@@ -182,6 +182,10 @@ assert(app.includes("buildSafetyInterlock"), "safety interlock should be wired")
 assert(app.includes("SafetyInterlockPanel"), "safety interlock panel should be rendered");
 assert(app.includes("buildDryRunLaunchGuard"), "dry-run launch guard should be wired");
 assert(app.includes("dryRunLaunchGuard.ready"), "dry-run launch guard should gate simulation");
+assert(app.includes("buildOperatingChecklist"), "operating checklist should be wired");
+assert(app.includes("OperatingChecklistPanel"), "operating checklist panel should be rendered");
+assert(app.includes("operating-checklist-panel"), "operating checklist should be focusable");
+assert(app.includes("Current operating mode"), "operating checklist should summarize the current mode");
 assert(app.includes("scanSettings"), "native scan settings should be wired");
 assert(app.includes("targetDrive"), "native scan settings should include target drive");
 assert(app.includes("updateScanSetting"), "native scan settings should invalidate stale evidence");

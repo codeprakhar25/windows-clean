@@ -2051,6 +2051,56 @@ const assert = require("assert");
     verificationSummary: { current: false }
   });
   assert.strictEqual(unsafeLaunchQuestions.activeQuestion.id, "resolve-safety-interlock", "unsafe launch guard should route the agent to safety review");
+  const launchOperatingChecklist = guard.buildOperatingChecklist({
+    scanned: true,
+    scanning: false,
+    scanMode: "demo",
+    scanSession: demoScanSession,
+    agentQuestionQueue: simulateQuestions,
+    runReadiness: runReady,
+    consentReceipt: armedConsent,
+    dryRunLaunchGuard: { ready: true, status: "dry-run-launch-ready", dryRunAllowed: true, realRunAllowed: false },
+    safetyInterlock: { status: "dry-run-interlocked", dryRunAllowed: true, realRunAllowed: false, destructiveCommands: false },
+    ledger: [],
+    planSnapshot: cleanRunSnapshot,
+    writeReadiness: { readyForRealExecution: false, status: "implementation-locked" },
+    releaseReviewPacket: { status: "review-waiting", readyForRealExecution: false, writeSignalVisible: false },
+    runtimeCapabilities: { available: false, realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(launchOperatingChecklist.schemaVersion, "spaceguard-operating-checklist/v1", "operating checklist should expose a schema version");
+  assert.strictEqual(launchOperatingChecklist.status, "dry-run-ready", "operating checklist should surface dry-run launch readiness");
+  assert.strictEqual(launchOperatingChecklist.safeActionNow.action, "simulate", "operating checklist should route the next safe action to simulation");
+  assert.strictEqual(launchOperatingChecklist.realRunAllowed, false, "operating checklist must not open real execution");
+  assert.strictEqual(launchOperatingChecklist.counts.realRun, 0, "operating checklist should keep real-run count at zero");
+  const operatingChecklistReport = guard.buildReport({
+    scenario: guard.getScenario("developer"),
+    profile: guard.getScenario("developer").profile,
+    actionList: developerActions,
+    selectedIds: new Set(["windows-temp"]),
+    readiness: { ready: true, unresolved: [] },
+    ledger: [],
+    protectedPaths: [],
+    goalBytes: 10 * guard.GB,
+    operatingChecklist: launchOperatingChecklist
+  });
+  assert(operatingChecklistReport.includes("## Operating Checklist"), "report should include operating checklist");
+  assert(operatingChecklistReport.includes("Real-run rows: 0"), "operating checklist report should keep real-run rows at zero");
+  const unsafeOperatingChecklist = guard.buildOperatingChecklist({
+    scanned: true,
+    scanning: false,
+    scanMode: "demo",
+    scanSession: demoScanSession,
+    agentQuestionQueue: unsafeLaunchQuestions,
+    runReadiness: runReady,
+    consentReceipt: armedConsent,
+    dryRunLaunchGuard: unsafeLaunchGuard,
+    safetyInterlock: { status: "unsafe-stop", dryRunAllowed: false, realRunAllowed: false, destructiveCommands: true },
+    writeReadiness: { readyForRealExecution: false, status: "implementation-locked" },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: true }
+  });
+  assert.strictEqual(unsafeOperatingChecklist.status, "unsafe-stop", "operating checklist should stop on unsafe execution signals");
+  assert.strictEqual(unsafeOperatingChecklist.safeActionNow.action, "focus-panel", "unsafe checklist should route to review, not simulation");
+  assert(!unsafeOperatingChecklist.rows.some((row) => row.action === "simulate" && row.canAct), "unsafe checklist must suppress actionable simulation");
   const staleConsent = guard.buildExecutionConsentReceipt({
     planSnapshot: changedItemPlanSnapshot,
     executorPlan: cleanRunExecutorPlan,

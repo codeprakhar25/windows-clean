@@ -3797,6 +3797,176 @@ export function buildDryRunLaunchGuard({
   };
 }
 
+export function buildOperatingChecklist({
+  scanned = false,
+  scanning = false,
+  scanMode = "demo",
+  scanSession = null,
+  agentQuestionQueue = null,
+  runReadiness = null,
+  consentReceipt = null,
+  dryRunLaunchGuard = null,
+  safetyInterlock = null,
+  ledger = [],
+  planSnapshot = null,
+  writeReadiness = null,
+  releaseReviewPacket = null,
+  runtimeCapabilities = {}
+} = {}) {
+  const activeQuestion = agentQuestionQueue?.activeQuestion || null;
+  const ledgerEntries = Array.isArray(ledger) ? ledger : [];
+  const ledgerCurrent = Boolean(
+    ledgerEntries.length
+      && (planSnapshot?.id
+        ? ledgerEntries.every((entry) => entry.planId === planSnapshot.id)
+        : true)
+  );
+  const scanReady = Boolean(scanSession?.readyForPlanning || scanSession?.status === "demo-current");
+  const runtimeUnsafe = Boolean(runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands);
+  const interlockUnsafe = Boolean(safetyInterlock?.status === "unsafe-stop" || safetyInterlock?.realRunAllowed || safetyInterlock?.destructiveCommands);
+  const launchUnsafe = Boolean(dryRunLaunchGuard?.status === "unsafe-stop" || dryRunLaunchGuard?.realRunAllowed);
+  const releaseUnsafe = Boolean(releaseReviewPacket?.status === "unsafe-stop" || releaseReviewPacket?.writeSignalVisible || releaseReviewPacket?.readyForRealExecution);
+  const writeReady = Boolean(writeReadiness?.readyForRealExecution);
+  const unsafe = runtimeUnsafe || interlockUnsafe || launchUnsafe || releaseUnsafe || writeReady;
+  const scanAction = runtimeCapabilities?.available ? "run-real-scan" : "run-scan";
+  const activeActionSafe = !unsafe || activeQuestion?.action === "focus-panel";
+  const launchReady = Boolean(dryRunLaunchGuard?.ready);
+
+  const rows = [
+    buildOperatingChecklistRow({
+      id: "scan-evidence",
+      label: "Current scan evidence",
+      phase: "discover",
+      status: scanReady ? "passed" : unsafe ? "blocked" : "waiting",
+      detail: scanReady
+        ? scanSession?.primary || "Current scan evidence can be used for planning."
+        : "Run a demo scan or native read-only scan before planning.",
+      evidence: scanSession?.status || "missing",
+      action: scanReady || unsafe ? "none" : scanAction,
+      canAct: !scanReady && !unsafe
+    }),
+    buildOperatingChecklistRow({
+      id: "active-question",
+      label: "Next user decision",
+      phase: "gate",
+      status: activeQuestion ? unsafe && activeQuestion.action !== "focus-panel" ? "blocked" : "waiting" : "passed",
+      detail: activeQuestion?.prompt || "No immediate user question is blocking the guarded workflow.",
+      evidence: activeQuestion?.detail || agentQuestionQueue?.status || "question queue clear",
+      action: activeQuestion?.action || "none",
+      actionId: activeQuestion?.actionId || "",
+      targetPanel: activeQuestion?.targetPanel || "",
+      canAct: Boolean(activeQuestion?.action && activeQuestion.action !== "none" && activeActionSafe)
+    }),
+    buildOperatingChecklistRow({
+      id: "run-readiness",
+      label: "Run readiness",
+      phase: "preflight",
+      status: runReadiness?.ready ? "passed" : unsafe ? "blocked" : "waiting",
+      detail: runReadiness?.ready ? "Workflow preflight and executor policy allow dry-run." : "Resolve workflow preflight, approval, route, or ledger blockers.",
+      evidence: runReadiness ? `${runReadiness.blockedCount || 0} blocker(s)` : "not evaluated",
+      action: runReadiness?.ready || unsafe ? "none" : "focus-panel",
+      targetPanel: "gate-panel",
+      canAct: Boolean(!runReadiness?.ready && !unsafe)
+    }),
+    buildOperatingChecklistRow({
+      id: "dry-run-consent",
+      label: "Dry-run consent",
+      phase: "consent",
+      status: consentReceipt?.ready ? "passed" : runReadiness?.ready && !unsafe ? "waiting" : unsafe ? "blocked" : "blocked",
+      detail: consentReceipt?.ready ? `Consent is bound to ${consentReceipt.planId || "the current plan"}.` : "Arm the current plan only after readiness passes.",
+      evidence: consentReceipt?.status || consentReceipt?.planId || "not armed",
+      action: consentReceipt?.ready || !runReadiness?.ready || unsafe ? "none" : "arm-consent",
+      canAct: Boolean(!consentReceipt?.ready && runReadiness?.ready && !unsafe)
+    }),
+    buildOperatingChecklistRow({
+      id: "dry-run-launch",
+      label: "Dry-run launch guard",
+      phase: "execute",
+      status: unsafe ? "unsafe" : launchReady ? "ready" : "waiting",
+      detail: dryRunLaunchGuard?.primary || "Launch guard has not been evaluated.",
+      evidence: dryRunLaunchGuard?.status || "missing",
+      action: unsafe ? "focus-panel" : launchReady && !ledgerCurrent ? "simulate" : !launchReady ? "focus-panel" : "none",
+      targetPanel: unsafe || !launchReady ? "safety-interlock-panel" : "",
+      canAct: Boolean(unsafe || (launchReady && !ledgerCurrent) || (!launchReady && dryRunLaunchGuard))
+    }),
+    buildOperatingChecklistRow({
+      id: "dry-run-ledger",
+      label: "Dry-run ledger",
+      phase: "verify",
+      status: ledgerCurrent ? "passed" : launchReady && !unsafe ? "waiting" : unsafe ? "blocked" : "waiting",
+      detail: ledgerCurrent ? `${ledgerEntries.length} current ledger entr${ledgerEntries.length === 1 ? "y" : "ies"} captured.` : "Run simulation to create current-plan dry-run evidence.",
+      evidence: ledgerCurrent ? planSnapshot?.id || "current plan" : "ledger missing",
+      action: ledgerCurrent || !launchReady || unsafe ? "none" : "simulate",
+      canAct: Boolean(!ledgerCurrent && launchReady && !unsafe)
+    }),
+    buildOperatingChecklistRow({
+      id: "real-cleanup-lock",
+      label: "Real cleanup lock",
+      phase: "write",
+      status: unsafe ? "unsafe" : "locked",
+      detail: unsafe ? "A write/destructive signal is visible; stop and inspect the safety surfaces." : "Real execution remains disabled; this checklist can route dry-run and review actions only.",
+      evidence: writeReadiness?.status || releaseReviewPacket?.status || "write readiness locked",
+      action: unsafe ? "focus-panel" : "none",
+      targetPanel: unsafe ? "safety-interlock-panel" : "",
+      canAct: Boolean(unsafe)
+    })
+  ];
+  const actionableRows = rows.filter((row) => row.canAct && !row.destructive);
+  const unsafeRows = rows.filter((row) => row.status === "unsafe");
+  const blockedRows = rows.filter((row) => row.status === "blocked");
+  const waitingRows = rows.filter((row) => row.status === "waiting");
+  const passedRows = rows.filter((row) => row.status === "passed" || row.status === "locked");
+  const readyRows = rows.filter((row) => row.status === "ready");
+  const safeActionNow = unsafe
+    ? actionableRows.find((row) => row.action === "focus-panel") || null
+    : actionableRows[0] || null;
+  const status = unsafeRows.length
+    ? "unsafe-stop"
+    : ledgerCurrent
+      ? "ledger-ready"
+      : launchReady
+        ? "dry-run-ready"
+        : consentReceipt?.ready
+          ? "launch-blocked"
+          : runReadiness?.ready
+            ? "consent-needed"
+            : !scanReady || !scanned || scanning
+              ? "scan-needed"
+              : activeQuestion
+                ? "user-action-needed"
+                : "evidence-building";
+
+  return {
+    schemaVersion: "spaceguard-operating-checklist/v1",
+    status,
+    tone: unsafeRows.length ? "restricted" : status === "dry-run-ready" || status === "ledger-ready" ? "safe" : "review",
+    scanMode,
+    safeActionNow,
+    realRunAllowed: false,
+    destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands || safetyInterlock?.destructiveCommands),
+    dryRunAllowed: Boolean(launchReady && !unsafe),
+    rows,
+    actionableRows,
+    unsafeRows,
+    blockedRows,
+    waitingRows,
+    readyRows,
+    passedRows,
+    counts: {
+      total: rows.length,
+      passed: passedRows.length,
+      ready: readyRows.length,
+      waiting: waitingRows.length,
+      blocked: blockedRows.length,
+      unsafe: unsafeRows.length,
+      actionable: actionableRows.length,
+      realRun: 0
+    },
+    primary: getOperatingChecklistPrimary(status, { safeActionNow, unsafeRows, waitingRows, readyRows, ledgerEntries }),
+    steps: getOperatingChecklistSteps(status, { safeActionNow, unsafeRows, waitingRows, readyRows })
+  };
+}
+
 export function buildAgentTaskRunbook({
   executorPlan = null,
   taskCapabilityGrants = null,
@@ -7263,6 +7433,7 @@ export function buildReport({
   intakePolicy = null,
   safetyInterlock = null,
   dryRunLaunchGuard = null,
+  operatingChecklist = null,
   taskPowerCatalog = null,
   taskPowerBroker = null,
   taskCapabilityGrants = null,
@@ -7337,6 +7508,22 @@ export function buildReport({
           dryRunLaunchGuard.items.length
             ? dryRunLaunchGuard.items.map((item) => `- ${item.label}: ${item.passed ? "passed" : "blocked"} | ${item.detail}`).join("\n")
             : "- No launch guard rows."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Operating Checklist",
+    operatingChecklist
+      ? [
+          `- Status: ${operatingChecklist.status}`,
+          `- Safe action now: ${operatingChecklist.safeActionNow?.label || "none"}`,
+          `- Dry-run allowed: ${operatingChecklist.dryRunAllowed ? "yes" : "no"}`,
+          `- Real run allowed: ${operatingChecklist.realRunAllowed ? "yes" : "no"}`,
+          `- Destructive commands: ${operatingChecklist.destructiveCommands ? "present" : "disabled"}`,
+          `- Actionable rows: ${operatingChecklist.counts.actionable}`,
+          `- Real-run rows: ${operatingChecklist.counts.realRun}`,
+          operatingChecklist.rows.length
+            ? operatingChecklist.rows.map((row) => `- ${row.label}: ${row.status} | action=${row.action} | real=${row.realRunAllowed ? "yes" : "no"} | ${row.detail}`).join("\n")
+            : "- No checklist rows."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -8998,6 +9185,68 @@ function getAgentTaskRunbookSteps(status, { readyRows = [], waitingRows = [], bl
   if (status === "unsafe-stop") return unsafeRows.slice(0, 3).map((row) => `${row.title}: ${row.agentStep}`);
   const waiting = [...blockedRows, ...waitingRows].slice(0, 3).map((row) => `${row.title}: ${row.agentStep}`);
   return waiting.length ? waiting : ["Run a scan.", "Select cleanup tasks.", "Resolve gates before dry-run work orders are issued."];
+}
+
+function buildOperatingChecklistRow({
+  id,
+  label,
+  phase,
+  status,
+  detail,
+  evidence = "",
+  action = "none",
+  targetPanel = "",
+  actionId = "",
+  canAct = false,
+  destructive = false
+}) {
+  return {
+    id,
+    label,
+    phase,
+    status,
+    tone: getOperatingChecklistRowTone(status),
+    detail,
+    evidence,
+    action,
+    actionId,
+    targetPanel,
+    canAct: Boolean(canAct && action && action !== "none" && !destructive),
+    destructive: Boolean(destructive),
+    realRunAllowed: false
+  };
+}
+
+function getOperatingChecklistRowTone(status) {
+  if (status === "passed" || status === "ready" || status === "locked") return "safe";
+  if (status === "unsafe" || status === "blocked") return "restricted";
+  return "review";
+}
+
+function getOperatingChecklistPrimary(status, { safeActionNow = null, unsafeRows = [], waitingRows = [], ledgerEntries = [] } = {}) {
+  if (status === "unsafe-stop") return safeActionNow?.detail || `${unsafeRows.length} unsafe operating signal(s) require safety review.`;
+  if (status === "ledger-ready") return `${ledgerEntries.length} dry-run ledger entr${ledgerEntries.length === 1 ? "y is" : "ies are"} current for this plan.`;
+  if (status === "dry-run-ready") return safeActionNow ? `${safeActionNow.label}: ${safeActionNow.detail}` : "Dry-run simulation is ready.";
+  if (status === "consent-needed") return "The plan can be armed for dry-run consent.";
+  if (status === "launch-blocked") return "Consent is armed, but the launch guard is still blocking simulation.";
+  if (status === "scan-needed") return "Start with a scan before the agent asks for cleanup decisions.";
+  if (status === "user-action-needed") return safeActionNow ? `${safeActionNow.label}: ${safeActionNow.detail}` : "A user decision is needed before the workflow can continue.";
+  return waitingRows[0]?.detail || "Continue collecting current evidence for the guarded cleanup workflow.";
+}
+
+function getOperatingChecklistSteps(status, { safeActionNow = null, unsafeRows = [], waitingRows = [] } = {}) {
+  if (status === "unsafe-stop") {
+    return [
+      "Open the safety interlock.",
+      unsafeRows[0]?.detail || "Investigate the unsafe write signal.",
+      "Do not simulate or run cleanup until the signal is gone."
+    ];
+  }
+  if (safeActionNow) return [`Use ${safeActionNow.label}.`, safeActionNow.detail, "Keep real cleanup locked."];
+  const nextRows = waitingRows.slice(0, 3);
+  return nextRows.length
+    ? nextRows.map((row) => `${row.label}: ${row.detail}`)
+    : ["Review current evidence.", "Export reports only on user action.", "Keep real cleanup locked."];
 }
 
 function buildDemoRehearsalRow({

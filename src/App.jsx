@@ -53,6 +53,7 @@ import {
   buildLedgerHistorySummary,
   buildLedgerRunRecord,
   buildNativeDryRunScopeEvidence,
+  buildOperatingChecklist,
   buildPostRunVerificationMarkdown,
   buildPostRunVerificationPlan,
   buildPrivilegeBoundary,
@@ -950,6 +951,41 @@ export default function App() {
       intakePolicy
     ]
   );
+  const operatingChecklist = useMemo(
+    () =>
+      buildOperatingChecklist({
+        scanned,
+        scanning,
+        scanMode: dataMode,
+        scanSession,
+        agentQuestionQueue,
+        runReadiness,
+        consentReceipt,
+        dryRunLaunchGuard,
+        safetyInterlock,
+        ledger: activeLedger,
+        planSnapshot,
+        writeReadiness,
+        releaseReviewPacket,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [
+      scanned,
+      scanning,
+      dataMode,
+      scanSession,
+      agentQuestionQueue,
+      runReadiness,
+      consentReceipt,
+      dryRunLaunchGuard,
+      safetyInterlock,
+      activeLedger,
+      planSnapshot,
+      writeReadiness,
+      releaseReviewPacket,
+      runtimeCapabilities.result
+    ]
+  );
   const productCompletionAudit = useMemo(
     () =>
       buildProductCompletionAudit({
@@ -1608,6 +1644,7 @@ export default function App() {
       runtimeCapabilities: runtimeCapabilities.result,
       safetyInterlock,
       dryRunLaunchGuard,
+      operatingChecklist,
       itemReviewsByAction,
       planSnapshot,
       verificationSummary,
@@ -1924,6 +1961,21 @@ export default function App() {
             <ProductCompletionAuditPanel audit={productCompletionAudit} />
 
             <SafetyInterlockPanel interlock={safetyInterlock} />
+
+            <OperatingChecklistPanel
+              checklist={operatingChecklist}
+              onRunScan={runScan}
+              onRunRealScan={runRealReadonlyScan}
+              onSuggestPlan={suggestPlan}
+              onApproveRebuildable={approveRebuildableCaches}
+              onConfirmPermanentRemoval={confirmPermanentRemoval}
+              onAllowAdminRoutes={() => setAdminAllowance(true)}
+              onFocusReview={setFocusedReviewId}
+              onFocusPanel={focusWorkflowPanel}
+              onArmConsent={armExecutionConsent}
+              onSimulate={simulateCleanup}
+              onProbeWriteBoundary={probeNativeWriteBoundary}
+            />
 
             <WorkflowHandoffPanel handoff={workflowHandoff} onExport={exportWorkflowHandoff} />
 
@@ -2625,6 +2677,110 @@ function SafetyInterlockPanel({ interlock }) {
       </CardContent>
     </Card>
   );
+}
+
+function OperatingChecklistPanel({
+  checklist,
+  onRunScan,
+  onRunRealScan,
+  onSuggestPlan,
+  onApproveRebuildable,
+  onConfirmPermanentRemoval,
+  onAllowAdminRoutes,
+  onFocusReview,
+  onFocusPanel,
+  onArmConsent,
+  onSimulate,
+  onProbeWriteBoundary
+}) {
+  const previewRows = checklist.rows.slice(0, 7);
+  const action = checklist.safeActionNow;
+
+  function runChecklistAction(row) {
+    if (!row || !row.canAct) return;
+    if (row.action === "run-scan") onRunScan();
+    if (row.action === "run-real-scan") onRunRealScan();
+    if (row.action === "suggest-plan") onSuggestPlan();
+    if (row.action === "approve-rebuildable") onApproveRebuildable();
+    if (row.action === "confirm-permanent-removal") onConfirmPermanentRemoval();
+    if (row.action === "allow-admin-routes") onAllowAdminRoutes();
+    if (row.action === "focus-review" && row.actionId) onFocusReview(row.actionId);
+    if (row.action === "focus-panel" && row.targetPanel) onFocusPanel(row.targetPanel);
+    if (row.action === "arm-consent") onArmConsent();
+    if (row.action === "simulate") onSimulate();
+    if (row.action === "probe-write-boundary") onProbeWriteBoundary();
+  }
+
+  return (
+    <Card id="operating-checklist-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Operating checklist
+            </CardTitle>
+            <CardDescription>{checklist.primary}</CardDescription>
+          </div>
+          <Badge variant={checklist.tone}>{checklist.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Ready" value={checklist.counts.ready + checklist.counts.passed} tone={checklist.counts.ready || checklist.counts.passed ? "safe" : "review"} />
+          <QueueStat label="Waiting" value={checklist.counts.waiting} tone={checklist.counts.waiting ? "review" : "safe"} />
+          <QueueStat label="Unsafe" value={checklist.counts.unsafe} tone={checklist.counts.unsafe ? "restricted" : "safe"} />
+          <QueueStat label="Actions" value={checklist.counts.actionable} tone={checklist.counts.actionable ? "advanced" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Current operating mode</span>
+            <Badge variant={checklist.dryRunAllowed ? "safe" : "review"}>{checklist.dryRunAllowed ? "dry-run allowed" : "dry-run held"}</Badge>
+            <Badge variant={checklist.realRunAllowed ? "restricted" : "safe"}>{checklist.realRunAllowed ? "real run open" : "real run locked"}</Badge>
+            <Badge variant={checklist.destructiveCommands ? "restricted" : "safe"}>{checklist.destructiveCommands ? "destructive visible" : "no destructive commands"}</Badge>
+          </div>
+          {action ? (
+            <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+              <div className="min-w-0">
+                <div className="text-sm font-medium">{action.label}</div>
+                <div className="text-xs text-muted-foreground">{action.detail}</div>
+              </div>
+              <Button size="sm" onClick={() => runChecklistAction(action)}>
+                <CheckCircle2 className="h-4 w-4" />
+                {operatingActionLabel(action)}
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No guarded action is ready from this checklist.</p>
+          )}
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {previewRows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="mr-auto min-w-0 text-sm font-medium">{row.label}</div>
+                <Badge variant={row.tone}>{row.status}</Badge>
+                <Badge variant="outline">{row.phase}</Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{row.detail}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge variant={row.realRunAllowed ? "restricted" : "safe"}>{row.realRunAllowed ? "real run" : "no real run"}</Badge>
+                {row.canAct ? <Badge variant="review">{operatingActionLabel(row)}</Badge> : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function operatingActionLabel(row) {
+  if (row.action === "run-scan") return "Run demo scan";
+  if (row.action === "run-real-scan") return "Run real scan";
+  return questionActionLabel(row);
 }
 
 function WorkflowHandoffPanel({ handoff, onExport }) {

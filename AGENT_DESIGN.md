@@ -131,6 +131,7 @@ The UI must also expose a recovery advisor and decision log:
 - `release review packet`: one exportable review artifact that combines plan, scan session, task grants, contract, write-boundary rejection, validation, rollback, rescan, privilege, privacy, support redaction, public claims, and real-cleanup lock evidence.
 - `safety interlock`: global stop/hold surface derived from runtime write signals, native write signals, scan freshness, dry-run consent, task power leases, broker standing permission, run readiness, write-boundary evidence, release review, and write readiness.
 - `dry-run launch guard`: final execution gate that allows simulation only when run readiness, current consent, and the safety interlock pass while real execution remains locked.
+- `operating checklist`: single operator surface for current scan evidence, active user question, run readiness, consent, launch guard, ledger evidence, and the real-cleanup lock.
 - `support bundle`: redacted diagnostics for support triage that exclude local paths and filenames by default.
 - `workflow handoff`: redacted resume artifact with active question, next actions, audit status, setup/demo/release state, and real-cleanup lock.
 - `validation evidence`: disposable VM checklists, seeded fixture roots, required commands, selected executor routes, reviewer/artifact records, and signoff fields.
@@ -307,6 +308,12 @@ Agent question invariant:
 - A question must not ask to simulate when the dry-run launch guard is blocked or unsafe; it must route the user to the safety interlock or launch guard instead.
 - Questions cannot mark item decisions, rollback evidence, validation evidence, typed approvals, write readiness, or release gates complete on their own.
 - The active question and queue must be exportable in the dry-run report for audit.
+
+Operating checklist invariant:
+
+- The checklist can route only to existing guarded UI actions; it cannot create approvals, validation evidence, rollback proof, release readiness, write readiness, or real cleanup authority.
+- If any unsafe write/destructive signal is visible, the checklist must route to safety review and suppress actionable simulation.
+- The checklist must report zero real-run rows until a separate validated real-executor release passes every final gate.
 
 Executor manifest invariant:
 
