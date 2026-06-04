@@ -765,6 +765,61 @@ const assert = require("assert");
   assert.strictEqual(storageStrategy.options.find((option) => option.id === "review-custom-roots").impact, 64 * guard.GB, "custom root strategy should carry advisory impact bytes");
   assert(storageStrategy.options.some((option) => option.id === "partition-or-drive-plan"), "storage strategy should include backup-first partition guidance");
   assert(storageStrategy.options.every((option) => option.automation === "manual"), "storage strategy options must not create automation routes");
+  const customRootTriage = guard.buildCustomRootTriage({
+    scanCoverage: storageStrategy.scanCoverage || {
+      customRootBytes: 64 * guard.GB,
+      customRootRows: [
+        {
+          id: "custom-root-1",
+          title: "Custom folder: Archives",
+          path: "C:\\Users\\demo\\Archives",
+          bytes: 64 * guard.GB,
+          evidence: "measured",
+          verified: true
+        }
+      ]
+    }
+  });
+  assert.strictEqual(customRootTriage.schemaVersion, "spaceguard-custom-root-triage/v1", "custom root triage should expose a schema version");
+  assert.strictEqual(customRootTriage.status, "triage-open", "custom root triage should start open until dispositions are chosen");
+  assert.strictEqual(customRootTriage.manualOnly, true, "custom root triage should be manual-only");
+  assert.strictEqual(customRootTriage.counts.executorRoutes, 0, "custom root triage must not create executor routes");
+  assert.strictEqual(customRootTriage.rows[0].canCreateExecutor, false, "custom root rows must not become executor candidates");
+  const documentedCustomRootTriage = guard.buildCustomRootTriage({
+    scanCoverage: {
+      customRootBytes: 64 * guard.GB,
+      customRootRows: [
+        {
+          id: "custom-root-1",
+          title: "Custom folder: Archives",
+          path: "C:\\Users\\demo\\Archives",
+          bytes: 64 * guard.GB,
+          evidence: "measured",
+          verified: true
+        }
+      ]
+    },
+    evidence: {
+      "custom-root-1": {
+        disposition: "archive",
+        owner: "old backups",
+        notes: "external drive candidate",
+        updatedAt: "2026-06-04T10:00:00.000Z"
+      }
+    }
+  });
+  assert.strictEqual(documentedCustomRootTriage.status, "triage-documented", "custom root triage should complete after every row has a disposition");
+  assert.strictEqual(documentedCustomRootTriage.manualDispositionBytes, 64 * guard.GB, "archive disposition should count advisory manual bytes");
+  assert.strictEqual(documentedCustomRootTriage.rows[0].noExecutorRoute, true, "documented custom roots should still have no executor route");
+  assert.strictEqual(guard.normalizeCustomRootTriageRecord("move").disposition, "move", "custom root triage should migrate string evidence records");
+  const customRootQuestionQueue = guard.buildAgentQuestionQueue({
+    scanned: true,
+    actionList: developerActions,
+    selectedIds: strategySelection,
+    approvals: strategyApprovals,
+    customRootTriage
+  });
+  assert(customRootQuestionQueue.questions.some((question) => question.id === "custom-root-triage" && question.targetPanel === "custom-root-triage-panel"), "question queue should ask for custom root triage");
   const manualChecklist = guard.buildManualStrategyChecklist({ storageStrategy });
   assert.strictEqual(manualChecklist.schemaVersion, "spaceguard-manual-strategy-checklist/v1", "manual strategy checklist should have a schema version");
   assert.strictEqual(manualChecklist.manualOnly, true, "manual strategy checklist must remain manual-only");
@@ -788,12 +843,15 @@ const assert = require("assert");
     advisor: strategyAdvisor,
     storageStrategy,
     manualStrategyChecklist: manualChecklist,
+    customRootTriage,
     itemReviewsByAction: strategyReviewItems
   });
   assert(strategyReport.includes("## Storage Strategy"), "dry-run report should include storage strategy");
   assert(strategyReport.includes("No automated partition writes"), "storage strategy report should include partition guardrails");
   assert(strategyReport.includes("## Manual Strategy Checklist"), "dry-run report should include manual strategy checklist");
   assert(strategyReport.includes("Manual only: yes"), "manual strategy report should keep manual boundary visible");
+  assert(strategyReport.includes("## Custom Root Triage"), "dry-run report should include custom root triage");
+  assert(strategyReport.includes("Executor routes: 0"), "custom root triage report should keep executor routes at zero");
 
   const decisionLog = guard.buildDecisionLog({
     scanned: true,

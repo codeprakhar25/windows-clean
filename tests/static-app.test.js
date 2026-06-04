@@ -159,6 +159,9 @@ assert(app.includes("targetDrive"), "native scan settings should include target 
 assert(app.includes("updateScanSetting"), "native scan settings should invalidate stale evidence");
 assert(app.includes("customRoots"), "native scan settings should include custom read-only roots");
 assert(app.includes("addCustomScanRoot"), "custom scan roots should be editable");
+assert(app.includes("buildCustomRootTriage"), "custom root triage should be wired");
+assert(app.includes("CustomRootTriagePanel"), "custom root triage panel should be rendered");
+assert(app.includes("CUSTOM_ROOT_TRIAGE_STORAGE_KEY"), "custom root triage should be persisted locally");
 assert(app.includes("buildScanCoverageSummary"), "scan coverage summary should be wired");
 assert(app.includes("buildScanSessionEvidence"), "scan session freshness guard should be wired");
 assert(app.includes("buildRecoveryAdvisor"), "recovery advisor should be wired");
@@ -254,6 +257,9 @@ assert(model.includes("import-fixture-evidence"), "question queue should ask fix
 assert(model.includes("manualDispositionBytes"), "model should separate manual move/archive bytes from executor bytes");
 assert(model.includes("isItemReviewDecision"), "model should validate expanded item review decisions");
 assert(model.includes("spaceguard-scan-coverage/v1"), "model should expose scan coverage schema");
+assert(model.includes("spaceguard-custom-root-triage/v1"), "model should expose custom root triage schema");
+assert(model.includes("customRootDispositionOptions"), "model should define custom root disposition options");
+assert(model.includes("canCreateExecutor: false"), "custom root triage should block executor creation");
 assert(model.includes("spaceguard-privacy-boundary/v1"), "model should expose privacy boundary schema");
 assert(model.includes("spaceguard-rollback-plan/v1"), "model should expose rollback plan schema");
 assert(model.includes("normalizeRollbackEvidenceRecord"), "model should normalize structured rollback evidence");

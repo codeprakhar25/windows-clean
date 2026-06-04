@@ -107,6 +107,7 @@ The UI must also expose a recovery advisor and decision log:
 - `agent questions`: a prioritized queue of the next user-facing questions derived from scan, plan, intake, approval, review, consent, rollback, validation, fixture import, and verification state.
 - `real scan settings`: project artifact inclusion, traversal depth, and per-root entry cap for the next native read-only scan.
 - `scan coverage`: confidence summary for measured, limited, missing, protected, unsupported, and demo-estimated roots; partial native scans must remain visibly partial.
+- `custom root triage`: manual disposition workflow for custom read-only findings, with Keep, Archive, Move, Inspect, and Escalate states that cannot create executor routes.
 - `storage strategy`: manual-only guidance for app uninstall review, library migration, archive storage, drive upgrades, and backup-first partition planning when cleanup cannot meet the target.
 - `manual strategy checklist`: local follow-along evidence for backup, archive destination, app-native move, official uninstall path, and partition-prep readiness.
 - `review workbench`: evidence status, gate, path, and next step for non-trivial findings.
@@ -318,6 +319,7 @@ Manual strategy invariant:
 - Installed app review, custom root review, library moves, archive moves, drive upgrades, and partition work remain user-owned.
 - Manual evidence can help the user follow along, but it cannot unlock executor routes, release gates, or real cleanup.
 - Custom root discovery can create manual review checklist rows, but it cannot create executor routes or automated folder cleanup.
+- Custom root triage can show advisory manual impact for Archive or Move dispositions, but that impact cannot count as selected recovery, ledger recovery, release evidence, or write readiness.
 - Partition and drive planning requires backup and recovery-key evidence before advice is considered ready.
 
 Support bundle invariant:

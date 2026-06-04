@@ -501,6 +501,34 @@ export const taskPowerDefinitions = [
   }
 ];
 
+export const customRootDispositionOptions = [
+  {
+    id: "keep",
+    label: "Keep",
+    detail: "Leave this folder untouched and use it only as context for future scans."
+  },
+  {
+    id: "archive",
+    label: "Archive",
+    detail: "Move content manually to an external or secondary storage location after backup review."
+  },
+  {
+    id: "move",
+    label: "Move",
+    detail: "Move through the owning app, project, or library manager instead of deleting the folder directly."
+  },
+  {
+    id: "inspect",
+    label: "Inspect",
+    detail: "Keep this finding open until ownership, age, and user impact are understood."
+  },
+  {
+    id: "escalate",
+    label: "Escalate",
+    detail: "Ask the user or app owner before any manual change."
+  }
+];
+
 export const releaseFeatureFlags = {
   realExecutors: false,
   tempCleanupExecutor: false,
@@ -1865,6 +1893,94 @@ export function buildScanCoverageSummary({
   };
 }
 
+export function buildCustomRootTriage({
+  scanCoverage = null,
+  evidence = {}
+} = {}) {
+  const sourceRows = scanCoverage?.customRootRows || [];
+  const rows = sourceRows.map((row) => {
+    const record = normalizeCustomRootTriageRecord(evidence[row.id] || evidence[row.path]);
+    const disposition = record.disposition;
+    const decided = disposition !== "undecided";
+    const manualImpactBytes = disposition === "archive" || disposition === "move" ? Number(row.bytes || 0) : 0;
+    const status = !row.verified
+      ? "evidence-waiting"
+      : decided
+        ? `marked-${disposition}`
+        : "needs-disposition";
+    const option = customRootDispositionOptions.find((item) => item.id === disposition) || null;
+
+    return {
+      id: row.id,
+      title: row.title,
+      path: row.path,
+      bytes: Number(row.bytes || 0),
+      evidence: row.evidence,
+      verified: Boolean(row.verified),
+      files: Number(row.files || 0),
+      dirs: Number(row.dirs || 0),
+      errors: Number(row.errors || 0),
+      note: row.note || "",
+      disposition,
+      dispositionLabel: option?.label || "Undecided",
+      owner: record.owner,
+      notes: record.notes,
+      updatedAt: record.updatedAt,
+      status,
+      tone: getCustomRootTriageRowTone(status),
+      decided,
+      manualImpactBytes,
+      manualOnly: true,
+      noExecutorRoute: true,
+      canCreateExecutor: false,
+      nextStep: getCustomRootTriageNextStep(disposition, row)
+    };
+  });
+  const waitingRows = rows.filter((row) => !row.decided || row.status === "evidence-waiting");
+  const decidedRows = rows.filter((row) => row.decided);
+  const manualDispositionBytes = decidedRows.reduce((sum, row) => sum + row.manualImpactBytes, 0);
+  const status = !rows.length
+    ? "no-custom-roots"
+    : rows.some((row) => row.status === "evidence-waiting")
+      ? "triage-waiting-scan"
+      : waitingRows.length
+        ? "triage-open"
+        : "triage-documented";
+
+  return {
+    schemaVersion: "spaceguard-custom-root-triage/v1",
+    status,
+    tone: status === "triage-documented" ? "safe" : status === "no-custom-roots" ? "review" : "advisory",
+    manualOnly: true,
+    automationBlockedReason: "Custom roots are read-only discovery findings. They cannot become automated cleanup actions or executor routes.",
+    rows,
+    waitingRows,
+    decidedRows,
+    counts: {
+      rows: rows.length,
+      decided: decidedRows.length,
+      waiting: waitingRows.length,
+      keep: rows.filter((row) => row.disposition === "keep").length,
+      archive: rows.filter((row) => row.disposition === "archive").length,
+      move: rows.filter((row) => row.disposition === "move").length,
+      inspect: rows.filter((row) => row.disposition === "inspect").length,
+      escalate: rows.filter((row) => row.disposition === "escalate").length,
+      executorRoutes: 0
+    },
+    visibleBytes: rows.reduce((sum, row) => sum + row.bytes, 0),
+    manualDispositionBytes,
+    primary:
+      status === "triage-documented"
+        ? `${rows.length} custom root finding(s) have manual dispositions and remain out of automation.`
+        : status === "triage-open"
+          ? `${waitingRows.length} custom root finding(s) still need a manual disposition.`
+          : status === "triage-waiting-scan"
+            ? "Some custom roots need fresh scan evidence before disposition can be trusted."
+            : "Add custom read-only roots to triage unknown folders.",
+    steps: getCustomRootTriageSteps(status, waitingRows)
+  };
+}
+
 function buildCustomRootCoverageRows(nativeScan = null) {
   return (nativeScan?.findings || [])
     .filter((finding) => String(finding.recipeId || finding.recipe_id || "").startsWith("custom-root-"))
@@ -1886,6 +2002,69 @@ function buildCustomRootCoverageRows(nativeScan = null) {
       };
     })
     .sort((a, b) => b.bytes - a.bytes || a.title.localeCompare(b.title));
+}
+
+export function normalizeCustomRootTriageRecord(value = null) {
+  if (typeof value === "string") {
+    return {
+      disposition: normalizeCustomRootDisposition(value),
+      owner: "",
+      notes: "",
+      updatedAt: ""
+    };
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {
+      disposition: "undecided",
+      owner: "",
+      notes: "",
+      updatedAt: ""
+    };
+  }
+  return {
+    disposition: normalizeCustomRootDisposition(value.disposition || value.status),
+    owner: String(value.owner || "").trim(),
+    notes: String(value.notes || "").trim(),
+    updatedAt: String(value.updatedAt || value.updated_at || "").trim()
+  };
+}
+
+function normalizeCustomRootDisposition(value = "") {
+  const clean = String(value || "").trim().toLowerCase();
+  return customRootDispositionOptions.some((option) => option.id === clean) ? clean : "undecided";
+}
+
+function getCustomRootTriageRowTone(status) {
+  if (status === "marked-keep" || status === "marked-archive" || status === "marked-move") return "safe";
+  if (status === "marked-escalate") return "restricted";
+  return "review";
+}
+
+function getCustomRootTriageNextStep(disposition, row) {
+  if (!row.verified) return "Run a fresh read-only scan before choosing a disposition.";
+  if (disposition === "keep") return "Leave this folder protected from cleanup plans.";
+  if (disposition === "archive") return "Manually archive after backup and ownership review.";
+  if (disposition === "move") return "Move only through the owning app, project, or library manager.";
+  if (disposition === "inspect") return "Inspect owner, age, and user impact before choosing action.";
+  if (disposition === "escalate") return "Ask the user or app owner before any manual change.";
+  return "Choose Keep, Archive, Move, Inspect, or Escalate. No automated cleanup route will be created.";
+}
+
+function getCustomRootTriageSteps(status, waitingRows = []) {
+  if (status === "triage-documented") {
+    return [
+      "Keep custom root decisions manual.",
+      "Use owner-specific move, archive, uninstall, or backup workflows outside executor plans.",
+      "Rerun the read-only scan after manual changes to update evidence."
+    ];
+  }
+  if (status === "triage-waiting-scan") {
+    return ["Rerun the native read-only scan.", "Review protected paths and scanner limits.", "Choose dispositions only after current evidence is captured."];
+  }
+  if (status === "triage-open") {
+    return waitingRows.slice(0, 3).map((row) => `${row.title}: ${row.nextStep}`);
+  }
+  return ["Add a custom root in scan settings.", "Run a native read-only scan.", "Review the custom-root findings manually."];
 }
 
 export function buildPrivacyBoundary({
@@ -2461,6 +2640,7 @@ export function buildAgentQuestionQueue({
   verificationSummary = null,
   rescanComparison = null,
   rollbackPlan = null,
+  customRootTriage = null,
   validationPack = null,
   fixtureImportResult = null,
   writeBoundaryProbe = null,
@@ -2662,6 +2842,21 @@ export function buildAgentQuestionQueue({
       detail: waiting ? `${waiting.optionTitle}: ${waiting.detail}` : manualStrategyChecklist.primary,
       action: "none",
       options: ["Use manual checklist", "Keep cleanup-only plan"]
+    });
+  }
+
+  if (customRootTriage?.status === "triage-open" || customRootTriage?.status === "triage-waiting-scan") {
+    const waiting = customRootTriage.waitingRows?.[0];
+    addQuestion({
+      id: "custom-root-triage",
+      lane: "strategy",
+      priority: 64,
+      title: "Triage custom folders",
+      prompt: "Which custom discovered folder needs a manual disposition?",
+      detail: waiting ? `${waiting.title}: ${waiting.nextStep}` : customRootTriage.primary,
+      action: "focus-panel",
+      targetPanel: "custom-root-triage-panel",
+      options: ["Open custom root triage", "Keep manual"]
     });
   }
 
@@ -5631,6 +5826,7 @@ export function buildReport({
   rollbackPlan = null,
   publicBetaReadiness = null,
   releaseReviewPacket = null,
+  customRootTriage = null,
   executorManifest = null,
   toolCommandInventory = null,
   writeReadiness = null,
@@ -5820,6 +6016,23 @@ export function buildReport({
                 .map((check) => `- ${check.optionTitle} / ${check.title}: ${check.status} | ${check.detail}`)
                 .join("\n")
             : "- No manual checklist rows."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Custom Root Triage",
+    customRootTriage
+      ? [
+          `- Status: ${customRootTriage.status}`,
+          `- Manual only: ${customRootTriage.manualOnly ? "yes" : "no"}`,
+          `- Custom roots: ${customRootTriage.counts.rows}`,
+          `- Decided: ${customRootTriage.counts.decided}`,
+          `- Waiting: ${customRootTriage.counts.waiting}`,
+          `- Executor routes: ${customRootTriage.counts.executorRoutes}`,
+          `- Manual disposition bytes: ${formatBytes(customRootTriage.manualDispositionBytes || 0)}`,
+          `- Boundary: ${customRootTriage.automationBlockedReason}`,
+          customRootTriage.rows.length
+            ? customRootTriage.rows.map((row) => `- ${row.title}: ${row.disposition} | ${row.status} | ${formatBytes(row.bytes)} | executor=${row.canCreateExecutor ? "yes" : "no"} | ${row.nextStep}`).join("\n")
+            : "- No custom root rows."
         ].join("\n")
       : "- Not evaluated.",
     "",

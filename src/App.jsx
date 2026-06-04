@@ -38,6 +38,7 @@ import {
   buildFirstSafeExecutorContract,
   buildFixtureEvidenceImport,
   buildIntakePolicy,
+  buildCustomRootTriage,
   buildPlanReview,
   buildAgentQuestionQueue,
   buildDecisionLog,
@@ -84,6 +85,7 @@ import {
   buildWriteBoundaryProbe,
   buildWriteReadiness,
   computeTotals,
+  customRootDispositionOptions,
   formatBytes,
   gates,
   actionRequiresAdminConsent,
@@ -92,6 +94,7 @@ import {
   getScenario,
   isActionProtected,
   makeExecutionLedgerForActions,
+  normalizeCustomRootTriageRecord,
   normalizeTargetDrive,
   scenarios,
   selectableAction,
@@ -110,6 +113,7 @@ const RUN_HISTORY_STORAGE_KEY = "spaceguard.ledgerHistory.v1";
 const VALIDATION_EVIDENCE_STORAGE_KEY = "spaceguard.validationEvidence.v1";
 const MANUAL_STRATEGY_EVIDENCE_STORAGE_KEY = "spaceguard.manualStrategyEvidence.v1";
 const ROLLBACK_EVIDENCE_STORAGE_KEY = "spaceguard.rollbackEvidence.v1";
+const CUSTOM_ROOT_TRIAGE_STORAGE_KEY = "spaceguard.customRootTriage.v1";
 const RUN_HISTORY_LIMIT = 25;
 const filters = ["all", "safe", "rebuildable", "review", "advanced", "restricted"];
 const modes = [
@@ -181,6 +185,7 @@ export default function App() {
   const [validationEvidence, setValidationEvidence] = useState(() => readStoredValidationEvidence());
   const [manualStrategyEvidence, setManualStrategyEvidence] = useState(() => readStoredManualStrategyEvidence());
   const [rollbackEvidence, setRollbackEvidence] = useState(() => readStoredRollbackEvidence());
+  const [customRootTriageEvidence, setCustomRootTriageEvidence] = useState(() => readStoredCustomRootTriageEvidence());
   const [fixtureImportText, setFixtureImportText] = useState("");
   const [fixtureImportReviewer, setFixtureImportReviewer] = useState("");
   const [fixtureImportArtifact, setFixtureImportArtifact] = useState("");
@@ -226,6 +231,10 @@ export default function App() {
     writeStoredRollbackEvidence(rollbackEvidence);
   }, [rollbackEvidence]);
 
+  useEffect(() => {
+    writeStoredCustomRootTriageEvidence(customRootTriageEvidence);
+  }, [customRootTriageEvidence]);
+
   const dataMode = nativeScan.result?.available ? "native-readonly" : "demo";
   const targetDrive = useMemo(() => normalizeTargetDrive(scanSettings.targetDrive), [scanSettings.targetDrive]);
   const profile = useMemo(
@@ -269,6 +278,10 @@ export default function App() {
   const scanCoverage = useMemo(
     () => buildScanCoverageSummary({ actionList, scanMode: dataMode, nativeScan: nativeScan.result }),
     [actionList, dataMode, nativeScan.result]
+  );
+  const customRootTriage = useMemo(
+    () => buildCustomRootTriage({ scanCoverage, evidence: customRootTriageEvidence }),
+    [scanCoverage, customRootTriageEvidence]
   );
   const scanSession = useMemo(
     () =>
@@ -613,6 +626,7 @@ export default function App() {
         verificationSummary,
         rescanComparison,
         rollbackPlan,
+        customRootTriage,
         validationPack,
         fixtureImportResult,
         writeBoundaryProbe,
@@ -637,6 +651,7 @@ export default function App() {
       verificationSummary,
       rescanComparison,
       rollbackPlan,
+      customRootTriage,
       validationPack,
       fixtureImportResult,
       writeBoundaryProbe,
@@ -1086,6 +1101,39 @@ export default function App() {
     setManualStrategyEvidence({});
   }
 
+  function setCustomRootDisposition(rowId, disposition) {
+    setCustomRootTriageEvidence((current) => {
+      const currentRecord = coerceCustomRootTriageFormRecord(current[rowId]);
+      const now = new Date().toISOString();
+      return {
+        ...current,
+        [rowId]: {
+          ...currentRecord,
+          disposition,
+          updatedAt: now
+        }
+      };
+    });
+  }
+
+  function updateCustomRootTriageRecord(rowId, field, value) {
+    setCustomRootTriageEvidence((current) => {
+      const currentRecord = coerceCustomRootTriageFormRecord(current[rowId]);
+      return {
+        ...current,
+        [rowId]: {
+          ...currentRecord,
+          [field]: value,
+          updatedAt: new Date().toISOString()
+        }
+      };
+    });
+  }
+
+  function resetCustomRootTriage() {
+    setCustomRootTriageEvidence({});
+  }
+
   function setRollbackProofEvidence(rowId, checked) {
     setRollbackEvidence((current) => {
       const next = { ...current };
@@ -1257,6 +1305,7 @@ export default function App() {
       ledgerHistorySummary,
       storageStrategy,
       manualStrategyChecklist,
+      customRootTriage,
       scanCoverage,
       intakePolicy,
       taskPowerCatalog,
@@ -1518,6 +1567,13 @@ export default function App() {
             />
 
             <ScanCoveragePanel coverage={scanCoverage} />
+
+            <CustomRootTriagePanel
+              triage={customRootTriage}
+              onDisposition={setCustomRootDisposition}
+              onUpdate={updateCustomRootTriageRecord}
+              onReset={resetCustomRootTriage}
+            />
 
             <RecoveryAdvisorPanel advisor={recoveryAdvisor} onSuggest={suggestPlan} />
 
@@ -2360,6 +2416,103 @@ function ScanCoveragePanel({ coverage }) {
   );
 }
 
+function CustomRootTriagePanel({ triage, onDisposition, onUpdate, onReset }) {
+  const previewRows = triage.rows.slice(0, 5);
+
+  return (
+    <Card id="custom-root-triage-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Archive className="h-4 w-4" />
+              Custom root triage
+            </CardTitle>
+            <CardDescription>{triage.primary}</CardDescription>
+          </div>
+          <Badge variant={triage.tone}>{triage.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Roots" value={triage.counts.rows} tone={triage.counts.rows ? "review" : "safe"} />
+          <QueueStat label="Decided" value={triage.counts.decided} tone={triage.counts.waiting ? "review" : "safe"} />
+          <QueueStat label="Manual" value={formatBytes(triage.manualDispositionBytes)} tone={triage.manualDispositionBytes ? "advisory" : "review"} />
+          <QueueStat label="Exec" value={triage.counts.executorRoutes} tone={triage.counts.executorRoutes ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Manual-only boundary</span>
+            <Badge variant="safe">no executor route</Badge>
+            <Badge variant="outline">{formatBytes(triage.visibleBytes)}</Badge>
+          </div>
+          <div className="flex flex-col gap-2">
+            {triage.steps.slice(0, 3).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <Lock className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {previewRows.length ? (
+            previewRows.map((row) => (
+              <div key={row.id} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="mr-auto min-w-0 text-sm font-medium">{row.title}</div>
+                  <Badge variant={row.tone}>{row.status}</Badge>
+                  <Badge variant="outline">{formatBytes(row.bytes)}</Badge>
+                </div>
+                <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{row.path}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {customRootDispositionOptions.map((option) => (
+                    <Button
+                      key={`${row.id}-${option.id}`}
+                      type="button"
+                      size="sm"
+                      variant={row.disposition === option.id ? "default" : "outline"}
+                      onClick={() => onDisposition(row.id, option.id)}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  <Input
+                    value={row.owner}
+                    placeholder="Owner or app"
+                    aria-label={`${row.title} owner`}
+                    onChange={(event) => onUpdate(row.id, "owner", event.target.value)}
+                  />
+                  <Input
+                    value={row.notes}
+                    placeholder="Manual note"
+                    aria-label={`${row.title} manual note`}
+                    onChange={(event) => onUpdate(row.id, "notes", event.target.value)}
+                  />
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{row.nextStep}</p>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              No custom read-only roots are present in the current scan.
+            </div>
+          )}
+        </div>
+
+        <Button variant="outline" className="w-full" onClick={onReset} disabled={triage.counts.decided === 0}>
+          <RefreshCcw className="h-4 w-4" />
+          Reset custom triage
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function RecoveryAdvisorPanel({ advisor, onSuggest }) {
   return (
     <Card>
@@ -2526,6 +2679,7 @@ function questionActionLabel(question) {
   if (question.action === "focus-review") return "Open item review";
   if (question.action === "focus-panel" && question.targetPanel === "rollback-plan-panel") return "Open rollback proof";
   if (question.action === "focus-panel" && question.targetPanel === "validation-evidence-panel") return "Open validation import";
+  if (question.action === "focus-panel" && question.targetPanel === "custom-root-triage-panel") return "Open custom triage";
   if (question.action === "arm-consent") return "Arm dry-run";
   if (question.action === "simulate") return "Simulate";
   if (question.action === "run-real-scan") return "Run real scan";
@@ -4823,6 +4977,38 @@ function readStoredManualStrategyEvidence() {
 function writeStoredManualStrategyEvidence(evidence) {
   try {
     globalThis.localStorage?.setItem(MANUAL_STRATEGY_EVIDENCE_STORAGE_KEY, JSON.stringify(evidence || {}));
+  } catch {
+    // Local storage can be unavailable in hardened browser contexts.
+  }
+}
+
+function readStoredCustomRootTriageEvidence() {
+  try {
+    const raw = globalThis.localStorage?.getItem(CUSTOM_ROOT_TRIAGE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, value]) => typeof value === "string" || (value && typeof value === "object" && !Array.isArray(value)))
+    );
+  } catch {
+    return {};
+  }
+}
+
+function coerceCustomRootTriageFormRecord(value) {
+  const record = normalizeCustomRootTriageRecord(value);
+  return {
+    disposition: record.disposition === "undecided" ? "inspect" : record.disposition,
+    owner: record.owner,
+    notes: record.notes,
+    updatedAt: record.updatedAt
+  };
+}
+
+function writeStoredCustomRootTriageEvidence(evidence) {
+  try {
+    globalThis.localStorage?.setItem(CUSTOM_ROOT_TRIAGE_STORAGE_KEY, JSON.stringify(evidence || {}));
   } catch {
     // Local storage can be unavailable in hardened browser contexts.
   }

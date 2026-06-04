@@ -150,6 +150,7 @@ The demo also includes:
 - Scan session freshness guard that fingerprints target drive, custom roots, traversal caps, project-artifact setting, and protected paths, then blocks preflight when native evidence is stale.
 - Scan coverage confidence showing measured, limited, unsupported, missing, custom-root, and demo-estimated cleanup roots.
 - Custom root discovery that measures user-entered folders read-only for manual review and never creates executor routes.
+- Custom root triage for unknown folders, with Keep, Archive, Move, Inspect, or Escalate dispositions stored locally as manual evidence and never counted as automated cleanup.
 - Runtime privilege boundary that shows whether the desktop shell is elevated and which selected routes would need admin validation later.
 - Recovery advisor that explains the next useful move when the target is unmet.
 - Agent questions panel that turns scan state, approvals, review items, consent, validation evidence, and verification into the next user-facing question.
@@ -227,6 +228,8 @@ Blocked:
 - Automated partition resizing.
 
 When cleanup cannot meet the requested target, the app switches to manual strategy guidance. Installed app review, custom root review, library migration, archive storage, drive upgrades, and partition work stay advisory-only; the product does not automate uninstallers, custom folder deletion, partition writes, registry edits, or bulk personal-file deletion.
+
+Custom root triage is the follow-through for unknown local folders. The scanner can measure user-specified roots read-only, but each finding must be marked Keep, Archive, Move, Inspect, or Escalate. Archive and Move show advisory manual impact only; they do not create executor rows, recovery totals, or real cleanup permission.
 
 Manual strategy guidance has its own checklist. The user can mark evidence such as full backup, archive destination, official uninstall path, app-native library move, save/source protection, and recovery keys. These marks are stored locally for follow-along workflow only; they do not unlock real cleanup or release gates.
 
