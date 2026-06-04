@@ -45,7 +45,7 @@ In the app:
 3. Check **Real data readiness** for native availability, write capability, destructive command state, and C: volume evidence.
 4. Add protected paths before planning any review-heavy route.
 5. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
-6. Use **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, and **Validation evidence** to confirm real cleanup is still locked.
+6. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, and **Validation evidence** to confirm real cleanup is still locked.
 7. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
 8. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, and no mutation.
 9. Export the redacted support bundle first, then the dry-run report and validation pack when path-level evidence is needed.
@@ -94,6 +94,7 @@ For each Windows validation run, capture:
 - Runtime capability panel state.
 - Real scan settings used for the native scan.
 - Native scan volume totals.
+- Active agent question and question queue state.
 - Per-check validation evidence records with reviewer, timestamp, artifact path, and notes.
 - Public beta readiness state.
 - Redacted support bundle.

@@ -2067,6 +2067,261 @@ export function buildDecisionLog({
   ];
 }
 
+export function buildAgentQuestionQueue({
+  scanned = false,
+  scanning = false,
+  scanMode = "demo",
+  nativeCapability = { available: false },
+  runtimeCapabilities = {},
+  actionList = actions,
+  selectedIds = new Set(),
+  approvals = {},
+  readiness = null,
+  reviewWorkbench = null,
+  recoveryAdvisor = null,
+  manualStrategyChecklist = null,
+  runReadiness = null,
+  consentReceipt = null,
+  verificationSummary = null,
+  rescanComparison = null,
+  validationPack = null,
+  writeBoundaryProbe = null
+} = {}) {
+  const selected = actionList.filter((action) => selectedIds.has(action.id));
+  const gateState = readiness || getExecutionReadinessForActions(selectedIds, approvals, actionList, []);
+  const questions = [];
+  const addQuestion = (question) => {
+    questions.push({
+      status: "waiting",
+      tone: questionTone(question.lane),
+      options: [],
+      ...question
+    });
+  };
+
+  if (scanning) {
+    addQuestion({
+      id: "scan-running",
+      lane: "discovery",
+      priority: 100,
+      title: "Scan in progress",
+      prompt: "Should I wait for the current scan before changing the plan?",
+      detail: "Planning and execution stay locked while scanner state is moving.",
+      status: "active",
+      action: "none",
+      options: ["Wait for scan results"]
+    });
+  }
+
+  if (!scanned && !scanning) {
+    addQuestion({
+      id: "run-first-scan",
+      lane: "discovery",
+      priority: 98,
+      title: "Start discovery",
+      prompt: "Should I scan before suggesting cleanup?",
+      detail: nativeCapability?.available
+        ? "The desktop shell can run a native read-only scan, or the browser demo can use sample data."
+        : "The browser demo can use sample data. Native local scan is available only inside the desktop shell.",
+      status: "active",
+      action: "run-scan",
+      options: nativeCapability?.available ? ["Run real read-only scan", "Run demo scan"] : ["Run demo scan"]
+    });
+  }
+
+  if (scanned && selected.length === 0) {
+    addQuestion({
+      id: "choose-plan",
+      lane: "planning",
+      priority: 92,
+      title: "Choose recovery plan",
+      prompt: "Should I build a suggested plan from the current scan?",
+      detail: "The agent needs at least one selected action before approvals, dry-run consent, or verification can happen.",
+      action: "suggest-plan",
+      options: ["Suggest safest plan"]
+    });
+  }
+
+  const unresolved = gateState?.unresolved || [];
+  if (unresolved.some((entry) => entry.gate === "groupConfirm")) {
+    addQuestion({
+      id: "approve-rebuildable-caches",
+      lane: "approval",
+      priority: 88,
+      title: "Approve rebuildable caches",
+      prompt: "Can rebuildable cache cleanup be included in this dry-run plan?",
+      detail: "Caches can be recreated, but the app still asks before including them in executor preview.",
+      action: "approve-rebuildable",
+      options: ["Approve selected rebuildable caches", "Leave them pending"]
+    });
+  }
+
+  unresolved
+    .filter((entry) => entry.gate === "review")
+    .slice(0, 3)
+    .forEach((entry, index) => {
+      addQuestion({
+        id: `review-${entry.action.id}`,
+        lane: "review",
+        priority: 84 - index,
+        title: `Review ${entry.action.title}`,
+        prompt: "Which items should be removed, moved, archived, or kept?",
+        detail: gateInstruction(entry.action, entry.gate),
+        action: "focus-review",
+        actionId: entry.action.id,
+        options: ["Open item review", "Keep pending"]
+      });
+    });
+
+  unresolved
+    .filter((entry) => entry.gate === "typed")
+    .slice(0, 2)
+    .forEach((entry, index) => {
+      addQuestion({
+        id: `typed-${entry.action.id}`,
+        lane: "advanced",
+        priority: 78 - index,
+        title: `Confirm ${entry.action.title}`,
+        prompt: `Type ${entry.action.typedPhrase} only if you understand the consequence.`,
+        detail: entry.action.consequence || "Advanced action requires explicit typed acknowledgement.",
+        action: "none",
+        actionId: entry.action.id,
+        options: ["Use typed approval field", "Skip advanced action"]
+      });
+    });
+
+  const reviewWaiting = reviewWorkbench?.needsDecision || [];
+  if (reviewWaiting.length > 0 && !questions.some((question) => question.lane === "review")) {
+    const row = reviewWaiting[0];
+    addQuestion({
+      id: `workbench-${row.id}`,
+      lane: "review",
+      priority: 76,
+      title: `Resolve ${row.title}`,
+      prompt: "Should I open the item review for this finding?",
+      detail: row.nextStep || "Review-gated findings need explicit item decisions.",
+      action: "focus-review",
+      actionId: row.id,
+      options: ["Open item review"]
+    });
+  }
+
+  if (recoveryAdvisor?.status === "add-safe" || recoveryAdvisor?.status === "expand-plan" || recoveryAdvisor?.status === "advanced-options") {
+    addQuestion({
+      id: `advisor-${recoveryAdvisor.status}`,
+      lane: "planning",
+      priority: 72,
+      title: "Adjust cleanup plan",
+      prompt: recoveryAdvisor.primary,
+      detail: recoveryAdvisor.detail,
+      action: "suggest-plan",
+      options: ["Rebuild suggested plan", "Keep current selection"]
+    });
+  }
+
+  if (manualStrategyChecklist?.status === "manual-work-open") {
+    const waiting = manualStrategyChecklist.waitingChecks?.[0];
+    addQuestion({
+      id: "manual-strategy-evidence",
+      lane: "strategy",
+      priority: 66,
+      title: "Document manual strategy",
+      prompt: "Which backup or manual storage evidence should be recorded next?",
+      detail: waiting ? `${waiting.optionTitle}: ${waiting.detail}` : manualStrategyChecklist.primary,
+      action: "none",
+      options: ["Use manual checklist", "Keep cleanup-only plan"]
+    });
+  }
+
+  if (runReadiness?.ready && !consentReceipt?.ready) {
+    addQuestion({
+      id: "arm-dry-run",
+      lane: "consent",
+      priority: 62,
+      title: "Arm dry-run",
+      prompt: "Should I arm this exact plan snapshot for dry-run simulation?",
+      detail: "Consent is tied to the current selected actions, approvals, protected paths, and item decisions.",
+      action: "arm-consent",
+      options: ["Arm current dry-run", "Review plan first"]
+    });
+  }
+
+  if (consentReceipt?.ready && !verificationSummary?.current) {
+    addQuestion({
+      id: "simulate-current-plan",
+      lane: "execution",
+      priority: 60,
+      title: "Simulate plan",
+      prompt: "Should I run the dry-run simulation for the armed plan?",
+      detail: "This writes a local dry-run ledger only. Real deletion remains locked.",
+      action: "simulate",
+      options: ["Simulate dry-run", "Export report first"]
+    });
+  }
+
+  if (verificationSummary?.current && rescanComparison?.status !== "matched") {
+    addQuestion({
+      id: "post-run-rescan",
+      lane: "verification",
+      priority: 58,
+      title: "Verify the ledger",
+      prompt: scanMode === "native-readonly" ? "Should I run a fresh native read-only scan for rescan parity?" : "Should I switch to native scan evidence before counting parity?",
+      detail: rescanComparison?.detail || "Post-run verification needs a native scan after the dry-run ledger timestamp.",
+      action: nativeCapability?.available ? "run-real-scan" : "none",
+      options: nativeCapability?.available ? ["Run real read-only scan"] : ["Use desktop shell for native evidence"]
+    });
+  }
+
+  const detailNeeded = validationPack?.validationChecks?.filter((check) => check.evidenceValue && !check.evidenceComplete) || [];
+  if (detailNeeded.length > 0) {
+    addQuestion({
+      id: "validation-evidence-detail",
+      lane: "validation",
+      priority: 52,
+      title: "Complete validation evidence",
+      prompt: "Which validation record needs reviewer and artifact details?",
+      detail: `${detailNeeded[0].label} is marked but cannot count until reviewer and evidence path are recorded.`,
+      action: "none",
+      options: ["Fill validation evidence fields"]
+    });
+  }
+
+  if (writeBoundaryProbe?.commandAvailable && writeBoundaryProbe?.status !== "rejected") {
+    addQuestion({
+      id: "probe-write-boundary",
+      lane: "validation",
+      priority: 48,
+      title: "Probe rejecting write boundary",
+      prompt: "Should I capture rejection evidence from the native write boundary?",
+      detail: "The probe must return accepted=false, every entry rejected, and zero reclaimed bytes.",
+      action: "probe-write-boundary",
+      options: ["Probe write boundary", "Leave unprobed"]
+    });
+  }
+
+  const sorted = questions.sort((a, b) => b.priority - a.priority);
+  const activeQuestion = sorted.find((question) => question.status === "active") || sorted[0] || null;
+
+  return {
+    schemaVersion: "spaceguard-question-queue/v1",
+    status: !sorted.length ? "clear" : activeQuestion?.lane || "waiting",
+    tone: !sorted.length ? "safe" : activeQuestion?.tone || "review",
+    activeQuestion,
+    questions: sorted,
+    counts: {
+      total: sorted.length,
+      active: activeQuestion ? 1 : 0,
+      approval: sorted.filter((question) => question.lane === "approval").length,
+      review: sorted.filter((question) => question.lane === "review").length,
+      validation: sorted.filter((question) => question.lane === "validation").length,
+      actionable: sorted.filter((question) => question.action && question.action !== "none").length
+    },
+    primary: activeQuestion
+      ? activeQuestion.prompt
+      : "No immediate question is blocking the guarded workflow."
+  };
+}
+
 export function buildReviewWorkbench(actionList = actions, selectedIds = new Set(), approvals = {}, protectedPaths = [], itemReviewsByAction = null) {
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, approvals);
   const rows = actionList
@@ -4125,6 +4380,7 @@ export function buildReport({
   nativeScan = null,
   advisor = null,
   decisionLog = [],
+  agentQuestionQueue = null,
   itemReview = null,
   executorPlan = null,
   releaseGate = null,
@@ -4264,6 +4520,22 @@ export function buildReport({
     "",
     "## Decision Log",
     decisionLog.length ? decisionLog.map((entry) => `- ${entry.title}: ${entry.status} | ${entry.detail}`).join("\n") : "- No decisions recorded.",
+    "",
+    "## Agent Questions",
+    agentQuestionQueue
+      ? [
+          `- Status: ${agentQuestionQueue.status}`,
+          `- Active question: ${agentQuestionQueue.activeQuestion?.prompt || "none"}`,
+          `- Total questions: ${agentQuestionQueue.counts.total}`,
+          `- Actionable questions: ${agentQuestionQueue.counts.actionable}`,
+          agentQuestionQueue.questions.length
+            ? agentQuestionQueue.questions
+                .slice(0, 10)
+                .map((question) => `- ${question.title}: ${question.prompt} | ${question.detail}`)
+                .join("\n")
+            : "- No blocking questions."
+        ].join("\n")
+      : "- Not evaluated.",
     "",
     "## Plan Snapshot",
     planSnapshot
@@ -5278,6 +5550,14 @@ function buildWriteBoundaryProbeSteps(status) {
     "Run the native rejecting write-boundary probe.",
     "Verify accepted=false, destructiveCommands=false, and zero bytes."
   ];
+}
+
+function questionTone(lane) {
+  if (lane === "discovery" || lane === "planning" || lane === "execution") return "review";
+  if (lane === "approval" || lane === "review" || lane === "validation") return "review";
+  if (lane === "advanced" || lane === "strategy") return "advanced";
+  if (lane === "verification" || lane === "consent") return "safe";
+  return "outline";
 }
 
 function dedupeBlockers(blockers = []) {

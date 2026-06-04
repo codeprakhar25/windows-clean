@@ -39,6 +39,9 @@ const requiredAppMarkers = [
   "Scan coverage",
   "Coverage confidence",
   "Recovery advisor",
+  "Agent questions",
+  "Open item review",
+  "Question queue is clear",
   "Storage strategy",
   "Manual storage strategy",
   "Manual strategy checklist",
@@ -125,6 +128,7 @@ assert(app.includes("scanSettings"), "native scan settings should be wired");
 assert(app.includes("updateScanSetting"), "native scan settings should invalidate stale evidence");
 assert(app.includes("buildScanCoverageSummary"), "scan coverage summary should be wired");
 assert(app.includes("buildRecoveryAdvisor"), "recovery advisor should be wired");
+assert(app.includes("buildAgentQuestionQueue"), "agent question queue should be wired");
 assert(app.includes("buildStorageStrategyPlan"), "storage strategy workflow should be wired");
 assert(app.includes("buildManualStrategyChecklist"), "manual strategy checklist should be wired");
 assert(app.includes("buildReviewWorkbench"), "review workbench should be wired");
@@ -180,6 +184,10 @@ assert(model.includes("Large personal files"), "model should label large persona
 assert(model.includes("item-review-large-files"), "model should route large personal files through item review");
 assert(model.includes("spaceguard-storage-strategy/v1"), "model should expose storage strategy schema");
 assert(model.includes("spaceguard-manual-strategy-checklist/v1"), "model should expose manual strategy checklist schema");
+assert(model.includes("spaceguard-question-queue/v1"), "model should expose agent question queue schema");
+assert(model.includes("run-first-scan"), "question queue should ask scan-first questions");
+assert(model.includes("approve-rebuildable-caches"), "question queue should ask approval questions");
+assert(model.includes("validation-evidence-detail"), "question queue should ask validation evidence questions");
 assert(model.includes("manualDispositionBytes"), "model should separate manual move/archive bytes from executor bytes");
 assert(model.includes("isItemReviewDecision"), "model should validate expanded item review decisions");
 assert(model.includes("spaceguard-scan-coverage/v1"), "model should expose scan coverage schema");

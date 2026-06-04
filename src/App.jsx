@@ -35,6 +35,7 @@ import {
   buildExecutionPreflight,
   buildExecutionConsentReceipt,
   buildPlanReview,
+  buildAgentQuestionQueue,
   buildDecisionLog,
   appendLedgerRunRecord,
   buildExecutorManifest,
@@ -485,6 +486,49 @@ export default function App() {
       }),
     [releaseGate, executorPlan, executorManifest, dataMode, runtimeCapabilities.result, nativeScan.result]
   );
+  const agentQuestionQueue = useMemo(
+    () =>
+      buildAgentQuestionQueue({
+        scanned,
+        scanning,
+        scanMode: dataMode,
+        nativeCapability,
+        runtimeCapabilities: runtimeCapabilities.result,
+        actionList,
+        selectedIds,
+        approvals,
+        readiness,
+        reviewWorkbench,
+        recoveryAdvisor,
+        manualStrategyChecklist,
+        runReadiness,
+        consentReceipt,
+        verificationSummary,
+        rescanComparison,
+        validationPack,
+        writeBoundaryProbe
+      }),
+    [
+      scanned,
+      scanning,
+      dataMode,
+      nativeCapability,
+      runtimeCapabilities.result,
+      actionList,
+      selectedIds,
+      approvals,
+      readiness,
+      reviewWorkbench,
+      recoveryAdvisor,
+      manualStrategyChecklist,
+      runReadiness,
+      consentReceipt,
+      verificationSummary,
+      rescanComparison,
+      validationPack,
+      writeBoundaryProbe
+    ]
+  );
   const publicBetaReadiness = useMemo(
     () =>
       buildPublicBetaReadiness({
@@ -651,6 +695,12 @@ export default function App() {
   function setModeAndPlan(nextMode) {
     setMode(nextMode);
     applyModeDefaults(nextMode);
+  }
+
+  function approveRebuildableCaches() {
+    setApprovals((current) => ({ ...current, groupConfirm: true }));
+    clearExecutionState();
+    setActiveStage("gate");
   }
 
   function suggestPlan() {
@@ -905,6 +955,7 @@ export default function App() {
       nativeScan: nativeScan.result,
       advisor: recoveryAdvisor,
       decisionLog,
+      agentQuestionQueue,
       itemReview,
       executorPlan,
       releaseGate,
@@ -1152,6 +1203,19 @@ export default function App() {
             <ScanCoveragePanel coverage={scanCoverage} />
 
             <RecoveryAdvisorPanel advisor={recoveryAdvisor} onSuggest={suggestPlan} />
+
+            <AgentQuestionPanel
+              queue={agentQuestionQueue}
+              nativeCapability={nativeCapability}
+              onRunScan={runScan}
+              onRunRealScan={runRealReadonlyScan}
+              onSuggestPlan={suggestPlan}
+              onApproveRebuildable={approveRebuildableCaches}
+              onFocusReview={setFocusedReviewId}
+              onArmConsent={armExecutionConsent}
+              onSimulate={simulateCleanup}
+              onProbeWriteBoundary={probeNativeWriteBoundary}
+            />
 
             <StorageStrategyPanel strategy={storageStrategy} />
 
@@ -1649,6 +1713,123 @@ function RecoveryAdvisorPanel({ advisor, onSuggest }) {
       </CardContent>
     </Card>
   );
+}
+
+function AgentQuestionPanel({
+  queue,
+  nativeCapability,
+  onRunScan,
+  onRunRealScan,
+  onSuggestPlan,
+  onApproveRebuildable,
+  onFocusReview,
+  onArmConsent,
+  onSimulate,
+  onProbeWriteBoundary
+}) {
+  const active = queue.activeQuestion;
+  const preview = queue.questions.slice(0, 5);
+
+  function runQuestionAction(question) {
+    if (!question) return;
+    if (question.action === "suggest-plan") onSuggestPlan();
+    if (question.action === "approve-rebuildable") onApproveRebuildable();
+    if (question.action === "focus-review" && question.actionId) onFocusReview(question.actionId);
+    if (question.action === "arm-consent") onArmConsent();
+    if (question.action === "simulate") onSimulate();
+    if (question.action === "run-real-scan") onRunRealScan();
+    if (question.action === "probe-write-boundary") onProbeWriteBoundary();
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <CircleGauge className="h-4 w-4" />
+              Agent questions
+            </CardTitle>
+            <CardDescription>{queue.primary}</CardDescription>
+          </div>
+          <Badge variant={queue.tone}>{queue.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-3 gap-2">
+          <QueueStat label="Total" value={queue.counts.total} tone={queue.counts.total ? "review" : "safe"} />
+          <QueueStat label="Review" value={queue.counts.review} tone={queue.counts.review ? "review" : "safe"} />
+          <QueueStat label="Action" value={queue.counts.actionable} tone={queue.counts.actionable ? "advanced" : "safe"} />
+        </div>
+
+        {active ? (
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="mr-auto min-w-0 text-sm font-medium">{active.title}</span>
+              <Badge variant={active.tone}>{active.lane}</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">{active.detail}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {active.action === "run-scan" ? (
+                <>
+                  {nativeCapability.available ? (
+                    <Button size="sm" onClick={onRunRealScan}>
+                      <ScanLine className="h-4 w-4" />
+                      Run real scan
+                    </Button>
+                  ) : null}
+                  <Button size="sm" variant={nativeCapability.available ? "outline" : "default"} onClick={onRunScan}>
+                    <Play className="h-4 w-4" />
+                    Run demo scan
+                  </Button>
+                </>
+              ) : active.action && active.action !== "none" ? (
+                <Button size="sm" onClick={() => runQuestionAction(active)}>
+                  <CheckCircle2 className="h-4 w-4" />
+                  {questionActionLabel(active)}
+                </Button>
+              ) : null}
+              {active.options.slice(0, 2).map((option) => (
+                <Badge key={option} variant="outline">{option}</Badge>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+            No immediate question is blocking the current guarded workflow.
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2">
+          {preview.length ? (
+            preview.map((question) => (
+              <div key={question.id} className="grid grid-cols-[18px_1fr_auto] items-start gap-2 rounded-md border bg-card p-3 text-sm">
+                <ClipboardList className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <div className="min-w-0">
+                  <div className="font-medium">{question.prompt}</div>
+                  <div className="text-xs text-muted-foreground">{question.detail}</div>
+                </div>
+                <Badge variant={question.tone}>{question.lane}</Badge>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-md border bg-card p-3 text-sm text-muted-foreground">Question queue is clear.</div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function questionActionLabel(question) {
+  if (question.action === "suggest-plan") return "Rebuild plan";
+  if (question.action === "approve-rebuildable") return "Approve caches";
+  if (question.action === "focus-review") return "Open item review";
+  if (question.action === "arm-consent") return "Arm dry-run";
+  if (question.action === "simulate") return "Simulate";
+  if (question.action === "run-real-scan") return "Run real scan";
+  if (question.action === "probe-write-boundary") return "Probe boundary";
+  return "Apply";
 }
 
 function AdvisorBucket({ label, value }) {

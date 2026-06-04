@@ -349,6 +349,16 @@ const assert = require("assert");
     protectedPaths: []
   });
   assert.strictEqual(scanFirstAdvisor.status, "scan-first", "advisor should require scan before planning");
+  const scanFirstQuestions = guard.buildAgentQuestionQueue({
+    scanned: false,
+    scanning: false,
+    nativeCapability: { available: false },
+    actionList: developerActions,
+    selectedIds: new Set()
+  });
+  assert.strictEqual(scanFirstQuestions.schemaVersion, "spaceguard-question-queue/v1", "question queue should expose a schema version");
+  assert.strictEqual(scanFirstQuestions.activeQuestion.id, "run-first-scan", "question queue should ask for scan first");
+  assert.strictEqual(scanFirstQuestions.activeQuestion.action, "run-scan", "scan-first question should be actionable");
 
   const gatedAdvisor = guard.buildRecoveryAdvisor({
     scanned: true,
@@ -360,6 +370,14 @@ const assert = require("assert");
   });
   assert.strictEqual(gatedAdvisor.status, "needs-approval", "advisor should surface unresolved gates before expansion");
   assert(gatedAdvisor.steps[0].includes("Approve"), "advisor should provide gate-specific next step");
+  const gatedQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    actionList: developerActions,
+    selectedIds: new Set(["gradle-cache"]),
+    approvals: { groupConfirm: false, reviewed: {}, typed: {} },
+    readiness: guard.getExecutionReadinessForActions(new Set(["gradle-cache"]), { groupConfirm: false, reviewed: {}, typed: {} }, developerActions, [])
+  });
+  assert(gatedQuestions.questions.some((question) => question.id === "approve-rebuildable-caches"), "question queue should ask for rebuildable-cache approval");
 
   const normalSelection = new Set(
     developerActions
@@ -906,6 +924,16 @@ const assert = require("assert");
   });
   assert.strictEqual(unarmedConsent.ready, false, "execution consent should be required even when run readiness passes");
   assert(unarmedConsent.items.some((item) => item.id === "plan-accepted" && !item.passed), "consent receipt should surface missing final acknowledgement");
+  const consentQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    actionList: developerActions,
+    selectedIds: new Set(["windows-temp"]),
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    runReadiness: runReady,
+    consentReceipt: unarmedConsent,
+    verificationSummary: { current: false }
+  });
+  assert.strictEqual(consentQuestions.activeQuestion.id, "arm-dry-run", "question queue should ask to arm dry-run when run readiness passes");
   const armedConsent = guard.buildExecutionConsentReceipt({
     planSnapshot: cleanRunSnapshot,
     executorPlan: cleanRunExecutorPlan,
@@ -914,6 +942,16 @@ const assert = require("assert");
   });
   assert.strictEqual(armedConsent.ready, true, "matching consent should arm the current dry-run plan");
   assert.strictEqual(armedConsent.expectedBytes, cleanRunExecutorPlan.dryRunBytes, "consent receipt should summarize expected dry-run bytes");
+  const simulateQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    actionList: developerActions,
+    selectedIds: new Set(["windows-temp"]),
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    runReadiness: runReady,
+    consentReceipt: armedConsent,
+    verificationSummary: { current: false }
+  });
+  assert(simulateQuestions.questions.some((question) => question.id === "simulate-current-plan" && question.action === "simulate"), "question queue should ask to simulate an armed plan");
   const staleConsent = guard.buildExecutionConsentReceipt({
     planSnapshot: changedItemPlanSnapshot,
     executorPlan: cleanRunExecutorPlan,
@@ -1009,6 +1047,19 @@ const assert = require("assert");
   });
   assert.strictEqual(legacyEvidenceGate.rows.find((row) => row.id === "windows-native-build").passed, false, "legacy checkbox evidence should need reviewer and artifact details");
   assert.strictEqual(legacyEvidenceGate.rows.find((row) => row.id === "windows-native-build").status, "legacy-needs-detail", "legacy evidence should stay visible as detail-needed");
+  const legacyValidationPack = guard.buildValidationEvidencePack({
+    releaseGate: legacyEvidenceGate,
+    executorPlan,
+    scanMode: "native-readonly",
+    runtimeCapabilities: { available: true, realRunEnabled: false, destructiveCommands: false }
+  });
+  const validationDetailQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    actionList: developerActions,
+    selectedIds: new Set(["windows-temp"]),
+    validationPack: legacyValidationPack
+  });
+  assert(validationDetailQuestions.questions.some((question) => question.id === "validation-evidence-detail"), "question queue should ask for validation evidence details");
 
   const executorManifest = guard.buildExecutorManifest({
     actionList: developerActions,
