@@ -213,7 +213,7 @@ Blocked:
 - Direct deletion from `C:\Windows`, `Program Files`, or `ProgramData`.
 - Automated partition resizing.
 
-When cleanup cannot meet the requested target, the app switches to manual strategy guidance. Installed app review, library migration, archive storage, drive upgrades, and partition work stay advisory-only; the product does not automate uninstallers, partition writes, registry edits, or bulk personal-file deletion.
+When cleanup cannot meet the requested target, the app switches to manual strategy guidance. Installed app review, custom root review, library migration, archive storage, drive upgrades, and partition work stay advisory-only; the product does not automate uninstallers, custom folder deletion, partition writes, registry edits, or bulk personal-file deletion.
 
 Manual strategy guidance has its own checklist. The user can mark evidence such as full backup, archive destination, official uninstall path, app-native library move, save/source protection, and recovery keys. These marks are stored locally for follow-along workflow only; they do not unlock real cleanup or release gates.
 

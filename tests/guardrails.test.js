@@ -425,11 +425,25 @@ const assert = require("assert");
     selectedIds: strategySelection,
     approvals: strategyApprovals,
     itemReviewsByAction: strategyReviewItems,
+    scanCoverage: {
+      customRootBytes: 64 * guard.GB,
+      customRootRows: [
+        {
+          id: "custom-root-1",
+          title: "Custom folder: Archives",
+          bytes: 64 * guard.GB,
+          evidence: "measured",
+          verified: true
+        }
+      ]
+    },
     goalBytes: 500 * guard.GB
   });
   assert.strictEqual(storageStrategy.status, "manual-strategy", "storage strategy should activate when cleanup cannot hit the target");
   assert.strictEqual(storageStrategy.manualOnly, true, "storage strategies must be manual-only");
   assert(storageStrategy.options.some((option) => option.id === "uninstall-apps-manually"), "storage strategy should include manual installed-app review");
+  assert(storageStrategy.options.some((option) => option.id === "review-custom-roots"), "storage strategy should include custom root manual review");
+  assert.strictEqual(storageStrategy.options.find((option) => option.id === "review-custom-roots").impact, 64 * guard.GB, "custom root strategy should carry advisory impact bytes");
   assert(storageStrategy.options.some((option) => option.id === "partition-or-drive-plan"), "storage strategy should include backup-first partition guidance");
   assert(storageStrategy.options.every((option) => option.automation === "manual"), "storage strategy options must not create automation routes");
   const manualChecklist = guard.buildManualStrategyChecklist({ storageStrategy });
@@ -437,6 +451,7 @@ const assert = require("assert");
   assert.strictEqual(manualChecklist.manualOnly, true, "manual strategy checklist must remain manual-only");
   assert.strictEqual(manualChecklist.status, "manual-work-open", "manual strategy should start with waiting evidence");
   assert(manualChecklist.checks.some((check) => check.id === "partition-or-drive-plan:full-backup"), "partition strategy should require full backup evidence");
+  assert(manualChecklist.checks.some((check) => check.id === "review-custom-roots:no-executor-route"), "custom root strategy should require no-executor-route acknowledgement");
   assert(manualChecklist.checks.some((check) => check.id === "uninstall-apps-manually:no-automated-uninstall"), "installed app strategy should block automated uninstall");
   const completedManualEvidence = Object.fromEntries(manualChecklist.checks.filter((check) => check.required).map((check) => [check.id, "done"]));
   const completedManualChecklist = guard.buildManualStrategyChecklist({ storageStrategy, evidence: completedManualEvidence });

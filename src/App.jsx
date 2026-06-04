@@ -309,9 +309,10 @@ export default function App() {
         approvals,
         protectedPaths,
         itemReviewsByAction,
+        scanCoverage,
         goalBytes: goalGb * GB
       }),
-    [scanned, profile, recoveryAdvisor, actionList, selectedIds, approvals, protectedPaths, itemReviewsByAction, goalGb]
+    [scanned, profile, recoveryAdvisor, actionList, selectedIds, approvals, protectedPaths, itemReviewsByAction, scanCoverage, goalGb]
   );
   const manualStrategyChecklist = useMemo(
     () =>

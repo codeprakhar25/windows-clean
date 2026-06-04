@@ -1865,6 +1865,7 @@ export function buildStorageStrategyPlan({
   approvals = {},
   itemReviewsByAction = null,
   protectedPaths = [],
+  scanCoverage = null,
   goalBytes = 0
 } = {}) {
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, approvals);
@@ -1876,8 +1877,22 @@ export function buildStorageStrategyPlan({
   const projectAction = actionList.find((action) => action.id === "node-modules-old");
   const gameAction = actionList.find((action) => action.id === "steam-shader-cache");
   const partitionAction = actionList.find((action) => action.id === "partitioning");
+  const customRootRows = scanCoverage?.customRootRows || [];
+  const customRootBytes = Number(scanCoverage?.customRootBytes || 0);
 
   const options = [
+    {
+      id: "review-custom-roots",
+      title: "Review custom discovered folders",
+      lane: "manual-folder-review",
+      priority: customRootBytes,
+      impact: customRootBytes,
+      recommended: customRootRows.length > 0 && customRootBytes > 0,
+      detail: "Inspect custom read-only root findings and decide whether to archive, move, uninstall through the owning app, or leave them untouched.",
+      evidence: "Custom root discovery rows plus user-owned keep/move/archive notes.",
+      guardrails: ["Read-only discovery", "No executor route", "No bulk folder deletion"],
+      automation: "manual"
+    },
     {
       id: "archive-large-files",
       title: "Archive large personal files",
@@ -5943,6 +5958,27 @@ function manualStrategyChecksForOption(option) {
       detail: option.guardrails?.join(", ") || "Review guardrails before manual action."
     }
   ];
+
+  if (option.id === "review-custom-roots") {
+    return [
+      {
+        key: "folder-owner-reviewed",
+        title: "Folder owner reviewed",
+        detail: "Confirm what app, project, or workflow owns each custom root before moving or deleting anything."
+      },
+      {
+        key: "manual-disposition",
+        title: "Manual disposition chosen",
+        detail: "Each custom root is marked keep, archive, move through the owning app, or inspect later."
+      },
+      {
+        key: "no-executor-route",
+        title: "No executor route",
+        detail: "Custom root findings remain manual evidence and cannot be added to automated cleanup."
+      },
+      ...common
+    ];
+  }
 
   if (option.id === "archive-large-files") {
     return [

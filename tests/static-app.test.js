@@ -240,6 +240,8 @@ assert(model.includes("permanent-removal acknowledgement"), "model should disclo
 assert(model.includes("No cloud telemetry"), "model should keep cloud telemetry disabled");
 assert(model.includes("demo-estimate"), "model should keep demo-estimated roots visible");
 assert(model.includes("uninstall-apps-manually"), "model should include manual installed-app strategy");
+assert(model.includes("review-custom-roots"), "model should include manual custom root strategy");
+assert(model.includes("No executor route"), "custom root strategy should keep automation blocked");
 assert(model.includes("No automated partition writes"), "model should keep partition strategy advisory");
 assert(nativeAdapter.includes("scan_known_roots"), "native adapter should invoke the read-only scanner command");
 assert(nativeAdapter.includes("customRoots"), "native adapter should pass custom read-only roots");

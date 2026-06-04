@@ -290,8 +290,9 @@ Public beta invariant:
 Manual strategy invariant:
 
 - Manual storage actions are tracked, not executed.
-- Installed app review, library moves, archive moves, drive upgrades, and partition work remain user-owned.
+- Installed app review, custom root review, library moves, archive moves, drive upgrades, and partition work remain user-owned.
 - Manual evidence can help the user follow along, but it cannot unlock executor routes, release gates, or real cleanup.
+- Custom root discovery can create manual review checklist rows, but it cannot create executor routes or automated folder cleanup.
 - Partition and drive planning requires backup and recovery-key evidence before advice is considered ready.
 
 Support bundle invariant:
