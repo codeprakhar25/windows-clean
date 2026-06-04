@@ -1,0 +1,42 @@
+{
+  "name": "windows-clean",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dry-run Windows space recovery assistant prototype with guarded cleanup workflows.",
+  "scripts": {
+    "start": "vite --host 127.0.0.1",
+    "dev": "vite --host 127.0.0.1",
+    "dev:tauri": "vite --host 127.0.0.1 --port 4173 --strictPort",
+    "native:dev": "tauri dev",
+    "native:build": "tauri build",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node tests/guardrails.test.js && node tests/native-scanner.test.js && node tests/static-app.test.js",
+    "check": "npm run build"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.1.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.6.0",
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "vite": "^5.4.11"
+  },
+  "keywords": [
+    "windows",
+    "disk-cleanup",
+    "space-recovery",
+    "dry-run"
+  ],
+  "license": "UNLICENSED"
+}
