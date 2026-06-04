@@ -39,6 +39,8 @@ const requiredAppMarkers = [
   "Scoped powers",
   "Power lease audit",
   "Lease envelope",
+  "Safety interlock",
+  "Execution envelope",
   "real run disabled",
   "Run real scan",
   "Native app required",
@@ -174,6 +176,8 @@ assert(app.includes("buildDemoRehearsalRunbook"), "demo rehearsal runbook should
 assert(app.includes("DemoRehearsalRunbookPanel"), "demo rehearsal runbook panel should be rendered");
 assert(app.includes("buildProductCompletionAudit"), "product completion audit should be wired");
 assert(app.includes("ProductCompletionAuditPanel"), "product completion audit panel should be rendered");
+assert(app.includes("buildSafetyInterlock"), "safety interlock should be wired");
+assert(app.includes("SafetyInterlockPanel"), "safety interlock panel should be rendered");
 assert(app.includes("scanSettings"), "native scan settings should be wired");
 assert(app.includes("targetDrive"), "native scan settings should include target drive");
 assert(app.includes("updateScanSetting"), "native scan settings should invalidate stale evidence");

@@ -145,6 +145,7 @@ The demo also includes:
 - Windows setup assistant that separates browser demo, desktop shell, current read-only scan evidence, local privacy/export, native beta readiness, and the real-cleanup lock.
 - Demo rehearsal runbook that proves the browser demo can go from scan to gated plan, dry-run consent, simulated ledger, and report export without native data or real cleanup.
 - Product completion audit that maps the original product requirements to proven, partial, waiting, locked, or unsafe evidence so the app cannot overclaim real cleanup readiness.
+- Safety interlock that summarizes runtime write signals, native write signals, scan freshness, dry-run consent, task power leases, standing permission, run readiness, write-boundary evidence, release review, and write readiness into one stop/hold/dry-run state.
 - Native Windows volume evidence for target-drive total, used, and free bytes when the desktop scanner can read it.
 - Intake constraints for target drive, goal, risk tolerance, protected paths, and whether admin/system routes can enter dry-run planning.
 - Task powers panel that maps selected cleanup actions to scoped capabilities such as safe cleanup, rebuildable cache cleanup, reviewed item cleanup, admin cleanup, advanced system strategy, manual storage strategy, and restricted zones.

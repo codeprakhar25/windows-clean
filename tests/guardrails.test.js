@@ -290,6 +290,56 @@ const assert = require("assert");
   assert.strictEqual(standingPermissionLeaseAudit.status, "unsafe-runtime", "standing permission should make power leases unsafe");
   assert.strictEqual(standingPermissionLeaseAudit.standingPermission, true, "lease audit should surface standing permission violations");
   assert.strictEqual(standingPermissionLeaseAudit.counts.standingPermission, 1, "lease audit should count standing permission violations");
+  const dryRunSafetyInterlock = guard.buildSafetyInterlock({
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false },
+    nativeScan: { writeCapability: false, destructiveCommands: false },
+    scanSession: grantScanSession,
+    runReadiness: { ready: true, blockedCount: 0 },
+    consentReceipt: grantConsent,
+    executorPlan: grantExecutorPlan,
+    taskPowerBroker: issuedPowerBroker,
+    taskCapabilityGrants: issuedTaskGrants,
+    taskPowerLeaseAudit: issuedPowerLeaseAudit,
+    writeBoundaryProbe: { status: "not-run", rejectionEvidence: false },
+    releaseReviewPacket: { status: "review-waiting", writeSignalVisible: false },
+    writeReadiness: { status: "implementation-locked", readyForRealExecution: false, primary: "Real execution remains locked." }
+  });
+  assert.strictEqual(dryRunSafetyInterlock.schemaVersion, "spaceguard-safety-interlock/v1", "safety interlock should expose a schema version");
+  assert.strictEqual(dryRunSafetyInterlock.status, "dry-run-interlocked", "current safe evidence should allow dry-run only");
+  assert.strictEqual(dryRunSafetyInterlock.dryRunAllowed, true, "interlock should allow dry-run when all dry-run gates pass");
+  assert.strictEqual(dryRunSafetyInterlock.realRunAllowed, false, "interlock must never allow real execution in this build");
+  assert.strictEqual(dryRunSafetyInterlock.rows.find((row) => row.id === "write-boundary").blocksDryRun, false, "write-boundary evidence should not block current dry-run simulation");
+  const staleSafetyInterlock = guard.buildSafetyInterlock({
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false },
+    nativeScan: { writeCapability: false, destructiveCommands: false },
+    scanSession: grantScanSession,
+    runReadiness: { ready: true, blockedCount: 0 },
+    consentReceipt: grantConsent,
+    executorPlan: grantExecutorPlan,
+    taskPowerBroker: issuedPowerBroker,
+    taskCapabilityGrants: issuedTaskGrants,
+    taskPowerLeaseAudit: stalePowerLeaseAudit,
+    writeReadiness: { status: "implementation-locked", readyForRealExecution: false }
+  });
+  assert.strictEqual(staleSafetyInterlock.status, "interlock-hold", "stale task leases should hold the safety interlock");
+  assert.strictEqual(staleSafetyInterlock.dryRunAllowed, false, "stale task leases should block dry-run");
+  assert(staleSafetyInterlock.holdRows.some((row) => row.id === "power-lease-current"), "stale interlock should name task power leases as the hold row");
+  const unsafeSafetyInterlock = guard.buildSafetyInterlock({
+    runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true },
+    nativeScan: { writeCapability: true, destructiveCommands: true },
+    scanSession: grantScanSession,
+    runReadiness: { ready: true, blockedCount: 0 },
+    consentReceipt: grantConsent,
+    executorPlan: grantExecutorPlan,
+    taskPowerBroker: issuedPowerBroker,
+    taskCapabilityGrants: issuedTaskGrants,
+    taskPowerLeaseAudit: issuedPowerLeaseAudit,
+    releaseReviewPacket: { status: "unsafe-stop", writeSignalVisible: true },
+    writeReadiness: { status: "ready-for-real-execution", readyForRealExecution: true }
+  });
+  assert.strictEqual(unsafeSafetyInterlock.status, "unsafe-stop", "unsafe runtime signals should stop the safety interlock");
+  assert.strictEqual(unsafeSafetyInterlock.counts.unsafe > 0, true, "unsafe interlock should count unsafe rows");
+  assert.strictEqual(unsafeSafetyInterlock.dryRunAllowed, false, "unsafe interlock should block dry-run");
   const unsafePowerBroker = guard.buildTaskPowerBroker({
     taskPowerCatalog: activeCachePowerCatalog,
     taskCapabilityGrants: unsafeTaskGrants,
@@ -339,10 +389,13 @@ const assert = require("assert");
     taskPowerBroker: issuedPowerBroker,
     taskCapabilityGrants: issuedTaskGrants,
     taskPowerLeaseAudit: issuedPowerLeaseAudit,
+    safetyInterlock: dryRunSafetyInterlock,
     taskPowerCatalog: activeCachePowerCatalog
   });
   assert(taskRunbookReport.includes("## Task Power Broker"), "report should include task power broker");
   assert(taskRunbookReport.includes("Standing permission: no"), "task power broker report should preserve no-standing-permission boundary");
+  assert(taskRunbookReport.includes("## Safety Interlock"), "report should include safety interlock");
+  assert(taskRunbookReport.includes("Dry-run allowed: yes"), "safety interlock report should capture dry-run allowance");
   assert(taskRunbookReport.includes("## Task Power Lease Audit"), "report should include task power lease audit");
   assert(taskRunbookReport.includes("Current leases: 1"), "task power lease report should capture current lease count");
   assert(taskRunbookReport.includes("## Task Runbook"), "report should include task runbook");

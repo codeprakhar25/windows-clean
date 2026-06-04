@@ -76,6 +76,7 @@ import {
   buildScenarioActions,
   buildSuggestedPlan,
   buildRunReadiness,
+  buildSafetyInterlock,
   buildScanCoverageSummary,
   buildScanSessionEvidence,
   buildStorageStrategyPlan,
@@ -851,6 +852,37 @@ export default function App() {
       consentReceipt
     ]
   );
+  const safetyInterlock = useMemo(
+    () =>
+      buildSafetyInterlock({
+        runtimeCapabilities: runtimeCapabilities.result,
+        nativeScan: nativeScan.result,
+        scanSession,
+        runReadiness,
+        consentReceipt,
+        executorPlan,
+        taskPowerBroker,
+        taskCapabilityGrants,
+        taskPowerLeaseAudit,
+        writeBoundaryProbe,
+        releaseReviewPacket,
+        writeReadiness
+      }),
+    [
+      runtimeCapabilities.result,
+      nativeScan.result,
+      scanSession,
+      runReadiness,
+      consentReceipt,
+      executorPlan,
+      taskPowerBroker,
+      taskCapabilityGrants,
+      taskPowerLeaseAudit,
+      writeBoundaryProbe,
+      releaseReviewPacket,
+      writeReadiness
+    ]
+  );
   const productCompletionAudit = useMemo(
     () =>
       buildProductCompletionAudit({
@@ -882,6 +914,7 @@ export default function App() {
         supportBundle,
         validationPack,
         releaseReviewPacket,
+        safetyInterlock,
         writeReadiness,
         realExecutorCapsule,
         runtimeCapabilities: runtimeCapabilities.result
@@ -915,6 +948,7 @@ export default function App() {
       supportBundle,
       validationPack,
       releaseReviewPacket,
+      safetyInterlock,
       writeReadiness,
       realExecutorCapsule,
       runtimeCapabilities.result
@@ -1504,6 +1538,7 @@ export default function App() {
       releaseGate,
       validationPack,
       runtimeCapabilities: runtimeCapabilities.result,
+      safetyInterlock,
       itemReviewsByAction,
       planSnapshot,
       verificationSummary,
@@ -1818,6 +1853,8 @@ export default function App() {
             <DemoRehearsalRunbookPanel runbook={demoRehearsalRunbook} onExport={exportReport} />
 
             <ProductCompletionAuditPanel audit={productCompletionAudit} />
+
+            <SafetyInterlockPanel interlock={safetyInterlock} />
 
             <WorkflowHandoffPanel handoff={workflowHandoff} onExport={exportWorkflowHandoff} />
 
@@ -2448,6 +2485,71 @@ function ProductCompletionAuditPanel({ audit }) {
                 <Badge variant={row.canRealRun ? "restricted" : "safe"}>{row.canRealRun ? "real run" : "no real run"}</Badge>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">{row.nextStep}</p>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SafetyInterlockPanel({ interlock }) {
+  const visibleRows = interlock.unsafeRows.length || interlock.holdRows.length
+    ? [...interlock.unsafeRows, ...interlock.holdRows].slice(0, 6)
+    : interlock.rows.slice(0, 6);
+
+  return (
+    <Card id="safety-interlock-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Lock className="h-4 w-4" />
+              Safety interlock
+            </CardTitle>
+            <CardDescription>{interlock.primary}</CardDescription>
+          </div>
+          <Badge variant={interlock.tone}>{interlock.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Passed" value={interlock.counts.passed} tone={interlock.counts.passed ? "safe" : "review"} />
+          <QueueStat label="Hold" value={interlock.counts.hold} tone={interlock.counts.hold ? "restricted" : "safe"} />
+          <QueueStat label="Unsafe" value={interlock.counts.unsafe} tone={interlock.counts.unsafe ? "restricted" : "safe"} />
+          <QueueStat label="Dry-run" value={interlock.dryRunAllowed ? "open" : "held"} tone={interlock.dryRunAllowed ? "safe" : "restricted"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Execution envelope</span>
+            <Badge variant={interlock.dryRunAllowed ? "safe" : "restricted"}>{interlock.dryRunAllowed ? "dry-run interlocked" : "dry-run held"}</Badge>
+            <Badge variant={interlock.realRunAllowed ? "restricted" : "safe"}>{interlock.realRunAllowed ? "real run open" : "real run locked"}</Badge>
+            <Badge variant={interlock.destructiveCommands ? "restricted" : "safe"}>{interlock.destructiveCommands ? "destructive visible" : "no destructive commands"}</Badge>
+          </div>
+          <div className="flex flex-col gap-2">
+            {interlock.steps.slice(0, 3).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {visibleRows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="mr-auto min-w-0 text-sm font-medium">{row.label}</div>
+                <Badge variant={row.tone}>{row.status}</Badge>
+                <Badge variant="outline">{row.lane}</Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{row.detail}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge variant={row.blocksDryRun ? "review" : "outline"}>{row.blocksDryRun ? "dry-run gate" : "release evidence"}</Badge>
+                <Badge variant="outline">{row.evidence}</Badge>
+              </div>
             </div>
           ))}
         </div>

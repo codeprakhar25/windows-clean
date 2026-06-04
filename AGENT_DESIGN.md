@@ -129,6 +129,7 @@ The UI must also expose a recovery advisor and decision log:
 - `privacy boundary`: local-only data handling, explicit export, browser storage audit records, blocked collection classes, and disabled telemetry/cloud upload.
 - `public beta readiness`: web-demo versus native read-only beta status, signing/support/uninstall evidence, privacy posture, and public claim boundary.
 - `release review packet`: one exportable review artifact that combines plan, scan session, task grants, contract, write-boundary rejection, validation, rollback, rescan, privilege, privacy, support redaction, public claims, and real-cleanup lock evidence.
+- `safety interlock`: global stop/hold surface derived from runtime write signals, native write signals, scan freshness, dry-run consent, task power leases, broker standing permission, run readiness, write-boundary evidence, release review, and write readiness.
 - `support bundle`: redacted diagnostics for support triage that exclude local paths and filenames by default.
 - `workflow handoff`: redacted resume artifact with active question, next actions, audit status, setup/demo/release state, and real-cleanup lock.
 - `validation evidence`: disposable VM checklists, seeded fixture roots, required commands, selected executor routes, reviewer/artifact records, and signoff fields.
@@ -178,6 +179,14 @@ Task power invariant:
 - Task runbook work orders can summarize and sequence selected task grants, but they cannot add authority, reuse one task power for another target, or bypass the selected route boundary.
 - The restriction matrix is authoritative for refusal classes. Hard-blocked, advisory-only, manual-only, and future-disabled rows cannot create executor routes, cannot count real-run routes, and cannot be bypassed by task powers, runbook work orders, validation records, or release packets.
 - The setup assistant can list non-destructive setup commands and UI exports, but it cannot list direct delete, registry, power-setting, format, partition, or cleanup shell commands.
+
+Safety interlock invariant:
+
+- Unsafe runtime write signals, destructive command visibility, native write capability, standing permission, write-boundary unsafe signals, release-review write signals, or real-execution readiness force a stop state.
+- Stale leases, blocked leases, missing current scan evidence, missing dry-run consent, or failed run readiness hold dry-run simulation.
+- Release evidence that is not needed for current dry-run can remain waiting without creating cleanup authority.
+- The interlock can allow dry-run simulation only; it never grants real execution.
+- The interlock must be rebuilt after any plan, scan, approval, protected-path, scanner-setting, consent, runtime, or write-boundary change.
 
 Review gate invariant:
 

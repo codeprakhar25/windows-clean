@@ -3542,6 +3542,167 @@ export function buildTaskPowerLeaseAudit({
   };
 }
 
+export function buildSafetyInterlock({
+  runtimeCapabilities = {},
+  nativeScan = null,
+  scanSession = null,
+  runReadiness = null,
+  consentReceipt = null,
+  executorPlan = null,
+  taskPowerBroker = null,
+  taskCapabilityGrants = null,
+  taskPowerLeaseAudit = null,
+  writeBoundaryProbe = null,
+  releaseReviewPacket = null,
+  writeReadiness = null
+} = {}) {
+  const selectedRows = executorPlan?.rows || [];
+  const runtimeUnsafe = Boolean(runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands);
+  const nativeUnsafe = Boolean(nativeScan?.writeCapability || nativeScan?.destructiveCommands);
+  const scanCurrent = Boolean(scanSession?.readyForPlanning || scanSession?.status === "demo-current");
+  const consentCurrent = Boolean(consentReceipt?.ready);
+  const leaseStatus = taskPowerLeaseAudit?.status || "no-leases";
+  const leasesCurrent = leaseStatus === "leases-current" || (!selectedRows.length && leaseStatus === "no-leases");
+  const leaseUnsafe = leaseStatus === "unsafe-runtime" || Boolean(taskPowerLeaseAudit?.standingPermission);
+  const leaseHold = leaseStatus === "leases-stale" || leaseStatus === "leases-blocked";
+  const leaseWaiting = !leasesCurrent && !leaseUnsafe && !leaseHold;
+  const probeStatus = writeBoundaryProbe?.status || "not-run";
+  const probeUnsafe = probeStatus === "unsafe-signal";
+  const probeHold = probeStatus === "contract-mismatch" || probeStatus === "target-scope-rejected" || probeStatus === "error";
+  const releaseUnsafe = Boolean(releaseReviewPacket?.writeSignalVisible || releaseReviewPacket?.status === "unsafe-stop");
+  const writeReady = Boolean(writeReadiness?.readyForRealExecution);
+
+  const rows = [
+    buildSafetyInterlockRow({
+      id: "runtime-write-lock",
+      label: "Runtime write lock",
+      lane: "runtime",
+      status: runtimeUnsafe ? "unsafe" : "passed",
+      blocksDryRun: true,
+      detail: runtimeUnsafe ? "Runtime reports real-run or destructive command capability." : "Runtime reports no real-run or destructive command capability.",
+      evidence: `realRun=${runtimeCapabilities?.realRunEnabled ? "yes" : "no"}, destructive=${runtimeCapabilities?.destructiveCommands ? "yes" : "no"}`
+    }),
+    buildSafetyInterlockRow({
+      id: "native-write-lock",
+      label: "Native write lock",
+      lane: "native",
+      status: nativeUnsafe ? "unsafe" : "passed",
+      blocksDryRun: true,
+      detail: nativeUnsafe ? "Native scan evidence reports write or destructive capability." : "Native scan evidence does not expose write capability.",
+      evidence: nativeScan ? `write=${nativeScan.writeCapability ? "yes" : "no"}, destructive=${nativeScan.destructiveCommands ? "yes" : "no"}` : "no native scan evidence"
+    }),
+    buildSafetyInterlockRow({
+      id: "scan-current",
+      label: "Scan session current",
+      lane: "scan",
+      status: scanCurrent ? "passed" : "waiting",
+      blocksDryRun: true,
+      detail: scanCurrent ? scanSession?.primary || "Scan evidence is current." : "Run or refresh the scan before using a plan.",
+      evidence: scanSession?.status || "missing"
+    }),
+    buildSafetyInterlockRow({
+      id: "consent-current",
+      label: "Dry-run consent current",
+      lane: "consent",
+      status: consentCurrent ? "passed" : "waiting",
+      blocksDryRun: true,
+      detail: consentCurrent ? `Consent is tied to ${consentReceipt.planId || "the current plan"}.` : "Arm dry-run consent for the current plan.",
+      evidence: consentReceipt?.planId || "missing"
+    }),
+    buildSafetyInterlockRow({
+      id: "power-lease-current",
+      label: "Task power leases",
+      lane: "powers",
+      status: leaseUnsafe ? "unsafe" : leaseHold ? "hold" : leaseWaiting ? "waiting" : "passed",
+      blocksDryRun: true,
+      detail: taskPowerLeaseAudit?.primary || "No task power lease has been evaluated.",
+      evidence: leaseStatus
+    }),
+    buildSafetyInterlockRow({
+      id: "broker-standing-permission",
+      label: "No standing permission",
+      lane: "powers",
+      status: taskPowerBroker?.standingPermission ? "unsafe" : "passed",
+      blocksDryRun: true,
+      detail: taskPowerBroker?.standingPermission ? "The broker reports standing permission, which is not allowed." : "Broker denies standing permission across tasks.",
+      evidence: taskPowerBroker?.defaultDecision || "broker not evaluated"
+    }),
+    buildSafetyInterlockRow({
+      id: "run-readiness",
+      label: "Run readiness",
+      lane: "dry-run",
+      status: runReadiness?.ready ? "passed" : "waiting",
+      blocksDryRun: true,
+      detail: runReadiness?.ready ? "Workflow preflight and executor policy allow simulation." : "Workflow, gates, route policy, or dry-run lock still need work.",
+      evidence: `${runReadiness?.blockedCount || 0} blocker(s)`
+    }),
+    buildSafetyInterlockRow({
+      id: "write-boundary",
+      label: "Write boundary probe",
+      lane: "release",
+      status: probeUnsafe ? "unsafe" : probeHold ? "hold" : writeBoundaryProbe?.rejectionEvidence ? "passed" : "waiting",
+      blocksDryRun: false,
+      detail: writeBoundaryProbe?.primary || "Write-boundary rejection evidence has not been captured.",
+      evidence: probeStatus
+    }),
+    buildSafetyInterlockRow({
+      id: "release-review",
+      label: "Release review signals",
+      lane: "release",
+      status: releaseUnsafe ? "unsafe" : releaseReviewPacket?.status === "review-packet-ready" ? "passed" : "waiting",
+      blocksDryRun: false,
+      detail: releaseUnsafe ? "Release review sees a write signal." : releaseReviewPacket?.primary || "Release review packet is not complete.",
+      evidence: releaseReviewPacket?.status || "missing"
+    }),
+    buildSafetyInterlockRow({
+      id: "real-execution-lock",
+      label: "Real execution lock",
+      lane: "write",
+      status: writeReady ? "unsafe" : "passed",
+      blocksDryRun: true,
+      detail: writeReady ? "Write readiness reports real execution available; this build needs explicit release review." : writeReadiness?.primary || "Real execution remains locked.",
+      evidence: writeReadiness?.status || "missing"
+    })
+  ];
+  const unsafeRows = rows.filter((row) => row.status === "unsafe");
+  const holdRows = rows.filter((row) => row.status === "hold" || (row.blocksDryRun && row.status === "waiting"));
+  const waitingRows = rows.filter((row) => row.status === "waiting" && !row.blocksDryRun);
+  const passedRows = rows.filter((row) => row.status === "passed");
+  const dryRunAllowed = !unsafeRows.length && !holdRows.length;
+  const status = unsafeRows.length
+    ? "unsafe-stop"
+    : holdRows.length
+      ? "interlock-hold"
+      : dryRunAllowed
+        ? "dry-run-interlocked"
+        : "interlock-waiting";
+
+  return {
+    schemaVersion: "spaceguard-safety-interlock/v1",
+    status,
+    tone: status === "dry-run-interlocked" ? "safe" : status === "unsafe-stop" || status === "interlock-hold" ? "restricted" : "review",
+    dryRunAllowed,
+    realRunAllowed: false,
+    destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands || nativeScan?.destructiveCommands),
+    rows,
+    unsafeRows,
+    holdRows,
+    waitingRows,
+    passedRows,
+    counts: {
+      total: rows.length,
+      passed: passedRows.length,
+      unsafe: unsafeRows.length,
+      hold: holdRows.length,
+      waiting: waitingRows.length,
+      dryRunBlockers: rows.filter((row) => row.blocksDryRun && row.status !== "passed").length,
+      realRun: 0
+    },
+    primary: getSafetyInterlockPrimary(status, { unsafeRows, holdRows, waitingRows }),
+    steps: getSafetyInterlockSteps(status, { unsafeRows, holdRows, waitingRows })
+  };
+}
+
 export function buildAgentTaskRunbook({
   executorPlan = null,
   taskCapabilityGrants = null,
@@ -3973,6 +4134,7 @@ export function buildProductCompletionAudit({
   supportBundle = null,
   validationPack = null,
   releaseReviewPacket = null,
+  safetyInterlock = null,
   writeReadiness = null,
   realExecutorCapsule = null,
   runtimeCapabilities = {}
@@ -4045,6 +4207,20 @@ export function buildProductCompletionAudit({
           : "Task grants have not been evaluated.",
       evidence: taskPowerBroker?.authority || taskRunbook?.authority || taskCapabilityGrants?.authority || "no grant authority",
       nextStep: "Keep powers tied to plan id, scan fingerprint, consent, route target, and no-standing-permission broker rules."
+    }),
+    buildProductCompletionAuditRow({
+      id: "safety-interlock",
+      requirement: "Stop or hold unsafe execution states",
+      status: safetyInterlock?.status === "unsafe-stop"
+        ? "unsafe"
+        : safetyInterlock?.schemaVersion && safetyInterlock?.realRunAllowed === false
+          ? "proven"
+          : "waiting-evidence",
+      detail: safetyInterlock
+        ? `${safetyInterlock.counts.unsafe} unsafe, ${safetyInterlock.counts.hold} hold, ${safetyInterlock.counts.dryRunBlockers} dry-run blocker(s).`
+        : "Global safety interlock has not been evaluated.",
+      evidence: safetyInterlock?.status || "safety interlock missing",
+      nextStep: safetyInterlock?.dryRunAllowed ? "Run dry-run only." : "Resolve the interlock row before simulation."
     }),
     buildProductCompletionAuditRow({
       id: "restriction-policy",
@@ -6991,6 +7167,7 @@ export function buildReport({
   manualStrategyChecklist = null,
   scanCoverage = null,
   intakePolicy = null,
+  safetyInterlock = null,
   taskPowerCatalog = null,
   taskPowerBroker = null,
   taskCapabilityGrants = null,
@@ -7033,6 +7210,24 @@ export function buildReport({
           productCompletionAudit.rows.length
             ? productCompletionAudit.rows.map((row) => `- ${row.requirement}: ${row.status} | proof=${row.proofLevel} | ${row.detail}`).join("\n")
             : "- No audit rows."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Safety Interlock",
+    safetyInterlock
+      ? [
+          `- Status: ${safetyInterlock.status}`,
+          `- Dry-run allowed: ${safetyInterlock.dryRunAllowed ? "yes" : "no"}`,
+          `- Real run allowed: ${safetyInterlock.realRunAllowed ? "yes" : "no"}`,
+          `- Destructive commands: ${safetyInterlock.destructiveCommands ? "present" : "disabled"}`,
+          `- Unsafe rows: ${safetyInterlock.counts.unsafe}`,
+          `- Hold rows: ${safetyInterlock.counts.hold}`,
+          `- Dry-run blockers: ${safetyInterlock.counts.dryRunBlockers}`,
+          safetyInterlock.rows.length
+            ? safetyInterlock.rows
+                .map((row) => `- ${row.label}: ${row.status} | blocksDryRun=${row.blocksDryRun ? "yes" : "no"} | ${row.detail}`)
+                .join("\n")
+            : "- No interlock rows."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -8465,6 +8660,61 @@ function getTaskPowerLeaseRowNextStep(status, checks = [], grant = {}) {
   if (status === "waiting") return grant.nextStep || "Resolve scan, approval, and consent before issuing a lease.";
   const failed = checks.find((check) => !check.passed);
   return failed ? `${failed.label} is not current; rebuild the grant from current evidence.` : "Rebuild the grant before simulation.";
+}
+
+function buildSafetyInterlockRow({
+  id,
+  label,
+  lane,
+  status,
+  detail,
+  evidence,
+  blocksDryRun = false
+}) {
+  return {
+    id,
+    label,
+    lane,
+    status,
+    tone: getSafetyInterlockRowTone(status),
+    passed: status === "passed",
+    blocksDryRun: Boolean(blocksDryRun),
+    detail,
+    evidence,
+    nextStep: getSafetyInterlockRowNextStep(status, label, detail)
+  };
+}
+
+function getSafetyInterlockRowTone(status) {
+  if (status === "passed") return "safe";
+  if (status === "unsafe" || status === "hold") return "restricted";
+  return "review";
+}
+
+function getSafetyInterlockPrimary(status, { unsafeRows = [], holdRows = [], waitingRows = [] } = {}) {
+  if (status === "dry-run-interlocked") return "Current evidence allows dry-run simulation only; real execution remains locked.";
+  if (status === "unsafe-stop") return `${unsafeRows.length} unsafe safety signal(s) require stopping the workflow.`;
+  if (status === "interlock-hold") return `${holdRows.length} dry-run interlock row(s) must be resolved before simulation.`;
+  if (waitingRows.length) return `${waitingRows.length} release-evidence row(s) are still waiting; dry-run remains separately guarded.`;
+  return "Safety interlock is waiting for current scan, consent, route, and lease evidence.";
+}
+
+function getSafetyInterlockSteps(status, { unsafeRows = [], holdRows = [], waitingRows = [] } = {}) {
+  if (status === "dry-run-interlocked") {
+    return ["Run dry-run simulation only.", "Keep real execution locked.", "Rebuild the interlock after any plan, scan, approval, protected-path, consent, or runtime change."];
+  }
+  if (status === "unsafe-stop") return unsafeRows.slice(0, 4).map((row) => `${row.label}: ${row.nextStep}`);
+  if (status === "interlock-hold") return holdRows.slice(0, 4).map((row) => `${row.label}: ${row.nextStep}`);
+  return waitingRows.length
+    ? waitingRows.slice(0, 4).map((row) => `${row.label}: ${row.nextStep}`)
+    : ["Run a scan.", "Resolve approval gates.", "Arm dry-run consent for the current plan."];
+}
+
+function getSafetyInterlockRowNextStep(status, label = "", detail = "") {
+  if (status === "passed") return `${label} is current.`;
+  if (status === "unsafe") return `Stop and investigate: ${detail}`;
+  if (status === "hold") return `Hold simulation until this is resolved: ${detail}`;
+  return detail;
 }
 
 function buildAgentTaskRunbookRow({
