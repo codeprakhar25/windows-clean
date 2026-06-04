@@ -36,6 +36,7 @@ import {
   buildExecutionPreflight,
   buildExecutionConsentReceipt,
   buildFirstSafeExecutorContract,
+  buildFirstSafeValidationGate,
   buildFixtureEvidenceImport,
   buildIntakePolicy,
   buildCustomRootTriage,
@@ -641,6 +642,19 @@ export default function App() {
         nativeScan: nativeScan.result
       }),
     [releaseGate, executorPlan, executorManifest, dataMode, runtimeCapabilities.result, nativeScan.result]
+  );
+  const firstSafeValidationGate = useMemo(
+    () =>
+      buildFirstSafeValidationGate({
+        executorManifest,
+        validationPack,
+        releaseGate,
+        realExecutorCapsule,
+        firstSafeExecutorContract,
+        writeBoundaryProbe,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [executorManifest, validationPack, releaseGate, realExecutorCapsule, firstSafeExecutorContract, writeBoundaryProbe, runtimeCapabilities.result]
   );
   const baseAgentQuestionQueue = useMemo(
     () =>
@@ -1721,6 +1735,7 @@ export default function App() {
       writeReadiness,
       realExecutorCapsule,
       firstSafeExecutorContract,
+      firstSafeValidationGate,
       writeBoundaryProbe,
       ledgerHistorySummary,
       storageStrategy,
@@ -2229,6 +2244,7 @@ export default function App() {
             <WriteReadinessPanel readiness={writeReadiness} />
             <RealExecutorCapsulePanel capsule={realExecutorCapsule} />
             <FirstSafeExecutorContractPanel contract={firstSafeExecutorContract} />
+            <FirstSafeValidationGatePanel gate={firstSafeValidationGate} />
             <WriteBoundaryProbePanel
               probe={writeBoundaryProbe}
               nativeWriteBoundary={nativeWriteBoundary}
@@ -5350,6 +5366,70 @@ function FirstSafeExecutorContractPanel({ contract }) {
             </div>
           ))}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function FirstSafeValidationGatePanel({ gate }) {
+  const visibleRows = gate.rows.length ? gate.rows : gate.blockers;
+  const fixtureRows = gate.fixtureRows.slice(0, 3);
+
+  return (
+    <Card id="first-safe-validation-gate-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          First-safe validation gate
+          <Badge variant={gate.tone}>{gate.status}</Badge>
+        </CardTitle>
+        <CardDescription>{gate.primary}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <QueueStat label="Checks" value={`${gate.counts.passedChecks}/${gate.counts.requiredChecks}`} tone={gate.counts.missingChecks ? "review" : "safe"} />
+          <QueueStat label="Missing" value={gate.counts.missingChecks} tone={gate.counts.missingChecks ? "restricted" : "safe"} />
+          <QueueStat label="Fixtures" value={`${gate.counts.passedFixtures}/${gate.counts.fixtures}`} tone={gate.counts.passedFixtures === gate.counts.fixtures ? "safe" : "review"} />
+          <QueueStat label="Real run" value={gate.realRunAllowed ? "allowed" : "locked"} tone={gate.realRunAllowed ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">{gate.route?.title || "No first-safe route"}</span>
+            <Badge variant={gate.implementationPlanningReady ? "safe" : "review"}>
+              {gate.implementationPlanningReady ? "planning ready" : "waiting"}
+            </Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Route: {gate.route?.id || "none"}</span>
+            <span>Contract: {gate.contract.ready ? "ready" : gate.contract.status}</span>
+            <span>Boundary probe: {gate.boundary.status}</span>
+            <span>Feature flag: {gate.contract.featureFlag || "none"}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {visibleRows.slice(0, 5).map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 text-sm font-medium">{row.label}</div>
+                <Badge variant={row.passed ? "safe" : "review"}>{row.passed ? "passed" : row.status || "waiting"}</Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">{row.detail}</p>
+              {row.evidencePath ? <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{row.evidencePath}</p> : null}
+            </div>
+          ))}
+        </div>
+
+        {fixtureRows.length ? (
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 text-sm font-medium">Required fixtures</div>
+            <div className="flex flex-wrap gap-1">
+              {fixtureRows.map((fixture) => (
+                <Badge key={fixture.id} variant={fixture.passed ? "safe" : "outline"}>{fixture.label}</Badge>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

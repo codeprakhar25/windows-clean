@@ -273,6 +273,13 @@ First-safe executor contract invariant:
 - Contract status cannot imply cleanup; current mode is `reject-only-preview`.
 - Runtime `realRunEnabled`, `destructiveCommands`, or capsule `destructiveActionAvailable` signals violate the disabled-contract assumption and block release review.
 
+First-safe validation gate invariant:
+
+- The gate can mark a selected first-safe route as ready for implementation planning only after its route-required Windows validation checks and disabled executor contract pass.
+- The gate must list required fixtures, missing route checks, unsafe runtime signals, and blockers before any write-boundary probe or implementation work is trusted.
+- Passing the gate cannot unlock cleanup. `realRunAllowed`, `realRunEnabled`, and `destructiveActionAvailable` remain `false`.
+- Runtime `realRunEnabled`, `destructiveCommands`, `safeExecutorsEnabled`, capsule destructive availability, contract write availability, or non-zero/accepted probe evidence must force `unsafe-runtime`.
+
 Write boundary probe invariant:
 
 - The probe can call `execute_cleanup_plan` only to prove the native boundary rejects the current request shape.

@@ -2778,6 +2778,52 @@ const assert = require("assert");
   assert.strictEqual(firstSafeContract.targetAudit.ready, true, "temp first-safe contract should audit selected target paths");
   assert.strictEqual(firstSafeContract.targetAudit.rows[0].status, "allowed", "windows temp row should match the temp allowlist");
   assert(firstSafeContract.targetAudit.rows[0].allowedRule.includes("Temp"), "target audit should name the matching temp rule");
+  const blockedFirstSafeValidationGate = guard.buildFirstSafeValidationGate({
+    executorManifest,
+    validationPack,
+    releaseGate,
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    firstSafeExecutorContract: firstSafeContract,
+    runtimeCapabilities: { available: false, realRunEnabled: false, destructiveCommands: false, safeExecutorsEnabled: false }
+  });
+  assert.strictEqual(blockedFirstSafeValidationGate.schemaVersion, "spaceguard-first-safe-validation-gate/v1", "first-safe validation gate should expose a schema version");
+  assert.strictEqual(blockedFirstSafeValidationGate.status, "validation-blocked", "missing Windows validation evidence should block first-safe implementation planning");
+  assert.strictEqual(blockedFirstSafeValidationGate.realRunAllowed, false, "first-safe validation gate must not allow real cleanup");
+  assert.strictEqual(blockedFirstSafeValidationGate.destructiveActionAvailable, false, "first-safe validation gate must not expose destructive actions");
+  assert(blockedFirstSafeValidationGate.rows.some((row) => row.id === "temp-locked-files" && !row.passed), "temp route should show locked-file evidence as missing");
+  const completedFirstSafeExecutorManifest = guard.buildExecutorManifest({
+    actionList: developerActions,
+    executorPlan,
+    releaseGate: enabledGate
+  });
+  const completedFirstSafeValidationPack = guard.buildValidationEvidencePack({
+    releaseGate: enabledGate,
+    executorPlan,
+    executorManifest: completedFirstSafeExecutorManifest,
+    scanMode: "native-readonly",
+    runtimeCapabilities: { available: true, realRunEnabled: false, destructiveCommands: false, safeExecutorsEnabled: false }
+  });
+  const readyFirstSafeValidationGate = guard.buildFirstSafeValidationGate({
+    executorManifest: completedFirstSafeExecutorManifest,
+    validationPack: completedFirstSafeValidationPack,
+    releaseGate: enabledGate,
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    firstSafeExecutorContract: firstSafeContract,
+    runtimeCapabilities: { available: true, realRunEnabled: false, destructiveCommands: false, safeExecutorsEnabled: false }
+  });
+  assert.strictEqual(readyFirstSafeValidationGate.status, "implementation-planning-ready", "completed route evidence should make first-safe implementation planning ready");
+  assert.strictEqual(readyFirstSafeValidationGate.counts.missingChecks, 0, "ready first-safe validation gate should have no missing route checks");
+  assert.strictEqual(readyFirstSafeValidationGate.realRunAllowed, false, "ready validation gate still must not allow real execution");
+  const unsafeFirstSafeValidationGate = guard.buildFirstSafeValidationGate({
+    executorManifest: completedFirstSafeExecutorManifest,
+    validationPack: completedFirstSafeValidationPack,
+    releaseGate: enabledGate,
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    firstSafeExecutorContract: firstSafeContract,
+    runtimeCapabilities: { available: true, realRunEnabled: true, destructiveCommands: true, safeExecutorsEnabled: true }
+  });
+  assert.strictEqual(unsafeFirstSafeValidationGate.status, "unsafe-runtime", "runtime write flags should stop first-safe implementation planning");
+  assert(unsafeFirstSafeValidationGate.blockers.some((blocker) => blocker.id === "runtime-write-capability"), "unsafe runtime should be listed as a blocker");
   const forgedCapsule = {
     ...currentBuildExecutorCapsule,
     selectedRows: [

@@ -227,6 +227,9 @@ assert(app.includes("buildReleaseReviewPacketMarkdown"), "release review packet 
 assert(app.includes("buildWriteReadiness"), "write readiness should be wired");
 assert(app.includes("buildRealExecutorCapsule"), "real executor capsule should be wired");
 assert(app.includes("buildFirstSafeExecutorContract"), "first-safe executor contract should be wired");
+assert(app.includes("buildFirstSafeValidationGate"), "first-safe validation gate should be wired");
+assert(app.includes("FirstSafeValidationGatePanel"), "first-safe validation gate panel should be rendered");
+assert(app.includes("first-safe-validation-gate-panel"), "first-safe validation gate should be focusable");
 assert(app.includes("buildWriteBoundaryProbe"), "write boundary probe should be wired");
 assert(app.includes("buildValidationEvidencePack"), "validation evidence pack should be wired");
 assert(app.includes("buildValidationPackMarkdown"), "validation pack markdown export should be wired");

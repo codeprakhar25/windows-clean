@@ -81,6 +81,8 @@ It exists only to validate the future request shape and reject every write attem
 
 The **Write boundary probe** panel can call this rejecting command from the desktop shell. A passing probe is rejection evidence only: accepted is false, every entry is rejected, reclaimed bytes are zero, and no ledger or recovery claim is created.
 
+The **First-safe validation gate** sits between the disabled request contract and the write-boundary probe. It summarizes the selected first-safe route, required Windows validation checks, required fixtures, contract status, and runtime write signals. Passing this gate means implementation planning can start; it still reports real run allowed as false and keeps destructive actions hidden.
+
 The native runtime capability command is:
 
 ```txt
@@ -294,6 +296,8 @@ The write-readiness panel is the final real-execution gate. It combines real exe
 The real executor capsule names the next first-safe route that could become a write-capable executor. It lists the route implementation boundary, required fixtures, missing validation, code-path status, and blockers. It always reports destructive action availability separately; in the current build that value is `false`.
 
 The first-safe executor contract turns that capsule into a concrete request-shape preview for `execute_cleanup_plan`: selected route, plan id, scan fingerprint, action ids, target paths, expected bytes, allowed targets, forbidden targets, target-scope audit, and feature flag. The contract is currently `reject-only-preview`; it is useful for validating the native boundary, not for cleanup.
+
+The first-safe validation gate converts that route contract plus Windows validation evidence into an implementation-planning decision. It shows each route-required check, fixture coverage, unsafe runtime signals, and blockers while keeping `realRunAllowed=false` even when every route check passes.
 
 The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` rejecting stub in the desktop shell, but success means rejection, not cleanup: `accepted=false`, all entries rejected with native reject codes, zero reclaimed bytes, and a native echo that matches the current first-safe executor contract. Target-scope reject codes are diagnostic only and do not count as passing rejection evidence. Probe entries are never ledger recovery.
 
