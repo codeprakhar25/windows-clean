@@ -252,6 +252,7 @@ assert(app.includes("Probe write boundary"), "write boundary probe action should
 assert(app.includes("rejection evidence"), "write boundary probe should frame evidence as rejection evidence");
 assert(app.includes("zero bytes"), "write boundary probe should make zero-byte outcome visible");
 assert(app.includes("rejectCode"), "write boundary probe UI should expose native reject codes");
+assert(app.includes("Candidate manifest"), "native dry-run panel should expose candidate manifest metadata");
 assert(!app.includes("function clearExecutionState() {\n    clearExecutionState();"), "execution reset should not recursively call itself");
 assert(model.includes("large-user-files"), "model should include large personal file discovery");
 assert(model.includes("Large personal files"), "model should label large personal file discovery");
@@ -349,6 +350,8 @@ assert(nativeAdapter.includes("scan_known_roots"), "native adapter should invoke
 assert(nativeAdapter.includes("targetDrive"), "native adapter should pass target drive scope");
 assert(nativeAdapter.includes("customRoots"), "native adapter should pass custom read-only roots");
 assert(nativeAdapter.includes("simulate_cleanup_plan"), "native adapter should invoke the dry-run executor command");
+assert(nativeAdapter.includes("candidateCount"), "native adapter should normalize dry-run candidate counts");
+assert(nativeAdapter.includes("skippedCount"), "native adapter should normalize dry-run skipped counts");
 assert(nativeAdapter.includes("execute_cleanup_plan"), "native adapter should invoke the rejecting write boundary command");
 assert(nativeAdapter.includes("rejectCode"), "native adapter should normalize write-boundary reject codes");
 assert(nativeAdapter.includes("targetPath"), "native adapter should pass selected target paths to the write boundary");
@@ -361,6 +364,9 @@ assert(rustScanner.includes("target_drive_path"), "Rust scanner should scope sys
 assert(rustScanner.includes("custom_roots"), "Rust scanner should accept custom read-only roots");
 assert(rustScanner.includes("measure_custom_roots"), "Rust scanner should measure custom roots read-only");
 assert(rustScanner.includes("simulate_cleanup_plan"), "Rust native dry-run command should exist");
+assert(rustScanner.includes("DryRunCandidate"), "Rust native dry-run should expose candidate manifest entries");
+assert(rustScanner.includes("candidate_count"), "Rust native dry-run should report candidate counts");
+assert(rustScanner.includes("skipped_count"), "Rust native dry-run should report skipped counts");
 assert(rustScanner.includes("execute_cleanup_plan"), "Rust rejecting write boundary command should exist");
 assert(rustScanner.includes("contract_echo"), "Rust rejecting write boundary should echo the first-safe contract");
 assert(rustScanner.includes("write_boundary_rejections"), "Rust write boundary should validate request shape before rejection");

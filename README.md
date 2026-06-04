@@ -67,7 +67,7 @@ The native dry-run executor command is:
 simulate_cleanup_plan
 ```
 
-It returns ledger entries for selected routes but reports `realRunEnabled: false` and does not mutate the filesystem.
+It returns ledger entries plus a bounded metadata-only candidate manifest for first-safe routes. It reports `realRunEnabled: false`, records sampled candidate bytes and skipped counts, and does not mutate the filesystem.
 
 The native write-boundary command is:
 
@@ -168,6 +168,7 @@ The demo also includes:
 - Decision log and dry-run reports include the selected task powers, task grant receipts, waiting power gates, locked admin powers, and real-run-disabled boundary.
 - Power broker panel that turns selected task powers into current-plan power requests, preserves the active user question, refuses standing permission, and keeps each request dry-run only.
 - Executor policy panel that classifies selected routes before simulation.
+- Native candidate manifest preview that shows sampled dry-run file metadata, target path, and skipped counts without deleting anything.
 - Executor manifest panel that shows every route family, first-safe lanes, required validation checks, fixtures, preconditions, rollback notes, and next implementation steps.
 - Tool command inventory panel that lists official inspect/prune command shapes for npm, pnpm, Docker, Gradle, and Windows cleanup without executing shell commands.
 - Release gate panel that shows feature flags, runtime capabilities, missing validation checks, and disposable VM coverage.

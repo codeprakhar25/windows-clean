@@ -104,6 +104,7 @@ struct DryRunAction {
     title: String,
     bytes: u64,
     route: String,
+    target_path: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -122,8 +123,23 @@ struct DryRunEntry {
     id: String,
     title: String,
     route: String,
+    target_path: String,
     result: String,
     bytes: u64,
+    candidate_bytes: u64,
+    candidate_count: u64,
+    skipped_count: u64,
+    candidates: Vec<DryRunCandidate>,
+    note: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DryRunCandidate {
+    name: String,
+    path: String,
+    bytes: u64,
+    result: String,
     note: String,
 }
 
@@ -339,14 +355,22 @@ fn simulate_cleanup_plan(request: Option<DryRunRequest>) -> DryRunResponse {
     });
     let entries = request
         .actions
-        .into_iter()
-        .map(|action| DryRunEntry {
-            id: action.id,
-            title: action.title,
-            route: action.route,
-            result: "dry-run".to_string(),
-            bytes: action.bytes,
-            note: "Native dry-run only. No filesystem mutation was attempted.".to_string(),
+        .iter()
+        .map(|action| {
+            let manifest = build_dry_run_candidate_manifest(action);
+            DryRunEntry {
+                id: action.id.clone(),
+                title: action.title.clone(),
+                route: action.route.clone(),
+                target_path: action.target_path.clone().unwrap_or_default(),
+                result: "dry-run".to_string(),
+                bytes: action.bytes,
+                candidate_bytes: manifest.candidate_bytes,
+                candidate_count: manifest.candidate_count,
+                skipped_count: manifest.skipped_count,
+                candidates: manifest.candidates,
+                note: manifest.note,
+            }
         })
         .collect::<Vec<_>>();
 
@@ -623,6 +647,185 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         reason: "Real executors are disabled until Windows VM validation and rollback tests pass."
             .to_string(),
     }
+}
+
+struct DryRunCandidateManifest {
+    candidate_bytes: u64,
+    candidate_count: u64,
+    skipped_count: u64,
+    candidates: Vec<DryRunCandidate>,
+    note: String,
+}
+
+fn build_dry_run_candidate_manifest(action: &DryRunAction) -> DryRunCandidateManifest {
+    if !is_first_safe_write_route(&action.route) {
+        return DryRunCandidateManifest {
+            candidate_bytes: 0,
+            candidate_count: 0,
+            skipped_count: 0,
+            candidates: Vec::new(),
+            note: "Native dry-run only. This route has no file-level candidate manifest in the current build.".to_string(),
+        };
+    }
+
+    let targets = split_dry_run_targets(action.target_path.as_deref().unwrap_or(""));
+    if targets.is_empty() {
+        return DryRunCandidateManifest {
+            candidate_bytes: 0,
+            candidate_count: 0,
+            skipped_count: 1,
+            candidates: Vec::new(),
+            note: "Native dry-run only. Target path evidence is missing, so no candidate files were enumerated.".to_string(),
+        };
+    }
+
+    let mut candidates = Vec::new();
+    let mut skipped_count = 0_u64;
+    let mut candidate_bytes = 0_u64;
+
+    for target in targets {
+        if candidates.len() >= 8 {
+            break;
+        }
+        let path = resolve_dry_run_target(&target);
+        if !path.exists() {
+            skipped_count += 1;
+            continue;
+        }
+
+        let remaining = 8usize.saturating_sub(candidates.len());
+        let mut sample = collect_dry_run_candidates(&path, remaining);
+        skipped_count = skipped_count.saturating_add(sample.skipped_count);
+        candidate_bytes = candidate_bytes.saturating_add(sample.candidate_bytes);
+        candidates.append(&mut sample.candidates);
+    }
+
+    let candidate_count = candidates.len() as u64;
+    DryRunCandidateManifest {
+        candidate_bytes,
+        candidate_count,
+        skipped_count,
+        candidates,
+        note: format!(
+            "Native dry-run only. Candidate manifest sampled {candidate_count} item(s), skipped {skipped_count} inaccessible, missing, or link-like target(s), and attempted no mutation."
+        ),
+    }
+}
+
+struct DryRunCandidateSample {
+    candidate_bytes: u64,
+    skipped_count: u64,
+    candidates: Vec<DryRunCandidate>,
+}
+
+fn collect_dry_run_candidates(root: &Path, limit: usize) -> DryRunCandidateSample {
+    let mut queue = VecDeque::from([root.to_path_buf()]);
+    let mut candidates = Vec::new();
+    let mut candidate_bytes = 0_u64;
+    let mut skipped_count = 0_u64;
+    let mut visited = 0usize;
+
+    while let Some(path) = queue.pop_front() {
+        if visited >= 500 || candidates.len() >= limit {
+            break;
+        }
+        visited += 1;
+
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            skipped_count += 1;
+            continue;
+        };
+        if metadata.file_type().is_symlink() {
+            skipped_count += 1;
+            continue;
+        }
+        if metadata.is_file() {
+            let bytes = metadata.len();
+            candidate_bytes = candidate_bytes.saturating_add(bytes);
+            candidates.push(DryRunCandidate {
+                name: path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("file")
+                    .to_string(),
+                path: path_to_string(&path),
+                bytes,
+                result: "candidate".to_string(),
+                note:
+                    "Would be eligible for first-safe dry-run preview only; no deletion attempted."
+                        .to_string(),
+            });
+            continue;
+        }
+        if metadata.is_dir() {
+            match fs::read_dir(&path) {
+                Ok(entries) => {
+                    for entry in entries.flatten() {
+                        queue.push_back(entry.path());
+                    }
+                }
+                Err(_) => skipped_count += 1,
+            }
+        }
+    }
+
+    DryRunCandidateSample {
+        candidate_bytes,
+        skipped_count,
+        candidates,
+    }
+}
+
+fn split_dry_run_targets(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(|target| target.trim())
+        .filter(|target| !target.is_empty())
+        .map(|target| target.to_string())
+        .collect()
+}
+
+fn resolve_dry_run_target(value: &str) -> PathBuf {
+    let upper = value.to_ascii_uppercase();
+    if let Some(suffix) = env_token_suffix(&upper, value, "%TEMP%") {
+        return env_path_with_suffix("TEMP", suffix)
+            .or_else(|| env_path_with_suffix("TMP", suffix))
+            .unwrap_or_else(|| PathBuf::from(value));
+    }
+    if let Some(suffix) = env_token_suffix(&upper, value, "%TMP%") {
+        return env_path_with_suffix("TMP", suffix)
+            .or_else(|| env_path_with_suffix("TEMP", suffix))
+            .unwrap_or_else(|| PathBuf::from(value));
+    }
+    if let Some(suffix) = env_token_suffix(&upper, value, "%LOCALAPPDATA%") {
+        return env_path_with_suffix("LOCALAPPDATA", suffix)
+            .unwrap_or_else(|| PathBuf::from(value));
+    }
+    if let Some(suffix) = env_token_suffix(&upper, value, "%USERPROFILE%") {
+        return env_path_with_suffix("USERPROFILE", suffix)
+            .or_else(|| env_path_with_suffix("HOME", suffix))
+            .unwrap_or_else(|| PathBuf::from(value));
+    }
+    PathBuf::from(value)
+}
+
+fn env_token_suffix<'a>(upper: &str, value: &'a str, token: &str) -> Option<&'a str> {
+    if upper.starts_with(token) {
+        Some(&value[token.len()..])
+    } else {
+        None
+    }
+}
+
+fn env_path_with_suffix(name: &str, suffix: &str) -> Option<PathBuf> {
+    env_path(name).map(|root| {
+        let suffix = suffix.trim_start_matches(|ch| ch == '\\' || ch == '/');
+        if suffix.is_empty() {
+            root
+        } else {
+            root.join(suffix)
+        }
+    })
 }
 
 #[cfg(target_os = "windows")]

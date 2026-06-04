@@ -205,6 +205,7 @@ After execution:
 - Compare expected and actual reclaimed space.
 - Mark skipped actions.
 - Produce a local ledger.
+- Preserve native dry-run candidate metadata as preview evidence only; sampled candidate files and skipped counts are not real cleanup proof.
 
 Ledger invariant:
 
@@ -422,7 +423,7 @@ The second native command is:
 simulate_cleanup_plan
 ```
 
-It returns native dry-run ledger entries only. It must report `realRunEnabled: false` and `destructiveCommands: false` until real executors are explicitly implemented and validated.
+It returns native dry-run ledger entries plus bounded candidate metadata for first-safe routes only. It must report `realRunEnabled: false` and `destructiveCommands: false` until real executors are explicitly implemented and validated.
 
 The third native command is:
 

@@ -119,7 +119,8 @@ export async function runNativeExecutorDryRun(executorPlan, host = globalThis) {
           id: row.id,
           title: row.title,
           bytes: row.bytes,
-          route: row.route
+          route: row.route,
+          targetPath: row.targetPath || row.target || row.path || ""
         }))
     }
   });
@@ -309,8 +310,21 @@ export function normalizeNativeExecutorDryRun(result = {}) {
           id: entry.id || "",
           title: entry.title || "",
           route: entry.route || "",
+          targetPath: entry.targetPath || entry.target_path || "",
           result: entry.result || "dry-run",
           bytes: Number(entry.bytes || 0),
+          candidateBytes: Number(entry.candidateBytes || entry.candidate_bytes || 0),
+          candidateCount: Number(entry.candidateCount || entry.candidate_count || 0),
+          skippedCount: Number(entry.skippedCount || entry.skipped_count || 0),
+          candidates: Array.isArray(entry.candidates)
+            ? entry.candidates.map((candidate) => ({
+                name: candidate.name || "",
+                path: candidate.path || "",
+                bytes: Number(candidate.bytes || 0),
+                result: candidate.result || "candidate",
+                note: candidate.note || ""
+              }))
+            : [],
           note: entry.note || ""
         }))
       : [],

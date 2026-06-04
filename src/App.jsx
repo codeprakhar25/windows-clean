@@ -4191,6 +4191,30 @@ function ExecutorPolicyPanel({ executorPlan, executorReadiness, nativeExecutorDr
           </p>
         </div>
 
+        {nativeExecutorDryRun.result?.entries?.length ? (
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+              <span className="font-medium">Candidate manifest</span>
+              <Badge variant="outline">metadata only</Badge>
+            </div>
+            <div className="flex flex-col gap-2">
+              {nativeExecutorDryRun.result.entries.slice(0, 3).map((entry) => (
+                <div key={`${entry.id}-${entry.route}`} className="rounded-md border bg-card p-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="mr-auto min-w-0 text-sm font-medium">{entry.title}</span>
+                    <Badge variant="outline">{entry.candidateCount || 0} candidates</Badge>
+                    <Badge variant={entry.skippedCount ? "review" : "safe"}>{entry.skippedCount || 0} skipped</Badge>
+                  </div>
+                  <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{entry.targetPath || "no target path"}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Sampled {formatBytes(entry.candidateBytes || 0)}. {entry.candidates?.[0]?.name || "No file samples returned."}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="rounded-md border bg-muted/30 p-3">
           <div className="mb-2 text-sm font-medium">Executor readiness</div>
           <div className="space-y-2">

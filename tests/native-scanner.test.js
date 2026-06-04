@@ -205,8 +205,13 @@ const assert = require("assert");
         id: "windows-temp",
         title: "Windows temporary files",
         route: "known-temp-delete",
+        target_path: "C:\\Windows\\Temp",
         result: "dry-run",
         bytes: 123,
+        candidate_bytes: 100,
+        candidate_count: 1,
+        skipped_count: 2,
+        candidates: [{ name: "a.tmp", path: "C:\\Windows\\Temp\\a.tmp", bytes: 100, result: "candidate", note: "sample" }],
         note: "No mutation"
       }
     ],
@@ -215,6 +220,26 @@ const assert = require("assert");
   assert.strictEqual(dryRun.realRunEnabled, false, "native dry-run normalization should keep real run disabled");
   assert.strictEqual(dryRun.destructiveCommands, false, "native dry-run normalization should keep destructive commands disabled");
   assert.strictEqual(dryRun.entries[0].route, "known-temp-delete", "native dry-run route should be preserved");
+  assert.strictEqual(dryRun.entries[0].targetPath, "C:\\Windows\\Temp", "native dry-run target path should normalize");
+  assert.strictEqual(dryRun.entries[0].candidateCount, 1, "native dry-run candidate count should normalize");
+  assert.strictEqual(dryRun.entries[0].skippedCount, 2, "native dry-run skipped count should normalize");
+  assert.strictEqual(dryRun.entries[0].candidates[0].name, "a.tmp", "native dry-run candidate samples should normalize");
+  let dryRunInvocation = null;
+  await native.runNativeExecutorDryRun(
+    { rows: [{ id: "windows-temp", title: "Windows temporary files", bytes: 123, route: "known-temp-delete", path: "C:\\Windows\\Temp", canSimulate: true }] },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            dryRunInvocation = { command, payload };
+            return Promise.resolve({ entries: [], warnings: [] });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(dryRunInvocation.command, "simulate_cleanup_plan", "native dry-run should invoke simulate_cleanup_plan");
+  assert.strictEqual(dryRunInvocation.payload.request.actions[0].targetPath, "C:\\Windows\\Temp", "native dry-run should pass target path evidence");
   let writeInvocation = null;
   const rejectedWrite = await native.runNativeWriteBoundary(
     {
