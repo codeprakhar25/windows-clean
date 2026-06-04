@@ -230,6 +230,8 @@ The rollback plan is evaluated before dry-run consent. Disposable and rebuildabl
 
 The write-readiness panel is the final real-execution gate. It combines real executor implementation, runtime write capability, release gate status, post-run rescan parity, rollback proof, privilege boundary, privacy boundary, and current plan consent. In the current build it stays locked because no selected route exposes write-capable execution.
 
+The real executor capsule names the next first-safe route that could become a write-capable executor. It lists the route implementation boundary, required fixtures, missing validation, code-path status, and blockers. It always reports destructive action availability separately; in the current build that value is `false`.
+
 Dry-run records are also saved to local browser storage as an append-only run history. A saved record can block a duplicate simulation for the same plan after reload, but it cannot unlock real execution. The history export is audit evidence only; real cleanup still requires native Windows validation and a post-run rescan.
 
 Real deletion is disabled in the current build. The executor layer classifies selected actions as dry-run routes, future safe-executor candidates, gated routes, or blocked routes. Safe executors should only be enabled after Windows validation and rollback tests exist.

@@ -104,6 +104,7 @@ For each Windows validation run, capture:
 - Post-run verification checklist.
 - Rescan comparison state, including ledger timestamp, native scan timestamp, matched rows, waiting rows, and mismatches.
 - Write-readiness state with every final real-execution blocker.
+- Real executor capsule route, code-path status, missing checks, and destructive-action availability.
 - Exported validation pack.
 
 Rescan comparison only counts when the native scan is taken after the current dry-run ledger. The expected operator order is: finish item decisions, arm and run the dry-run simulation, run the native read-only scan again, then inspect the rescan comparison panel. A native scan captured before the ledger remains evidence for sizing, not parity.
@@ -117,6 +118,7 @@ Do not implement write-capable executors until:
 - Rollback or Recycle Bin behavior is proven for review routes.
 - Ledger/rescan parity is proven.
 - Write readiness is blocked only by intentionally unfinished implementation work, not by missing validation, rollback, privilege, privacy, or consent evidence.
+- Real executor capsule identifies a single first-safe route and reports `destructiveActionAvailable: false` until implementation is explicit.
 - Runtime privilege boundary is recorded.
 - Real executor feature flag is intentionally enabled.
 - Signed Windows build flow exists.

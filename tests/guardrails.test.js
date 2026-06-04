@@ -1104,6 +1104,27 @@ const assert = require("assert");
   assert.strictEqual(currentBuildWriteReadiness.readyForRealExecution, false, "write readiness must stay locked when no real executor is implemented");
   assert.strictEqual(currentBuildWriteReadiness.status, "implementation-locked", "current build should be implementation locked");
   assert(currentBuildWriteReadiness.items.some((item) => item.id === "real-route-implementation" && !item.passed), "write readiness should require real route implementation");
+  const currentBuildExecutorCapsule = guard.buildRealExecutorCapsule({
+    executorManifest,
+    executorPlan,
+    releaseGate: enabledGate,
+    writeReadiness: currentBuildWriteReadiness,
+    rollbackPlan: tempRollbackPlan,
+    rescanComparison: matchedComparison,
+    privilegeBoundary: guard.buildPrivilegeBoundary({
+      runtimeCapabilities: { available: true, elevated: true, realRunEnabled: true },
+      executorPlan
+    }),
+    privacyBoundary: guard.buildPrivacyBoundary({
+      scanMode: "native-readonly",
+      runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
+    })
+  });
+  assert.strictEqual(currentBuildExecutorCapsule.schemaVersion, "spaceguard-real-executor-capsule/v1", "real executor capsule should have a schema version");
+  assert.strictEqual(currentBuildExecutorCapsule.destructiveActionAvailable, false, "executor capsule must not expose destructive execution");
+  assert.strictEqual(currentBuildExecutorCapsule.codePath.status, "not-implemented", "capsule code path should remain unimplemented");
+  assert.strictEqual(currentBuildExecutorCapsule.route.id, "known-temp-delete", "capsule should select the first-safe temp route from the selected plan");
+  assert(currentBuildExecutorCapsule.blockers.some((blocker) => blocker.id === "implementation-missing"), "capsule should block on missing write implementation");
   const writeReadinessReport = guard.buildReport({
     scenario: guard.getScenario("developer"),
     profile: guard.getScenario("developer").profile,
@@ -1113,10 +1134,13 @@ const assert = require("assert");
     ledger: [],
     protectedPaths: [],
     goalBytes: 10 * guard.GB,
-    writeReadiness: currentBuildWriteReadiness
+    writeReadiness: currentBuildWriteReadiness,
+    realExecutorCapsule: currentBuildExecutorCapsule
   });
   assert(writeReadinessReport.includes("## Write Readiness"), "dry-run report should include write readiness");
   assert(writeReadinessReport.includes("Ready for real execution: no"), "write readiness report should keep real execution blocked");
+  assert(writeReadinessReport.includes("## Real Executor Capsule"), "dry-run report should include real executor capsule");
+  assert(writeReadinessReport.includes("Destructive action available: no"), "executor capsule report should keep destructive action hidden");
   const hypotheticalRealExecutorPlan = {
     ...tempExecutorPlan,
     realRunEnabled: true,

@@ -51,6 +51,7 @@ import {
   buildManualStrategyChecklist,
   buildReleaseGate,
   buildRecoveryAdvisor,
+  buildRealExecutorCapsule,
   buildRollbackPlan,
   buildItemReview,
   buildReport,
@@ -437,6 +438,20 @@ export default function App() {
   const executorManifest = useMemo(
     () => buildExecutorManifest({ actionList, executorPlan, releaseGate }),
     [actionList, executorPlan, releaseGate]
+  );
+  const realExecutorCapsule = useMemo(
+    () =>
+      buildRealExecutorCapsule({
+        executorManifest,
+        executorPlan,
+        releaseGate,
+        writeReadiness,
+        rollbackPlan,
+        rescanComparison,
+        privilegeBoundary,
+        privacyBoundary
+      }),
+    [executorManifest, executorPlan, releaseGate, writeReadiness, rollbackPlan, rescanComparison, privilegeBoundary, privacyBoundary]
   );
   const toolCommandInventory = useMemo(
     () => buildToolCommandInventory({ actionList, executorPlan, releaseGate }),
@@ -836,6 +851,7 @@ export default function App() {
       executorManifest,
       toolCommandInventory,
       writeReadiness,
+      realExecutorCapsule,
       ledgerHistorySummary,
       storageStrategy,
       manualStrategyChecklist,
@@ -1172,6 +1188,7 @@ export default function App() {
             <SupportBundlePanel bundle={supportBundle} onExport={exportSupportBundle} />
             <ReleaseGatePanel releaseGate={releaseGate} runtimeCapabilities={runtimeCapabilities} />
             <WriteReadinessPanel readiness={writeReadiness} />
+            <RealExecutorCapsulePanel capsule={realExecutorCapsule} />
             <ValidationEvidencePanel
               validationPack={validationPack}
               validationEvidence={validationEvidence}
@@ -2441,6 +2458,59 @@ function WriteReadinessPanel({ readiness }) {
               <p className="mt-1 text-sm text-muted-foreground">{row.detail}</p>
             </div>
           ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RealExecutorCapsulePanel({ capsule }) {
+  const previewBlockers = capsule.blockers.slice(0, 4);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Real executor capsule
+          <Badge variant={capsule.tone}>{capsule.status}</Badge>
+        </CardTitle>
+        <CardDescription>{capsule.primary}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-3 gap-2">
+          <QueueStat label="Selected" value={capsule.counts.selectedRows} tone="review" />
+          <QueueStat label="Missing" value={capsule.counts.missingChecks} tone={capsule.counts.missingChecks ? "restricted" : "safe"} />
+          <QueueStat label="Blockers" value={capsule.counts.blockers} tone={capsule.counts.blockers ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">{capsule.route?.title || "No route selected"}</span>
+            <Badge variant={capsule.destructiveActionAvailable ? "restricted" : "safe"}>
+              {capsule.destructiveActionAvailable ? "destructive visible" : "destructive hidden"}
+            </Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Route: {capsule.route?.id || "none"}</span>
+            <span>Phase: {capsule.route?.phase || "none"}</span>
+            <span>Code path: {capsule.codePath.command} / {capsule.codePath.status}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {previewBlockers.length ? (
+            previewBlockers.map((blocker) => (
+              <div key={blocker.id} className="rounded-md border bg-card p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 text-sm font-medium">{blocker.label}</div>
+                  <Badge variant="restricted">blocked</Badge>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">{blocker.detail}</p>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">No capsule blockers are listed, but destructive execution remains hidden until implementation is explicit.</div>
+          )}
         </div>
       </CardContent>
     </Card>

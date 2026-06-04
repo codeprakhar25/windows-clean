@@ -2628,6 +2628,140 @@ export function buildExecutorManifest({
   };
 }
 
+export function buildRealExecutorCapsule({
+  executorManifest = null,
+  executorPlan = null,
+  releaseGate = null,
+  writeReadiness = null,
+  rollbackPlan = null,
+  rescanComparison = null,
+  privilegeBoundary = null,
+  privacyBoundary = null
+} = {}) {
+  const selectedRoutes = executorManifest?.selectedRoutes || [];
+  const firstSafeRoutes = executorManifest?.routes?.filter((route) => route.phase === "first-safe" && route.status !== "blocked" && route.status !== "advisory") || [];
+  const selectedFirstSafe = selectedRoutes.find((route) => route.phase === "first-safe" && route.status !== "blocked" && route.status !== "advisory");
+  const route = selectedFirstSafe || firstSafeRoutes[0] || null;
+  const selectedRows = route ? (executorPlan?.rows || []).filter((row) => row.route === route.route) : [];
+  const releaseMissingIds = route?.missingCheckIds || [];
+  const writeBlockedItems = writeReadiness?.blockedItems || [];
+  const implementationBlocked = !route || !executorPlan?.realRunEnabled || selectedRows.every((row) => !row.canRealRun);
+  const destructiveActionAvailable = false;
+  const blockers = [
+    !route
+      ? {
+          id: "no-first-safe-route",
+          label: "No first-safe route",
+          detail: "Select a cleanup route with a first-safe executor lane before implementation planning."
+        }
+      : null,
+    implementationBlocked
+      ? {
+          id: "implementation-missing",
+          label: "Implementation missing",
+          detail: "No write-capable Tauri command is implemented or enabled for this route."
+        }
+      : null,
+    ...releaseMissingIds.map((id) => ({
+      id: `validation-${id}`,
+      label: "Validation missing",
+      detail: `${id} evidence is required for ${route?.title || "the selected route"}.`
+    })),
+    rescanComparison?.status === "matched"
+      ? null
+      : {
+          id: "rescan-parity",
+          label: "Rescan parity missing",
+          detail: rescanComparison?.detail || "Post-run native rescan comparison has not matched."
+        },
+    rollbackPlan?.status === "rebuildable-routes"
+      ? null
+      : {
+          id: "rollback-proof",
+          label: "Rollback proof missing",
+          detail: rollbackPlan?.detail || "Rollback posture is not clean for real execution."
+        },
+    privilegeBoundary?.nativeAvailable && privilegeBoundary?.readyForAdminRoutes
+      ? null
+      : {
+          id: "privilege-boundary",
+          label: "Privilege boundary missing",
+          detail: "Native privilege evidence must be captured before write execution."
+        },
+    privacyBoundary?.cloudDisabled && privacyBoundary?.telemetryDisabled && privacyBoundary?.exportOnly
+      ? null
+      : {
+          id: "privacy-boundary",
+          label: "Privacy boundary missing",
+          detail: "Local-only privacy boundary must pass before write execution."
+        },
+    ...writeBlockedItems.slice(0, 3).map((item) => ({
+      id: `write-${item.id}`,
+      label: item.label,
+      detail: item.detail
+    }))
+  ].filter(Boolean);
+  const uniqueBlockers = dedupeBlockers(blockers);
+  const status = !route
+    ? "no-route"
+    : destructiveActionAvailable
+      ? "execution-available"
+      : implementationBlocked
+        ? "implementation-capsule"
+        : uniqueBlockers.length
+          ? "evidence-blocked"
+          : "implementation-ready";
+
+  return {
+    schemaVersion: "spaceguard-real-executor-capsule/v1",
+    status,
+    tone: destructiveActionAvailable ? "safe" : status === "implementation-capsule" || status === "no-route" ? "restricted" : "review",
+    destructiveActionAvailable,
+    realRunEnabled: Boolean(executorPlan?.realRunEnabled),
+    route: route
+      ? {
+          id: route.route,
+          title: route.title,
+          lane: route.lane,
+          phase: route.phase,
+          status: route.status,
+          implementation: route.implementation,
+          rollback: route.rollback,
+          proof: route.proof,
+          preconditions: route.preconditions || [],
+          fixtureIds: route.fixtureIds || [],
+          missingCheckIds: releaseMissingIds,
+          selectedCount: route.selectedCount || 0
+        }
+      : null,
+    selectedRows: selectedRows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      bytes: Number(row.bytes || 0),
+      canSimulate: Boolean(row.canSimulate),
+      canRealRun: Boolean(row.canRealRun),
+      status: row.status
+    })),
+    codePath: {
+      command: "execute_cleanup_plan",
+      status: "not-implemented",
+      destructiveCommands: false,
+      featureFlag: "realExecutors",
+      nativeBoundary: "Tauri command must reject every route except the selected first-safe capsule."
+    },
+    blockers: uniqueBlockers,
+    counts: {
+      blockers: uniqueBlockers.length,
+      missingChecks: releaseMissingIds.length,
+      selectedRows: selectedRows.length,
+      fixtures: route?.fixtureIds?.length || 0,
+      preconditions: route?.preconditions?.length || 0
+    },
+    primary: getRealExecutorCapsulePrimary(status, route, uniqueBlockers),
+    steps: buildRealExecutorCapsuleSteps(status, route, uniqueBlockers)
+  };
+}
+
 export function buildToolCommandInventory({
   actionList = actions,
   executorPlan = null,
@@ -3837,6 +3971,7 @@ export function buildReport({
   executorManifest = null,
   toolCommandInventory = null,
   writeReadiness = null,
+  realExecutorCapsule = null,
   ledgerHistorySummary = null,
   storageStrategy = null,
   manualStrategyChecklist = null,
@@ -4168,6 +4303,22 @@ export function buildReport({
           `- Real routes: ${writeReadiness.counts.realRoutes}`,
           `- Primary: ${writeReadiness.primary}`,
           writeReadiness.items.map((item) => `- ${item.label}: ${item.passed ? "passed" : "blocked"} | ${item.detail}`).join("\n")
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Real Executor Capsule",
+    realExecutorCapsule
+      ? [
+          `- Status: ${realExecutorCapsule.status}`,
+          `- Destructive action available: ${realExecutorCapsule.destructiveActionAvailable ? "yes" : "no"}`,
+          `- Route: ${realExecutorCapsule.route ? `${realExecutorCapsule.route.title} (${realExecutorCapsule.route.id})` : "none"}`,
+          `- Code path: ${realExecutorCapsule.codePath.command} | ${realExecutorCapsule.codePath.status}`,
+          `- Missing checks: ${realExecutorCapsule.counts.missingChecks}`,
+          `- Blockers: ${realExecutorCapsule.counts.blockers}`,
+          `- Primary: ${realExecutorCapsule.primary}`,
+          realExecutorCapsule.blockers.length
+            ? realExecutorCapsule.blockers.map((blocker) => `- ${blocker.label}: ${blocker.detail}`).join("\n")
+            : "- No capsule blockers."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -4848,6 +4999,44 @@ function buildExecutorManifestNextSteps(routes, selectedRoutes) {
   }
 
   return steps;
+}
+
+function getRealExecutorCapsulePrimary(status, route, blockers = []) {
+  if (status === "execution-available") return "A write-capable executor is available for the selected capsule.";
+  if (!route) return "No first-safe executor capsule is selected yet.";
+  if (status === "implementation-capsule") return `${route.title} is the next implementation capsule, but no write-capable command exists.`;
+  if (status === "implementation-ready") return `${route.title} has evidence ready for implementation work, but destructive execution is still hidden.`;
+  const first = blockers[0];
+  return first ? `${route.title}: ${first.detail}` : `${route.title} is waiting for implementation evidence.`;
+}
+
+function buildRealExecutorCapsuleSteps(status, route, blockers = []) {
+  if (!route) {
+    return ["Select a first-safe cleanup route.", "Generate its executor manifest.", "Keep real execution hidden."];
+  }
+  if (status === "implementation-ready") {
+    return [
+      `Implement ${route.title} in a dedicated Tauri command.`,
+      "Reject every route outside this capsule at runtime.",
+      "Run disposable Windows fixture validation before exposing the feature flag."
+    ];
+  }
+  if (status === "execution-available") {
+    return ["Show destructive-action confirmation.", "Run only this capsule route.", "Write a ledger and require immediate native rescan."];
+  }
+  const blockerSteps = blockers.slice(0, 4).map((blocker) => `${blocker.label}: ${blocker.detail}`);
+  return blockerSteps.length
+    ? blockerSteps
+    : [`Keep ${route.title} in dry-run mode until implementation and validation evidence are complete.`];
+}
+
+function dedupeBlockers(blockers = []) {
+  const seen = new Set();
+  return blockers.filter((blocker) => {
+    if (!blocker?.id || seen.has(blocker.id)) return false;
+    seen.add(blocker.id);
+    return true;
+  });
 }
 
 function scanCoverageNextStep(action, evidence) {

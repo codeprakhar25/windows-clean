@@ -207,6 +207,13 @@ Write-readiness invariant:
 - The current plan must also have matched post-run rescan parity, clean rollback posture, privilege boundary evidence, local-only privacy boundary, and current plan consent.
 - If any selected route only supports dry-run simulation, write readiness remains `implementation-locked`.
 
+Real executor capsule invariant:
+
+- The app must name the next first-safe executor route before implementation starts.
+- The capsule must expose implementation boundary, fixture requirements, missing validation checks, blockers, and code-path status.
+- `destructiveActionAvailable` is independent of route planning and remains `false` until a real Tauri executor command exists and all final gates pass.
+- Capsule planning cannot create a run button or bypass write readiness.
+
 Rollback invariant:
 
 - Every selected executor route must have a rollback posture before real implementation work starts.
