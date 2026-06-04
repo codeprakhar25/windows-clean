@@ -2735,6 +2735,8 @@ export function buildAgentQuestionQueue({
   manualStrategyChecklist = null,
   runReadiness = null,
   consentReceipt = null,
+  dryRunLaunchGuard = null,
+  safetyInterlock = null,
   verificationSummary = null,
   rescanComparison = null,
   rollbackPlan = null,
@@ -2960,7 +2962,21 @@ export function buildAgentQuestionQueue({
     });
   }
 
-  if (runReadiness?.ready && !consentReceipt?.ready) {
+  if (dryRunLaunchGuard?.status === "unsafe-stop" || safetyInterlock?.status === "unsafe-stop") {
+    addQuestion({
+      id: "resolve-safety-interlock",
+      lane: "execution",
+      priority: 63,
+      title: "Resolve safety interlock",
+      prompt: "Should I stop and review the unsafe execution signal?",
+      detail: dryRunLaunchGuard?.primary || safetyInterlock?.primary || "Safety interlock is blocking the dry-run path.",
+      action: "focus-panel",
+      targetPanel: "safety-interlock-panel",
+      options: ["Open safety interlock"]
+    });
+  }
+
+  if (runReadiness?.ready && !consentReceipt?.ready && dryRunLaunchGuard?.status !== "unsafe-stop" && safetyInterlock?.status !== "unsafe-stop") {
     addQuestion({
       id: "arm-dry-run",
       lane: "consent",
@@ -2973,7 +2989,21 @@ export function buildAgentQuestionQueue({
     });
   }
 
-  if (consentReceipt?.ready && !verificationSummary?.current) {
+  if (consentReceipt?.ready && dryRunLaunchGuard && !dryRunLaunchGuard.ready) {
+    addQuestion({
+      id: "resolve-dry-run-launch",
+      lane: "execution",
+      priority: 61,
+      title: "Resolve dry-run launch guard",
+      prompt: "Should I review why the armed plan still cannot simulate?",
+      detail: dryRunLaunchGuard.primary || "The dry-run launch guard is blocking simulation.",
+      action: "focus-panel",
+      targetPanel: "safety-interlock-panel",
+      options: ["Open safety interlock", "Review launch guard"]
+    });
+  }
+
+  if (consentReceipt?.ready && (!dryRunLaunchGuard || dryRunLaunchGuard.ready) && !verificationSummary?.current) {
     addQuestion({
       id: "simulate-current-plan",
       lane: "execution",

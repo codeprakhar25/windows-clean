@@ -304,6 +304,7 @@ Agent question invariant:
 
 - Questions are derived from current state, not hardcoded walkthrough copy.
 - A question can trigger only an existing guarded action such as scan, suggest plan, allow admin/system routes into dry-run planning, confirm permanent-removal routes, focus item review, focus rollback proof, focus fixture import, approve rebuildable cache group, arm dry-run consent, simulate dry-run, run native read-only scan, or probe the rejecting write boundary.
+- A question must not ask to simulate when the dry-run launch guard is blocked or unsafe; it must route the user to the safety interlock or launch guard instead.
 - Questions cannot mark item decisions, rollback evidence, validation evidence, typed approvals, write readiness, or release gates complete on their own.
 - The active question and queue must be exportable in the dry-run report for audit.
 

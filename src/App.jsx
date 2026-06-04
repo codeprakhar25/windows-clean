@@ -619,7 +619,7 @@ export default function App() {
       }),
     [releaseGate, executorPlan, executorManifest, dataMode, runtimeCapabilities.result, nativeScan.result]
   );
-  const agentQuestionQueue = useMemo(
+  const baseAgentQuestionQueue = useMemo(
     () =>
       buildAgentQuestionQueue({
         scanned,
@@ -677,11 +677,11 @@ export default function App() {
       buildTaskPowerBroker({
         taskPowerCatalog,
         taskCapabilityGrants,
-        agentQuestionQueue,
+        agentQuestionQueue: baseAgentQuestionQueue,
         runReadiness,
         runtimeCapabilities: runtimeCapabilities.result
       }),
-    [taskPowerCatalog, taskCapabilityGrants, agentQuestionQueue, runReadiness, runtimeCapabilities.result]
+    [taskPowerCatalog, taskCapabilityGrants, baseAgentQuestionQueue, runReadiness, runtimeCapabilities.result]
   );
   const taskPowerLeaseAudit = useMemo(
     () =>
@@ -700,10 +700,10 @@ export default function App() {
       buildAgentTaskRunbook({
         executorPlan,
         taskCapabilityGrants,
-        agentQuestionQueue,
+        agentQuestionQueue: baseAgentQuestionQueue,
         rollbackPlan
       }),
-    [executorPlan, taskCapabilityGrants, agentQuestionQueue, rollbackPlan]
+    [executorPlan, taskCapabilityGrants, baseAgentQuestionQueue, rollbackPlan]
   );
   const restrictionPolicyMatrix = useMemo(
     () =>
@@ -787,7 +787,7 @@ export default function App() {
         consentReceipt,
         ledger: activeLedger,
         planSnapshot,
-        agentQuestionQueue,
+        agentQuestionQueue: baseAgentQuestionQueue,
         runtimeCapabilities: runtimeCapabilities.result
       }),
     [
@@ -806,7 +806,7 @@ export default function App() {
       consentReceipt,
       activeLedger,
       planSnapshot,
-      agentQuestionQueue,
+      baseAgentQuestionQueue,
       runtimeCapabilities.result
     ]
   );
@@ -892,6 +892,63 @@ export default function App() {
         safetyInterlock
       }),
     [runReadiness, consentReceipt, safetyInterlock]
+  );
+  const agentQuestionQueue = useMemo(
+    () =>
+      buildAgentQuestionQueue({
+        scanned,
+        scanning,
+        scanMode: dataMode,
+        scanSession,
+        nativeCapability,
+        runtimeCapabilities: runtimeCapabilities.result,
+        actionList,
+        selectedIds,
+        approvals,
+        readiness,
+        reviewWorkbench,
+        recoveryAdvisor,
+        manualStrategyChecklist,
+        runReadiness,
+        consentReceipt,
+        dryRunLaunchGuard,
+        safetyInterlock,
+        verificationSummary,
+        rescanComparison,
+        rollbackPlan,
+        customRootTriage,
+        validationPack,
+        fixtureImportResult,
+        writeBoundaryProbe,
+        intakePolicy
+      }),
+    [
+      scanned,
+      scanning,
+      dataMode,
+      scanSession,
+      nativeCapability,
+      runtimeCapabilities.result,
+      actionList,
+      selectedIds,
+      approvals,
+      readiness,
+      reviewWorkbench,
+      recoveryAdvisor,
+      manualStrategyChecklist,
+      runReadiness,
+      consentReceipt,
+      dryRunLaunchGuard,
+      safetyInterlock,
+      verificationSummary,
+      rescanComparison,
+      rollbackPlan,
+      customRootTriage,
+      validationPack,
+      fixtureImportResult,
+      writeBoundaryProbe,
+      intakePolicy
+    ]
   );
   const productCompletionAudit = useMemo(
     () =>

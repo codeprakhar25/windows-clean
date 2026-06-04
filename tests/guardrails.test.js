@@ -2024,9 +2024,33 @@ const assert = require("assert");
     approvals: { groupConfirm: true, reviewed: {}, typed: {} },
     runReadiness: runReady,
     consentReceipt: armedConsent,
+    dryRunLaunchGuard: { ready: true, status: "dry-run-launch-ready", dryRunAllowed: true },
     verificationSummary: { current: false }
   });
   assert(simulateQuestions.questions.some((question) => question.id === "simulate-current-plan" && question.action === "simulate"), "question queue should ask to simulate an armed plan");
+  const blockedLaunchQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    actionList: developerActions,
+    selectedIds: new Set(["windows-temp"]),
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    runReadiness: runReady,
+    consentReceipt: armedConsent,
+    dryRunLaunchGuard: staleLaunchGuard,
+    verificationSummary: { current: false }
+  });
+  assert.strictEqual(blockedLaunchQuestions.activeQuestion.id, "resolve-dry-run-launch", "question queue should ask to resolve a blocked launch guard before simulation");
+  assert(!blockedLaunchQuestions.questions.some((question) => question.id === "simulate-current-plan"), "blocked launch guard must suppress simulate question");
+  const unsafeLaunchQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    actionList: developerActions,
+    selectedIds: new Set(["windows-temp"]),
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    runReadiness: runReady,
+    consentReceipt: armedConsent,
+    dryRunLaunchGuard: unsafeLaunchGuard,
+    verificationSummary: { current: false }
+  });
+  assert.strictEqual(unsafeLaunchQuestions.activeQuestion.id, "resolve-safety-interlock", "unsafe launch guard should route the agent to safety review");
   const staleConsent = guard.buildExecutionConsentReceipt({
     planSnapshot: changedItemPlanSnapshot,
     executorPlan: cleanRunExecutorPlan,
