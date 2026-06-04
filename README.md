@@ -169,6 +169,7 @@ The demo also includes:
 - Power broker panel that turns selected task powers into current-plan power requests, preserves the active user question, refuses standing permission, and keeps each request dry-run only.
 - Executor policy panel that classifies selected routes before simulation.
 - Native candidate manifest preview that shows target-scope status, sampled dry-run file metadata, target path, and skipped counts without deleting anything.
+- Native dry-run scope evidence export that runs a metadata-only allowed/rejected scope probe and writes a minimal JSON artifact for fixture validation without raw candidate filename samples.
 - Executor manifest panel that shows every route family, first-safe lanes, required validation checks, fixtures, preconditions, rollback notes, and next implementation steps.
 - Tool command inventory panel that lists official inspect/prune command shapes for npm, pnpm, Docker, Gradle, and Windows cleanup without executing shell commands.
 - Release gate panel that shows feature flags, runtime capabilities, missing validation checks, and disposable VM coverage.
@@ -285,7 +286,7 @@ The first-safe executor contract turns that capsule into a concrete request-shap
 
 The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` rejecting stub in the desktop shell, but success means rejection, not cleanup: `accepted=false`, all entries rejected with native reject codes, zero reclaimed bytes, and a native echo that matches the current first-safe executor contract. Target-scope reject codes are diagnostic only and do not count as passing rejection evidence. Probe entries are never ledger recovery.
 
-The fixture evidence import accepts the JSON produced by `scripts/inspect-spaceguard-fixtures.ps1`. It can fill the `scanner-fixtures` validation record after the fixture JSON passes schema, count, age, size, destructive-command, reviewer, and artifact checks. It can also fill `dry-run-target-scope` only when the evidence includes explicit passing dry-run scope cases with allowed and rejected targets. Protected-path, rollback, tool-command, native-build, and ledger/rescan evidence still require their own records.
+The fixture evidence import accepts the JSON produced by `scripts/inspect-spaceguard-fixtures.ps1`. It can fill the `scanner-fixtures` validation record after the fixture JSON passes schema, count, age, size, destructive-command, reviewer, and artifact checks. It can also fill `dry-run-target-scope` only when the evidence includes explicit passing dry-run scope cases with allowed and rejected targets. Use **Export scope evidence** to run the native metadata-only scope probe and create the minimal `spaceguard-native-dry-run-scope/v1` JSON consumed by the fixture inspector. Protected-path, rollback, tool-command, native-build, and ledger/rescan evidence still require their own records.
 
 Dry-run records are also saved to local browser storage as an append-only run history. A saved record can block a duplicate simulation for the same plan after reload, but it cannot unlock real execution. The history export is audit evidence only; real cleanup still requires native Windows validation and a post-run rescan.
 

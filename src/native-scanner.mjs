@@ -128,6 +128,50 @@ export async function runNativeExecutorDryRun(executorPlan, host = globalThis) {
   return normalizeNativeExecutorDryRun(result);
 }
 
+export async function runNativeDryRunScopeValidation(host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      entries: [],
+      warnings: ["Native dry-run scope validation is not available in the browser demo."]
+    };
+  }
+
+  const result = await host.__TAURI__.core.invoke("simulate_cleanup_plan", {
+    request: {
+      actions: [
+        {
+          id: "windows-temp",
+          title: "Known temp allowed target",
+          bytes: 0,
+          route: "known-temp-delete",
+          targetPath: "%TEMP%, C:\\Windows\\Temp"
+        },
+        {
+          id: "downloads-forbidden-as-temp",
+          title: "Downloads forbidden as temp target",
+          bytes: 0,
+          route: "known-temp-delete",
+          targetPath: "%USERPROFILE%\\Downloads"
+        },
+        {
+          id: "browser-identity-forbidden",
+          title: "Browser identity forbidden as cache target",
+          bytes: 0,
+          route: "browser-cache-only",
+          targetPath: "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Cookies"
+        }
+      ]
+    }
+  });
+
+  return normalizeNativeExecutorDryRun(result);
+}
+
 export async function runNativeWriteBoundary(boundary = {}, host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {

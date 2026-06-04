@@ -89,13 +89,13 @@ After seeding:
 powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.ps1
 ```
 
-After exporting or saving native dry-run scope evidence from the desktop VM run, inspect it with the fixture evidence:
+After the desktop runtime exposes native dry-run support, use **Export scope evidence** in the Executor policy panel. The app runs a metadata-only scope probe with one allowed temp target and rejected Downloads/browser-identity targets, then exports the result for fixture inspection:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.ps1 -DryRunScopeEvidencePath .\evidence\native-dry-run-scope.json
 ```
 
-The dry-run scope evidence file can be the raw native dry-run response or an object with `entries`. Each entry should include `id`, `route`, `targetPath`, `targetScopeStatus`, `rejectCode`, and `candidateCount`. The fixture manifest expects at least one allowed first-safe target and at least one rejected target with `candidateCount: 0`.
+The exported file uses `spaceguard-native-dry-run-scope/v1`. It contains `entries` with `id`, `route`, `targetPath`, `targetScopeStatus`, `rejectCode`, and `candidateCount`, while excluding raw candidate filename samples. The fixture manifest expects at least one allowed first-safe target and at least one rejected target with `candidateCount: 0`.
 
 4. Confirm fixture-backed findings appear as measured or limited.
 5. Confirm large personal files appear in item review only, not as bulk cleanup.

@@ -2050,6 +2050,58 @@ const assert = require("assert");
   assert.deepStrictEqual(noDryRunScopeImport.mappedCheckIds, ["scanner-fixtures"], "fixture import without dry-run scope proof should map scanner fixtures only");
   assert.strictEqual(noDryRunScopeImport.validationEvidence["dry-run-target-scope"], undefined, "missing dry-run scope proof must not create target-scope validation evidence");
   assert(noDryRunScopeImport.warnings.some((warning) => warning.includes("Dry-run target-scope evidence was not present")), "fixture import should warn when dry-run scope evidence is missing");
+  const nativeScopeEvidence = guard.buildNativeDryRunScopeEvidence({
+    nativeExecutorDryRun: {
+      result: {
+        mode: "native-dry-run",
+        realRunEnabled: false,
+        destructiveCommands: false,
+        entries: [
+          {
+            id: "windows-temp",
+            title: "Windows temp",
+            route: "known-temp-delete",
+            targetPath: "%TEMP%",
+            targetScopeStatus: "target-allowed",
+            rejectCode: "",
+            candidateCount: 1,
+            candidates: [{ name: "secret.tmp" }]
+          },
+          {
+            id: "downloads-forbidden-as-temp",
+            title: "Downloads forbidden",
+            route: "known-temp-delete",
+            targetPath: "C:\\Users\\demo\\Downloads",
+            targetScopeStatus: "target-blocked",
+            rejectCode: "target-forbidden",
+            candidateCount: 0,
+            candidates: [{ name: "should-not-export.zip" }]
+          }
+        ]
+      }
+    },
+    planSnapshot: { id: "plan-scope" },
+    scanSession: { fingerprint: "scan-scope" },
+    exportedAt: "2026-06-04T12:30:00.000Z"
+  });
+  assert.strictEqual(nativeScopeEvidence.schemaVersion, "spaceguard-native-dry-run-scope/v1", "native dry-run scope evidence should expose a schema");
+  assert.strictEqual(nativeScopeEvidence.passed, true, "native dry-run scope evidence should pass with allowed and rejected scope entries");
+  assert.strictEqual(nativeScopeEvidence.counts.rejectedWithSamples, 0, "rejected target scopes should export zero candidate samples");
+  assert.strictEqual(nativeScopeEvidence.entries[0].candidates, undefined, "native dry-run scope evidence must not export candidate filenames");
+  assert.strictEqual(nativeScopeEvidence.planId, "plan-scope", "native scope evidence should include plan id");
+  assert.strictEqual(nativeScopeEvidence.scanFingerprint, "scan-scope", "native scope evidence should include scan fingerprint");
+  const unsafeNativeScopeEvidence = guard.buildNativeDryRunScopeEvidence({
+    nativeExecutorDryRun: {
+      result: {
+        realRunEnabled: false,
+        destructiveCommands: false,
+        entries: [
+          { id: "bad", route: "known-temp-delete", targetScopeStatus: "target-blocked", rejectCode: "target-forbidden", candidateCount: 1 }
+        ]
+      }
+    }
+  });
+  assert.strictEqual(unsafeNativeScopeEvidence.passed, false, "native dry-run scope evidence should fail if rejected targets report samples");
   const noReviewerFixtureImport = guard.buildFixtureEvidenceImport({
     evidenceObject: fixtureEvidence,
     reviewer: "",

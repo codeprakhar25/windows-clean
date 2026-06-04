@@ -262,6 +262,21 @@ const assert = require("assert");
   );
   assert.strictEqual(dryRunInvocation.command, "simulate_cleanup_plan", "native dry-run should invoke simulate_cleanup_plan");
   assert.strictEqual(dryRunInvocation.payload.request.actions[0].targetPath, "C:\\Windows\\Temp", "native dry-run should pass target path evidence");
+  let scopeInvocation = null;
+  await native.runNativeDryRunScopeValidation({
+    __TAURI__: {
+      core: {
+        invoke(command, payload) {
+          scopeInvocation = { command, payload };
+          return Promise.resolve({ entries: [], warnings: [] });
+        }
+      }
+    }
+  });
+  assert.strictEqual(scopeInvocation.command, "simulate_cleanup_plan", "native scope validation should invoke simulate_cleanup_plan");
+  assert(scopeInvocation.payload.request.actions.some((action) => action.id === "windows-temp" && action.targetPath.includes("%TEMP%")), "native scope validation should include allowed temp scope");
+  assert(scopeInvocation.payload.request.actions.some((action) => action.id === "downloads-forbidden-as-temp" && action.targetPath.includes("Downloads")), "native scope validation should include forbidden Downloads scope");
+  assert(scopeInvocation.payload.request.actions.some((action) => action.id === "browser-identity-forbidden" && action.targetPath.includes("Cookies")), "native scope validation should include forbidden browser identity scope");
   let writeInvocation = null;
   const rejectedWrite = await native.runNativeWriteBoundary(
     {

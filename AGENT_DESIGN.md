@@ -407,6 +407,7 @@ The current React/shadcn app implements this as a guarded planner with browser-d
 - Executor manifest panel.
 - Validation evidence pack export.
 - Dry-run target-scope evidence in the validation pack when fixture import proves the scope cases.
+- Native dry-run scope evidence export for disposable VM fixture inspection, without raw candidate filename samples.
 
 No real cleanup is performed yet.
 

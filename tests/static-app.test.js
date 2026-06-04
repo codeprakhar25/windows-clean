@@ -243,6 +243,9 @@ assert(app.includes("buildLedgerHistorySummary"), "ledger history summary should
 assert(app.includes("buildLedgerHistoryMarkdown"), "ledger history export should be wired");
 assert(app.includes("localStorage"), "ledger history should use local browser storage");
 assert(app.includes("runNativeExecutorDryRun"), "native executor dry-run should be wired");
+assert(app.includes("runNativeDryRunScopeValidation"), "native dry-run scope validation probe should be wired");
+assert(app.includes("buildNativeDryRunScopeEvidence"), "native dry-run scope evidence export should be wired");
+assert(app.includes("Export scope evidence"), "native dry-run scope evidence export action should be visible");
 assert(app.includes("runNativeWriteBoundary"), "native write boundary probe should be wired");
 assert(app.includes("getNativeRuntimeCapabilities"), "native runtime capability should be wired");
 assert(app.includes("executeCleanupPlan"), "runtime UI should expose rejecting write command capability");
@@ -336,6 +339,8 @@ assert(model.includes("spaceguard-fixture-evidence-import/v1"), "model should ex
 assert(model.includes("destructive-evidence"), "fixture evidence import should reject destructive evidence");
 assert(model.includes("scanner-fixtures"), "fixture evidence import should map scanner fixture readiness evidence");
 assert(model.includes("dry-run-target-scope"), "model should expose dry-run target-scope validation");
+assert(model.includes("spaceguard-native-dry-run-scope/v1"), "model should expose native dry-run scope evidence schema");
+assert(model.includes("rejectedWithSamples"), "native dry-run scope evidence should track rejected targets that returned samples");
 assert(model.includes("summarizeFixtureDryRunScopeCheck"), "fixture evidence import should summarize dry-run scope proof");
 assert(model.includes("Dry-run target-scope evidence was not present"), "fixture import should keep dry-run scope proof separate when missing");
 assert(model.includes("legacy-needs-detail"), "legacy validation evidence should need details");
@@ -356,6 +361,9 @@ assert(nativeAdapter.includes("scan_known_roots"), "native adapter should invoke
 assert(nativeAdapter.includes("targetDrive"), "native adapter should pass target drive scope");
 assert(nativeAdapter.includes("customRoots"), "native adapter should pass custom read-only roots");
 assert(nativeAdapter.includes("simulate_cleanup_plan"), "native adapter should invoke the dry-run executor command");
+assert(nativeAdapter.includes("runNativeDryRunScopeValidation"), "native adapter should expose native dry-run scope validation");
+assert(nativeAdapter.includes("downloads-forbidden-as-temp"), "native adapter scope validation should include forbidden Downloads case");
+assert(nativeAdapter.includes("browser-identity-forbidden"), "native adapter scope validation should include forbidden browser identity case");
 assert(nativeAdapter.includes("candidateCount"), "native adapter should normalize dry-run candidate counts");
 assert(nativeAdapter.includes("skippedCount"), "native adapter should normalize dry-run skipped counts");
 assert(nativeAdapter.includes("targetScopeStatus"), "native adapter should normalize dry-run target-scope status");

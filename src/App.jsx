@@ -51,6 +51,7 @@ import {
   buildLedgerHistoryMarkdown,
   buildLedgerHistorySummary,
   buildLedgerRunRecord,
+  buildNativeDryRunScopeEvidence,
   buildPostRunVerificationMarkdown,
   buildPostRunVerificationPlan,
   buildPrivilegeBoundary,
@@ -112,6 +113,7 @@ import {
   getNativeScannerCapability,
   getNativeRuntimeCapabilities,
   mergeNativeScanIntoActions,
+  runNativeDryRunScopeValidation,
   runNativeExecutorDryRun,
   runNativeReadonlyScan,
   runNativeWriteBoundary
@@ -1598,6 +1600,18 @@ export default function App() {
     downloadTextFile("spaceguard-release-review-packet.md", body, "text/markdown;charset=utf-8");
   }
 
+  async function exportNativeDryRunScopeEvidence() {
+    if (!runtimeCapabilities.result.simulateCleanupPlan) return;
+    const scopeResult = await runNativeDryRunScopeValidation(globalThis);
+    const evidence = buildNativeDryRunScopeEvidence({
+      nativeExecutorDryRun: { result: scopeResult },
+      planSnapshot,
+      scanSession,
+      exportedAt: new Date().toISOString()
+    });
+    downloadTextFile("spaceguard-native-dry-run-scope.json", JSON.stringify(evidence, null, 2), "application/json;charset=utf-8");
+  }
+
   function downloadTextFile(fileName, content, type) {
     const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
@@ -1926,7 +1940,13 @@ export default function App() {
               intakePolicy={intakePolicy}
             />
             <TracePanel activeStage={activeStage} />
-            <ExecutorPolicyPanel executorPlan={executorPlan} executorReadiness={executorReadiness} nativeExecutorDryRun={nativeExecutorDryRun} />
+            <ExecutorPolicyPanel
+              executorPlan={executorPlan}
+              executorReadiness={executorReadiness}
+              nativeExecutorDryRun={nativeExecutorDryRun}
+              canExportScopeEvidence={runtimeCapabilities.result.simulateCleanupPlan}
+              onExportScopeEvidence={exportNativeDryRunScopeEvidence}
+            />
             <ExecutorManifestPanel manifest={executorManifest} />
             <ToolCommandInventoryPanel inventory={toolCommandInventory} />
             <VerificationPanel planSnapshot={planSnapshot} verificationSummary={verificationSummary} />
@@ -4160,8 +4180,9 @@ function TracePanel({ activeStage }) {
   );
 }
 
-function ExecutorPolicyPanel({ executorPlan, executorReadiness, nativeExecutorDryRun }) {
+function ExecutorPolicyPanel({ executorPlan, executorReadiness, nativeExecutorDryRun, canExportScopeEvidence, onExportScopeEvidence }) {
   const previewRows = executorPlan.rows.slice(0, 5);
+  const nativeDryRunEntries = nativeExecutorDryRun.result?.entries || [];
 
   return (
     <Card>
@@ -4189,16 +4210,27 @@ function ExecutorPolicyPanel({ executorPlan, executorReadiness, nativeExecutorDr
           <p className="mt-1 text-muted-foreground">
             {nativeExecutorDryRun.result?.warnings?.[0] || nativeExecutorDryRun.error || "Browser simulation is used unless the Tauri bridge is available."}
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3 w-full"
+            onClick={onExportScopeEvidence}
+            disabled={!canExportScopeEvidence}
+          >
+            <Download className="h-4 w-4" />
+            Export scope evidence
+          </Button>
         </div>
 
-        {nativeExecutorDryRun.result?.entries?.length ? (
+        {nativeDryRunEntries.length ? (
           <div className="rounded-md border bg-muted/30 p-3">
             <div className="mb-2 flex items-center justify-between gap-3 text-sm">
               <span className="font-medium">Candidate manifest</span>
               <Badge variant="outline">metadata only</Badge>
             </div>
             <div className="flex flex-col gap-2">
-              {nativeExecutorDryRun.result.entries.slice(0, 3).map((entry) => (
+              {nativeDryRunEntries.slice(0, 3).map((entry) => (
                 <div key={`${entry.id}-${entry.route}`} className="rounded-md border bg-card p-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="mr-auto min-w-0 text-sm font-medium">{entry.title}</span>

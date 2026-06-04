@@ -5447,6 +5447,61 @@ export function buildFixtureEvidenceImport({
   };
 }
 
+export function buildNativeDryRunScopeEvidence({
+  nativeExecutorDryRun = null,
+  planSnapshot = null,
+  scanSession = null,
+  exportedAt = new Date().toISOString()
+} = {}) {
+  const result = nativeExecutorDryRun?.result || nativeExecutorDryRun || {};
+  const entries = Array.isArray(result.entries)
+    ? result.entries.map((entry) => ({
+        id: entry.id || "",
+        title: entry.title || "",
+        route: entry.route || "",
+        targetPath: entry.targetPath || entry.target_path || "",
+        targetScopeStatus: entry.targetScopeStatus || entry.target_scope_status || "",
+        rejectCode: entry.rejectCode || entry.reject_code || "",
+        candidateCount: Number(entry.candidateCount || entry.candidate_count || 0),
+        skippedCount: Number(entry.skippedCount || entry.skipped_count || 0),
+        candidateBytes: Number(entry.candidateBytes || entry.candidate_bytes || 0),
+        result: entry.result || "dry-run",
+        note: entry.rejectCode || entry.reject_code
+          ? "Rejected target scope returned without candidate samples."
+          : "Allowed target scope sampled metadata only."
+      }))
+    : [];
+  const allowed = entries.filter((entry) => entry.targetScopeStatus === "target-allowed").length;
+  const rejected = entries.filter((entry) => entry.targetScopeStatus === "target-blocked" || entry.rejectCode).length;
+  const rejectedWithSamples = entries.filter((entry) => entry.rejectCode && entry.candidateCount > 0).length;
+  const destructiveCommands = Boolean(result.destructiveCommands || result.destructive_commands);
+  const realRunEnabled = Boolean(result.realRunEnabled || result.real_run_enabled);
+  const passed = entries.length > 0 && allowed > 0 && rejected > 0 && rejectedWithSamples === 0 && !destructiveCommands && !realRunEnabled;
+
+  return {
+    schemaVersion: "spaceguard-native-dry-run-scope/v1",
+    generatedAt: exportedAt,
+    source: "spaceguard-native-dry-run",
+    mode: result.mode || "native-dry-run",
+    planId: planSnapshot?.id || "",
+    scanFingerprint: scanSession?.fingerprint || "",
+    destructiveCommands,
+    realRunEnabled,
+    passed,
+    counts: {
+      entries: entries.length,
+      allowed,
+      rejected,
+      rejectedWithSamples
+    },
+    entries,
+    warnings: [
+      "This artifact is target-scope validation evidence only.",
+      "It excludes candidate filename samples and does not enable real cleanup."
+    ]
+  };
+}
+
 function summarizeFixtureDryRunScopeCheck(evidence = {}) {
   const check = evidence.dryRunScopeCheck || evidence.dry_run_scope_check || null;
   if (!check || typeof check !== "object" || Array.isArray(check)) {
