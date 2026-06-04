@@ -3476,6 +3476,125 @@ export function buildRestrictionPolicyMatrix({
   };
 }
 
+export function buildWindowsSetupAssistant({
+  nativeCapability = { available: false },
+  runtimeCapabilities = {},
+  scanMode = "demo",
+  scanSession = null,
+  scanCoverage = null,
+  privacyBoundary = null,
+  publicBetaReadiness = null,
+  validationPack = null,
+  releaseGate = null,
+  supportBundle = null
+} = {}) {
+  const unsafeRuntime = Boolean(runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands);
+  const nativeAvailable = Boolean(nativeCapability?.available || runtimeCapabilities?.available);
+  const nativeScanCurrent = Boolean(scanMode === "native-readonly" && scanSession?.readyForPlanning && scanSession?.nativeEvidence);
+  const privacyReady = Boolean(privacyBoundary?.cloudDisabled && privacyBoundary?.telemetryDisabled && privacyBoundary?.exportOnly);
+  const nativeBetaReady = Boolean(publicBetaReadiness?.readyForNativeBeta);
+  const rows = [
+    buildSetupAssistantRow({
+      id: "browser-demo",
+      label: "Browser demo",
+      lane: "demo",
+      passed: true,
+      detail: "Demo mode can rehearse workflow, approvals, reports, and guardrails without local file access.",
+      action: "Use demo scan for product rehearsal."
+    }),
+    buildSetupAssistantRow({
+      id: "desktop-shell",
+      label: "Desktop shell",
+      lane: "native",
+      passed: nativeAvailable && runtimeCapabilities?.scanKnownRoots !== false,
+      detail: nativeAvailable
+        ? `Native runtime detected on ${runtimeCapabilities?.platform || nativeCapability?.mode || "desktop"}.`
+        : "Tauri desktop shell is required before local Windows folders can be measured.",
+      action: nativeAvailable ? "Run real read-only scan." : "Start with npm run native:dev on Windows."
+    }),
+    buildSetupAssistantRow({
+      id: "read-only-scan",
+      label: "Read-only scan evidence",
+      lane: "scanner",
+      passed: nativeScanCurrent,
+      detail: nativeScanCurrent
+        ? `${scanCoverage?.confidenceScore || 0}% coverage confidence is tied to the current scan fingerprint.`
+        : "Native scan evidence must match the current target drive, custom roots, traversal caps, and protected paths.",
+      action: nativeScanCurrent ? "Use current scan for dry-run planning." : "Run real scan after settings are final."
+    }),
+    buildSetupAssistantRow({
+      id: "privacy-export",
+      label: "Local privacy and export",
+      lane: "privacy",
+      passed: privacyReady,
+      detail: privacyReady
+        ? "Scan evidence stays local, telemetry/cloud upload is disabled, and support export is explicit."
+        : "Privacy boundary must prove local-only scan handling and explicit exports.",
+      action: "Export reports only when the user chooses."
+    }),
+    buildSetupAssistantRow({
+      id: "native-beta-evidence",
+      label: "Native beta evidence",
+      lane: "release",
+      passed: nativeBetaReady,
+      detail: nativeBetaReady
+        ? "Read-only native beta evidence is assembled without claiming real cleanup."
+        : "Native beta needs signing/support/uninstall, privacy, validation, and read-only scan evidence.",
+      action: "Use validation pack and release review packet for beta signoff."
+    }),
+    buildSetupAssistantRow({
+      id: "real-cleanup-lock",
+      label: "Real cleanup lock",
+      lane: "safety",
+      passed: !unsafeRuntime && !releaseGate?.readyForRealRun && !validationPack?.readyForRealRun,
+      detail: unsafeRuntime
+        ? "Runtime write capability is visible and must be investigated before continuing."
+        : "Current build keeps destructive execution, shell cleanup, registry edits, and partition writes disabled.",
+      action: "Keep real cleanup disabled until a separately validated executor release."
+    })
+  ];
+  const blockedRows = rows.filter((row) => row.status === "blocked");
+  const waitingRows = rows.filter((row) => row.status === "waiting");
+  const readyRows = rows.filter((row) => row.status === "ready");
+  const status = unsafeRuntime
+    ? "unsafe-runtime"
+    : nativeBetaReady
+      ? "native-beta-ready"
+      : nativeScanCurrent
+        ? "native-scan-ready"
+        : nativeAvailable
+          ? "desktop-ready"
+          : "browser-demo";
+
+  return {
+    schemaVersion: "spaceguard-windows-setup-assistant/v1",
+    status,
+    tone: unsafeRuntime ? "restricted" : nativeBetaReady || nativeScanCurrent ? "safe" : "review",
+    nativeAvailable,
+    nativeScanCurrent,
+    privacyReady,
+    nativeBetaReady,
+    realCleanupEnabled: false,
+    destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
+    supportBundleReady: Boolean(supportBundle?.schemaVersion),
+    rows,
+    readyRows,
+    waitingRows,
+    blockedRows,
+    commands: getWindowsSetupCommands({ nativeAvailable, nativeScanCurrent, nativeBetaReady }),
+    forbiddenCommands: ["Remove-Item", "Clear-Item", "reg.exe", "powercfg", "Format-Volume", "Resize-Partition"],
+    counts: {
+      total: rows.length,
+      ready: readyRows.length,
+      waiting: waitingRows.length,
+      blocked: blockedRows.length,
+      realRun: 0
+    },
+    primary: getWindowsSetupPrimary(status, { nativeAvailable, nativeScanCurrent, nativeBetaReady, unsafeRuntime }),
+    steps: getWindowsSetupSteps(status, { rows, nativeAvailable, nativeScanCurrent, nativeBetaReady, unsafeRuntime })
+  };
+}
+
 export function buildExecutorPlan({
   selectedIds = new Set(),
   actionList = actions,
@@ -6005,6 +6124,7 @@ export function buildReport({
   executorPlan = null,
   taskRunbook = null,
   restrictionPolicyMatrix = null,
+  windowsSetupAssistant = null,
   releaseGate = null,
   validationPack = null,
   runtimeCapabilities = null,
@@ -6136,6 +6256,26 @@ export function buildReport({
                 .map((row) => `- ${row.title}: ${row.status} | executor=${row.canCreateExecutor ? "yes" : "no"} | real=${row.canRealRun ? "yes" : "no"} | ${row.nextStep}`)
                 .join("\n")
             : "- No restriction rows."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Windows Setup Assistant",
+    windowsSetupAssistant
+      ? [
+          `- Status: ${windowsSetupAssistant.status}`,
+          `- Native available: ${windowsSetupAssistant.nativeAvailable ? "yes" : "no"}`,
+          `- Native scan current: ${windowsSetupAssistant.nativeScanCurrent ? "yes" : "no"}`,
+          `- Privacy ready: ${windowsSetupAssistant.privacyReady ? "yes" : "no"}`,
+          `- Native beta ready: ${windowsSetupAssistant.nativeBetaReady ? "yes" : "no"}`,
+          `- Real cleanup enabled: ${windowsSetupAssistant.realCleanupEnabled ? "yes" : "no"}`,
+          `- Destructive commands: ${windowsSetupAssistant.destructiveCommands ? "yes" : "no"}`,
+          `- Real-run setup routes: ${windowsSetupAssistant.counts.realRun}`,
+          windowsSetupAssistant.rows.length
+            ? windowsSetupAssistant.rows.map((row) => `- ${row.label}: ${row.status} | ${row.detail}`).join("\n")
+            : "- No setup rows.",
+          windowsSetupAssistant.commands.length
+            ? windowsSetupAssistant.commands.map((command) => `- Command: ${command.command} | destructive=${command.destructive ? "yes" : "no"} | ${command.detail}`).join("\n")
+            : "- No setup commands."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -7432,6 +7572,78 @@ function getRestrictionPolicySteps(status, { selectedBlockedRows = [], gatedRows
   if (status === "restricted-selection-visible") return selectedBlockedRows.slice(0, 3).map((row) => `${row.title}: ${row.nextStep}`);
   if (status === "restrictions-active") return gatedRows.slice(0, 3).map((row) => `${row.title}: ${row.nextStep}`);
   return hardRows.slice(0, 3).map((row) => `${row.title}: ${row.reason}`);
+}
+
+function buildSetupAssistantRow({ id, label, lane, passed, detail, action }) {
+  return {
+    id,
+    label,
+    lane,
+    status: passed ? "ready" : "waiting",
+    tone: passed ? "safe" : lane === "safety" ? "restricted" : "review",
+    passed,
+    detail,
+    action
+  };
+}
+
+function getWindowsSetupCommands({ nativeAvailable = false, nativeScanCurrent = false, nativeBetaReady = false } = {}) {
+  const commands = [
+    {
+      id: "web-demo",
+      label: "Browser demo",
+      command: "npm run dev",
+      status: "available",
+      destructive: false,
+      detail: "Runs the workflow demo without local filesystem access."
+    },
+    {
+      id: "desktop-shell",
+      label: "Desktop shell",
+      command: "npm run native:dev",
+      status: nativeAvailable ? "detected" : "next",
+      destructive: false,
+      detail: "Starts the Tauri desktop shell so the read-only scanner can measure local Windows roots."
+    },
+    {
+      id: "native-build",
+      label: "Native build",
+      command: "npm run native:build",
+      status: nativeBetaReady ? "ready-for-validation" : "waiting-evidence",
+      destructive: false,
+      detail: "Builds the desktop app for distribution checks; it does not enable cleanup writes."
+    }
+  ];
+
+  if (nativeScanCurrent) {
+    commands.push({
+      id: "export-evidence",
+      label: "Evidence export",
+      command: "Export support bundle, dry-run report, release review packet, and validation pack from the UI.",
+      status: "available",
+      destructive: false,
+      detail: "Exports local evidence only when the user explicitly requests it."
+    });
+  }
+
+  return commands;
+}
+
+function getWindowsSetupPrimary(status, { unsafeRuntime = false } = {}) {
+  if (status === "unsafe-runtime" || unsafeRuntime) return "Runtime write capability is visible; stop setup review.";
+  if (status === "native-beta-ready") return "Native read-only beta evidence is ready while real cleanup remains locked.";
+  if (status === "native-scan-ready") return "Current native read-only scan evidence can drive dry-run planning.";
+  if (status === "desktop-ready") return "Desktop shell is detected; run a current read-only scan next.";
+  return "Browser demo is ready; desktop shell is needed for real local scan data.";
+}
+
+function getWindowsSetupSteps(status, { rows = [], unsafeRuntime = false } = {}) {
+  if (status === "unsafe-runtime" || unsafeRuntime) {
+    return ["Stop setup review.", "Confirm realRunEnabled and destructiveCommands are false.", "Inspect native runtime capability output."];
+  }
+  const waitingRows = rows.filter((row) => !row.passed);
+  if (waitingRows.length) return waitingRows.slice(0, 3).map((row) => `${row.label}: ${row.action}`);
+  return ["Export setup evidence.", "Keep public claims to read-only scan or demo.", "Continue real-executor validation separately."];
 }
 
 function buildTaskPowerBlockers(definition, availableActions = [], selectedActions = [], unresolved = [], intakePolicy = null) {

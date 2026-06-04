@@ -105,6 +105,7 @@ The UI must also expose a recovery advisor and decision log:
 - `recovery advisor`: the current gap, the reason the goal is or is not reachable, and the next decision branch.
 - `intake constraints`: the target drive, free-space goal, risk tolerance, protected-path count, and whether admin/system routes may enter dry-run planning.
 - `agent questions`: a prioritized queue of the next user-facing questions derived from scan, plan, intake, approval, review, consent, rollback, validation, fixture import, and verification state.
+- `windows setup assistant`: first-run setup state for browser demo, desktop shell, read-only scan evidence, privacy/export, native beta evidence, and real-cleanup lock.
 - `real scan settings`: project artifact inclusion, traversal depth, and per-root entry cap for the next native read-only scan.
 - `scan coverage`: confidence summary for measured, limited, missing, protected, unsupported, and demo-estimated roots; partial native scans must remain visibly partial.
 - `custom root triage`: manual disposition workflow for custom read-only findings, with Keep, Archive, Move, Inspect, and Escalate states that cannot create executor routes.
@@ -171,6 +172,7 @@ Task power invariant:
 - Task grants are issued only as `dry-run-only` authority. They wait on the current scan session and dry-run consent, refuse issuance when runtime write capability is visible, and expire when the plan, selection, approval state, protected paths, or scanner settings change.
 - Task runbook work orders can summarize and sequence selected task grants, but they cannot add authority, reuse one task power for another target, or bypass the selected route boundary.
 - The restriction matrix is authoritative for refusal classes. Hard-blocked, advisory-only, manual-only, and future-disabled rows cannot create executor routes, cannot count real-run routes, and cannot be bypassed by task powers, runbook work orders, validation records, or release packets.
+- The setup assistant can list non-destructive setup commands and UI exports, but it cannot list direct delete, registry, power-setting, format, partition, or cleanup shell commands.
 
 Review gate invariant:
 

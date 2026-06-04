@@ -343,6 +343,52 @@ const assert = require("assert");
   assert.strictEqual(currentScanSession.schemaVersion, "spaceguard-scan-session/v1", "scan sessions should expose a schema version");
   assert.strictEqual(currentScanSession.status, "native-current", "matching native request evidence should be current");
   assert.strictEqual(currentScanSession.readyForPlanning, true, "current native session should allow planning");
+  const browserSetupAssistant = guard.buildWindowsSetupAssistant({
+    nativeCapability: { available: false },
+    runtimeCapabilities: { available: false, realRunEnabled: false, destructiveCommands: false },
+    scanMode: "demo",
+    scanSession: null
+  });
+  assert.strictEqual(browserSetupAssistant.schemaVersion, "spaceguard-windows-setup-assistant/v1", "setup assistant should expose a schema version");
+  assert.strictEqual(browserSetupAssistant.status, "browser-demo", "browser setup should identify demo-only mode");
+  assert.strictEqual(browserSetupAssistant.realCleanupEnabled, false, "setup assistant must not enable real cleanup");
+  assert.strictEqual(browserSetupAssistant.counts.realRun, 0, "setup assistant should never count real-run setup routes");
+  assert(browserSetupAssistant.commands.every((command) => command.destructive === false), "setup commands must be non-destructive");
+  assert(browserSetupAssistant.forbiddenCommands.includes("Remove-Item"), "setup assistant should explicitly forbid direct delete commands");
+  const nativeSetupAssistant = guard.buildWindowsSetupAssistant({
+    nativeCapability: { available: true },
+    runtimeCapabilities: { available: true, platform: "windows", scanKnownRoots: true, realRunEnabled: false, destructiveCommands: false },
+    scanMode: "native-readonly",
+    scanSession: currentScanSession,
+    scanCoverage: { confidenceScore: 80 },
+    privacyBoundary: { cloudDisabled: true, telemetryDisabled: true, exportOnly: true },
+    publicBetaReadiness: { readyForNativeBeta: false },
+    validationPack: { readyForRealRun: false },
+    releaseGate: { readyForRealRun: false }
+  });
+  assert.strictEqual(nativeSetupAssistant.status, "native-scan-ready", "setup assistant should recognize current native scan evidence");
+  assert.strictEqual(nativeSetupAssistant.nativeScanCurrent, true, "setup assistant should expose current scan state");
+  assert.strictEqual(nativeSetupAssistant.destructiveCommands, false, "native setup assistant should keep destructive commands disabled");
+  const unsafeSetupAssistant = guard.buildWindowsSetupAssistant({
+    nativeCapability: { available: true },
+    runtimeCapabilities: { available: true, realRunEnabled: true, destructiveCommands: true },
+    scanMode: "native-readonly",
+    scanSession: currentScanSession
+  });
+  assert.strictEqual(unsafeSetupAssistant.status, "unsafe-runtime", "setup assistant should stop when runtime write capability appears");
+  const setupReport = guard.buildReport({
+    scenario: guard.getScenario("developer"),
+    profile: guard.getScenario("developer").profile,
+    actionList: guard.actions,
+    selectedIds: new Set(["windows-temp"]),
+    readiness: { ready: true, unresolved: [] },
+    ledger: [],
+    protectedPaths: [],
+    goalBytes: 10 * guard.GB,
+    windowsSetupAssistant: nativeSetupAssistant
+  });
+  assert(setupReport.includes("## Windows Setup Assistant"), "report should include setup assistant");
+  assert(setupReport.includes("Real-run setup routes: 0"), "setup report should keep real-run setup routes at zero");
   const staleScanSession = guard.buildScanSessionEvidence({
     scanned: true,
     scanning: false,

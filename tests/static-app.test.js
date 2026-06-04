@@ -29,6 +29,8 @@ const requiredAppMarkers = [
   "Demo scenario",
   "Export report",
   "Real data readiness",
+  "Windows setup assistant",
+  "Safe setup commands",
   "Intake constraints",
   "Admin/system actions",
   "intake gated",
@@ -158,6 +160,8 @@ assert(app.includes("TaskRunbookPanel"), "task runbook panel should be rendered"
 assert(app.includes("buildRestrictionPolicyMatrix"), "restriction policy matrix should be wired");
 assert(app.includes("RestrictionPolicyMatrixPanel"), "restriction policy matrix panel should be rendered");
 assert(app.includes("runNativeReadonlyScan"), "real read-only scan workflow should be wired");
+assert(app.includes("buildWindowsSetupAssistant"), "Windows setup assistant should be wired");
+assert(app.includes("WindowsSetupAssistantPanel"), "Windows setup assistant panel should be rendered");
 assert(app.includes("scanSettings"), "native scan settings should be wired");
 assert(app.includes("targetDrive"), "native scan settings should include target drive");
 assert(app.includes("updateScanSetting"), "native scan settings should invalidate stale evidence");
@@ -253,6 +257,9 @@ assert(model.includes("spaceguard-restriction-policy-matrix/v1"), "model should 
 assert(model.includes("restrictionPolicyRules"), "model should define restriction policy rules");
 assert(model.includes("browser-identity"), "restriction policy should include browser identity stores");
 assert(model.includes("counts.realRun"), "restriction policy report should keep real-run count visible");
+assert(model.includes("spaceguard-windows-setup-assistant/v1"), "model should expose Windows setup assistant schema");
+assert(model.includes("forbiddenCommands"), "setup assistant should list forbidden commands");
+assert(model.includes("Remove-Item"), "setup assistant should forbid direct delete commands");
 assert(model.includes("admin-cleanup"), "model should classify admin cleanup as a scoped power");
 assert(model.includes("reviewed-item-cleanup"), "model should classify reviewed item cleanup as a scoped power");
 assert(model.includes("permanentConfirm"), "model should expose permanent-removal confirmation gate");

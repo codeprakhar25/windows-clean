@@ -142,6 +142,7 @@ The demo also includes:
 
 - Scenario presets for developer, gaming, and family laptops.
 - Real data readiness panel for the Tauri read-only scanner.
+- Windows setup assistant that separates browser demo, desktop shell, current read-only scan evidence, local privacy/export, native beta readiness, and the real-cleanup lock.
 - Native Windows volume evidence for target-drive total, used, and free bytes when the desktop scanner can read it.
 - Intake constraints for target drive, goal, risk tolerance, protected paths, and whether admin/system routes can enter dry-run planning.
 - Task powers panel that maps selected cleanup actions to scoped capabilities such as safe cleanup, rebuildable cache cleanup, reviewed item cleanup, admin cleanup, advanced system strategy, manual storage strategy, and restricted zones.
@@ -242,6 +243,8 @@ Admin/system-sensitive routes are also intake-gated. Windows.old, hibernation ch
 Task runbook work orders are agent-facing instructions, not new permissions. A selected cache cleanup task can ask for its own approval or enter its own dry-run simulation after grants are issued, but it cannot reuse that power for Downloads, custom roots, browser identity data, partitions, registry keys, or any sibling folder.
 
 The restriction matrix is the refusal surface. Browser identity stores, Docker volumes, pagefile and registry tuning, partition writes, custom roots, admin/system routes, personal/project data, and tool-native shell commands each show what the agent may still do and what remains forbidden. Hard-blocked and manual-only rows cannot create executor routes, and the matrix always keeps real-run routes at zero in this build.
+
+The Windows setup assistant is the first-run operational guide. It can recommend `npm run dev`, `npm run native:dev`, `npm run native:build`, and explicit UI exports, but it does not introduce destructive commands. Its forbidden command list includes direct delete, registry, power, format, and partition operations.
 
 Execution is blocked until the preflight passes:
 

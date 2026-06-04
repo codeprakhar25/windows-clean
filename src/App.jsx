@@ -84,6 +84,7 @@ import {
   buildValidationEvidencePack,
   buildValidationPackMarkdown,
   buildVerificationSummary,
+  buildWindowsSetupAssistant,
   buildWriteBoundaryProbe,
   buildWriteReadiness,
   computeTotals,
@@ -718,6 +719,22 @@ export default function App() {
       }),
     [profile, dataMode, scanSettings, scanSession, nativeScan.result, scanCoverage, privacyBoundary, publicBetaReadiness, releaseGate, runtimeCapabilities.result, executorPlan, rollbackPlan, ledgerHistorySummary]
   );
+  const windowsSetupAssistant = useMemo(
+    () =>
+      buildWindowsSetupAssistant({
+        nativeCapability,
+        runtimeCapabilities: runtimeCapabilities.result,
+        scanMode: dataMode,
+        scanSession,
+        scanCoverage,
+        privacyBoundary,
+        publicBetaReadiness,
+        validationPack,
+        releaseGate,
+        supportBundle
+      }),
+    [nativeCapability, runtimeCapabilities.result, dataMode, scanSession, scanCoverage, privacyBoundary, publicBetaReadiness, validationPack, releaseGate, supportBundle]
+  );
   const releaseReviewPacket = useMemo(
     () =>
       buildReleaseReviewPacket({
@@ -1306,6 +1323,7 @@ export default function App() {
       agentQuestionQueue,
       taskRunbook,
       restrictionPolicyMatrix,
+      windowsSetupAssistant,
       itemReview,
       executorPlan,
       releaseGate,
@@ -1570,6 +1588,8 @@ export default function App() {
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_430px]">
           <div className="space-y-3">
             <NativeScannerPanel capability={nativeCapability} nativeScan={nativeScan} />
+
+            <WindowsSetupAssistantPanel assistant={windowsSetupAssistant} />
 
             <ScanSessionPanel session={scanSession} />
 
@@ -1951,6 +1971,83 @@ function NativeScannerPanel({ capability, nativeScan }) {
             The browser demo cannot inspect local folders. Start the desktop shell to populate this panel with real path sizes.
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function WindowsSetupAssistantPanel({ assistant }) {
+  return (
+    <Card id="windows-setup-assistant-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <HardDrive className="h-4 w-4" />
+              Windows setup assistant
+            </CardTitle>
+            <CardDescription>{assistant.primary}</CardDescription>
+          </div>
+          <Badge variant={assistant.tone}>{assistant.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Native" value={assistant.nativeAvailable ? "yes" : "no"} tone={assistant.nativeAvailable ? "safe" : "review"} />
+          <QueueStat label="Scan" value={assistant.nativeScanCurrent ? "current" : "needed"} tone={assistant.nativeScanCurrent ? "safe" : "review"} />
+          <QueueStat label="Privacy" value={assistant.privacyReady ? "ready" : "wait"} tone={assistant.privacyReady ? "safe" : "review"} />
+          <QueueStat label="Writes" value={assistant.realCleanupEnabled ? "on" : "locked"} tone={assistant.realCleanupEnabled ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Setup boundary</span>
+            <Badge variant={assistant.destructiveCommands ? "restricted" : "safe"}>
+              {assistant.destructiveCommands ? "destructive visible" : "no destructive commands"}
+            </Badge>
+            <Badge variant={assistant.nativeBetaReady ? "safe" : "outline"}>
+              {assistant.nativeBetaReady ? "native beta evidence" : "setup evidence waiting"}
+            </Badge>
+          </div>
+          <div className="flex flex-col gap-2">
+            {assistant.steps.slice(0, 3).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <Lock className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {assistant.rows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex items-center gap-2">
+                <div className="mr-auto text-sm font-medium">{row.label}</div>
+                <Badge variant={row.tone}>{row.status}</Badge>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{row.detail}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{row.action}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 text-sm font-medium">Safe setup commands</div>
+          <div className="flex flex-col gap-2">
+            {assistant.commands.map((command) => (
+              <div key={command.id} className="grid gap-1 rounded-md border bg-card p-2 text-xs sm:grid-cols-[1fr_auto]">
+                <div className="min-w-0">
+                  <div className="truncate font-mono">{command.command}</div>
+                  <div className="text-muted-foreground">{command.detail}</div>
+                </div>
+                <Badge variant={command.destructive ? "restricted" : command.status === "available" || command.status === "detected" ? "safe" : "review"}>
+                  {command.destructive ? "destructive" : command.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
