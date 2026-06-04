@@ -1042,6 +1042,14 @@ const assert = require("assert");
     readiness: guard.getExecutionReadinessForActions(new Set(["recycle-bin"]), { groupConfirm: true, permanentConfirm: false, reviewed: {}, typed: {} }, developerActions, [])
   });
   assert(permanentQuestions.questions.some((question) => question.id === "confirm-permanent-removal"), "question queue should ask for permanent-removal confirmation");
+  const typedQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    actionList: developerActions,
+    selectedIds: new Set(["wsl-vhdx"]),
+    approvals: { groupConfirm: true, permanentConfirm: true, reviewed: {}, typed: {} },
+    readiness: guard.getExecutionReadinessForActions(new Set(["wsl-vhdx"]), { groupConfirm: true, permanentConfirm: true, reviewed: {}, typed: {} }, developerActions, [])
+  });
+  assert(typedQuestions.questions.some((question) => question.id === "typed-wsl-vhdx" && question.action === "focus-panel" && question.targetPanel === "gate-panel"), "typed acknowledgement question should focus approval gates");
 
   const normalSelection = new Set(
     developerActions
@@ -1211,6 +1219,14 @@ const assert = require("assert");
   assert(manualChecklist.checks.some((check) => check.id === "partition-or-drive-plan:full-backup"), "partition strategy should require full backup evidence");
   assert(manualChecklist.checks.some((check) => check.id === "review-custom-roots:no-executor-route"), "custom root strategy should require no-executor-route acknowledgement");
   assert(manualChecklist.checks.some((check) => check.id === "uninstall-apps-manually:no-automated-uninstall"), "installed app strategy should block automated uninstall");
+  const manualStrategyQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    actionList: developerActions,
+    selectedIds: strategySelection,
+    approvals: strategyApprovals,
+    manualStrategyChecklist: manualChecklist
+  });
+  assert(manualStrategyQuestions.questions.some((question) => question.id === "manual-strategy-evidence" && question.action === "focus-panel" && question.targetPanel === "manual-strategy-checklist-panel"), "manual strategy question should focus manual checklist");
   const completedManualEvidence = Object.fromEntries(manualChecklist.checks.filter((check) => check.required).map((check) => [check.id, "done"]));
   const completedManualChecklist = guard.buildManualStrategyChecklist({ storageStrategy, evidence: completedManualEvidence });
   assert.strictEqual(completedManualChecklist.status, "manual-plan-documented", "manual checklist should complete only when required evidence is marked");
@@ -1980,7 +1996,7 @@ const assert = require("assert");
     selectedIds: new Set(["windows-temp"]),
     validationPack: legacyValidationPack
   });
-  assert(validationDetailQuestions.questions.some((question) => question.id === "validation-evidence-detail"), "question queue should ask for validation evidence details");
+  assert(validationDetailQuestions.questions.some((question) => question.id === "validation-evidence-detail" && question.action === "focus-panel" && question.targetPanel === "validation-evidence-panel"), "question queue should ask for validation evidence details");
 
   const executorManifest = guard.buildExecutorManifest({
     actionList: developerActions,

@@ -2871,8 +2871,9 @@ export function buildAgentQuestionQueue({
         title: `Confirm ${entry.action.title}`,
         prompt: `Type ${entry.action.typedPhrase} only if you understand the consequence.`,
         detail: entry.action.consequence || "Advanced action requires explicit typed acknowledgement.",
-        action: "none",
+        action: "focus-panel",
         actionId: entry.action.id,
+        targetPanel: "gate-panel",
         options: ["Use typed approval field", "Skip advanced action"]
       });
     });
@@ -2915,7 +2916,8 @@ export function buildAgentQuestionQueue({
       title: "Document manual strategy",
       prompt: "Which backup or manual storage evidence should be recorded next?",
       detail: waiting ? `${waiting.optionTitle}: ${waiting.detail}` : manualStrategyChecklist.primary,
-      action: "none",
+      action: "focus-panel",
+      targetPanel: "manual-strategy-checklist-panel",
       options: ["Use manual checklist", "Keep cleanup-only plan"]
     });
   }
@@ -2998,7 +3000,8 @@ export function buildAgentQuestionQueue({
       title: "Complete validation evidence",
       prompt: "Which validation record needs reviewer and artifact details?",
       detail: `${detailNeeded[0].label} is marked but cannot count until reviewer and evidence path are recorded.`,
-      action: "none",
+      action: "focus-panel",
+      targetPanel: "validation-evidence-panel",
       options: ["Fill validation evidence fields"]
     });
   }

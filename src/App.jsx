@@ -3262,8 +3262,12 @@ function questionActionLabel(question) {
   if (question.action === "confirm-permanent-removal") return "Confirm removal";
   if (question.action === "allow-admin-routes") return "Allow admin routes";
   if (question.action === "focus-review") return "Open item review";
+  if (question.action === "focus-panel" && question.targetPanel === "gate-panel") return "Open approvals";
+  if (question.action === "focus-panel" && question.targetPanel === "manual-strategy-checklist-panel") return "Open checklist";
   if (question.action === "focus-panel" && question.targetPanel === "rollback-plan-panel") return "Open rollback proof";
-  if (question.action === "focus-panel" && question.targetPanel === "validation-evidence-panel") return "Open validation import";
+  if (question.action === "focus-panel" && question.targetPanel === "validation-evidence-panel") {
+    return question.id === "import-fixture-evidence" ? "Open validation import" : "Open validation evidence";
+  }
   if (question.action === "focus-panel" && question.targetPanel === "custom-root-triage-panel") return "Open custom triage";
   if (question.action === "arm-consent") return "Arm dry-run";
   if (question.action === "simulate") return "Simulate";
@@ -3339,7 +3343,7 @@ function ManualStrategyChecklistPanel({ checklist, onToggle, onReset }) {
   const preview = checklist.checks.slice(0, 8);
 
   return (
-    <Card>
+    <Card id="manual-strategy-checklist-panel">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -3734,7 +3738,7 @@ function GatePanel({ actionList, selectedIds, approvals, setApprovals, scanned, 
   const intakeBlockedCount = actionList.filter((action) => actionRequiresAdminConsent(action) && intakePolicy?.adminSensitiveBlocked).length;
 
   return (
-    <Card>
+    <Card id="gate-panel">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between">
           Agent gates
