@@ -323,6 +323,8 @@ assert(model.includes("Real executor implementation"), "write readiness should r
 assert(model.includes("spaceguard-real-executor-capsule/v1"), "model should expose real executor capsule schema");
 assert(model.includes("spaceguard-first-safe-executor-contract/v1"), "model should expose first-safe executor contract schema");
 assert(model.includes("spaceguard-first-safe-target-audit/v1"), "model should expose first-safe target audit schema");
+assert(model.includes("targetPath"), "first-safe contract should include native target path evidence");
+assert(model.includes("target-scope-rejected"), "write boundary probe should separate target-scope rejection from passing evidence");
 assert(model.includes("spaceguard-write-boundary-probe/v1"), "model should expose write boundary probe schema");
 assert(model.includes("contract-mismatch"), "write boundary probe should reject mismatched contract echoes");
 assert(model.includes("normalizeValidationEvidenceRecord"), "model should normalize structured validation evidence");
@@ -349,6 +351,7 @@ assert(nativeAdapter.includes("customRoots"), "native adapter should pass custom
 assert(nativeAdapter.includes("simulate_cleanup_plan"), "native adapter should invoke the dry-run executor command");
 assert(nativeAdapter.includes("execute_cleanup_plan"), "native adapter should invoke the rejecting write boundary command");
 assert(nativeAdapter.includes("rejectCode"), "native adapter should normalize write-boundary reject codes");
+assert(nativeAdapter.includes("targetPath"), "native adapter should pass selected target paths to the write boundary");
 assert(nativeAdapter.includes("runtime_capabilities"), "native adapter should invoke runtime capability command");
 assert(nativeAdapter.includes("items.map"), "native adapter should preserve item-level review candidates");
 assert(tauriConfig.includes('"withGlobalTauri": true'), "Tauri config should expose the global bridge used by the adapter");
@@ -363,6 +366,8 @@ assert(rustScanner.includes("contract_echo"), "Rust rejecting write boundary sho
 assert(rustScanner.includes("write_boundary_rejections"), "Rust write boundary should validate request shape before rejection");
 assert(rustScanner.includes("dry-run-only-required"), "Rust write boundary should reject non-dry-run request shapes");
 assert(rustScanner.includes("route-not-first-safe"), "Rust write boundary should reject non-first-safe routes");
+assert(rustScanner.includes("target-not-allowlisted"), "Rust write boundary should reject targets outside route allowlists");
+assert(rustScanner.includes("target-forbidden"), "Rust write boundary should reject forbidden targets");
 assert(rustScanner.includes("runtime_capabilities"), "Rust runtime capability command should exist");
 assert(rustScanner.includes("GetDiskFreeSpaceExW"), "Rust native scanner should read Windows volume totals");
 assert(rustScanner.includes("IsUserAnAdmin"), "Rust native scanner should read elevation state");

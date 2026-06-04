@@ -2242,6 +2242,7 @@ const assert = require("assert");
   assert.strictEqual(firstSafeContract.requestPreview.command, "execute_cleanup_plan", "first-safe contract should name the native write boundary command");
   assert.strictEqual(firstSafeContract.requestPreview.mode, "reject-only-preview", "first-safe request should be reject-only in the current build");
   assert.strictEqual(firstSafeContract.requestPreview.planId, cleanRunSnapshot.id, "first-safe request should include the current plan id");
+  assert(firstSafeContract.requestPreview.actions[0].targetPath.includes("Temp"), "first-safe request should include selected target path evidence");
   assert.strictEqual(firstSafeContract.realRunEnabled, false, "first-safe contract must not enable real execution");
   assert.strictEqual(firstSafeContract.destructiveActionAvailable, false, "first-safe contract must not expose destructive execution");
   assert(firstSafeContract.route.forbiddenTargets.includes("Downloads"), "temp contract should explicitly forbid user Downloads");
@@ -2341,6 +2342,36 @@ const assert = require("assert");
   assert.strictEqual(rejectedWriteBoundaryProbe.counts.rejected, 1, "rejected probe should count rejected entries");
   assert.strictEqual(rejectedWriteBoundaryProbe.entries[0].rejectCode, "real-executor-disabled", "rejected probe should preserve native reject codes");
   assert.strictEqual(rejectedWriteBoundaryProbe.counts.bytes, 0, "rejected probe must not reclaim bytes");
+  const targetRejectedWriteBoundaryProbe = guard.buildWriteBoundaryProbe({
+    nativeWriteBoundary: {
+      status: "complete",
+      result: {
+        available: true,
+        accepted: false,
+        realRunEnabled: false,
+        destructiveCommands: false,
+        reason: "target rejected",
+        contractEcho: rejectedWriteBoundaryProbe.contractEcho,
+        entries: [
+          {
+            id: "windows-temp",
+            title: "Windows temporary files",
+            route: "known-temp-delete",
+            result: "rejected",
+            rejectCode: "target-forbidden",
+            bytes: 0,
+            note: "Downloads is not a temp target"
+          }
+        ],
+        warnings: ["target scope rejected"]
+      }
+    },
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    firstSafeExecutorContract: firstSafeContract,
+    runtimeCapabilities: { available: true, executeCleanupPlan: true, realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(targetRejectedWriteBoundaryProbe.status, "target-scope-rejected", "target-scope rejection should not count as passing probe evidence");
+  assert.strictEqual(targetRejectedWriteBoundaryProbe.rejectionEvidence, false, "target-scope rejection is diagnostic only");
   const mismatchedContractProbe = guard.buildWriteBoundaryProbe({
     nativeWriteBoundary: {
       status: "complete",

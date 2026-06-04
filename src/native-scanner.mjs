@@ -163,7 +163,8 @@ export async function runNativeWriteBoundary(boundary = {}, host = globalThis) {
         id: row.id,
         title: row.title,
         bytes: Number(row.bytes || 0),
-        route: route || row.route || ""
+        route: route || row.route || "",
+        targetPath: row.targetPath || row.target || row.path || ""
       }))
     }
   });

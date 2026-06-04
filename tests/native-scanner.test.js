@@ -220,7 +220,7 @@ const assert = require("assert");
     {
       capsule: {
         route: { id: "known-temp-delete" },
-        selectedRows: [{ id: "windows-temp", title: "Windows temporary files", bytes: 123 }]
+        selectedRows: [{ id: "windows-temp", title: "Windows temporary files", path: "C:\\Windows\\Temp", bytes: 123 }]
       },
       contract: {
         schemaVersion: "spaceguard-first-safe-executor-contract/v1",
@@ -233,7 +233,7 @@ const assert = require("assert");
           expectedBytes: 123,
           dryRunOnly: true,
           mutationAttempted: false,
-          actions: [{ id: "windows-temp", title: "Windows temporary files", bytes: 123, route: "known-temp-delete" }]
+          actions: [{ id: "windows-temp", title: "Windows temporary files", targetPath: "C:\\Windows\\Temp", bytes: 123, route: "known-temp-delete" }]
         }
       }
     },
@@ -274,6 +274,7 @@ const assert = require("assert");
   assert.strictEqual(writeInvocation.payload.request.requestMode, "reject-only-preview", "native write boundary should pass first-safe request mode");
   assert.strictEqual(writeInvocation.payload.request.scanFingerprint, "scan-temp", "native write boundary should pass scan fingerprint");
   assert.strictEqual(writeInvocation.payload.request.consentPlanId, "plan-temp", "native write boundary should pass consent plan id");
+  assert.strictEqual(writeInvocation.payload.request.actions[0].targetPath, "C:\\Windows\\Temp", "native write boundary should pass selected target path");
   assert.strictEqual(writeInvocation.payload.request.dryRunOnly, true, "native write boundary should keep the request dry-run only");
   assert.strictEqual(writeInvocation.payload.request.mutationAttempted, false, "native write boundary should mark mutation as not attempted");
   assert.strictEqual(rejectedWrite.realRunEnabled, false, "native write boundary must keep real run disabled");

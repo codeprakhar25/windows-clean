@@ -4912,6 +4912,7 @@ export function buildFirstSafeExecutorContract({
           id: row.id,
           title: row.title,
           route: contract.route,
+          targetPath: row.path || "",
           bytes: Number(row.bytes || 0)
         })),
         actionCount: selectedRows.length,
@@ -5057,6 +5058,7 @@ export function buildWriteBoundaryProbe({
   const commandAvailable = Boolean(runtimeCapabilities?.executeCleanupPlan);
   const bytes = entries.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
   const rejected = entries.filter((entry) => entry.result === "rejected").length;
+  const targetScopeRejected = entries.some((entry) => isWriteBoundaryTargetRejectCode(entry.rejectCode));
   const contractEcho = result?.contractEcho || null;
   const expectedContract = firstSafeExecutorContract?.requestPreview || null;
   const contractRequired = Boolean(expectedContract);
@@ -5073,6 +5075,7 @@ export function buildWriteBoundaryProbe({
     bytes === 0 &&
     entries.length > 0 &&
     rejected === entries.length &&
+    !targetScopeRejected &&
     (!contractRequired || contractMatch);
   const unsafeSignal =
     complete &&
@@ -5086,18 +5089,20 @@ export function buildWriteBoundaryProbe({
         ? "not-run"
         : unavailable
           ? "native-unavailable"
-          : unsafeSignal
-            ? "unsafe-signal"
-            : contractRequired && !contractMatch
-              ? "contract-mismatch"
-            : zeroByteRejection
-              ? "rejected"
-              : "inconclusive";
+          : targetScopeRejected
+            ? "target-scope-rejected"
+            : unsafeSignal
+              ? "unsafe-signal"
+              : contractRequired && !contractMatch
+                ? "contract-mismatch"
+                : zeroByteRejection
+                  ? "rejected"
+                  : "inconclusive";
 
   return {
     schemaVersion: "spaceguard-write-boundary-probe/v1",
     status,
-    tone: status === "rejected" ? "safe" : status === "unsafe-signal" || status === "contract-mismatch" || status === "error" ? "restricted" : "review",
+    tone: status === "rejected" ? "safe" : status === "unsafe-signal" || status === "contract-mismatch" || status === "target-scope-rejected" || status === "error" ? "restricted" : "review",
     rejectionEvidence: status === "rejected",
     destructiveActionAvailable: false,
     available,
@@ -9502,9 +9507,14 @@ function normalizeAuditTargetText(path) {
     .trim();
 }
 
+function isWriteBoundaryTargetRejectCode(code = "") {
+  return ["target-missing", "target-forbidden", "target-not-allowlisted", "route-mismatch", "route-not-first-safe"].includes(code);
+}
+
 function getWriteBoundaryProbeReason(status) {
   if (status === "not-run") return "Probe has not been run for the current plan.";
   if (status === "native-unavailable") return "Desktop native runtime or rejecting write command is unavailable.";
+  if (status === "target-scope-rejected") return "Native boundary rejected the selected target scope before executor validation.";
   if (status === "unsafe-signal") return "Probe returned a signal that would be unsafe in the current build.";
   if (status === "contract-mismatch") return "Native rejection did not echo the current first-safe executor contract.";
   if (status === "error") return "Probe failed before rejection evidence could be recorded.";
@@ -9516,6 +9526,7 @@ function getWriteBoundaryProbeReason(status) {
 function getWriteBoundaryProbePrimary(status, { selectedRows = [], entries = [], rejected = 0, bytes = 0 } = {}) {
   if (status === "rejected") return `Rejection evidence recorded for ${rejected} write-boundary entr${rejected === 1 ? "y" : "ies"} with zero bytes reclaimed.`;
   if (status === "native-unavailable") return "Run the Tauri desktop shell to probe the rejecting native write boundary.";
+  if (status === "target-scope-rejected") return "Native boundary rejected the target scope; this is not passing rejection evidence.";
   if (status === "unsafe-signal") return `Write boundary returned accepted/destructive/non-zero signals; bytes=${formatBytes(bytes)}.`;
   if (status === "contract-mismatch") return "Rejected write-boundary response did not match the current first-safe contract.";
   if (status === "running") return "Native write boundary probe is running.";
@@ -9545,6 +9556,13 @@ function buildWriteBoundaryProbeSteps(status) {
       "Run the probe again with the current first-safe contract.",
       "Confirm plan id, route, scan fingerprint, and expected bytes match.",
       "Treat the rejection as audit-only until the echo matches."
+    ];
+  }
+  if (status === "target-scope-rejected") {
+    return [
+      "Stop treating this probe as passing evidence.",
+      "Confirm selected targets match the first-safe allowlist.",
+      "Regenerate the request contract before probing again."
     ];
   }
   if (status === "native-unavailable") {

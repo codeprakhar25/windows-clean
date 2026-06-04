@@ -149,6 +149,7 @@ struct WriteExecutionAction {
     title: String,
     bytes: u64,
     route: String,
+    target_path: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -500,6 +501,9 @@ fn write_action_reject_code(
     if !is_first_safe_write_route(route) {
         return "route-not-first-safe";
     }
+    if let Some(target_code) = write_action_target_reject_code(route, &action.target_path) {
+        return target_code;
+    }
     boundary_rejections
         .first()
         .copied()
@@ -511,6 +515,70 @@ fn is_first_safe_write_route(route: &str) -> bool {
         route,
         "known-temp-delete" | "shell-recycle-bin" | "browser-cache-only"
     )
+}
+
+fn write_action_target_reject_code(
+    route: &str,
+    target_path: &Option<String>,
+) -> Option<&'static str> {
+    let target = normalize_write_target(target_path.as_deref().unwrap_or(""));
+    if target.is_empty() {
+        return Some("target-missing");
+    }
+    if write_target_forbidden(route, &target) {
+        return Some("target-forbidden");
+    }
+    if !write_target_allowed(route, &target) {
+        return Some("target-not-allowlisted");
+    }
+    None
+}
+
+fn normalize_write_target(value: &str) -> String {
+    value
+        .to_ascii_lowercase()
+        .replace('/', "\\")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn write_target_forbidden(route: &str, target: &str) -> bool {
+    match route {
+        "known-temp-delete" => {
+            target.contains("downloads")
+                || target.contains("documents")
+                || target.contains("desktop")
+                || target.contains("node_modules")
+                || target.contains("reparse")
+        }
+        "shell-recycle-bin" => target.contains("downloads") || target.contains("documents"),
+        "browser-cache-only" => {
+            target.contains("cookie")
+                || target.contains("session")
+                || target.contains("login")
+                || target.contains("password")
+                || target.contains("extension")
+                || target.contains("identity")
+                || target.contains("profile database")
+        }
+        _ => true,
+    }
+}
+
+fn write_target_allowed(route: &str, target: &str) -> bool {
+    match route {
+        "known-temp-delete" => {
+            target.contains("windows\\temp")
+                || target.contains("appdata\\local\\temp")
+                || target.contains("%temp%")
+        }
+        "shell-recycle-bin" => target.contains("$recycle.bin") || target.contains("recycle bin"),
+        "browser-cache-only" => {
+            target.contains("\\cache") || target.contains("cache2") || target.contains("code cache")
+        }
+        _ => false,
+    }
 }
 
 fn write_boundary_warning(code: &str) -> &'static str {
@@ -527,6 +595,11 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "request-mode-invalid" => "Write request rejected: request mode is not a disabled preview.",
         "route-not-first-safe" => {
             "Write request rejected: route is not a first-safe executor lane."
+        }
+        "target-missing" => "Write request rejected: selected action target path is missing.",
+        "target-forbidden" => "Write request rejected: target path hits a forbidden target rule.",
+        "target-not-allowlisted" => {
+            "Write request rejected: target path does not match the route allowlist."
         }
         "no-actions" => "Write request rejected: no selected actions were supplied.",
         _ => "Write request rejected by native boundary validation.",

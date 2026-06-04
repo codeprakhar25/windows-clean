@@ -248,7 +248,7 @@ Real executor capsule invariant:
 First-safe executor contract invariant:
 
 - A first-safe route can produce only a disabled request-shape preview until real executors are implemented.
-- The contract must include plan id, route, selected action ids, expected bytes, scan-session fingerprint, allowed targets, forbidden targets, and feature flag.
+- The contract must include plan id, route, selected action ids, selected target paths, expected bytes, scan-session fingerprint, allowed targets, forbidden targets, and feature flag.
 - The selected route paths must pass the contract target audit: allowed target rule matched, no forbidden target rule hit, and route id matches the contract.
 - Contract status cannot imply cleanup; current mode is `reject-only-preview`.
 - Runtime `realRunEnabled`, `destructiveCommands`, or capsule `destructiveActionAvailable` signals violate the disabled-contract assumption and block release review.
@@ -257,7 +257,7 @@ Write boundary probe invariant:
 
 - The probe can call `execute_cleanup_plan` only to prove the native boundary rejects the current request shape.
 - Passing probe evidence requires `accepted=false`, `realRunEnabled=false`, `destructiveCommands=false`, every entry rejected, zero reclaimed bytes, and a native contract echo matching the current first-safe executor contract.
-- Reject codes such as `real-executor-disabled`, `dry-run-only-required`, `route-not-first-safe`, or `route-mismatch` are diagnostic evidence only; they do not create cleanup authority.
+- Reject codes such as `real-executor-disabled`, `dry-run-only-required`, `route-not-first-safe`, `route-mismatch`, or `target-forbidden` are diagnostic evidence only; they do not create cleanup authority. Target-scope reject codes do not count as passing rejection evidence.
 - Probe entries cannot create ledger records, recovery totals, release-gate credit, or write-readiness credit.
 - Any accepted, destructive, real-run-enabled, non-rejected, non-zero-byte, or contract-mismatched signal is unsafe and blocks release review.
 
@@ -430,7 +430,7 @@ The third native command is:
 execute_cleanup_plan
 ```
 
-It is a rejecting write boundary for future executor request-shape validation. Current builds must validate dry-run-only state, mutation flags, plan/scan/consent evidence, first-safe route membership, and per-action route matches, then return `accepted: false`, `realRunEnabled: false`, `destructiveCommands: false`, native reject codes, and zero reclaimed bytes for every entry.
+It is a rejecting write boundary for future executor request-shape validation. Current builds must validate dry-run-only state, mutation flags, plan/scan/consent evidence, first-safe route membership, per-action route matches, and selected target paths, then return `accepted: false`, `realRunEnabled: false`, `destructiveCommands: false`, native reject codes, and zero reclaimed bytes for every entry.
 
 The fourth native command is:
 
