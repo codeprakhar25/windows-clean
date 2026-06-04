@@ -339,10 +339,18 @@ It returns native dry-run ledger entries only. It must report `realRunEnabled: f
 The third native command is:
 
 ```txt
+execute_cleanup_plan
+```
+
+It is a rejecting write boundary for future executor request-shape validation. Current builds must return `accepted: false`, `realRunEnabled: false`, `destructiveCommands: false`, and zero reclaimed bytes for every entry.
+
+The fourth native command is:
+
+```txt
 runtime_capabilities
 ```
 
-It reports platform, native command availability, and whether real executors are enabled. Current builds must report real execution disabled.
+It reports platform, native command availability, the rejecting write-boundary command, and whether real executors are enabled. Current builds must report real execution disabled.
 
 Request shape:
 

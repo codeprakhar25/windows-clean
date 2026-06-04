@@ -65,6 +65,8 @@ const requiredAppMarkers = [
   "Real executor capsule",
   "destructive hidden",
   "Runtime capability",
+  "Write command",
+  "rejecting stub",
   "Disposable VM matrix",
   "Validation evidence",
   "Validation evidence ledger",
@@ -161,6 +163,7 @@ assert(app.includes("buildLedgerHistoryMarkdown"), "ledger history export should
 assert(app.includes("localStorage"), "ledger history should use local browser storage");
 assert(app.includes("runNativeExecutorDryRun"), "native executor dry-run should be wired");
 assert(app.includes("getNativeRuntimeCapabilities"), "native runtime capability should be wired");
+assert(app.includes("executeCleanupPlan"), "runtime UI should expose rejecting write command capability");
 assert(!app.includes("function clearExecutionState() {\n    clearExecutionState();"), "execution reset should not recursively call itself");
 assert(model.includes("large-user-files"), "model should include large personal file discovery");
 assert(model.includes("Large personal files"), "model should label large personal file discovery");
@@ -191,11 +194,13 @@ assert(model.includes("uninstall-apps-manually"), "model should include manual i
 assert(model.includes("No automated partition writes"), "model should keep partition strategy advisory");
 assert(nativeAdapter.includes("scan_known_roots"), "native adapter should invoke the read-only scanner command");
 assert(nativeAdapter.includes("simulate_cleanup_plan"), "native adapter should invoke the dry-run executor command");
+assert(nativeAdapter.includes("execute_cleanup_plan"), "native adapter should invoke the rejecting write boundary command");
 assert(nativeAdapter.includes("runtime_capabilities"), "native adapter should invoke runtime capability command");
 assert(nativeAdapter.includes("items.map"), "native adapter should preserve item-level review candidates");
 assert(tauriConfig.includes('"withGlobalTauri": true'), "Tauri config should expose the global bridge used by the adapter");
 assert(rustScanner.includes("scan_known_roots"), "Rust scanner command should exist");
 assert(rustScanner.includes("simulate_cleanup_plan"), "Rust native dry-run command should exist");
+assert(rustScanner.includes("execute_cleanup_plan"), "Rust rejecting write boundary command should exist");
 assert(rustScanner.includes("runtime_capabilities"), "Rust runtime capability command should exist");
 assert(rustScanner.includes("GetDiskFreeSpaceExW"), "Rust native scanner should read Windows volume totals");
 assert(rustScanner.includes("IsUserAnAdmin"), "Rust native scanner should read elevation state");
@@ -206,6 +211,7 @@ assert(rustScanner.includes("struct VolumeInfo"), "Rust scanner should expose re
 assert(rustScanner.includes("real_run_enabled: false"), "native dry-run should report real run disabled");
 assert(rustScanner.includes("write_capability: false"), "native scanner should report write capability disabled");
 assert(rustScanner.includes("destructive_commands: false"), "native scanner should report destructive commands disabled");
+assert(rustScanner.includes("accepted: false"), "native write boundary should reject execution");
 assert(!/\bremove_file\b|\bremove_dir\b|\bCommand::new\b|powercfg|reg\.exe/i.test(rustScanner), "native scanner should not contain delete, shell, registry, or powercfg execution");
 assert(packageJson.includes("vite"), "package should use Vite");
 assert(packageJson.includes("@radix-ui/react-slot"), "package should include shadcn primitive dependency");

@@ -71,6 +71,37 @@ export async function runNativeExecutorDryRun(executorPlan, host = globalThis) {
   return normalizeNativeExecutorDryRun(result);
 }
 
+export async function runNativeWriteBoundary(capsule = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      accepted: false,
+      reason: "Native write boundary is not available in the browser demo.",
+      entries: [],
+      warnings: ["Native write execution is unavailable and real cleanup is disabled."]
+    };
+  }
+
+  const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
+    request: {
+      planId: capsule.planId || "",
+      route: capsule.route?.id || "",
+      actions: (capsule.selectedRows || []).map((row) => ({
+        id: row.id,
+        title: row.title,
+        bytes: row.bytes,
+        route: capsule.route?.id || row.route || ""
+      }))
+    }
+  });
+
+  return normalizeNativeWriteBoundary(result);
+}
+
 export async function getNativeRuntimeCapabilities(host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {
@@ -85,6 +116,7 @@ export async function getNativeRuntimeCapabilities(host = globalThis) {
       destructiveCommands: false,
       scanKnownRoots: false,
       simulateCleanupPlan: false,
+      executeCleanupPlan: false,
       safeExecutorsEnabled: false,
       reason: "Browser demo cannot perform native scans or cleanup."
     };
@@ -212,6 +244,28 @@ export function normalizeNativeExecutorDryRun(result = {}) {
   };
 }
 
+export function normalizeNativeWriteBoundary(result = {}) {
+  return {
+    available: true,
+    mode: result.mode || "native-write-rejected",
+    realRunEnabled: Boolean(result.realRunEnabled || result.real_run_enabled),
+    destructiveCommands: Boolean(result.destructiveCommands || result.destructive_commands),
+    accepted: Boolean(result.accepted),
+    reason: result.reason || "",
+    entries: Array.isArray(result.entries)
+      ? result.entries.map((entry) => ({
+          id: entry.id || "",
+          title: entry.title || "",
+          route: entry.route || "",
+          result: entry.result || "rejected",
+          bytes: Number(entry.bytes || 0),
+          note: entry.note || ""
+        }))
+      : [],
+    warnings: Array.isArray(result.warnings) ? result.warnings : []
+  };
+}
+
 export function normalizeNativeRuntimeCapabilities(result = {}) {
   return {
     available: true,
@@ -224,6 +278,7 @@ export function normalizeNativeRuntimeCapabilities(result = {}) {
     destructiveCommands: Boolean(result.destructiveCommands || result.destructive_commands),
     scanKnownRoots: Boolean(result.scanKnownRoots || result.scan_known_roots),
     simulateCleanupPlan: Boolean(result.simulateCleanupPlan || result.simulate_cleanup_plan),
+    executeCleanupPlan: Boolean(result.executeCleanupPlan || result.execute_cleanup_plan),
     safeExecutorsEnabled: Boolean(result.safeExecutorsEnabled || result.safe_executors_enabled),
     reason: result.reason || ""
   };

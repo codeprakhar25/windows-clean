@@ -69,6 +69,14 @@ simulate_cleanup_plan
 
 It returns ledger entries for selected routes but reports `realRunEnabled: false` and does not mutate the filesystem.
 
+The native write-boundary command is:
+
+```txt
+execute_cleanup_plan
+```
+
+It exists only to validate the future request shape and reject every write attempt. It returns `accepted: false`, `realRunEnabled: false`, `destructiveCommands: false`, zero reclaimed bytes, and no filesystem mutation.
+
 The native runtime capability command is:
 
 ```txt

@@ -1118,11 +1118,12 @@ const assert = require("assert");
     privacyBoundary: guard.buildPrivacyBoundary({
       scanMode: "native-readonly",
       runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
-    })
+    }),
+    runtimeCapabilities: { executeCleanupPlan: true }
   });
   assert.strictEqual(currentBuildExecutorCapsule.schemaVersion, "spaceguard-real-executor-capsule/v1", "real executor capsule should have a schema version");
   assert.strictEqual(currentBuildExecutorCapsule.destructiveActionAvailable, false, "executor capsule must not expose destructive execution");
-  assert.strictEqual(currentBuildExecutorCapsule.codePath.status, "not-implemented", "capsule code path should remain unimplemented");
+  assert.strictEqual(currentBuildExecutorCapsule.codePath.status, "rejecting-stub", "capsule should detect the native rejecting write stub");
   assert.strictEqual(currentBuildExecutorCapsule.route.id, "known-temp-delete", "capsule should select the first-safe temp route from the selected plan");
   assert(currentBuildExecutorCapsule.blockers.some((blocker) => blocker.id === "implementation-missing"), "capsule should block on missing write implementation");
   const writeReadinessReport = guard.buildReport({

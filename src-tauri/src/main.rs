@@ -122,6 +122,46 @@ struct DryRunEntry {
     note: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WriteExecutionRequest {
+    plan_id: String,
+    route: String,
+    actions: Vec<WriteExecutionAction>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WriteExecutionAction {
+    id: String,
+    title: String,
+    bytes: u64,
+    route: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WriteExecutionResponse {
+    mode: &'static str,
+    real_run_enabled: bool,
+    destructive_commands: bool,
+    accepted: bool,
+    reason: String,
+    entries: Vec<WriteExecutionEntry>,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WriteExecutionEntry {
+    id: String,
+    title: String,
+    route: String,
+    result: String,
+    bytes: u64,
+    note: String,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeCapabilities {
@@ -134,6 +174,7 @@ struct RuntimeCapabilities {
     destructive_commands: bool,
     scan_known_roots: bool,
     simulate_cleanup_plan: bool,
+    execute_cleanup_plan: bool,
     safe_executors_enabled: bool,
     reason: String,
 }
@@ -166,6 +207,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             scan_known_roots,
             simulate_cleanup_plan,
+            execute_cleanup_plan,
             runtime_capabilities
         ])
         .run(tauri::generate_context!())
@@ -287,6 +329,46 @@ fn simulate_cleanup_plan(request: Option<DryRunRequest>) -> DryRunResponse {
 }
 
 #[tauri::command]
+fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutionResponse {
+    let request = request.unwrap_or(WriteExecutionRequest {
+        plan_id: String::new(),
+        route: String::new(),
+        actions: Vec::new(),
+    });
+    let route = request.route;
+    let plan_id = request.plan_id;
+    let entries = request
+        .actions
+        .into_iter()
+        .map(|action| {
+            let requested_bytes = action.bytes;
+            WriteExecutionEntry {
+                id: action.id,
+                title: action.title,
+                route: action.route,
+                result: "rejected".to_string(),
+                bytes: 0,
+                note: format!(
+                    "Rejected by native write boundary for route {route}. Plan {plan_id} requested {requested_bytes} byte(s), but write execution is disabled."
+                ),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    WriteExecutionResponse {
+        mode: "native-write-rejected",
+        real_run_enabled: false,
+        destructive_commands: false,
+        accepted: false,
+        reason: "Native write boundary is present for request-shape validation only. Real cleanup is disabled.".to_string(),
+        entries,
+        warnings: vec![
+            "No filesystem mutation was attempted by execute_cleanup_plan.".to_string(),
+        ],
+    }
+}
+
+#[tauri::command]
 fn runtime_capabilities() -> RuntimeCapabilities {
     RuntimeCapabilities {
         mode: "native-readonly",
@@ -298,6 +380,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         destructive_commands: false,
         scan_known_roots: true,
         simulate_cleanup_plan: true,
+        execute_cleanup_plan: true,
         safe_executors_enabled: false,
         reason: "Real executors are disabled until Windows VM validation and rollback tests pass."
             .to_string(),

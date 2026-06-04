@@ -19,10 +19,15 @@ const assert = require("assert");
   const executorUnavailable = await native.runNativeExecutorDryRun({ rows: [] }, {});
   assert.strictEqual(executorUnavailable.available, false, "native executor dry-run should report unavailable outside Tauri");
   assert.strictEqual(executorUnavailable.destructiveCommands, false, "native executor fallback must not expose destructive commands");
+  const writeUnavailable = await native.runNativeWriteBoundary({ selectedRows: [] }, {});
+  assert.strictEqual(writeUnavailable.available, false, "native write boundary should report unavailable outside Tauri");
+  assert.strictEqual(writeUnavailable.accepted, false, "native write fallback must not accept execution");
+  assert.strictEqual(writeUnavailable.destructiveCommands, false, "native write fallback must not expose destructive commands");
   const capabilityUnavailable = await native.getNativeRuntimeCapabilities({});
   assert.strictEqual(capabilityUnavailable.available, false, "runtime capability should report unavailable outside Tauri");
   assert.strictEqual(capabilityUnavailable.elevated, false, "browser runtime capability must not imply elevation");
   assert.strictEqual(capabilityUnavailable.realRunEnabled, false, "browser runtime capability must keep real run disabled");
+  assert.strictEqual(capabilityUnavailable.executeCleanupPlan, false, "browser runtime capability must not expose write command");
   let scanInvocation = null;
   await native.runNativeReadonlyScan(
     {
@@ -178,6 +183,40 @@ const assert = require("assert");
   assert.strictEqual(dryRun.realRunEnabled, false, "native dry-run normalization should keep real run disabled");
   assert.strictEqual(dryRun.destructiveCommands, false, "native dry-run normalization should keep destructive commands disabled");
   assert.strictEqual(dryRun.entries[0].route, "known-temp-delete", "native dry-run route should be preserved");
+  let writeInvocation = null;
+  const rejectedWrite = await native.runNativeWriteBoundary(
+    {
+      planId: "plan-temp",
+      route: { id: "known-temp-delete" },
+      selectedRows: [{ id: "windows-temp", title: "Windows temporary files", bytes: 123 }]
+    },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            writeInvocation = { command, payload };
+            return Promise.resolve({
+              mode: "native-write-rejected",
+              real_run_enabled: false,
+              destructive_commands: false,
+              accepted: false,
+              reason: "disabled",
+              entries: [{ id: "windows-temp", title: "Windows temporary files", route: "known-temp-delete", result: "rejected", bytes: 0, note: "blocked" }],
+              warnings: ["no mutation"]
+            });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(writeInvocation.command, "execute_cleanup_plan", "native write boundary should invoke execute_cleanup_plan");
+  assert.strictEqual(writeInvocation.payload.request.planId, "plan-temp", "native write boundary should pass plan id");
+  assert.strictEqual(writeInvocation.payload.request.route, "known-temp-delete", "native write boundary should pass capsule route");
+  assert.strictEqual(rejectedWrite.realRunEnabled, false, "native write boundary must keep real run disabled");
+  assert.strictEqual(rejectedWrite.destructiveCommands, false, "native write boundary must keep destructive commands disabled");
+  assert.strictEqual(rejectedWrite.accepted, false, "native write boundary should reject execution");
+  assert.strictEqual(rejectedWrite.entries[0].result, "rejected", "native write boundary should normalize rejected entries");
+  assert.strictEqual(rejectedWrite.entries[0].bytes, 0, "native write boundary should reclaim zero bytes");
 
   const capabilities = native.normalizeNativeRuntimeCapabilities({
     mode: "native-readonly",
@@ -189,6 +228,7 @@ const assert = require("assert");
     destructive_commands: false,
     scan_known_roots: true,
     simulate_cleanup_plan: true,
+    execute_cleanup_plan: true,
     safe_executors_enabled: false,
     reason: "disabled"
   });
@@ -197,6 +237,7 @@ const assert = require("assert");
   assert.strictEqual(capabilities.realRunEnabled, false, "native capabilities should keep real run disabled");
   assert.strictEqual(capabilities.scanKnownRoots, true, "native capabilities should expose scanner availability");
   assert.strictEqual(capabilities.simulateCleanupPlan, true, "native capabilities should expose dry-run availability");
+  assert.strictEqual(capabilities.executeCleanupPlan, true, "native capabilities should expose rejecting write boundary availability");
 
   console.log("native scanner adapter ok");
 })();

@@ -2636,7 +2636,8 @@ export function buildRealExecutorCapsule({
   rollbackPlan = null,
   rescanComparison = null,
   privilegeBoundary = null,
-  privacyBoundary = null
+  privacyBoundary = null,
+  runtimeCapabilities = {}
 } = {}) {
   const selectedRoutes = executorManifest?.selectedRoutes || [];
   const firstSafeRoutes = executorManifest?.routes?.filter((route) => route.phase === "first-safe" && route.status !== "blocked" && route.status !== "advisory") || [];
@@ -2744,10 +2745,12 @@ export function buildRealExecutorCapsule({
     })),
     codePath: {
       command: "execute_cleanup_plan",
-      status: "not-implemented",
+      status: runtimeCapabilities?.executeCleanupPlan ? "rejecting-stub" : "not-implemented",
       destructiveCommands: false,
       featureFlag: "realExecutors",
-      nativeBoundary: "Tauri command must reject every route except the selected first-safe capsule."
+      nativeBoundary: runtimeCapabilities?.executeCleanupPlan
+        ? "Tauri command is present but rejects every request while real execution is disabled."
+        : "Tauri command must reject every route except the selected first-safe capsule."
     },
     blockers: uniqueBlockers,
     counts: {

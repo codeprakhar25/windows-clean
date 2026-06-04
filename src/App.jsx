@@ -142,6 +142,7 @@ export default function App() {
       destructiveCommands: false,
       scanKnownRoots: false,
       simulateCleanupPlan: false,
+      executeCleanupPlan: false,
       safeExecutorsEnabled: false,
       reason: "Runtime capability check has not completed."
     },
@@ -449,9 +450,10 @@ export default function App() {
         rollbackPlan,
         rescanComparison,
         privilegeBoundary,
-        privacyBoundary
+        privacyBoundary,
+        runtimeCapabilities: runtimeCapabilities.result
       }),
-    [executorManifest, executorPlan, releaseGate, writeReadiness, rollbackPlan, rescanComparison, privilegeBoundary, privacyBoundary]
+    [executorManifest, executorPlan, releaseGate, writeReadiness, rollbackPlan, rescanComparison, privilegeBoundary, privacyBoundary, runtimeCapabilities.result]
   );
   const toolCommandInventory = useMemo(
     () => buildToolCommandInventory({ actionList, executorPlan, releaseGate }),
@@ -2379,6 +2381,7 @@ function ReleaseGatePanel({ releaseGate, runtimeCapabilities }) {
             <span>Elevated: {runtimeCapabilities.result.elevated ? "yes" : "no"}</span>
             <span>Scan command: {runtimeCapabilities.result.scanKnownRoots ? "yes" : "no"}</span>
             <span>Dry-run command: {runtimeCapabilities.result.simulateCleanupPlan ? "yes" : "no"}</span>
+            <span>Write command: {runtimeCapabilities.result.executeCleanupPlan ? "rejecting stub" : "no"}</span>
           </div>
         </div>
 
