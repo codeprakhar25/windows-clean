@@ -221,6 +221,39 @@ const assert = require("assert");
     consentReceipt: { ready: false, planId: grantPlanSnapshot.id },
     intakePolicy: intakeAllowedPolicy
   });
+  const waitingPowerBroker = guard.buildTaskPowerBroker({
+    taskPowerCatalog: activeCachePowerCatalog,
+    taskCapabilityGrants: waitingTaskGrants,
+    agentQuestionQueue: grantQuestionQueue,
+    runReadiness: { ready: true },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(waitingPowerBroker.schemaVersion, "spaceguard-task-power-broker/v1", "task power broker should expose a schema version");
+  assert.strictEqual(waitingPowerBroker.status, "broker-waiting", "broker should wait while a selected power lacks current consent");
+  assert.strictEqual(waitingPowerBroker.authority, "task-scoped-dry-run", "broker should keep task authority scoped to dry-run");
+  assert.strictEqual(waitingPowerBroker.standingPermission, false, "broker must not create standing permission");
+  assert.strictEqual(waitingPowerBroker.realRunEnabled, false, "broker must not enable real cleanup");
+  assert.strictEqual(waitingPowerBroker.activeQuestion.id, "arm-dry-run", "broker should preserve the active user question");
+  assert.strictEqual(waitingPowerBroker.currentRequest.powerId, "rebuildable-cache-cleanup", "broker should focus the selected power request");
+  assert(waitingPowerBroker.currentRequest.expiresWith.includes(`plan:${grantPlanSnapshot.id}`), "broker request should expire with the current plan");
+  const issuedPowerBroker = guard.buildTaskPowerBroker({
+    taskPowerCatalog: activeCachePowerCatalog,
+    taskCapabilityGrants: issuedTaskGrants,
+    agentQuestionQueue: grantQuestionQueue,
+    runReadiness: { ready: true },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(issuedPowerBroker.status, "broker-ready", "broker should become ready when dry-run grants are issued");
+  assert.strictEqual(issuedPowerBroker.counts.granted, 1, "broker should count issued dry-run requests");
+  const unsafePowerBroker = guard.buildTaskPowerBroker({
+    taskPowerCatalog: activeCachePowerCatalog,
+    taskCapabilityGrants: unsafeTaskGrants,
+    agentQuestionQueue: grantQuestionQueue,
+    runReadiness: { ready: true },
+    runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
+  });
+  assert.strictEqual(unsafePowerBroker.status, "unsafe-stop", "runtime write capability should stop the broker");
+  assert.strictEqual(unsafePowerBroker.counts.realRun, 0, "broker should never count real-run requests");
   const waitingTaskRunbook = guard.buildAgentTaskRunbook({
     executorPlan: grantExecutorPlan,
     taskCapabilityGrants: waitingTaskGrants,
@@ -258,9 +291,12 @@ const assert = require("assert");
     protectedPaths: [],
     goalBytes: 10 * guard.GB,
     taskRunbook: issuedTaskRunbook,
+    taskPowerBroker: issuedPowerBroker,
     taskCapabilityGrants: issuedTaskGrants,
     taskPowerCatalog: activeCachePowerCatalog
   });
+  assert(taskRunbookReport.includes("## Task Power Broker"), "report should include task power broker");
+  assert(taskRunbookReport.includes("Standing permission: no"), "task power broker report should preserve no-standing-permission boundary");
   assert(taskRunbookReport.includes("## Task Runbook"), "report should include task runbook");
   assert(taskRunbookReport.includes("No cross-task authority: yes"), "task runbook report should preserve scope boundary");
   const restrictionMatrix = guard.buildRestrictionPolicyMatrix({

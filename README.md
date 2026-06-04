@@ -166,6 +166,7 @@ The demo also includes:
 - Item review panel for Downloads, large files, old project dependencies, and Android Studio roots, with per-item Remove, Move, Archive, or Keep decisions.
 - Decision log for source, scan, plan, gates, policy, and execution state.
 - Decision log and dry-run reports include the selected task powers, task grant receipts, waiting power gates, locked admin powers, and real-run-disabled boundary.
+- Power broker panel that turns selected task powers into current-plan power requests, preserves the active user question, refuses standing permission, and keeps each request dry-run only.
 - Executor policy panel that classifies selected routes before simulation.
 - Executor manifest panel that shows every route family, first-safe lanes, required validation checks, fixtures, preconditions, rollback notes, and next implementation steps.
 - Tool command inventory panel that lists official inspect/prune command shapes for npm, pnpm, Docker, Gradle, and Windows cleanup without executing shell commands.

@@ -115,6 +115,7 @@ The UI must also expose a recovery advisor and decision log:
 - `item review`: candidate files or folders under review-gated roots, including size, age, recommendation, reason, and protected-path state.
 - `decision log`: data source, scan state, plan coverage, gate state, policy boundary, and execution state.
 - `task powers`: scoped per-task capabilities that show whether safe cleanup, rebuildable cache cleanup, reviewed item cleanup, admin cleanup, advanced system strategy, manual storage strategy, or restricted zones are active, locked, advisory, or blocked.
+- `task power broker`: current-plan broker that turns selected powers into explicit user-facing power requests, preserves the active question, denies standing permission, and keeps authority dry-run only.
 - `task grants`: per-selected-action receipts that bind a scoped power to the current plan id, scan fingerprint, dry-run consent receipt, route, target, allowed operations, forbidden operations, and blockers.
 - `task runbook`: per-selected-task work orders that expose the next user question, allowed operations, forbidden operations, evidence needs, and no cross-task authority.
 - `restriction matrix`: explicit refusal surface for hard-blocked, manual-only, review-gated, intake-gated, and future-disabled cleanup classes.
@@ -170,6 +171,7 @@ Task power invariant:
 - `restricted-zones` stays blocked even when selected data has visible size.
 - `manual-storage-strategy` can track evidence and next steps but cannot create executor rows.
 - Every power reports real execution unavailable until a future native executor, validation evidence, rollback proof, privilege boundary, privacy boundary, and consent path all pass.
+- The power broker is the only bridge between selected powers and task grants. It defaults to deny unless a current plan, scan, and consent-bound grant exists, and it cannot create standing permission across tasks.
 - Task grants are issued only as `dry-run-only` authority. They wait on the current scan session and dry-run consent, refuse issuance when runtime write capability is visible, and expire when the plan, selection, approval state, protected paths, or scanner settings change.
 - Task runbook work orders can summarize and sequence selected task grants, but they cannot add authority, reuse one task power for another target, or bypass the selected route boundary.
 - The restriction matrix is authoritative for refusal classes. Hard-blocked, advisory-only, manual-only, and future-disabled rows cannot create executor routes, cannot count real-run routes, and cannot be bypassed by task powers, runbook work orders, validation records, or release packets.
@@ -330,7 +332,7 @@ Demo rehearsal invariant:
 Product completion audit invariant:
 
 - The audit must map the product goal to current evidence rows instead of summarizing optimistic intent.
-- It can mark demo workflow, read-only native scan, privacy, restrictions, task powers, and reports as proven only when the corresponding runtime artifact exists.
+- It can mark demo workflow, read-only native scan, privacy, restrictions, brokered task powers, and reports as proven only when the corresponding runtime artifact exists.
 - Real cleanup remains `future-locked` until write readiness, release review, executor capsule, validation evidence, rollback, rescan, consent, and native runtime evidence all pass together.
 - The audit cannot mark `productComplete=true` while real cleanup is locked or while any unsafe runtime write signal is visible.
 

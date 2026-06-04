@@ -81,6 +81,7 @@ import {
   buildSupportBundle,
   buildSupportBundleMarkdown,
   buildTaskCapabilityGrants,
+  buildTaskPowerBroker,
   buildTaskPowerCatalog,
   buildToolCommandInventory,
   buildValidationEvidencePack,
@@ -665,6 +666,17 @@ export default function App() {
       intakePolicy
     ]
   );
+  const taskPowerBroker = useMemo(
+    () =>
+      buildTaskPowerBroker({
+        taskPowerCatalog,
+        taskCapabilityGrants,
+        agentQuestionQueue,
+        runReadiness,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [taskPowerCatalog, taskCapabilityGrants, agentQuestionQueue, runReadiness, runtimeCapabilities.result]
+  );
   const taskRunbook = useMemo(
     () =>
       buildAgentTaskRunbook({
@@ -836,6 +848,7 @@ export default function App() {
         demoRehearsalRunbook,
         windowsSetupAssistant,
         taskPowerCatalog,
+        taskPowerBroker,
         taskCapabilityGrants,
         taskRunbook,
         restrictionPolicyMatrix,
@@ -868,6 +881,7 @@ export default function App() {
       demoRehearsalRunbook,
       windowsSetupAssistant,
       taskPowerCatalog,
+      taskPowerBroker,
       taskCapabilityGrants,
       taskRunbook,
       restrictionPolicyMatrix,
@@ -1498,6 +1512,7 @@ export default function App() {
       scanCoverage,
       intakePolicy,
       taskPowerCatalog,
+      taskPowerBroker,
       taskCapabilityGrants
     });
     downloadTextFile("spaceguard-dry-run-report.md", report, "text/markdown;charset=utf-8");
@@ -1767,6 +1782,8 @@ export default function App() {
             />
 
             <TaskPowerPanel catalog={taskPowerCatalog} />
+
+            <TaskPowerBrokerPanel broker={taskPowerBroker} />
 
             <TaskCapabilityGrantPanel grants={taskCapabilityGrants} />
 
@@ -2637,6 +2654,88 @@ function TaskPowerPanel({ catalog }) {
               )}
             </div>
           ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TaskPowerBrokerPanel({ broker }) {
+  const previewRows = broker.requests.length ? broker.requests.slice(0, 4) : [];
+
+  return (
+    <Card id="task-power-broker-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4" />
+              Power broker
+            </CardTitle>
+            <CardDescription>{broker.primary}</CardDescription>
+          </div>
+          <Badge variant={broker.tone}>{broker.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Requests" value={broker.counts.requests} tone={broker.counts.requests ? "review" : "safe"} />
+          <QueueStat label="Granted" value={broker.counts.granted} tone={broker.counts.granted ? "safe" : "review"} />
+          <QueueStat label="Waiting" value={broker.counts.waiting} tone={broker.counts.waiting ? "review" : "safe"} />
+          <QueueStat label="Denied" value={broker.counts.denied} tone={broker.counts.denied ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Broker envelope</span>
+            <Badge variant={broker.standingPermission ? "restricted" : "safe"}>
+              {broker.standingPermission ? "standing permission" : "no standing permission"}
+            </Badge>
+            <Badge variant={broker.realRunEnabled ? "restricted" : "safe"}>{broker.authority}</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+            <div>{broker.activeQuestion?.prompt || "No active power question."}</div>
+            <div>{broker.currentRequest ? `${broker.currentRequest.label}: ${broker.currentRequest.nextStep}` : broker.defaultDecision}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {previewRows.length ? (
+            previewRows.map((request) => (
+              <div key={request.id} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="mr-auto min-w-0 text-sm font-medium">{request.label}</div>
+                  <Badge variant={request.tone}>{request.status}</Badge>
+                  <Badge variant="outline">{formatBytes(request.plannedBytes)}</Badge>
+                </div>
+                <div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-[0.9fr_1fr]">
+                  <div className="truncate">{request.selectedActions.join(", ") || "no selected actions"}</div>
+                  <div>{request.nextStep}</div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {request.expiresWith.slice(0, 2).map((expiry) => (
+                    <Badge key={`${request.id}-${expiry}`} variant="outline">{expiry}</Badge>
+                  ))}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              No task-specific power has been requested for the current plan.
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-md border bg-muted/20 p-3">
+          <div className="mb-2 text-sm font-medium">Hard limits</div>
+          <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+            {broker.hardLimits.slice(0, 4).map((limit) => (
+              <div key={limit} className="flex items-start gap-2">
+                <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{limit}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </CardContent>
     </Card>
