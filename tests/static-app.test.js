@@ -21,6 +21,7 @@ const requiredAppMarkers = [
   "Run demo scan",
   "Cleanup actions",
   "Agent gates",
+  "Confirm permanent removal",
   "Plan review queue",
   "Execution preflight",
   "Execution ledger",
@@ -209,6 +210,8 @@ assert(model.includes("spaceguard-storage-strategy/v1"), "model should expose st
 assert(model.includes("spaceguard-manual-strategy-checklist/v1"), "model should expose manual strategy checklist schema");
 assert(model.includes("spaceguard-question-queue/v1"), "model should expose agent question queue schema");
 assert(model.includes("spaceguard-intake-policy/v1"), "model should expose intake policy schema");
+assert(model.includes("permanentConfirm"), "model should expose permanent-removal confirmation gate");
+assert(model.includes("confirm-permanent-removal"), "question queue should ask permanent-removal questions");
 assert(model.includes("intake admin boundary"), "model should name admin intake blockers");
 assert(model.includes("allow-admin-system-routes"), "question queue should ask admin intake questions");
 assert(model.includes("allow-admin-routes"), "question queue should expose admin allowance action");

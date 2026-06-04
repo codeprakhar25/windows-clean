@@ -4,7 +4,7 @@ const assert = require("assert");
   const guard = await import("../src/spaceguard-model.mjs");
 
   function makeReviewApprovals(actionList, protectedPaths = []) {
-    const base = { groupConfirm: true, reviewed: {}, reviewItems: {}, typed: {} };
+    const base = { groupConfirm: true, permanentConfirm: true, reviewed: {}, reviewItems: {}, typed: {} };
     const reviews = guard.buildReviewItemsByAction(actionList, null, protectedPaths, base);
     const reviewItems = {};
     for (const [actionId, review] of Object.entries(reviews)) {
@@ -47,6 +47,17 @@ const assert = require("assert");
   assert(
     !guard.buildSuggestedPlan(90 * guard.GB, new Set()).has("pagefile"),
     "suggested plan must not include pagefile changes"
+  );
+  const recycleOnly = new Set(["recycle-bin"]);
+  assert.strictEqual(
+    guard.getExecutionReadiness(recycleOnly, { groupConfirm: true, reviewed: {}, typed: {} }).ready,
+    false,
+    "Recycle Bin emptying should need explicit permanent-removal confirmation"
+  );
+  assert.strictEqual(
+    guard.getExecutionReadiness(recycleOnly, { groupConfirm: true, permanentConfirm: true, reviewed: {}, typed: {} }).ready,
+    true,
+    "Recycle Bin emptying should unlock only after permanent-removal confirmation"
   );
   const intakeBlockedPolicy = guard.buildIntakePolicy({
     targetDrive: "C:",
@@ -427,6 +438,14 @@ const assert = require("assert");
     readiness: guard.getExecutionReadinessForActions(new Set(["gradle-cache"]), { groupConfirm: false, reviewed: {}, typed: {} }, developerActions, [])
   });
   assert(gatedQuestions.questions.some((question) => question.id === "approve-rebuildable-caches"), "question queue should ask for rebuildable-cache approval");
+  const permanentQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    actionList: developerActions,
+    selectedIds: new Set(["recycle-bin"]),
+    approvals: { groupConfirm: true, permanentConfirm: false, reviewed: {}, typed: {} },
+    readiness: guard.getExecutionReadinessForActions(new Set(["recycle-bin"]), { groupConfirm: true, permanentConfirm: false, reviewed: {}, typed: {} }, developerActions, [])
+  });
+  assert(permanentQuestions.questions.some((question) => question.id === "confirm-permanent-removal"), "question queue should ask for permanent-removal confirmation");
 
   const normalSelection = new Set(
     developerActions

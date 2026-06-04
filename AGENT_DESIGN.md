@@ -144,6 +144,7 @@ Gate types:
 
 - `auto`: selected by default after user starts cleanup.
 - `groupConfirm`: one explicit approval for rebuildable caches.
+- `permanentConfirm`: one explicit approval for permanent-removal routes such as Recycle Bin emptying.
 - `review`: per-item approval.
 - `typed`: exact phrase required.
 - `blocked`: cannot run.
@@ -254,7 +255,7 @@ Consent receipt invariant:
 Agent question invariant:
 
 - Questions are derived from current state, not hardcoded walkthrough copy.
-- A question can trigger only an existing guarded action such as scan, suggest plan, allow admin/system routes into dry-run planning, focus item review, focus rollback proof, focus fixture import, approve rebuildable cache group, arm dry-run consent, simulate dry-run, run native read-only scan, or probe the rejecting write boundary.
+- A question can trigger only an existing guarded action such as scan, suggest plan, allow admin/system routes into dry-run planning, confirm permanent-removal routes, focus item review, focus rollback proof, focus fixture import, approve rebuildable cache group, arm dry-run consent, simulate dry-run, run native read-only scan, or probe the rejecting write boundary.
 - Questions cannot mark item decisions, rollback evidence, validation evidence, typed approvals, write readiness, or release gates complete on their own.
 - The active question and queue must be exportable in the dry-run report for audit.
 

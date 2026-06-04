@@ -166,6 +166,7 @@ The demo also includes:
 - A plan review queue separating ready, pending, protected, and policy-blocked work.
 - An execution preflight checklist that blocks simulation until scan, selection, gates, protected paths, and ledger state are valid.
 - Run readiness that also requires executor-policy clearance, at least one dry-run route, and real deletion still locked.
+- Permanent-removal confirmation for Recycle Bin emptying, separate from cache approval.
 - A plan-specific dry-run consent receipt that must be armed after readiness passes and resets whenever the plan snapshot changes.
 - Plan snapshot verification so a ledger is trusted only when it matches the current selected actions, approvals, protected paths, and item decisions.
 - Post-run verification checklist that turns the current ledger into affected-root rescan checkpoints before any Windows validation can count.
@@ -182,7 +183,6 @@ Allowed in low-risk batch:
 
 - Known temporary files.
 - Browser cache only, never identity data.
-- Recycle Bin after the user starts cleanup.
 
 Requires confirmation:
 
@@ -190,6 +190,10 @@ Requires confirmation:
 - Windows.old.
 - Docker build cache.
 - Game launcher shader/download caches.
+
+Requires permanent-removal confirmation:
+
+- Recycle Bin emptying.
 
 Requires item review:
 

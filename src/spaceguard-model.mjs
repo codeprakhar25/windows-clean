@@ -84,6 +84,10 @@ export const gates = {
     label: "Confirm",
     description: "Requires category approval because the data is rebuildable but useful."
   },
+  permanentConfirm: {
+    label: "Permanent confirm",
+    description: "Requires explicit approval because the action permanently removes already-discarded data."
+  },
   review: {
     label: "Review",
     description: "Requires item review because the data may be personal or project-specific."
@@ -905,7 +909,7 @@ export const actions = [
     path: "C:\\$Recycle.Bin",
     bytes: 3.2 * GB,
     risk: "safe",
-    gate: "auto",
+    gate: "permanentConfirm",
     method: "Empty files already marked for deletion",
     consequence: "Files already in Recycle Bin are permanently removed.",
     recommendation: "Include unless the user intentionally keeps recoverable files there.",
@@ -1476,7 +1480,7 @@ export function buildLedgerHistoryMarkdown(historySummary) {
 export function buildPlanSnapshot({
   selectedIds = new Set(),
   actionList = actions,
-  approvals = { groupConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
+  approvals = { groupConfirm: false, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
   protectedPaths = [],
   itemReviewsByAction = null,
   scanMode = "demo",
@@ -1496,6 +1500,7 @@ export function buildPlanSnapshot({
         gate: action.gate,
         bytes: getPlannedActionBytes(action, approvals, reviewsByAction),
         visibleBytes: action.bytes,
+        permanentConfirm: Boolean(approvals.permanentConfirm),
         typed: approvals.typed?.[action.id] || "",
         reviewItems: review?.items?.map((item) => ({
           id: item.id,
@@ -1519,6 +1524,7 @@ export function buildPlanSnapshot({
       : null,
     protectedPaths: [...protectedPaths].sort(),
     groupConfirm: Boolean(approvals.groupConfirm),
+    permanentConfirm: Boolean(approvals.permanentConfirm),
     rows
   };
   const id = `plan-${hashText(stableStringify(payload))}`;
@@ -1814,7 +1820,7 @@ export function buildRecoveryAdvisor({
   goalBytes = 0,
   actionList = actions,
   selectedIds = new Set(),
-  approvals = { groupConfirm: false, reviewed: {}, typed: {} },
+  approvals = { groupConfirm: false, permanentConfirm: false, reviewed: {}, typed: {} },
   protectedPaths = [],
   ledger = [],
   itemReviewsByAction = null,
@@ -2139,7 +2145,7 @@ export function buildDecisionLog({
   scanMode = "demo",
   actionList = actions,
   selectedIds = new Set(),
-  approvals = { groupConfirm: false, reviewed: {}, typed: {} },
+  approvals = { groupConfirm: false, permanentConfirm: false, reviewed: {}, typed: {} },
   readiness,
   protectedPaths = [],
   ledger = [],
@@ -2306,6 +2312,20 @@ export function buildAgentQuestionQueue({
   }
 
   const unresolved = gateState?.unresolved || [];
+  if (unresolved.some((entry) => entry.gate === "permanentConfirm")) {
+    const entry = unresolved.find((item) => item.gate === "permanentConfirm");
+    addQuestion({
+      id: "confirm-permanent-removal",
+      lane: "approval",
+      priority: 89,
+      title: "Confirm permanent removal",
+      prompt: "Can Recycle Bin emptying be included in this dry-run plan?",
+      detail: entry ? gateInstruction(entry.action, entry.gate) : "Permanent-removal routes need explicit confirmation before dry-run simulation.",
+      action: "confirm-permanent-removal",
+      options: ["Confirm permanent removal", "Leave Recycle Bin pending"]
+    });
+  }
+
   if (unresolved.some((entry) => entry.gate === "groupConfirm")) {
     addQuestion({
       id: "approve-rebuildable-caches",
@@ -2648,7 +2668,7 @@ export function getExecutorPolicy(action) {
 export function buildExecutorPlan({
   selectedIds = new Set(),
   actionList = actions,
-  approvals = { groupConfirm: false, reviewed: {}, typed: {} },
+  approvals = { groupConfirm: false, permanentConfirm: false, reviewed: {}, typed: {} },
   protectedPaths = [],
   scanMode = "demo",
   preflight = null,
@@ -5353,6 +5373,7 @@ function unresolvedGate(action, approvals = {}, protectedPaths = [], itemReview 
   if (!actionAllowedByIntake(action, intakePolicy)) return "intake";
   if (!selectableAction(action, protectedPaths, intakePolicy) || action.gate === "auto") return null;
   if (action.gate === "groupConfirm") return approvals.groupConfirm ? null : "groupConfirm";
+  if (action.gate === "permanentConfirm") return approvals.permanentConfirm ? null : "permanentConfirm";
   if (action.gate === "review") return isReviewGateResolved(action, approvals, itemReview) ? null : "review";
   if (action.gate === "typed") return approvals.typed?.[action.id] === action.typedPhrase ? null : "typed";
   return action.gate;
@@ -5372,6 +5393,7 @@ function getReviewReason(action, status, gate, itemReview = null) {
   if (status === "pending") {
     if (gate === "intake") return "Needs intake consent for admin-sensitive cleanup.";
     if (gate === "groupConfirm") return "Needs rebuildable-cache approval.";
+    if (gate === "permanentConfirm") return "Needs permanent-removal confirmation.";
     if (gate === "typed") return "Needs typed acknowledgement.";
     if (itemReview?.items?.length) {
       if (itemReview.undecidedCount > 0) return `${itemReview.undecidedCount} item decision(s) still unset.`;
@@ -5391,6 +5413,7 @@ function getReviewReason(action, status, gate, itemReview = null) {
 function gateInstruction(action, gate) {
   if (gate === "auto") return `Add ${action.title} for ${formatBytes(action.bytes)}.`;
   if (gate === "groupConfirm") return `Approve rebuildable-cache cleanup for ${action.title} (${formatBytes(action.bytes)}).`;
+  if (gate === "permanentConfirm") return `Confirm permanent removal for ${action.title} (${formatBytes(action.bytes)}); these files leave the Recycle Bin.`;
   if (gate === "review") return `Review ${action.title} item-by-item before selecting ${formatBytes(action.bytes)}.`;
   if (gate === "typed") return `Use typed acknowledgement for ${action.title} only after backup/rollback is clear.`;
   if (gate === "protected") return `Remove or narrow the protected path before considering ${action.title}.`;

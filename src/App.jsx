@@ -165,7 +165,7 @@ export default function App() {
     const initialActions = buildScenarioActions("developer");
     return new Set(initialActions.filter(selectedByDefault).map((action) => action.id));
   });
-  const [approvals, setApprovals] = useState({ groupConfirm: false, reviewed: {}, reviewItems: {}, typed: {} });
+  const [approvals, setApprovals] = useState({ groupConfirm: false, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} });
   const [ledger, setLedger] = useState([]);
   const [runHistory, setRunHistory] = useState(() => readStoredRunHistory());
   const [validationEvidence, setValidationEvidence] = useState(() => readStoredValidationEvidence());
@@ -654,7 +654,7 @@ export default function App() {
     setScanning(true);
     setScanned(false);
     setNativeScan({ status: "idle", result: null, error: "" });
-    setApprovals({ groupConfirm: false, reviewed: {}, reviewItems: {}, typed: {} });
+    setApprovals({ groupConfirm: false, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} });
     setScanProgress(0);
     clearExecutionState();
     setActiveStage("discover");
@@ -688,7 +688,7 @@ export default function App() {
     if (nativeScan.status === "scanning" || scanning) return;
 
     setNativeScan({ status: "scanning", result: null, error: "" });
-    setApprovals({ groupConfirm: false, reviewed: {}, reviewItems: {}, typed: {} });
+    setApprovals({ groupConfirm: false, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} });
     setScanning(true);
     setScanned(false);
     setScanProgress(0);
@@ -773,6 +773,12 @@ export default function App() {
 
   function approveRebuildableCaches() {
     setApprovals((current) => ({ ...current, groupConfirm: true }));
+    clearExecutionState();
+    setActiveStage("gate");
+  }
+
+  function confirmPermanentRemoval() {
+    setApprovals((current) => ({ ...current, permanentConfirm: true }));
     clearExecutionState();
     setActiveStage("gate");
   }
@@ -1019,7 +1025,7 @@ export default function App() {
     setFocusedReviewId("downloads-installers");
     setActiveStage("intake");
     clearExecutionState();
-    setApprovals({ groupConfirm: false, reviewed: {}, reviewItems: {}, typed: {} });
+    setApprovals({ groupConfirm: false, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} });
     setSelectedIds(new Set(nextActions.filter((action) => selectedByDefault(action, protectedPaths, intakePolicy)).map((action) => action.id)));
   }
 
@@ -1368,6 +1374,7 @@ export default function App() {
               onRunRealScan={runRealReadonlyScan}
               onSuggestPlan={suggestPlan}
               onApproveRebuildable={approveRebuildableCaches}
+              onConfirmPermanentRemoval={confirmPermanentRemoval}
               onAllowAdminRoutes={() => setAdminAllowance(true)}
               onFocusReview={setFocusedReviewId}
               onFocusPanel={focusWorkflowPanel}
@@ -2009,6 +2016,7 @@ function AgentQuestionPanel({
   onRunRealScan,
   onSuggestPlan,
   onApproveRebuildable,
+  onConfirmPermanentRemoval,
   onAllowAdminRoutes,
   onFocusReview,
   onFocusPanel,
@@ -2023,6 +2031,7 @@ function AgentQuestionPanel({
     if (!question) return;
     if (question.action === "suggest-plan") onSuggestPlan();
     if (question.action === "approve-rebuildable") onApproveRebuildable();
+    if (question.action === "confirm-permanent-removal") onConfirmPermanentRemoval();
     if (question.action === "allow-admin-routes") onAllowAdminRoutes();
     if (question.action === "focus-review" && question.actionId) onFocusReview(question.actionId);
     if (question.action === "focus-panel" && question.targetPanel) onFocusPanel(question.targetPanel);
@@ -2115,6 +2124,7 @@ function AgentQuestionPanel({
 function questionActionLabel(question) {
   if (question.action === "suggest-plan") return "Rebuild plan";
   if (question.action === "approve-rebuildable") return "Approve caches";
+  if (question.action === "confirm-permanent-removal") return "Confirm removal";
   if (question.action === "allow-admin-routes") return "Allow admin routes";
   if (question.action === "focus-review") return "Open item review";
   if (question.action === "focus-panel" && question.targetPanel === "rollback-plan-panel") return "Open rollback proof";
@@ -2580,6 +2590,7 @@ function GatePanel({ actionList, selectedIds, approvals, setApprovals, scanned, 
   const selectedReview = selected.filter((action) => action.gate === "review");
   const selectedTyped = selected.filter((action) => action.gate === "typed");
   const hasGroupConfirm = selected.some((action) => action.gate === "groupConfirm");
+  const hasPermanentConfirm = selected.some((action) => action.gate === "permanentConfirm");
   const blockedCount = actionList.filter((action) => action.gate === "blocked").length;
   const protectedCount = actionList.filter((action) => isActionProtected(action, protectedPaths)).length;
   const intakeBlockedCount = actionList.filter((action) => actionRequiresAdminConsent(action) && intakePolicy?.adminSensitiveBlocked).length;
@@ -2602,6 +2613,15 @@ function GatePanel({ actionList, selectedIds, approvals, setApprovals, scanned, 
             detail="Gradle, npm, pnpm, Docker build cache, Windows.old, and launcher caches may be recreated later."
             checked={approvals.groupConfirm}
             onChange={(checked) => setApprovals((current) => ({ ...current, groupConfirm: checked }))}
+          />
+        ) : null}
+
+        {hasPermanentConfirm ? (
+          <GateCheck
+            title="Confirm permanent removal"
+            detail="Recycle Bin emptying permanently removes files already marked for deletion. It is not treated as cache cleanup."
+            checked={Boolean(approvals.permanentConfirm)}
+            onChange={(checked) => setApprovals((current) => ({ ...current, permanentConfirm: checked }))}
           />
         ) : null}
 
