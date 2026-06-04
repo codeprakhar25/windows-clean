@@ -245,6 +245,51 @@ const assert = require("assert");
   });
   assert.strictEqual(issuedPowerBroker.status, "broker-ready", "broker should become ready when dry-run grants are issued");
   assert.strictEqual(issuedPowerBroker.counts.granted, 1, "broker should count issued dry-run requests");
+  const issuedPowerLeaseAudit = guard.buildTaskPowerLeaseAudit({
+    taskCapabilityGrants: issuedTaskGrants,
+    taskPowerBroker: issuedPowerBroker,
+    planSnapshot: grantPlanSnapshot,
+    scanSession: grantScanSession,
+    consentReceipt: grantConsent,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(issuedPowerLeaseAudit.schemaVersion, "spaceguard-task-power-leases/v1", "task power lease audit should expose a schema version");
+  assert.strictEqual(issuedPowerLeaseAudit.status, "leases-current", "issued task grants should create current dry-run leases");
+  assert.strictEqual(issuedPowerLeaseAudit.counts.current, 1, "lease audit should count the current lease");
+  assert.strictEqual(issuedPowerLeaseAudit.rows[0].canRealRun, false, "lease audit must not expose real-run authority");
+  assert(issuedPowerLeaseAudit.rows[0].checks.every((check) => check.passed), "current lease should pass plan, scan, consent, broker, and runtime checks");
+  const stalePowerLeaseAudit = guard.buildTaskPowerLeaseAudit({
+    taskCapabilityGrants: issuedTaskGrants,
+    taskPowerBroker: issuedPowerBroker,
+    planSnapshot: { id: "changed-plan" },
+    scanSession: grantScanSession,
+    consentReceipt: { ready: true, planId: "changed-plan" },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(stalePowerLeaseAudit.status, "leases-stale", "lease audit should expire grants when the plan changes");
+  assert.strictEqual(stalePowerLeaseAudit.rows[0].status, "stale", "mismatched plan evidence should stale the lease row");
+  assert.strictEqual(stalePowerLeaseAudit.rows[0].checks.find((check) => check.id === "plan").passed, false, "stale lease should show failed plan check");
+  const unsafePowerLeaseAudit = guard.buildTaskPowerLeaseAudit({
+    taskCapabilityGrants: issuedTaskGrants,
+    taskPowerBroker: issuedPowerBroker,
+    planSnapshot: grantPlanSnapshot,
+    scanSession: grantScanSession,
+    consentReceipt: grantConsent,
+    runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
+  });
+  assert.strictEqual(unsafePowerLeaseAudit.status, "unsafe-runtime", "runtime write capability should refuse task power leases");
+  assert.strictEqual(unsafePowerLeaseAudit.realRunEnabled, false, "lease audit must keep real execution disabled");
+  const standingPermissionLeaseAudit = guard.buildTaskPowerLeaseAudit({
+    taskCapabilityGrants: issuedTaskGrants,
+    taskPowerBroker: { ...issuedPowerBroker, standingPermission: true },
+    planSnapshot: grantPlanSnapshot,
+    scanSession: grantScanSession,
+    consentReceipt: grantConsent,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(standingPermissionLeaseAudit.status, "unsafe-runtime", "standing permission should make power leases unsafe");
+  assert.strictEqual(standingPermissionLeaseAudit.standingPermission, true, "lease audit should surface standing permission violations");
+  assert.strictEqual(standingPermissionLeaseAudit.counts.standingPermission, 1, "lease audit should count standing permission violations");
   const unsafePowerBroker = guard.buildTaskPowerBroker({
     taskPowerCatalog: activeCachePowerCatalog,
     taskCapabilityGrants: unsafeTaskGrants,
@@ -293,10 +338,13 @@ const assert = require("assert");
     taskRunbook: issuedTaskRunbook,
     taskPowerBroker: issuedPowerBroker,
     taskCapabilityGrants: issuedTaskGrants,
+    taskPowerLeaseAudit: issuedPowerLeaseAudit,
     taskPowerCatalog: activeCachePowerCatalog
   });
   assert(taskRunbookReport.includes("## Task Power Broker"), "report should include task power broker");
   assert(taskRunbookReport.includes("Standing permission: no"), "task power broker report should preserve no-standing-permission boundary");
+  assert(taskRunbookReport.includes("## Task Power Lease Audit"), "report should include task power lease audit");
+  assert(taskRunbookReport.includes("Current leases: 1"), "task power lease report should capture current lease count");
   assert(taskRunbookReport.includes("## Task Runbook"), "report should include task runbook");
   assert(taskRunbookReport.includes("No cross-task authority: yes"), "task runbook report should preserve scope boundary");
   const restrictionMatrix = guard.buildRestrictionPolicyMatrix({

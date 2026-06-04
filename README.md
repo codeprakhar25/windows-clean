@@ -167,6 +167,7 @@ The demo also includes:
 - Decision log for source, scan, plan, gates, policy, and execution state.
 - Decision log and dry-run reports include the selected task powers, task grant receipts, waiting power gates, locked admin powers, and real-run-disabled boundary.
 - Power broker panel that turns selected task powers into current-plan power requests, preserves the active user question, refuses standing permission, and keeps each request dry-run only.
+- Power lease audit that checks issued task grants against the current plan id, scan fingerprint, dry-run consent, broker request, and runtime write lock before any dry-run work order is treated as current.
 - Executor policy panel that classifies selected routes before simulation.
 - Native candidate manifest preview that shows target-scope status, sampled dry-run file metadata, target path, and skipped counts without deleting anything.
 - Native dry-run scope evidence export that runs a metadata-only allowed/rejected scope probe and writes a minimal JSON artifact for fixture validation without raw candidate filename samples.

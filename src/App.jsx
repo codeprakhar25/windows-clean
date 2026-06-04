@@ -84,6 +84,7 @@ import {
   buildTaskCapabilityGrants,
   buildTaskPowerBroker,
   buildTaskPowerCatalog,
+  buildTaskPowerLeaseAudit,
   buildToolCommandInventory,
   buildValidationEvidencePack,
   buildValidationPackMarkdown,
@@ -679,6 +680,18 @@ export default function App() {
         runtimeCapabilities: runtimeCapabilities.result
       }),
     [taskPowerCatalog, taskCapabilityGrants, agentQuestionQueue, runReadiness, runtimeCapabilities.result]
+  );
+  const taskPowerLeaseAudit = useMemo(
+    () =>
+      buildTaskPowerLeaseAudit({
+        taskCapabilityGrants,
+        taskPowerBroker,
+        planSnapshot,
+        scanSession,
+        consentReceipt,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [taskCapabilityGrants, taskPowerBroker, planSnapshot, scanSession, consentReceipt, runtimeCapabilities.result]
   );
   const taskRunbook = useMemo(
     () =>
@@ -1517,7 +1530,8 @@ export default function App() {
       intakePolicy,
       taskPowerCatalog,
       taskPowerBroker,
-      taskCapabilityGrants
+      taskCapabilityGrants,
+      taskPowerLeaseAudit
     });
     downloadTextFile("spaceguard-dry-run-report.md", report, "text/markdown;charset=utf-8");
   }
@@ -1818,6 +1832,8 @@ export default function App() {
             <TaskPowerPanel catalog={taskPowerCatalog} />
 
             <TaskPowerBrokerPanel broker={taskPowerBroker} />
+
+            <TaskPowerLeaseAuditPanel audit={taskPowerLeaseAudit} />
 
             <TaskCapabilityGrantPanel grants={taskCapabilityGrants} />
 
@@ -2777,6 +2793,83 @@ function TaskPowerBrokerPanel({ broker }) {
               </div>
             ))}
           </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TaskPowerLeaseAuditPanel({ audit }) {
+  const previewRows = audit.rows.length ? audit.rows.slice(0, 5) : [];
+
+  return (
+    <Card id="task-power-lease-audit-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4" />
+              Power lease audit
+            </CardTitle>
+            <CardDescription>{audit.primary}</CardDescription>
+          </div>
+          <Badge variant={audit.tone}>{audit.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Current" value={audit.counts.current} tone={audit.counts.current ? "safe" : "review"} />
+          <QueueStat label="Waiting" value={audit.counts.waiting} tone={audit.counts.waiting ? "review" : "safe"} />
+          <QueueStat label="Stale" value={audit.counts.stale} tone={audit.counts.stale ? "restricted" : "safe"} />
+          <QueueStat label="Blocked" value={audit.counts.blocked + audit.counts.unsafe} tone={audit.counts.blocked || audit.counts.unsafe ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Lease envelope</span>
+            <Badge variant={audit.realRunEnabled ? "restricted" : "safe"}>{audit.authority}</Badge>
+            <Badge variant={audit.standingPermission ? "restricted" : "safe"}>
+              {audit.standingPermission ? "standing lease" : "no standing lease"}
+            </Badge>
+            <Badge variant={audit.consentCurrent ? "safe" : "outline"}>{audit.consentCurrent ? "consent matched" : "consent unmatched"}</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
+            <div className="truncate">Plan {audit.planId || "missing"}</div>
+            <div className="truncate">Scan {audit.scanFingerprint || "missing"}</div>
+            <div className="truncate">Consent {audit.consentPlanId || "missing"}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {previewRows.length ? (
+            previewRows.map((row) => {
+              const failedCheck = row.checks.find((check) => !check.passed);
+              return (
+                <div key={row.id} className="rounded-md border bg-card p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="mr-auto min-w-0 text-sm font-medium">{row.title}</div>
+                    <Badge variant={row.tone}>{row.status}</Badge>
+                    <Badge variant="outline">{row.powerLabel}</Badge>
+                    <Badge variant={row.canRealRun ? "restricted" : "safe"}>{row.canRealRun ? "real run visible" : "real run locked"}</Badge>
+                  </div>
+                  <div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-[0.8fr_1fr]">
+                    <div className="truncate">{row.route} | {row.target || "no target"}</div>
+                    <div>{row.nextStep}</div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {row.checks.slice(0, 4).map((check) => (
+                      <Badge key={`${row.id}-${check.id}`} variant={check.passed ? "safe" : "restricted"}>{check.label}</Badge>
+                    ))}
+                    {failedCheck ? <Badge variant="outline">{failedCheck.current}</Badge> : null}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              No dry-run lease exists for the current plan.
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

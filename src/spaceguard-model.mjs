@@ -3458,6 +3458,90 @@ export function buildTaskPowerBroker({
   };
 }
 
+export function buildTaskPowerLeaseAudit({
+  taskCapabilityGrants = null,
+  taskPowerBroker = null,
+  planSnapshot = null,
+  scanSession = null,
+  consentReceipt = null,
+  runtimeCapabilities = {}
+} = {}) {
+  const grantRows = taskCapabilityGrants?.rows || [];
+  const planId = planSnapshot?.id || taskCapabilityGrants?.planId || "";
+  const scanFingerprint = scanSession?.currentFingerprint || taskCapabilityGrants?.scanFingerprint || "";
+  const consentPlanId = consentReceipt?.planId || taskCapabilityGrants?.consentPlanId || "";
+  const scanCurrent = scanSession ? Boolean(scanSession.readyForPlanning) : Boolean(taskCapabilityGrants?.scanCurrent);
+  const consentCurrent = consentReceipt
+    ? Boolean(consentReceipt.ready && consentReceipt.planId === planId)
+    : Boolean(taskCapabilityGrants?.consentCurrent && taskCapabilityGrants?.consentPlanId === planId);
+  const standingPermission = Boolean(taskPowerBroker?.standingPermission);
+  const unsafeRuntime = Boolean(
+    runtimeCapabilities?.realRunEnabled
+      || runtimeCapabilities?.destructiveCommands
+      || taskCapabilityGrants?.destructiveCommands
+      || taskPowerBroker?.destructiveCommands
+      || standingPermission
+  );
+  const requestsByPower = new Map((taskPowerBroker?.requests || []).map((request) => [request.powerId, request]));
+  const rows = grantRows.map((grant, index) =>
+    buildTaskPowerLeaseAuditRow({
+      grant,
+      index,
+      request: requestsByPower.get(grant.powerId),
+      planId,
+      scanFingerprint,
+      consentPlanId,
+      scanCurrent,
+      consentCurrent,
+      unsafeRuntime,
+      standingPermission
+    })
+  );
+  const counts = {
+    total: rows.length,
+    current: rows.filter((row) => row.status === "current").length,
+    waiting: rows.filter((row) => row.status === "waiting").length,
+    stale: rows.filter((row) => row.status === "stale").length,
+    blocked: rows.filter((row) => row.status === "blocked").length,
+    unsafe: rows.filter((row) => row.status === "unsafe-runtime").length,
+    realRun: 0,
+    standingPermission: standingPermission ? 1 : 0
+  };
+  const status = unsafeRuntime
+    ? "unsafe-runtime"
+    : !rows.length
+      ? "no-leases"
+      : counts.blocked
+        ? "leases-blocked"
+        : counts.stale
+          ? "leases-stale"
+          : counts.waiting
+            ? "leases-waiting"
+            : counts.current
+              ? "leases-current"
+              : "leases-idle";
+
+  return {
+    schemaVersion: "spaceguard-task-power-leases/v1",
+    status,
+    tone: getTaskPowerLeaseAuditTone(status),
+    authority: "leased-dry-run",
+    standingPermission,
+    defaultDecision: "deny-expired-or-mismatched-lease",
+    realRunEnabled: false,
+    destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
+    planId,
+    scanFingerprint,
+    consentPlanId,
+    scanCurrent,
+    consentCurrent,
+    rows,
+    counts,
+    primary: getTaskPowerLeaseAuditPrimary(status, counts),
+    steps: getTaskPowerLeaseAuditSteps(status, rows)
+  };
+}
+
 export function buildAgentTaskRunbook({
   executorPlan = null,
   taskCapabilityGrants = null,
@@ -6909,7 +6993,8 @@ export function buildReport({
   intakePolicy = null,
   taskPowerCatalog = null,
   taskPowerBroker = null,
-  taskCapabilityGrants = null
+  taskCapabilityGrants = null,
+  taskPowerLeaseAudit = null
 }) {
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, nativeScan, protectedPaths, {});
   const totals = computeTotals(selectedIds, actionList, { itemReviewsByAction: reviewsByAction });
@@ -7037,6 +7122,26 @@ export function buildReport({
                 .map((grant) => `- ${grant.title}: ${grant.status} | ${grant.powerLabel} | route=${grant.route} | target=${grant.target || "none"} | next=${grant.nextStep}`)
                 .join("\n")
             : "- No task grants."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Task Power Lease Audit",
+    taskPowerLeaseAudit
+      ? [
+          `- Status: ${taskPowerLeaseAudit.status}`,
+          `- Authority: ${taskPowerLeaseAudit.authority}`,
+          `- Standing lease: ${taskPowerLeaseAudit.standingPermission ? "yes" : "no"}`,
+          `- Default decision: ${taskPowerLeaseAudit.defaultDecision}`,
+          `- Real run enabled: ${taskPowerLeaseAudit.realRunEnabled ? "yes" : "no"}`,
+          `- Current leases: ${taskPowerLeaseAudit.counts.current}`,
+          `- Waiting leases: ${taskPowerLeaseAudit.counts.waiting}`,
+          `- Stale leases: ${taskPowerLeaseAudit.counts.stale}`,
+          `- Blocked leases: ${taskPowerLeaseAudit.counts.blocked}`,
+          taskPowerLeaseAudit.rows.length
+            ? taskPowerLeaseAudit.rows
+                .map((row) => `- ${row.title}: ${row.status} | ${row.powerLabel} | route=${row.route} | canDryRun=${row.canDryRun ? "yes" : "no"} | next=${row.nextStep}`)
+                .join("\n")
+            : "- No task power leases."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -8228,6 +8333,138 @@ function getTaskPowerBrokerRequestNextStep(status, power = {}, blocker = null) {
   if (status === "waiting-scan") return "Run or refresh the scan so the power can bind to a current fingerprint.";
   if (status === "waiting-consent") return "Arm dry-run consent for the current plan before issuing this power.";
   return blocker?.detail || power.nextStep || "Ask for the user decision required by this task power.";
+}
+
+function buildTaskPowerLeaseAuditRow({
+  grant,
+  index = 0,
+  request = null,
+  planId = "",
+  scanFingerprint = "",
+  consentPlanId = "",
+  scanCurrent = false,
+  consentCurrent = false,
+  unsafeRuntime = false,
+  standingPermission = false
+}) {
+  const evidence = grant?.evidence || {};
+  const brokerMatched = Boolean(
+    request
+      && request.status === "granted-dry-run"
+      && request.selectedActions?.includes(grant.actionId)
+      && !standingPermission
+  );
+  const checks = [
+    {
+      id: "plan",
+      label: "Plan lease",
+      passed: Boolean(planId && evidence.planId === planId),
+      current: planId || "missing",
+      leased: evidence.planId || "missing"
+    },
+    {
+      id: "scan",
+      label: "Scan lease",
+      passed: Boolean(scanCurrent && scanFingerprint && evidence.scanFingerprint === scanFingerprint),
+      current: scanFingerprint || "missing",
+      leased: evidence.scanFingerprint || "missing"
+    },
+    {
+      id: "consent",
+      label: "Consent lease",
+      passed: Boolean(consentCurrent && consentPlanId && evidence.consentPlanId === consentPlanId && evidence.consentPlanId === planId),
+      current: consentPlanId || "missing",
+      leased: evidence.consentPlanId || "missing"
+    },
+    {
+      id: "broker",
+      label: "Broker lease",
+      passed: brokerMatched,
+      current: request?.status || "missing",
+      leased: grant?.powerId || "missing"
+    },
+    {
+      id: "runtime",
+      label: "Runtime lock",
+      passed: !unsafeRuntime && !grant?.runtimeRealRunEnabled,
+      current: unsafeRuntime ? "unsafe signal" : "write locked",
+      leased: grant?.authority || "missing"
+    }
+  ];
+  const leaseCurrent = checks.every((check) => check.passed);
+  const status = unsafeRuntime || grant?.status === "unsafe-runtime"
+    ? "unsafe-runtime"
+    : grant?.status === "blocked"
+      ? "blocked"
+      : grant?.status?.startsWith("waiting")
+        ? "waiting"
+        : grant?.status === "issued-dry-run" && leaseCurrent
+          ? "current"
+          : grant?.status === "issued-dry-run"
+            ? "stale"
+            : "waiting";
+
+  return {
+    id: `lease-${grant?.actionId || index}`,
+    actionId: grant?.actionId || "",
+    title: grant?.title || "Unscoped task grant",
+    powerId: grant?.powerId || "",
+    powerLabel: grant?.powerLabel || "Unknown power",
+    status,
+    tone: getTaskPowerLeaseRowTone(status),
+    authority: "leased-dry-run",
+    route: grant?.route || "",
+    target: grant?.target || "",
+    canDryRun: status === "current",
+    canRealRun: false,
+    checks,
+    expiresWith: grant?.expiresWith || ["selection, approval, protected path, or scanner setting change"],
+    nextStep: getTaskPowerLeaseRowNextStep(status, checks, grant)
+  };
+}
+
+function getTaskPowerLeaseAuditTone(status) {
+  if (status === "leases-current") return "safe";
+  if (status === "unsafe-runtime" || status === "leases-blocked" || status === "leases-stale") return "restricted";
+  return "review";
+}
+
+function getTaskPowerLeaseRowTone(status) {
+  if (status === "current") return "safe";
+  if (status === "stale" || status === "blocked" || status === "unsafe-runtime") return "restricted";
+  return "review";
+}
+
+function getTaskPowerLeaseAuditPrimary(status, counts = {}) {
+  if (status === "leases-current") return `${counts.current} task power lease(s) are current for dry-run only.`;
+  if (status === "unsafe-runtime") return "Power leases are refused because runtime write capability or standing permission is visible.";
+  if (status === "leases-stale") return `${counts.stale} task power lease(s) expired or no longer match current evidence.`;
+  if (status === "leases-blocked") return `${counts.blocked} task power lease(s) are blocked by route policy or gates.`;
+  if (status === "leases-waiting") return `${counts.waiting} task power lease(s) are waiting for scan, approval, or consent.`;
+  return "No task power lease has been issued for the current plan.";
+}
+
+function getTaskPowerLeaseAuditSteps(status, rows = []) {
+  if (status === "leases-current") {
+    return ["Run dry-run simulation only.", "Expire these leases on any plan, scan, approval, protected-path, or consent change.", "Keep real cleanup locked."];
+  }
+  if (status === "unsafe-runtime") {
+    return ["Stop lease use.", "Confirm runtime write/destructive signals and standing permission are false.", "Rebuild grants from current evidence before continuing."];
+  }
+  const actionable = rows
+    .filter((row) => row.status !== "current")
+    .slice(0, 3)
+    .map((row) => `${row.title}: ${row.nextStep}`);
+  return actionable.length ? actionable : ["Run a scan.", "Resolve gates.", "Arm dry-run consent for the current plan."];
+}
+
+function getTaskPowerLeaseRowNextStep(status, checks = [], grant = {}) {
+  if (status === "current") return `${grant.title} has a current dry-run lease; do not reuse it for any other task.`;
+  if (status === "unsafe-runtime") return "Discard this lease until runtime write/destructive signals are gone.";
+  if (status === "blocked") return grant.nextStep || "Remove the blocked route or resolve its policy gate.";
+  if (status === "waiting") return grant.nextStep || "Resolve scan, approval, and consent before issuing a lease.";
+  const failed = checks.find((check) => !check.passed);
+  return failed ? `${failed.label} is not current; rebuild the grant from current evidence.` : "Rebuild the grant before simulation.";
 }
 
 function buildAgentTaskRunbookRow({

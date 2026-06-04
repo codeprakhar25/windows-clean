@@ -37,6 +37,8 @@ const requiredAppMarkers = [
   "Allow admin routes",
   "Task powers",
   "Scoped powers",
+  "Power lease audit",
+  "Lease envelope",
   "real run disabled",
   "Run real scan",
   "Native app required",
@@ -157,6 +159,8 @@ assert(app.includes("buildExecutionConsentReceipt"), "execution consent receipt 
 assert(app.includes("buildTaskPowerCatalog"), "task power catalog should be wired");
 assert(app.includes("buildTaskPowerBroker"), "task power broker should be wired");
 assert(app.includes("TaskPowerBrokerPanel"), "task power broker panel should be rendered");
+assert(app.includes("buildTaskPowerLeaseAudit"), "task power lease audit should be wired");
+assert(app.includes("TaskPowerLeaseAuditPanel"), "task power lease audit panel should be rendered");
 assert(app.includes("buildTaskCapabilityGrants"), "task capability grants should be wired");
 assert(app.includes("TaskCapabilityGrantPanel"), "task capability grant panel should be rendered");
 assert(app.includes("buildAgentTaskRunbook"), "task runbook should be wired");
