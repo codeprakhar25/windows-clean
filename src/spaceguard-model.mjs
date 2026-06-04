@@ -1257,9 +1257,11 @@ export function makeExecutionLedgerForActions(selectedIds, actionList = actions,
     itemReviewsByAction: options.itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, options.approvals || {})
   };
   const planId = options.planSnapshot?.id || options.planId || "";
+  const executedAt = options.executedAt || "";
   return selected.map((action, index) => ({
     id: action.id,
     planId,
+    executedAt,
     time: `T+${String(index + 1).padStart(2, "0")}m`,
     title: action.title,
     result: getLedgerResult(action, protectedPaths, ledgerOptions),
@@ -1294,6 +1296,7 @@ export function buildLedgerRunRecord({
   const entries = ledger.map((entry) => ({
     id: entry.id,
     planId: entry.planId || planSnapshot?.id || "",
+    executedAt: entry.executedAt || "",
     time: entry.time,
     title: entry.title,
     result: entry.result,
@@ -3368,6 +3371,7 @@ export function buildPostRunVerificationPlan({
       route: row.route || "unknown",
       lane: row.lane || "unknown",
       path: row.path || "unknown affected root",
+      baselineBytes: Number(row.visibleBytes ?? row.bytes ?? entry.bytes ?? 0),
       expectedBytes: Number(entry.bytes || 0),
       ledgerResult: entry.result,
       method: entry.method || row.method || "",
@@ -3437,6 +3441,143 @@ export function buildPostRunVerificationPlan({
       ? ["Compare each affected root with the ledger.", "Record skipped files and byte deltas.", "Export the verification checklist with the dry-run report."]
       : ["Run the Windows desktop read-only scan after execution.", "Compare affected roots with the ledger.", "Keep real execution locked until rescan parity is proven."]
   };
+}
+
+export function buildRescanComparison({
+  postRunVerification = null,
+  nativeScan = null,
+  scanMode = "demo",
+  ledger = [],
+  planSnapshot = null,
+  toleranceBytes = 64 * MB
+} = {}) {
+  const checkpoints = postRunVerification?.checkpoints || [];
+  const planId = postRunVerification?.planId || planSnapshot?.id || "";
+  const currentEntries = planId ? ledger.filter((entry) => entry.planId === planId) : ledger;
+  const staleEntries = planId ? ledger.filter((entry) => entry.planId !== planId) : [];
+  const nativeEvidence = scanMode === "native-readonly" && Boolean(nativeScan?.available !== false && nativeScan);
+  const latestExecutionAt = latestIsoTimestamp(currentEntries.map((entry) => entry.executedAt));
+  const scanGeneratedAt = nativeScan?.generatedAt || "";
+  const postRunScanEvidence = Boolean(nativeEvidence && latestExecutionAt && isIsoAtOrAfter(scanGeneratedAt, latestExecutionAt));
+  const rows = checkpoints.map((checkpoint) =>
+    buildRescanComparisonRow({
+      checkpoint,
+      nativeScan,
+      nativeEvidence,
+      postRunScanEvidence,
+      latestExecutionAt,
+      scanGeneratedAt,
+      toleranceBytes
+    })
+  );
+  const counts = {
+    rows: rows.length,
+    matched: rows.filter((row) => row.state === "matched").length,
+    mismatch: rows.filter((row) => row.state === "mismatch").length,
+    skipped: rows.filter((row) => row.state === "skipped").length,
+    noFinding: rows.filter((row) => row.state === "no-finding").length,
+    waiting: rows.filter((row) => row.state === "needs-post-run-native-rescan" || row.state === "needs-native-rescan").length
+  };
+
+  if (!checkpoints.length || !ledger.length) {
+    return {
+      schemaVersion: "spaceguard-rescan-comparison/v1",
+      status: "not-run",
+      tone: "review",
+      planId,
+      current: false,
+      nativeEvidence,
+      postRunScanEvidence: false,
+      latestExecutionAt,
+      scanGeneratedAt,
+      toleranceBytes,
+      rows: [],
+      counts,
+      expectedBytes: 0,
+      actualRemainingBytes: 0,
+      detail: "No current ledger checkpoints exist yet, so rescan parity cannot be evaluated.",
+      steps: ["Run dry-run simulation.", "Run a native read-only scan after the ledger is created.", "Compare affected roots before any real executor work."]
+    };
+  }
+
+  if (postRunVerification?.status === "stale-ledger" || staleEntries.length > 0 || !postRunVerification?.current) {
+    return {
+      schemaVersion: "spaceguard-rescan-comparison/v1",
+      status: "stale-ledger",
+      tone: "advanced",
+      planId,
+      current: false,
+      nativeEvidence,
+      postRunScanEvidence: false,
+      latestExecutionAt,
+      scanGeneratedAt,
+      toleranceBytes,
+      rows: [],
+      counts: { ...counts, rows: 0, matched: 0, mismatch: 0, skipped: 0, noFinding: 0, waiting: 0 },
+      expectedBytes: 0,
+      actualRemainingBytes: 0,
+      detail: "The ledger is not current for this plan, so native scan data cannot prove parity.",
+      steps: ["Simulate the current plan.", "Run a fresh native read-only scan after that ledger.", "Ignore stale run history for parity decisions."]
+    };
+  }
+
+  const expectedBytes = rows.reduce((sum, row) => sum + row.expectedBytes, 0);
+  const actualRemainingBytes = rows.reduce((sum, row) => sum + row.actualBytes, 0);
+  const status = getRescanComparisonStatus({ rows, nativeEvidence, postRunScanEvidence });
+
+  return {
+    schemaVersion: "spaceguard-rescan-comparison/v1",
+    status,
+    tone: getRescanComparisonTone(status),
+    planId,
+    current: true,
+    nativeEvidence,
+    postRunScanEvidence,
+    latestExecutionAt,
+    scanGeneratedAt,
+    toleranceBytes,
+    rows,
+    counts,
+    expectedBytes,
+    actualRemainingBytes,
+    detail: getRescanComparisonDetail(status, counts),
+    steps: getRescanComparisonSteps(status)
+  };
+}
+
+export function buildRescanComparisonMarkdown(comparison) {
+  const rows = comparison?.rows?.length
+    ? comparison.rows
+        .map((row) => [
+          `- ${row.title}: ${row.state}`,
+          `  - Expected removal: ${formatBytes(row.expectedBytes)}`,
+          `  - Expected remaining: ${formatBytes(row.expectedRemainingBytes)}`,
+          `  - Native remaining: ${formatBytes(row.actualBytes)}`,
+          `  - Delta: ${formatBytes(row.deltaBytes)}`,
+          `  - Evidence: ${row.evidence}`
+        ].join("\n"))
+        .join("\n")
+    : "- No comparison rows.";
+  const steps = comparison?.steps?.length ? comparison.steps.map((step) => `- ${step}`).join("\n") : "- No steps.";
+
+  return [
+    "# SpaceGuard Rescan Comparison",
+    "",
+    `Plan: ${comparison?.planId || "none"}`,
+    `Status: ${comparison?.status || "not-run"}`,
+    `Native evidence: ${comparison?.nativeEvidence ? "yes" : "no"}`,
+    `Post-run scan evidence: ${comparison?.postRunScanEvidence ? "yes" : "no"}`,
+    `Ledger timestamp: ${comparison?.latestExecutionAt || "missing"}`,
+    `Scan timestamp: ${comparison?.scanGeneratedAt || "missing"}`,
+    "",
+    "## Steps",
+    steps,
+    "",
+    "## Rows",
+    rows,
+    "",
+    "This comparison is proof-gathering only. It does not enable real cleanup."
+  ].join("\n");
 }
 
 export function buildPostRunVerificationMarkdown(plan) {
@@ -3570,6 +3711,7 @@ export function buildReport({
   planSnapshot = null,
   verificationSummary = null,
   postRunVerification = null,
+  rescanComparison = null,
   runReadiness = null,
   consentReceipt = null,
   privilegeBoundary = null,
@@ -3729,6 +3871,23 @@ export function buildReport({
           `- Skipped checkpoints: ${postRunVerification.skippedCount}`,
           `- Expected recovery: ${formatBytes(postRunVerification.expectedBytes)}`,
           postRunVerification.steps.map((step) => `- ${step}`).join("\n")
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Rescan Comparison",
+    rescanComparison
+      ? [
+          `- Status: ${rescanComparison.status}`,
+          `- Native evidence: ${rescanComparison.nativeEvidence ? "yes" : "no"}`,
+          `- Post-run scan evidence: ${rescanComparison.postRunScanEvidence ? "yes" : "no"}`,
+          `- Ledger timestamp: ${rescanComparison.latestExecutionAt || "missing"}`,
+          `- Scan timestamp: ${rescanComparison.scanGeneratedAt || "missing"}`,
+          `- Matched rows: ${rescanComparison.counts.matched}`,
+          `- Mismatch rows: ${rescanComparison.counts.mismatch}`,
+          `- Waiting rows: ${rescanComparison.counts.waiting}`,
+          rescanComparison.rows.length
+            ? rescanComparison.rows.map((row) => `- ${row.title}: ${row.state} | expected remaining=${formatBytes(row.expectedRemainingBytes)} | native remaining=${formatBytes(row.actualBytes)} | ${row.evidence}`).join("\n")
+            : "- No rescan comparison rows."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -4299,6 +4458,169 @@ function buildRollbackSteps(status, rows, needsProofRows, postRunVerification = 
     steps.push("Use native read-only rescan parity as the restore proof for rebuildable routes.");
   }
   return steps;
+}
+
+function buildRescanComparisonRow({
+  checkpoint,
+  nativeScan,
+  nativeEvidence,
+  postRunScanEvidence,
+  latestExecutionAt,
+  scanGeneratedAt,
+  toleranceBytes
+}) {
+  const skipped = checkpoint.status === "skipped" || checkpoint.ledgerResult === "skipped" || Number(checkpoint.expectedBytes || 0) === 0;
+  const expectedBytes = Number(checkpoint.expectedBytes || 0);
+  const baselineBytes = Number(checkpoint.baselineBytes ?? expectedBytes);
+  const expectedRemainingBytes = skipped ? baselineBytes : Math.max(0, baselineBytes - expectedBytes);
+  const finding = findNativeFindingForCheckpoint(checkpoint, nativeScan);
+  const measured = finding && (finding.status === "measured" || finding.status === "limited");
+  const actualBytes = measured ? Number(finding.bytes || 0) : 0;
+  const deltaBytes = measured ? Math.abs(actualBytes - expectedRemainingBytes) : expectedRemainingBytes;
+  let state = "needs-native-rescan";
+  let evidence = "Run the Windows desktop read-only scanner after the ledger is created.";
+
+  if (skipped) {
+    state = "skipped";
+    evidence = "Ledger skipped this route; keep the skipped result visible for audit.";
+  } else if (!nativeEvidence) {
+    state = "needs-native-rescan";
+    evidence = "No native scan is available for this comparison.";
+  } else if (!postRunScanEvidence) {
+    state = "needs-post-run-native-rescan";
+    evidence = latestExecutionAt
+      ? `Native scan must be newer than ledger timestamp ${latestExecutionAt}.`
+      : "Ledger is missing an absolute execution timestamp; simulate again before comparing.";
+  } else if (!finding || !measured) {
+    state = "no-finding";
+    evidence = finding
+      ? `Native finding status is ${finding.status}; measured or limited evidence is required.`
+      : "No matching native finding exists for this affected route.";
+  } else if (deltaBytes <= toleranceBytes) {
+    state = "matched";
+    evidence = `Native remaining size is within ${formatBytes(toleranceBytes)} tolerance.`;
+  } else {
+    state = "mismatch";
+    evidence = `Native remaining size differs by ${formatBytes(deltaBytes)}.`;
+  }
+
+  return {
+    id: checkpoint.id,
+    title: checkpoint.title,
+    route: checkpoint.route,
+    path: checkpoint.path,
+    state,
+    tone: getRescanRowTone(state),
+    baselineBytes,
+    expectedBytes,
+    expectedRemainingBytes,
+    actualBytes,
+    deltaBytes,
+    nativeStatus: finding?.status || "missing",
+    nativePath: finding?.path || "",
+    latestExecutionAt,
+    scanGeneratedAt,
+    evidence
+  };
+}
+
+function findNativeFindingForCheckpoint(checkpoint, nativeScan) {
+  const findings = nativeScan?.findings || [];
+  if (!findings.length) return null;
+  const byRecipe = findings.filter((finding) => finding.recipeId === checkpoint.id);
+  if (byRecipe.length) return sumNativeFindings(byRecipe);
+  const checkpointPath = normalizeComparablePath(checkpoint.path);
+  if (!checkpointPath) return null;
+  const byPath = findings.filter((finding) => {
+    const findingPath = normalizeComparablePath(finding.path);
+    return findingPath && (checkpointPath.includes(findingPath) || findingPath.includes(checkpointPath));
+  });
+  return byPath.length ? sumNativeFindings(byPath) : null;
+}
+
+function sumNativeFindings(findings) {
+  const measured = findings.filter((finding) => finding.status === "measured" || finding.status === "limited");
+  const rows = measured.length ? measured : findings;
+  const first = rows[0] || {};
+  return {
+    recipeId: first.recipeId || "",
+    title: first.title || "",
+    path: rows.map((finding) => finding.path).filter(Boolean).join(", "),
+    status: measured.some((finding) => finding.status === "limited")
+      ? "limited"
+      : measured.length
+        ? "measured"
+        : first.status || "missing",
+    bytes: rows.reduce((sum, finding) => sum + Number(finding.bytes || 0), 0)
+  };
+}
+
+function normalizeComparablePath(path) {
+  return String(path || "")
+    .toLowerCase()
+    .replace(/%userprofile%/g, "c:\\users\\demo")
+    .replace(/%localappdata%/g, "c:\\users\\demo\\appdata\\local")
+    .replace(/%temp%/g, "temp")
+    .replace(/\s+\+\d+\s+more/g, "")
+    .split(",")[0]
+    .trim();
+}
+
+function latestIsoTimestamp(values = []) {
+  const timestamps = values
+    .map((value) => ({ value, time: Date.parse(value) }))
+    .filter((entry) => entry.value && Number.isFinite(entry.time))
+    .sort((a, b) => b.time - a.time);
+  return timestamps[0]?.value || "";
+}
+
+function isIsoAtOrAfter(value, baseline) {
+  const valueTime = Date.parse(value || "");
+  const baselineTime = Date.parse(baseline || "");
+  return Number.isFinite(valueTime) && Number.isFinite(baselineTime) && valueTime >= baselineTime;
+}
+
+function getRescanComparisonStatus({ rows, nativeEvidence, postRunScanEvidence }) {
+  if (!nativeEvidence) return "needs-native-rescan";
+  if (!postRunScanEvidence) return "needs-post-run-native-rescan";
+  if (rows.some((row) => row.state === "mismatch" || row.state === "no-finding")) return "mismatch";
+  if (rows.some((row) => row.state === "matched")) return "matched";
+  if (rows.every((row) => row.state === "skipped")) return "skipped";
+  return "needs-post-run-native-rescan";
+}
+
+function getRescanComparisonTone(status) {
+  if (status === "matched" || status === "skipped") return "safe";
+  if (status === "mismatch") return "restricted";
+  if (status === "stale-ledger") return "advanced";
+  return "review";
+}
+
+function getRescanRowTone(state) {
+  if (state === "matched" || state === "skipped") return "safe";
+  if (state === "mismatch" || state === "no-finding") return "restricted";
+  return "review";
+}
+
+function getRescanComparisonDetail(status, counts) {
+  if (status === "matched") return `${counts.matched} affected route(s) match the post-run native rescan within tolerance.`;
+  if (status === "mismatch") return `${counts.mismatch + counts.noFinding} affected route(s) still need investigation before parity can count.`;
+  if (status === "skipped") return "All checkpoints were skipped; keep the skipped ledger visible and do not claim reclaimed space.";
+  if (status === "needs-native-rescan") return "Native read-only scan evidence is required before affected-root comparison can start.";
+  return "Run a native read-only scan after the current ledger timestamp before comparing affected roots.";
+}
+
+function getRescanComparisonSteps(status) {
+  if (status === "matched") {
+    return ["Export the dry-run report.", "Attach the rescan comparison to Windows validation evidence.", "Keep real cleanup disabled until release gates pass."];
+  }
+  if (status === "mismatch") {
+    return ["Inspect mismatched affected roots.", "Check skipped files, locks, and scanner limits.", "Do not use this run as ledger/rescan parity evidence."];
+  }
+  if (status === "skipped") {
+    return ["Keep skipped entries in the ledger.", "Explain why no bytes were reclaimed.", "Rescan again only after a plan that can actually run."];
+  }
+  return ["Run dry-run simulation for the current plan.", "Run native read-only scan after the ledger timestamp.", "Compare every affected route before real-executor validation."];
 }
 
 function getReleaseBlockedReason({ realFlagEnabled, nativeReady, missingRows, candidateRoutes }) {

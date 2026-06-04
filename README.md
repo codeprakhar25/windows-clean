@@ -224,6 +224,8 @@ Final consent is also plan-specific. A user can arm only the current plan after 
 
 The post-run verification panel converts the current ledger into route-level checkpoints. Each checkpoint includes the affected root, expected bytes, route, and evidence required for a read-only rescan comparison. Stale ledgers cannot produce valid checkpoints for the current plan.
 
+The rescan comparison panel is stricter than the checklist. It requires an absolute ledger timestamp and a native scan timestamp newer than that ledger before any affected-root row can be marked as matched. Demo scans, stale ledgers, and scans taken before the dry-run ledger stay in a waiting state. If native bytes remain where the plan expected removal, the row is marked as a mismatch and cannot count as ledger/rescan parity evidence.
+
 The rollback plan is evaluated before dry-run consent. Disposable and rebuildable routes require rescan proof. Reviewed user items require a visible Recycle Bin, quarantine, or archive restore location. Recycle Bin emptying is marked as permanent-removal. Admin and advanced routes require backup or recovery-state evidence. None of these checks unlock real cleanup in the current build.
 
 Dry-run records are also saved to local browser storage as an append-only run history. A saved record can block a duplicate simulation for the same plan after reload, but it cannot unlock real execution. The history export is audit evidence only; real cleanup still requires native Windows validation and a post-run rescan.

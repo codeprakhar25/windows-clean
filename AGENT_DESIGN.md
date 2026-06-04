@@ -192,6 +192,14 @@ Post-run verification invariant:
 - Demo-mode checkpoints are instructions only; Windows validation requires native read-only rescan evidence.
 - Stale ledgers remain exportable audit history but cannot prove ledger/rescan parity for the current plan.
 
+Rescan comparison invariant:
+
+- Each simulated ledger entry carries an absolute `executedAt` timestamp.
+- A native scan can count as post-run evidence only when its `generatedAt` timestamp is newer than the current ledger timestamp.
+- Affected-root rows compare expected remaining bytes against measured native remaining bytes with a fixed tolerance.
+- Missing findings, unsupported findings, stale ledgers, demo mode, and pre-ledger native scans cannot prove parity.
+- Skipped ledger rows stay visible as skipped evidence and never become reclaimed-space proof.
+
 Rollback invariant:
 
 - Every selected executor route must have a rollback posture before real implementation work starts.

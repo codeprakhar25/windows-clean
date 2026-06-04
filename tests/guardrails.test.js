@@ -629,12 +629,15 @@ const assert = require("assert");
     goalBytes: 10 * guard.GB
   });
   assert.notStrictEqual(itemPlanSnapshot.id, changedItemPlanSnapshot.id, "item decision changes should change the plan id");
+  const itemExecutedAt = "2026-06-04T10:00:00.000Z";
   const taggedItemLedger = guard.makeExecutionLedgerForActions(new Set(["downloads-installers"]), developerActions, [], {
     approvals: itemExecutorApprovals,
     itemReviewsByAction: itemExecutorReviews,
-    planSnapshot: itemPlanSnapshot
+    planSnapshot: itemPlanSnapshot,
+    executedAt: itemExecutedAt
   });
   assert.strictEqual(taggedItemLedger[0].planId, itemPlanSnapshot.id, "ledger entries should carry the plan id");
+  assert.strictEqual(taggedItemLedger[0].executedAt, itemExecutedAt, "ledger entries should carry an absolute execution timestamp");
   const currentVerification = guard.buildVerificationSummary({
     planSnapshot: itemPlanSnapshot,
     ledger: taggedItemLedger,
@@ -656,6 +659,115 @@ const assert = require("assert");
   const postRunMarkdown = guard.buildPostRunVerificationMarkdown(postRunVerification);
   assert(postRunMarkdown.includes("SpaceGuard Post-Run Verification Checklist"), "post-run verification markdown should have a title");
   assert(postRunMarkdown.includes("needs-native-rescan"), "post-run verification markdown should include status");
+  const demoRescanComparison = guard.buildRescanComparison({
+    postRunVerification,
+    ledger: taggedItemLedger,
+    scanMode: "demo"
+  });
+  assert.strictEqual(demoRescanComparison.schemaVersion, "spaceguard-rescan-comparison/v1", "rescan comparison should have a schema version");
+  assert.strictEqual(demoRescanComparison.status, "needs-native-rescan", "demo comparison should require native scan evidence");
+  assert.strictEqual(demoRescanComparison.rows[0].state, "needs-native-rescan", "demo row should wait for native rescan evidence");
+
+  const tempPlanSnapshot = guard.buildPlanSnapshot({
+    selectedIds: new Set(["windows-temp"]),
+    actionList: developerActions,
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    protectedPaths: [],
+    scanMode: "native-readonly",
+    goalBytes: 10 * guard.GB
+  });
+  const tempExecutorPlan = guard.buildExecutorPlan({
+    selectedIds: new Set(["windows-temp"]),
+    actionList: developerActions,
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    protectedPaths: [],
+    scanMode: "native-readonly"
+  });
+  const tempLedger = guard.makeExecutionLedgerForActions(new Set(["windows-temp"]), developerActions, [], {
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    planSnapshot: tempPlanSnapshot,
+    executedAt: "2026-06-04T10:00:00.000Z"
+  });
+  const tempPostRunVerification = guard.buildPostRunVerificationPlan({
+    planSnapshot: tempPlanSnapshot,
+    ledger: tempLedger,
+    executorPlan: tempExecutorPlan,
+    scanMode: "native-readonly",
+    nativeScan: { available: true, generatedAt: "2026-06-04T09:59:00.000Z", findings: [] }
+  });
+  const earlyNativeComparison = guard.buildRescanComparison({
+    postRunVerification: tempPostRunVerification,
+    ledger: tempLedger,
+    scanMode: "native-readonly",
+    nativeScan: {
+      available: true,
+      generatedAt: "2026-06-04T09:59:00.000Z",
+      findings: [{ recipeId: "windows-temp", title: "Windows temp", path: "%TEMP%", bytes: tempLedger[0].bytes, status: "measured" }]
+    }
+  });
+  assert.strictEqual(earlyNativeComparison.status, "needs-post-run-native-rescan", "native scan older than the ledger should not count as post-run proof");
+  assert.strictEqual(earlyNativeComparison.rows[0].state, "needs-post-run-native-rescan", "row should wait for a later native scan");
+  const mismatchComparison = guard.buildRescanComparison({
+    postRunVerification: tempPostRunVerification,
+    ledger: tempLedger,
+    scanMode: "native-readonly",
+    nativeScan: {
+      available: true,
+      generatedAt: "2026-06-04T10:05:00.000Z",
+      findings: [{ recipeId: "windows-temp", title: "Windows temp", path: "%TEMP%", bytes: tempLedger[0].bytes, status: "measured" }]
+    }
+  });
+  assert.strictEqual(mismatchComparison.status, "mismatch", "native bytes still present after the ledger should be a mismatch");
+  assert.strictEqual(mismatchComparison.rows[0].state, "mismatch", "comparison row should flag affected-root mismatch");
+  const matchedComparison = guard.buildRescanComparison({
+    postRunVerification: tempPostRunVerification,
+    ledger: tempLedger,
+    scanMode: "native-readonly",
+    nativeScan: {
+      available: true,
+      generatedAt: "2026-06-04T10:05:00.000Z",
+      findings: [{ recipeId: "windows-temp", title: "Windows temp", path: "%TEMP%", bytes: 0, status: "measured" }]
+    }
+  });
+  assert.strictEqual(matchedComparison.status, "matched", "zero remaining bytes after a full temp cleanup should match within tolerance");
+  const skippedPlanSnapshot = guard.buildPlanSnapshot({
+    selectedIds: new Set(["browser-identity"]),
+    actionList: developerActions,
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    protectedPaths: [],
+    scanMode: "native-readonly",
+    goalBytes: 10 * guard.GB
+  });
+  const skippedExecutorPlan = guard.buildExecutorPlan({
+    selectedIds: new Set(["browser-identity"]),
+    actionList: developerActions,
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    protectedPaths: [],
+    scanMode: "native-readonly"
+  });
+  const skippedLedger = guard.makeExecutionLedgerForActions(new Set(["browser-identity"]), developerActions, [], {
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    planSnapshot: skippedPlanSnapshot,
+    executedAt: "2026-06-04T10:00:00.000Z"
+  });
+  const skippedPostRunVerification = guard.buildPostRunVerificationPlan({
+    planSnapshot: skippedPlanSnapshot,
+    ledger: skippedLedger,
+    executorPlan: skippedExecutorPlan,
+    scanMode: "native-readonly",
+    nativeScan: { available: true, generatedAt: "2026-06-04T10:05:00.000Z", findings: [] }
+  });
+  const skippedComparison = guard.buildRescanComparison({
+    postRunVerification: skippedPostRunVerification,
+    ledger: skippedLedger,
+    scanMode: "native-readonly",
+    nativeScan: { available: true, generatedAt: "2026-06-04T10:05:00.000Z", findings: [] }
+  });
+  assert.strictEqual(skippedComparison.status, "skipped", "all-skipped ledgers should stay skipped in rescan comparison");
+  assert.strictEqual(skippedComparison.rows[0].state, "skipped", "skipped checkpoint should not be treated as mismatch");
+  const rescanMarkdown = guard.buildRescanComparisonMarkdown(mismatchComparison);
+  assert(rescanMarkdown.includes("SpaceGuard Rescan Comparison"), "rescan comparison markdown should have a title");
+  assert(rescanMarkdown.includes("mismatch"), "rescan comparison markdown should include row state");
   const itemRollbackPlan = guard.buildRollbackPlan({
     planSnapshot: itemPlanSnapshot,
     executorPlan: itemExecutorPlan,
@@ -693,10 +805,13 @@ const assert = require("assert");
     protectedPaths: [],
     goalBytes: 10 * guard.GB,
     itemReviewsByAction: itemExecutorReviews,
-    rollbackPlan: itemRollbackPlan
+    rollbackPlan: itemRollbackPlan,
+    rescanComparison: demoRescanComparison
   });
   assert(rollbackReport.includes("## Rollback Plan"), "dry-run report should include rollback plan");
   assert(rollbackReport.includes("Routes needing proof: 1"), "rollback report should include proof count");
+  assert(rollbackReport.includes("## Rescan Comparison"), "dry-run report should include rescan comparison");
+  assert(rollbackReport.includes("Post-run scan evidence: no"), "rescan comparison report should show missing post-run evidence");
   const staleVerification = guard.buildVerificationSummary({
     planSnapshot: changedItemPlanSnapshot,
     ledger: taggedItemLedger,

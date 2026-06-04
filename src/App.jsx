@@ -46,6 +46,8 @@ import {
   buildPrivilegeBoundary,
   buildPrivacyBoundary,
   buildPublicBetaReadiness,
+  buildRescanComparison,
+  buildRescanComparisonMarkdown,
   buildManualStrategyChecklist,
   buildReleaseGate,
   buildRecoveryAdvisor,
@@ -373,6 +375,17 @@ export default function App() {
       }),
     [planSnapshot, activeLedger, executorPlan, dataMode, nativeScan.result]
   );
+  const rescanComparison = useMemo(
+    () =>
+      buildRescanComparison({
+        postRunVerification,
+        nativeScan: nativeScan.result,
+        scanMode: dataMode,
+        ledger: activeLedger,
+        planSnapshot
+      }),
+    [postRunVerification, nativeScan.result, dataMode, activeLedger, planSnapshot]
+  );
   const rollbackPlan = useMemo(
     () =>
       buildRollbackPlan({
@@ -619,6 +632,7 @@ export default function App() {
     if (!consentReceipt.ready) return;
     setActiveStage("execute");
     setNativeExecutorDryRun({ status: "running", result: null, error: "" });
+    const executedAt = new Date().toISOString();
     let nextLedger = [];
 
     if (nativeCapability.available) {
@@ -628,6 +642,7 @@ export default function App() {
         nextLedger = result.entries.map((entry, index) => ({
           id: entry.id,
           planId: planSnapshot.id,
+          executedAt,
           time: `T+${String(index + 1).padStart(2, "0")}m`,
           title: entry.title,
           result: entry.result,
@@ -636,11 +651,11 @@ export default function App() {
         }));
       } catch (error) {
         setNativeExecutorDryRun({ status: "error", result: null, error: error instanceof Error ? error.message : String(error) });
-        nextLedger = makeExecutionLedgerForActions(selectedIds, actionList, protectedPaths, { approvals, itemReviewsByAction, planSnapshot });
+        nextLedger = makeExecutionLedgerForActions(selectedIds, actionList, protectedPaths, { approvals, itemReviewsByAction, planSnapshot, executedAt });
       }
     } else {
       setNativeExecutorDryRun({ status: "browser-demo", result: null, error: "" });
-      nextLedger = makeExecutionLedgerForActions(selectedIds, actionList, protectedPaths, { approvals, itemReviewsByAction, planSnapshot });
+      nextLedger = makeExecutionLedgerForActions(selectedIds, actionList, protectedPaths, { approvals, itemReviewsByAction, planSnapshot, executedAt });
     }
 
     setLedger(nextLedger);
@@ -795,6 +810,7 @@ export default function App() {
       planSnapshot,
       verificationSummary,
       postRunVerification,
+      rescanComparison,
       runReadiness,
       consentReceipt,
       privilegeBoundary,
@@ -817,6 +833,10 @@ export default function App() {
 
   function exportPostRunVerification() {
     downloadTextFile("spaceguard-post-run-verification.md", buildPostRunVerificationMarkdown(postRunVerification), "text/markdown;charset=utf-8");
+  }
+
+  function exportRescanComparison() {
+    downloadTextFile("spaceguard-rescan-comparison.md", buildRescanComparisonMarkdown(rescanComparison), "text/markdown;charset=utf-8");
   }
 
   function exportValidationPack() {
@@ -1127,6 +1147,7 @@ export default function App() {
             <ToolCommandInventoryPanel inventory={toolCommandInventory} />
             <VerificationPanel planSnapshot={planSnapshot} verificationSummary={verificationSummary} />
             <PostRunVerificationPanel verification={postRunVerification} onExport={exportPostRunVerification} />
+            <RescanComparisonPanel comparison={rescanComparison} onExport={exportRescanComparison} />
             <RollbackPlanPanel plan={rollbackPlan} />
             <PrivilegeBoundaryPanel boundary={privilegeBoundary} />
             <PrivacyBoundaryPanel boundary={privacyBoundary} />
@@ -2511,6 +2532,71 @@ function PostRunVerificationPanel({ verification, onExport }) {
         <Button variant="outline" className="w-full" onClick={onExport} disabled={!verification.checkpoints.length}>
           <Download className="h-4 w-4" />
           Export verification checklist
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RescanComparisonPanel({ comparison, onExport }) {
+  const preview = comparison.rows.slice(0, 4);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Rescan comparison
+          <Badge variant={comparison.tone}>{comparison.status}</Badge>
+        </CardTitle>
+        <CardDescription>{comparison.detail}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-3 gap-2">
+          <QueueStat label="Matched" value={comparison.counts.matched} tone={comparison.counts.matched ? "safe" : "review"} />
+          <QueueStat label="Mismatch" value={comparison.counts.mismatch + comparison.counts.noFinding} tone={comparison.counts.mismatch + comparison.counts.noFinding ? "restricted" : "safe"} />
+          <QueueStat label="Waiting" value={comparison.counts.waiting} tone={comparison.counts.waiting ? "review" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">Post-run scan timing</span>
+            <Badge variant={comparison.postRunScanEvidence ? "safe" : "review"}>
+              {comparison.postRunScanEvidence ? "scan after ledger" : "needs later scan"}
+            </Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span className="truncate">Ledger: {comparison.latestExecutionAt || "missing timestamp"}</span>
+            <span className="truncate">Scan: {comparison.scanGeneratedAt || "missing timestamp"}</span>
+            <span>Tolerance: {formatBytes(comparison.toleranceBytes)}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {preview.length ? (
+            preview.map((row) => (
+              <div key={row.id} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="mr-auto min-w-0 text-sm font-medium">{row.title}</div>
+                  <Badge variant={row.tone}>{row.state}</Badge>
+                  <Badge variant="outline">{row.nativeStatus}</Badge>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  <QueueStat label="Expected left" value={formatBytes(row.expectedRemainingBytes)} tone="review" />
+                  <QueueStat label="Native left" value={formatBytes(row.actualBytes)} tone={row.state === "matched" ? "safe" : "review"} />
+                  <QueueStat label="Delta" value={formatBytes(row.deltaBytes)} tone={row.state === "mismatch" ? "restricted" : "safe"} />
+                </div>
+                <p className="mt-2 truncate font-mono text-xs text-muted-foreground">{row.nativePath || row.path}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{row.evidence}</p>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">Run simulation and then a native read-only scan to compare affected roots.</div>
+          )}
+        </div>
+
+        <Button variant="outline" className="w-full" onClick={onExport} disabled={!comparison.rows.length}>
+          <Download className="h-4 w-4" />
+          Export rescan comparison
         </Button>
       </CardContent>
     </Card>

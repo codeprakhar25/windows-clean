@@ -78,6 +78,10 @@ const requiredAppMarkers = [
   "Post-run verification",
   "Rescan proof",
   "Export verification checklist",
+  "Rescan comparison",
+  "Post-run scan timing",
+  "Export rescan comparison",
+  "needs later scan",
   "Rollback plan",
   "Restore posture",
   "real run locked",
@@ -138,6 +142,8 @@ assert(app.includes("buildPlanSnapshot"), "plan snapshot should be wired");
 assert(app.includes("buildVerificationSummary"), "verification summary should be wired");
 assert(app.includes("buildPostRunVerificationPlan"), "post-run verification plan should be wired");
 assert(app.includes("buildPostRunVerificationMarkdown"), "post-run verification export should be wired");
+assert(app.includes("buildRescanComparison"), "rescan comparison should be wired");
+assert(app.includes("buildRescanComparisonMarkdown"), "rescan comparison export should be wired");
 assert(app.includes("buildRollbackPlan"), "rollback plan should be wired");
 assert(app.includes("buildSupportBundle"), "support bundle should be wired");
 assert(app.includes("buildSupportBundleMarkdown"), "support bundle markdown export should be wired");
@@ -159,6 +165,8 @@ assert(model.includes("isItemReviewDecision"), "model should validate expanded i
 assert(model.includes("spaceguard-scan-coverage/v1"), "model should expose scan coverage schema");
 assert(model.includes("spaceguard-privacy-boundary/v1"), "model should expose privacy boundary schema");
 assert(model.includes("spaceguard-rollback-plan/v1"), "model should expose rollback plan schema");
+assert(model.includes("spaceguard-rescan-comparison/v1"), "model should expose rescan comparison schema");
+assert(model.includes("executedAt"), "ledger entries should carry absolute execution timestamps");
 assert(model.includes("spaceguard-public-beta-readiness/v1"), "model should expose public beta readiness schema");
 assert(model.includes("spaceguard-support-bundle/v1"), "model should expose support bundle schema");
 assert(model.includes("spaceguard-tool-command-inventory/v1"), "model should expose tool command inventory schema");

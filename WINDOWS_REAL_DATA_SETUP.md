@@ -102,7 +102,10 @@ For each Windows validation run, capture:
 - Local validation evidence ledger state.
 - Dry-run consent receipt and plan id.
 - Post-run verification checklist.
+- Rescan comparison state, including ledger timestamp, native scan timestamp, matched rows, waiting rows, and mismatches.
 - Exported validation pack.
+
+Rescan comparison only counts when the native scan is taken after the current dry-run ledger. The expected operator order is: finish item decisions, arm and run the dry-run simulation, run the native read-only scan again, then inspect the rescan comparison panel. A native scan captured before the ledger remains evidence for sizing, not parity.
 
 ## Release Criteria
 
