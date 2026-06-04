@@ -3735,8 +3735,8 @@ export function buildDemoRehearsalRunbook({
     realCleanupEnabled,
     destructiveCommands: unsafeRuntime,
     noLocalFileAccess: isDemoMode,
-    activeQuestionId: agentQuestionQueue?.active?.id || "",
-    activeQuestion: agentQuestionQueue?.active?.prompt || "",
+    activeQuestionId: agentQuestionQueue?.activeQuestion?.id || "",
+    activeQuestion: agentQuestionQueue?.activeQuestion?.prompt || "",
     rows,
     readyRows,
     waitingRows,
@@ -3756,8 +3756,8 @@ export function buildDemoRehearsalRunbook({
       ledger: ledgerEntries.length,
       realRun: 0
     },
-    primary: getDemoRehearsalPrimary(status, { selected, ledgerEntries, activeQuestion: agentQuestionQueue?.active }),
-    steps: getDemoRehearsalSteps(status, { rows, activeQuestion: agentQuestionQueue?.active })
+    primary: getDemoRehearsalPrimary(status, { selected, ledgerEntries, activeQuestion: agentQuestionQueue?.activeQuestion }),
+    steps: getDemoRehearsalSteps(status, { rows, activeQuestion: agentQuestionQueue?.activeQuestion })
   };
 }
 
@@ -3838,9 +3838,9 @@ export function buildProductCompletionAudit({
       id: "ask-and-follow",
       requirement: "Ask the user the next required question",
       status: agentQuestionQueue?.schemaVersion && taskRunbook?.schemaVersion ? "proven" : "waiting-evidence",
-      detail: agentQuestionQueue?.active?.prompt || "Question queue is ready when workflow state needs user input.",
+      detail: agentQuestionQueue?.activeQuestion?.prompt || "Question queue is ready when workflow state needs user input.",
       evidence: agentQuestionQueue ? `${agentQuestionQueue.counts?.total || 0} question(s), ${agentQuestionQueue.counts?.actionable || 0} actionable` : "question queue missing",
-      nextStep: agentQuestionQueue?.active?.action ? `Use ${agentQuestionQueue.active.action}.` : "Continue through the guarded workflow."
+      nextStep: agentQuestionQueue?.activeQuestion?.action ? `Use ${agentQuestionQueue.activeQuestion.action}.` : "Continue through the guarded workflow."
     }),
     buildProductCompletionAuditRow({
       id: "approval-gates",

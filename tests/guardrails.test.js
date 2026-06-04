@@ -464,6 +464,36 @@ const assert = require("assert");
   });
   assert.strictEqual(simulationReadyRunbook.status, "demo-simulation-ready", "armed demo rehearsal should be ready for simulated ledger");
   assert.strictEqual(simulationReadyRunbook.counts.realRun, 0, "demo rehearsal should never count real-run routes");
+  const demoGateApprovals = { groupConfirm: false, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} };
+  const demoGateReadiness = guard.getExecutionReadinessForActions(demoSelectedIds, demoGateApprovals, guard.actions, [], {}, intakeAllowedPolicy);
+  const demoGateQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    scanning: false,
+    scanMode: "demo",
+    scanSession: demoScanSession,
+    actionList: guard.actions,
+    selectedIds: demoSelectedIds,
+    approvals: demoGateApprovals,
+    readiness: demoGateReadiness,
+    intakePolicy: intakeAllowedPolicy
+  });
+  const gateWaitingRunbook = guard.buildDemoRehearsalRunbook({
+    scanned: true,
+    scanning: false,
+    scanMode: "demo",
+    scanSession: demoScanSession,
+    actionList: guard.actions,
+    selectedIds: demoSelectedIds,
+    readiness: demoGateReadiness,
+    executorPlan: demoExecutorPlan,
+    windowsSetupAssistant: browserSetupAssistant,
+    agentQuestionQueue: demoGateQuestions,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(gateWaitingRunbook.status, "demo-gates-waiting", "demo rehearsal should wait on unresolved gates");
+  assert.strictEqual(gateWaitingRunbook.activeQuestionId, demoGateQuestions.activeQuestion.id, "demo rehearsal should preserve active question id");
+  assert.strictEqual(gateWaitingRunbook.activeQuestion, demoGateQuestions.activeQuestion.prompt, "demo rehearsal should preserve active question prompt");
+  assert.strictEqual(gateWaitingRunbook.primary, demoGateQuestions.activeQuestion.prompt, "demo rehearsal primary should use active question prompt");
   const demoLedger = guard.makeExecutionLedgerForActions(demoSelectedIds, guard.actions, [], {
     approvals: demoApprovals,
     planSnapshot: demoPlanSnapshot,
@@ -555,6 +585,26 @@ const assert = require("assert");
     productCompletionAudit.rows.find((row) => row.id === "real-cleanup").status,
     "future-locked",
     "real cleanup row should remain future locked"
+  );
+  const questionAwareAudit = guard.buildProductCompletionAudit({
+    scanned: true,
+    scanMode: "demo",
+    actionList: guard.actions,
+    selectedIds: demoSelectedIds,
+    readiness: demoGateReadiness,
+    scanSession: demoScanSession,
+    agentQuestionQueue: demoGateQuestions,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(
+    questionAwareAudit.rows.find((row) => row.id === "ask-and-follow").detail,
+    demoGateQuestions.activeQuestion.prompt,
+    "product audit should preserve active question prompt"
+  );
+  assert.strictEqual(
+    questionAwareAudit.rows.find((row) => row.id === "ask-and-follow").nextStep,
+    `Use ${demoGateQuestions.activeQuestion.action}.`,
+    "product audit should preserve active question action"
   );
   const unsafeProductAudit = guard.buildProductCompletionAudit({
     scanned: true,
