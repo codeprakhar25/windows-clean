@@ -63,6 +63,7 @@ import {
   buildRescanComparisonMarkdown,
   buildManualStrategyChecklist,
   buildRestrictionPolicyMatrix,
+  buildPlanLock,
   buildReleaseGate,
   buildReleaseReviewPacket,
   buildReleaseReviewPacketMarkdown,
@@ -448,9 +449,19 @@ export default function App() {
       }),
     [actionList, selectedIds, intakePolicy]
   );
+  const planLock = useMemo(
+    () =>
+      buildPlanLock({
+        planSnapshot,
+        scanSession,
+        riskBudget,
+        consent: executionConsent
+      }),
+    [planSnapshot, scanSession, riskBudget, executionConsent]
+  );
   const preflight = useMemo(
-    () => buildExecutionPreflight({ scanned, scanning, selectedIds, actionList, readiness, protectedPaths, ledger: activeLedger, planSnapshot, scanSession, riskBudget }),
-    [scanned, scanning, selectedIds, actionList, readiness, protectedPaths, activeLedger, planSnapshot, scanSession, riskBudget]
+    () => buildExecutionPreflight({ scanned, scanning, selectedIds, actionList, readiness, protectedPaths, ledger: activeLedger, planSnapshot, scanSession, riskBudget, planLock }),
+    [scanned, scanning, selectedIds, actionList, readiness, protectedPaths, activeLedger, planSnapshot, scanSession, riskBudget, planLock]
   );
   const executorPlan = useMemo(
     () =>
@@ -475,8 +486,8 @@ export default function App() {
     [preflight, executorReadiness]
   );
   const consentReceipt = useMemo(
-    () => buildExecutionConsentReceipt({ planSnapshot, executorPlan, runReadiness, consent: executionConsent }),
-    [planSnapshot, executorPlan, runReadiness, executionConsent]
+    () => buildExecutionConsentReceipt({ planSnapshot, executorPlan, runReadiness, consent: executionConsent, planLock }),
+    [planSnapshot, executorPlan, runReadiness, executionConsent, planLock]
   );
   const verificationSummary = useMemo(
     () =>
@@ -873,6 +884,7 @@ export default function App() {
         scanSession,
         runReadiness,
         consentReceipt,
+        planLock,
         executorPlan,
         taskPowerBroker,
         taskCapabilityGrants,
@@ -887,6 +899,7 @@ export default function App() {
       scanSession,
       runReadiness,
       consentReceipt,
+      planLock,
       executorPlan,
       taskPowerBroker,
       taskCapabilityGrants,
@@ -901,9 +914,10 @@ export default function App() {
       buildDryRunLaunchGuard({
         runReadiness,
         consentReceipt,
-        safetyInterlock
+        safetyInterlock,
+        planLock
       }),
-    [runReadiness, consentReceipt, safetyInterlock]
+    [runReadiness, consentReceipt, safetyInterlock, planLock]
   );
   const agentQuestionQueue = useMemo(
     () =>
@@ -1062,6 +1076,7 @@ export default function App() {
         safetyInterlock,
         writeReadiness,
         realExecutorCapsule,
+        planLock,
         runtimeCapabilities: runtimeCapabilities.result
       }),
     [
@@ -1096,6 +1111,7 @@ export default function App() {
       safetyInterlock,
       writeReadiness,
       realExecutorCapsule,
+      planLock,
       runtimeCapabilities.result
     ]
   );
@@ -1336,7 +1352,7 @@ export default function App() {
   }
 
   async function simulateCleanup() {
-    if (!dryRunLaunchGuard.ready) return;
+    if (!dryRunLaunchGuard.ready || !planLock.readyForLaunch) return;
     setActiveStage("execute");
     setNativeExecutorDryRun({ status: "running", result: null, error: "" });
     const executedAt = new Date().toISOString();
@@ -1388,10 +1404,11 @@ export default function App() {
   }
 
   function armExecutionConsent() {
-    if (!runReadiness.ready || safetyInterlock.status === "unsafe-stop") return;
+    if (!runReadiness.ready || !planLock.readyForPreflight || safetyInterlock.status === "unsafe-stop") return;
     setExecutionConsent({
       accepted: true,
       planId: planSnapshot.id,
+      planLockId: planLock.lockId,
       acceptedAt: new Date().toISOString()
     });
   }
@@ -1712,6 +1729,7 @@ export default function App() {
       scanCoverage,
       intakePolicy,
       riskBudget,
+      planLock,
       userDecisionReceipt,
       taskPowerCatalog,
       taskPowerBroker,
@@ -2024,6 +2042,8 @@ export default function App() {
             <WorkflowHandoffPanel handoff={workflowHandoff} onExport={exportWorkflowHandoff} />
 
             <ScanSessionPanel session={scanSession} />
+
+            <PlanLockPanel planLock={planLock} />
 
             <IntakePolicyPanel
               policy={intakePolicy}
@@ -2962,6 +2982,64 @@ function ScanSessionPanel({ session }) {
 
         <div className="flex flex-col gap-1 text-sm text-muted-foreground">
           {steps.slice(0, 3).map((step) => (
+            <div key={step}>- {step}</div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PlanLockPanel({ planLock }) {
+  return (
+    <Card id="plan-lock-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4" />
+              Plan lock
+            </CardTitle>
+            <CardDescription>{planLock.primary}</CardDescription>
+          </div>
+          <Badge variant={planLock.tone}>{planLock.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid gap-2 md:grid-cols-4">
+          <QueueStat label="Preflight" value={planLock.readyForPreflight ? "ready" : "blocked"} tone={planLock.readyForPreflight ? "safe" : "restricted"} />
+          <QueueStat label="Launch" value={planLock.readyForLaunch ? "ready" : "blocked"} tone={planLock.readyForLaunch ? "safe" : "review"} />
+          <QueueStat label="Consent" value={planLock.consentCurrent ? "current" : "waiting"} tone={planLock.consentCurrent ? "safe" : "review"} />
+          <QueueStat label="Real run" value="locked" tone="safe" />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">Lock id</span>
+            <Badge variant="outline">{planLock.lockId || "missing"}</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+            <span>Plan: {planLock.planId || "missing"}</span>
+            <span>Scan: {planLock.scanFingerprint || "missing"}</span>
+            <span>Risk: {planLock.riskMode || "unknown"} / {planLock.riskStatus}</span>
+            <span>Accepted lock: {planLock.acceptedLockId || "none"}</span>
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {planLock.items.map((item) => (
+            <div key={item.id} className="grid grid-cols-[18px_1fr] gap-2 rounded-md border bg-card p-3 text-sm">
+              {item.passed ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" /> : <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />}
+              <div>
+                <div className={item.passed ? "font-medium" : "font-medium text-muted-foreground"}>{item.label}</div>
+                <div className="text-xs text-muted-foreground">{item.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+          {planLock.steps.slice(0, 3).map((step) => (
             <div key={step}>- {step}</div>
           ))}
         </div>

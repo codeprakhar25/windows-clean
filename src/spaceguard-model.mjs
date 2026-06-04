@@ -1647,6 +1647,148 @@ export function buildRiskBudget({
   };
 }
 
+export function buildPlanLock({
+  planSnapshot = null,
+  scanSession = null,
+  riskBudget = null,
+  consent = {}
+} = {}) {
+  const planId = planSnapshot?.id || "";
+  const planRows = Array.isArray(planSnapshot?.rows) ? planSnapshot.rows : [];
+  const planRowIds = planRows.map((row) => row.id).sort();
+  const riskRows = Array.isArray(riskBudget?.rows) ? riskBudget.rows : [];
+  const riskRowIds = riskRows.map((row) => row.id).sort();
+  const currentScanFingerprint = scanSession?.currentFingerprint || "";
+  const snapshotScan = planSnapshot?.payload?.scanSession || null;
+  const snapshotScanFingerprint = snapshotScan?.currentFingerprint || "";
+  const scanCurrent = Boolean(scanSession?.readyForPlanning);
+  const scanMatchesPlan = Boolean(
+    planId
+      && scanCurrent
+      && currentScanFingerprint
+      && snapshotScanFingerprint
+      && snapshotScanFingerprint === currentScanFingerprint
+      && snapshotScan?.readyForPlanning
+  );
+  const planMode = planSnapshot?.payload?.intake?.mode || "";
+  const riskReady = riskBudget
+    ? riskBudget.status === "within-risk-budget" || riskBudget.status === "no-selection"
+    : false;
+  const riskRowsMatchPlan = planRowIds.length === riskRowIds.length && planRowIds.every((id, index) => id === riskRowIds[index]);
+  const riskMatchesPlan = Boolean(riskReady && riskRowsMatchPlan && (!planMode || planMode === riskBudget?.mode));
+  const realRunVisible = Boolean(riskBudget?.realRunAllowed || riskRows.some((row) => row.canRealRun));
+  const lockPayload = {
+    planId,
+    scanFingerprint: currentScanFingerprint,
+    riskMode: riskBudget?.mode || "",
+    riskStatus: riskBudget?.status || "missing",
+    riskCeiling: riskBudget?.ceiling?.maxRisk || "",
+    rows: planRows.map((row) => ({
+      id: row.id,
+      risk: row.risk,
+      gate: row.gate,
+      bytes: Number(row.bytes || 0)
+    }))
+  };
+  const lockId = planId ? `lock-${hashText(stableStringify(lockPayload))}` : "";
+  const accepted = Boolean(consent?.accepted);
+  const acceptedPlanId = consent?.planId || "";
+  const acceptedLockId = consent?.planLockId || "";
+  const consentCurrent = Boolean(accepted && acceptedPlanId === planId && acceptedLockId === lockId);
+  const consentStale = Boolean(accepted && !consentCurrent);
+  const preflightItems = [
+    {
+      id: "plan-snapshot",
+      label: "Plan snapshot exists",
+      detail: planId ? `${planRows.length} selected row(s) are bound to ${planId}.` : "Create a plan snapshot before approval or simulation.",
+      passed: Boolean(planId)
+    },
+    {
+      id: "scan-fingerprint",
+      label: "Plan matches current scan",
+      detail: scanMatchesPlan
+        ? `Plan and UI both reference ${currentScanFingerprint}.`
+        : snapshotScanFingerprint && currentScanFingerprint
+          ? `Plan scan ${snapshotScanFingerprint} does not match current scan ${currentScanFingerprint}.`
+          : "A current scan fingerprint is required before locking the plan.",
+      passed: scanMatchesPlan
+    },
+    {
+      id: "risk-budget",
+      label: "Risk budget matches plan",
+      detail: riskMatchesPlan
+        ? `${riskBudget.mode} risk budget covers every selected plan row.`
+        : riskBudget
+          ? `${riskBudget.status} does not match the current selected plan rows.`
+          : "Attach risk budget evidence before locking the plan.",
+      passed: riskMatchesPlan
+    },
+    {
+      id: "real-run-lock",
+      label: "Real execution absent",
+      detail: realRunVisible ? "Plan lock sees a real-run signal; stop before consent." : "Plan lock is dry-run only.",
+      passed: !realRunVisible
+    }
+  ];
+  const consentItem = {
+    id: "consent-lock",
+    label: "Consent matches plan lock",
+    detail: consentCurrent
+      ? `Consent is bound to ${lockId}.`
+      : accepted
+        ? `Consent references ${acceptedLockId || "no lock"} for ${acceptedPlanId || "unknown plan"}; current lock is ${lockId || "missing"}.`
+        : "Dry-run consent has not been armed for this plan lock.",
+    passed: consentCurrent
+  };
+  const readyForPreflight = preflightItems.every((item) => item.passed);
+  const readyForLaunch = Boolean(readyForPreflight && consentCurrent);
+  const status = realRunVisible
+    ? "plan-lock-unsafe"
+    : !planId
+      ? "plan-lock-missing"
+      : !readyForPreflight
+        ? "plan-lock-drift"
+        : consentCurrent
+          ? "plan-lock-consented"
+          : consentStale
+            ? "plan-lock-stale-consent"
+            : "plan-lock-ready";
+  const items = [...preflightItems, consentItem];
+
+  return {
+    schemaVersion: "spaceguard-plan-lock/v1",
+    status,
+    tone: status === "plan-lock-consented" || status === "plan-lock-ready" ? "safe" : status === "plan-lock-unsafe" || status === "plan-lock-drift" ? "restricted" : "review",
+    planId,
+    lockId,
+    scanFingerprint: currentScanFingerprint,
+    snapshotScanFingerprint,
+    riskStatus: riskBudget?.status || "missing",
+    riskMode: riskBudget?.mode || "",
+    accepted,
+    acceptedPlanId,
+    acceptedLockId,
+    consentCurrent,
+    readyForPreflight,
+    readyForLaunch,
+    realRunAllowed: false,
+    preflightItems,
+    consentItem,
+    items,
+    blockedPreflightItems: preflightItems.filter((item) => !item.passed),
+    blockedLaunchItems: items.filter((item) => !item.passed),
+    counts: {
+      rows: planRows.length,
+      passed: items.filter((item) => item.passed).length,
+      blockedPreflight: preflightItems.filter((item) => !item.passed).length,
+      blockedLaunch: items.filter((item) => !item.passed).length,
+      realRun: 0
+    },
+    primary: getPlanLockPrimary(status, { lockId, blockedItems: items.filter((item) => !item.passed) }),
+    steps: getPlanLockSteps(status, { items })
+  };
+}
+
 export function selectableAction(action, protectedPaths = [], intakePolicy = null) {
   protectedPaths = Array.isArray(protectedPaths) ? protectedPaths : [];
   return action.gate !== "blocked" && action.gate !== "advisory" && !isActionProtected(action, protectedPaths) && actionAllowedByIntake(action, intakePolicy);
@@ -3826,6 +3968,7 @@ export function buildSafetyInterlock({
   scanSession = null,
   runReadiness = null,
   consentReceipt = null,
+  planLock = null,
   executorPlan = null,
   taskPowerBroker = null,
   taskCapabilityGrants = null,
@@ -3839,6 +3982,7 @@ export function buildSafetyInterlock({
   const nativeUnsafe = Boolean(nativeScan?.writeCapability || nativeScan?.destructiveCommands);
   const scanCurrent = Boolean(scanSession?.readyForPlanning || scanSession?.status === "demo-current");
   const consentCurrent = Boolean(consentReceipt?.ready);
+  const planLockReady = planLock ? planLock.readyForLaunch : true;
   const leaseStatus = taskPowerLeaseAudit?.status || "no-leases";
   const leasesCurrent = leaseStatus === "leases-current" || (!selectedRows.length && leaseStatus === "no-leases");
   const leaseUnsafe = leaseStatus === "unsafe-runtime" || Boolean(taskPowerLeaseAudit?.standingPermission);
@@ -3886,6 +4030,15 @@ export function buildSafetyInterlock({
       blocksDryRun: true,
       detail: consentCurrent ? `Consent is tied to ${consentReceipt.planId || "the current plan"}.` : "Arm dry-run consent for the current plan.",
       evidence: consentReceipt?.planId || "missing"
+    }),
+    buildSafetyInterlockRow({
+      id: "plan-lock-current",
+      label: "Plan lock current",
+      lane: "consent",
+      status: planLockReady ? "passed" : "waiting",
+      blocksDryRun: true,
+      detail: planLock ? planLock.primary : "No plan lock is attached to the safety interlock.",
+      evidence: planLock?.status || "missing"
     }),
     buildSafetyInterlockRow({
       id: "power-lease-current",
@@ -3984,7 +4137,8 @@ export function buildSafetyInterlock({
 export function buildDryRunLaunchGuard({
   runReadiness = null,
   consentReceipt = null,
-  safetyInterlock = null
+  safetyInterlock = null,
+  planLock = null
 } = {}) {
   const unsafe = safetyInterlock?.status === "unsafe-stop" || Boolean(safetyInterlock?.realRunAllowed || safetyInterlock?.destructiveCommands);
   const items = [
@@ -3999,6 +4153,16 @@ export function buildDryRunLaunchGuard({
       label: "Current dry-run consent",
       passed: Boolean(consentReceipt?.ready),
       detail: consentReceipt?.ready ? `Consent is tied to ${consentReceipt.planId || "the current plan"}.` : "Arm dry-run consent for the current plan."
+    },
+    {
+      id: "plan-lock",
+      label: "Current plan lock",
+      passed: planLock ? Boolean(planLock.readyForLaunch) : true,
+      detail: planLock
+        ? planLock.readyForLaunch
+          ? `Plan lock ${planLock.lockId} matches scan, risk budget, and consent.`
+          : planLock.primary
+        : "No explicit plan lock is attached to this launch guard."
     },
     {
       id: "safety-interlock",
@@ -4645,6 +4809,7 @@ export function buildProductCompletionAudit({
   safetyInterlock = null,
   writeReadiness = null,
   realExecutorCapsule = null,
+  planLock = null,
   runtimeCapabilities = {}
 } = {}) {
   const selectedCount = selectedIds?.size || 0;
@@ -4703,6 +4868,22 @@ export function buildProductCompletionAudit({
       detail: readiness?.ready ? "All current approval and review gates are resolved." : `${readiness?.unresolved?.length || 0} current gate(s) remain.`,
       evidence: readiness ? "execution readiness evaluated" : "execution readiness missing",
       nextStep: readiness?.ready ? "Arm dry-run consent." : "Resolve the next approval or item-review question."
+    }),
+    buildProductCompletionAuditRow({
+      id: "plan-lock",
+      requirement: "Bind scan, plan, risk budget, and consent",
+      status: planLock?.readyForLaunch
+        ? "proven"
+        : planLock?.readyForPreflight
+          ? "waiting-evidence"
+          : planLock?.status === "plan-lock-unsafe"
+            ? "unsafe"
+            : "waiting-evidence",
+      detail: planLock
+        ? `${planLock.status}; preflight blockers=${planLock.counts.blockedPreflight}, launch blockers=${planLock.counts.blockedLaunch}.`
+        : "Plan lock has not been evaluated.",
+      evidence: planLock?.lockId || planLock?.status || "plan lock missing",
+      nextStep: planLock?.readyForLaunch ? "Use dry-run only." : "Refresh scan, rebuild plan, resolve risk budget, then arm consent."
     }),
     buildProductCompletionAuditRow({
       id: "task-scoped-powers",
@@ -5220,12 +5401,15 @@ export function buildExecutionConsentReceipt({
   planSnapshot = null,
   executorPlan = null,
   runReadiness = null,
-  consent = {}
+  consent = {},
+  planLock = null
 } = {}) {
   const planId = planSnapshot?.id || "";
   const accepted = Boolean(consent.accepted);
   const acceptedPlanId = consent.planId || "";
   const planMatches = accepted && acceptedPlanId === planId;
+  const lockReady = planLock ? planLock.readyForPreflight : true;
+  const lockMatches = planLock ? planLock.consentCurrent : true;
   const rows = executorPlan?.rows || [];
   const executableRows = rows.filter((row) => row.canSimulate);
   const consequenceRows = executableRows.filter((row) => row.consequence);
@@ -5249,6 +5433,26 @@ export function buildExecutionConsentReceipt({
       passed: planMatches
     },
     {
+      id: "plan-lock-ready",
+      label: "Plan lock ready",
+      detail: planLock
+        ? lockReady
+          ? `Plan lock ${planLock.lockId} is current before consent.`
+          : planLock.primary
+        : "Legacy consent path has no explicit plan-lock evidence.",
+      passed: lockReady
+    },
+    {
+      id: "plan-lock-match",
+      label: "Consent matches plan lock",
+      detail: planLock
+        ? lockMatches
+          ? `Consent is bound to ${planLock.lockId}.`
+          : planLock.consentItem.detail
+        : "Legacy consent path checks plan id only.",
+      passed: lockMatches
+    },
+    {
       id: "real-locked",
       label: "Real deletion locked",
       detail: executorPlan?.realRunEnabled ? "Real execution is enabled; dry-run consent is not sufficient." : "This receipt can only start dry-run simulation.",
@@ -5263,6 +5467,16 @@ export function buildExecutionConsentReceipt({
     accepted,
     acceptedPlanId,
     acceptedAt: consent.acceptedAt || "",
+    planLockId: planLock?.lockId || "",
+    acceptedLockId: consent.planLockId || "",
+    planLockCurrent: Boolean(planLock ? planLock.consentCurrent : planMatches),
+    status: items.every((item) => item.passed)
+      ? "consent-current"
+      : accepted && !planMatches
+        ? "consent-stale-plan"
+        : accepted && planLock && !planLock.consentCurrent
+          ? "consent-stale-lock"
+          : "consent-waiting",
     selectedCount: planSnapshot?.selectedCount || 0,
     expectedBytes: executorPlan?.dryRunBytes || planSnapshot?.selectedBytes || 0,
     executableCount: executableRows.length,
@@ -7544,7 +7758,8 @@ export function buildExecutionPreflight({
   ledger = [],
   planSnapshot = null,
   scanSession = null,
-  riskBudget = null
+  riskBudget = null,
+  planLock = null
 } = {}) {
   const selected = actionList.filter((action) => selectedIds.has(action.id));
   const selectedProtected = selected.filter((action) => isActionProtected(action, protectedPaths));
@@ -7606,6 +7821,16 @@ export function buildExecutionPreflight({
       passed: riskBudget ? riskBudget.status === "within-risk-budget" || riskBudget.status === "no-selection" : true
     },
     {
+      id: "plan-lock",
+      label: "Plan lock current",
+      detail: planLock
+        ? planLock.readyForPreflight
+          ? planLock.primary
+          : planLock.primary
+        : "No plan lock evidence is attached; using legacy plan snapshot checks only.",
+      passed: planLock ? planLock.readyForPreflight : true
+    },
+    {
       id: "ledger-clear",
       label: "Current ledger clear",
       detail: currentLedgerCount === 0
@@ -7622,7 +7847,8 @@ export function buildExecutionPreflight({
     items,
     selectedCount: selected.length,
     selectedProtectedCount: selectedProtected.length,
-    riskBudgetStatus: riskBudget?.status || "not-evaluated"
+    riskBudgetStatus: riskBudget?.status || "not-evaluated",
+    planLockStatus: planLock?.status || "not-evaluated"
   };
 }
 
@@ -7688,6 +7914,7 @@ export function buildReport({
   scanCoverage = null,
   intakePolicy = null,
   riskBudget = null,
+  planLock = null,
   userDecisionReceipt = null,
   safetyInterlock = null,
   dryRunLaunchGuard = null,
@@ -7827,6 +8054,24 @@ export function buildReport({
           riskBudget.rows.length
             ? riskBudget.rows.map((row) => `- ${row.title}: ${row.status} | risk=${row.risk} | dry-run=${row.canDryRun ? "yes" : "no"} | real=${row.canRealRun ? "yes" : "no"} | ${row.detail}`).join("\n")
             : "- No selected risk rows."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Plan Lock",
+    planLock
+      ? [
+          `- Status: ${planLock.status}`,
+          `- Lock id: ${planLock.lockId || "missing"}`,
+          `- Plan id: ${planLock.planId || "missing"}`,
+          `- Scan fingerprint: ${planLock.scanFingerprint || "missing"}`,
+          `- Risk status: ${planLock.riskStatus}`,
+          `- Ready for preflight: ${planLock.readyForPreflight ? "yes" : "no"}`,
+          `- Ready for launch: ${planLock.readyForLaunch ? "yes" : "no"}`,
+          `- Consent current: ${planLock.consentCurrent ? "yes" : "no"}`,
+          `- Real-run rows: ${planLock.counts.realRun}`,
+          planLock.items.length
+            ? planLock.items.map((item) => `- ${item.label}: ${item.passed ? "passed" : "blocked"} | ${item.detail}`).join("\n")
+            : "- No plan lock rows."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -9638,6 +9883,26 @@ function getRiskBudgetSteps(status, { mode = "safe", overrunRows = [], blockedRo
   if (blocked.length) return blocked.map((row) => `${row.title}: ${row.detail}`);
   if (status === "invalid-risk-mode") return ["Choose Safe, Balanced, or Emergency mode.", "Rebuild the selected plan.", "Keep simulation blocked until risk budget is valid."];
   return [`Select cleanup actions for ${mode} mode.`, "Resolve risk budget before dry-run consent.", "Keep real cleanup locked."];
+}
+
+function getPlanLockPrimary(status, { lockId = "", blockedItems = [] } = {}) {
+  if (status === "plan-lock-consented") return `Plan lock ${lockId} is current and consented for dry-run.`;
+  if (status === "plan-lock-ready") return `Plan lock ${lockId} is current; dry-run consent is still required.`;
+  if (status === "plan-lock-stale-consent") return "Plan changed after consent; re-arm dry-run consent.";
+  if (status === "plan-lock-unsafe") return "A real-run signal is visible inside the plan lock.";
+  if (status === "plan-lock-drift") {
+    const first = blockedItems[0];
+    return first ? `${first.label} is blocking the plan lock.` : "Plan lock drift blocks dry-run.";
+  }
+  return "No current plan lock exists.";
+}
+
+function getPlanLockSteps(status, { items = [] } = {}) {
+  if (status === "plan-lock-consented") return ["Launch dry-run only.", "Keep the lock tied to the current scan fingerprint.", "Rebuild consent after any scan, selection, approval, or risk change."];
+  if (status === "plan-lock-ready") return ["Review the locked plan.", "Arm dry-run consent for the current lock.", "Do not reuse consent after any plan change."];
+  const blockers = items.filter((item) => !item.passed).slice(0, 3);
+  if (blockers.length) return blockers.map((item) => `${item.label}: ${item.detail}`);
+  return ["Run a scan.", "Create a selected plan.", "Resolve risk budget before consent."];
 }
 
 function buildDemoRehearsalRow({

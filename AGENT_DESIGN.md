@@ -105,6 +105,7 @@ The UI must also expose a recovery advisor and decision log:
 - `recovery advisor`: the current gap, the reason the goal is or is not reachable, and the next decision branch.
 - `intake constraints`: the target drive, free-space goal, risk tolerance, protected-path count, and whether admin/system routes may enter dry-run planning.
 - `risk budget`: hard ceiling that maps Safe to safe/rebuildable routes, Balanced to review-gated routes, and Emergency to advanced dry-run routes while still blocking restricted/advisory rows.
+- `plan lock`: current-plan binding across plan snapshot, scan fingerprint, selected rows, risk budget, and dry-run consent; stale locks block preflight or launch.
 - `agent questions`: a prioritized queue of the next user-facing questions derived from scan, plan, intake, approval, review, consent, rollback, validation, fixture import, and verification state.
 - `windows setup assistant`: first-run setup state for browser demo, desktop shell, read-only scan evidence, privacy/export, native beta evidence, and real-cleanup lock.
 - `real scan settings`: project artifact inclusion, traversal depth, and per-root entry cap for the next native read-only scan.
@@ -131,8 +132,8 @@ The UI must also expose a recovery advisor and decision log:
 - `privacy boundary`: local-only data handling, explicit export, browser storage audit records, blocked collection classes, and disabled telemetry/cloud upload.
 - `public beta readiness`: web-demo versus native read-only beta status, signing/support/uninstall evidence, privacy posture, and public claim boundary.
 - `release review packet`: one exportable review artifact that combines plan, scan session, task grants, contract, write-boundary rejection, validation, rollback, rescan, privilege, privacy, support redaction, public claims, and real-cleanup lock evidence.
-- `safety interlock`: global stop/hold surface derived from runtime write signals, native write signals, scan freshness, dry-run consent, task power leases, broker standing permission, run readiness, write-boundary evidence, release review, and write readiness.
-- `dry-run launch guard`: final execution gate that allows simulation only when run readiness, current consent, and the safety interlock pass while real execution remains locked.
+- `safety interlock`: global stop/hold surface derived from runtime write signals, native write signals, scan freshness, dry-run consent, plan lock, task power leases, broker standing permission, run readiness, write-boundary evidence, release review, and write readiness.
+- `dry-run launch guard`: final execution gate that allows simulation only when run readiness, current consent, current plan lock, and the safety interlock pass while real execution remains locked.
 - `operating checklist`: single operator surface for current scan evidence, active user question, run readiness, consent, launch guard, ledger evidence, and the real-cleanup lock.
 - `support bundle`: redacted diagnostics for support triage that exclude local paths and filenames by default.
 - `workflow handoff`: redacted resume artifact with active question, next actions, audit status, setup/demo/release state, and real-cleanup lock.
@@ -149,6 +150,7 @@ Execution preflight must pass before the agent simulates or performs any action:
 - All selected approval gates are resolved.
 - No selected action matches a protected path.
 - Selected actions are within the current risk budget for the user tolerance mode.
+- The current plan lock matches the active scan fingerprint and risk budget.
 - The current plan snapshot has not already produced a ledger.
 - Executor policy exposes at least one dry-run route.
 - No selected executor route is policy-blocked.
@@ -188,7 +190,7 @@ Task power invariant:
 Safety interlock invariant:
 
 - Unsafe runtime write signals, destructive command visibility, native write capability, standing permission, write-boundary unsafe signals, release-review write signals, or real-execution readiness force a stop state.
-- Stale leases, blocked leases, missing current scan evidence, missing dry-run consent, or failed run readiness hold dry-run simulation.
+- Stale leases, blocked leases, missing current scan evidence, stale plan lock, missing dry-run consent, or failed run readiness hold dry-run simulation.
 - Release evidence that is not needed for current dry-run can remain waiting without creating cleanup authority.
 - The interlock can allow dry-run simulation only; it never grants real execution.
 - The interlock must be rebuilt after any plan, scan, approval, protected-path, scanner-setting, consent, runtime, or write-boundary change.
@@ -324,6 +326,15 @@ User decision receipt invariant:
 - Item-review receipts must distinguish Remove, Keep, Move, Archive, and undecided states; only Remove can contribute to dry-run executor preview.
 - Receipts must include the protected-path count and real-run lock, and must report zero real-run rows in this build.
 - If runtime write or destructive signals are visible, receipts must switch to unsafe-stop instead of honoring the recorded decisions.
+
+Plan lock invariant:
+
+- A plan lock binds plan snapshot id, selected rows, scan fingerprint, risk mode, risk ceiling, and risk status.
+- Preflight requires a current plan lock before dry-run routes are considered ready.
+- Consent must store both the current plan id and current plan-lock id.
+- Changing scan evidence, selection, approvals, protected paths, risk mode, or goal must stale or clear consent before launch.
+- A stale plan lock can never be repaired by task grants, release evidence, validation records, or the safety interlock.
+- Plan locks are dry-run evidence only and always report zero real-run authority.
 
 Risk budget invariant:
 

@@ -210,6 +210,10 @@ assert(app.includes("buildRiskBudget"), "risk budget should be wired");
 assert(app.includes("RiskBudgetPanel"), "risk budget panel should be rendered");
 assert(app.includes("risk-budget-panel"), "risk budget should be focusable");
 assert(app.includes("Mode ceiling"), "risk budget should expose the mode ceiling");
+assert(app.includes("buildPlanLock"), "plan lock should be wired");
+assert(app.includes("PlanLockPanel"), "plan lock panel should be rendered");
+assert(app.includes("plan-lock-panel"), "plan lock should be focusable");
+assert(app.includes("planLockId"), "dry-run consent should bind the plan lock id");
 assert(app.includes("buildItemReview"), "item review should be wired");
 assert(app.includes("buildExecutorPlan"), "executor plan should be wired");
 assert(app.includes("buildExecutorManifest"), "executor manifest should be wired");
@@ -320,6 +324,7 @@ assert(model.includes("realCleanupLocked"), "product audit should expose real cl
 assert(model.includes("future-locked"), "product audit should name future-locked real cleanup");
 assert(model.includes("spaceguard-user-decision-receipt/v1"), "model should expose user decision receipt schema");
 assert(model.includes("spaceguard-risk-budget/v1"), "model should expose risk budget schema");
+assert(model.includes("spaceguard-plan-lock/v1"), "model should expose plan lock schema");
 assert(model.includes("admin-cleanup"), "model should classify admin cleanup as a scoped power");
 assert(model.includes("reviewed-item-cleanup"), "model should classify reviewed item cleanup as a scoped power");
 assert(model.includes("permanentConfirm"), "model should expose permanent-removal confirmation gate");

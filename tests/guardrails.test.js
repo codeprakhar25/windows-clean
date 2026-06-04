@@ -133,6 +133,139 @@ const assert = require("assert");
     selectedIds: new Set(["hibernation"])
   });
   assert.strictEqual(emergencyRiskBudget.status, "within-risk-budget", "emergency mode should allow advanced routes at the risk ceiling");
+  const lockSelection = new Set(["windows-temp"]);
+  const lockApprovals = { groupConfirm: true, permanentConfirm: true, reviewed: {}, reviewItems: {}, typed: {} };
+  const lockScanSession = {
+    status: "native-current",
+    readyForPlanning: true,
+    currentFingerprint: "scan-lock-1",
+    primary: "Native scan evidence is current."
+  };
+  const lockPlanSnapshot = guard.buildPlanSnapshot({
+    selectedIds: lockSelection,
+    actionList: guard.actions,
+    approvals: lockApprovals,
+    intakePolicy: intakeAllowedPolicy,
+    scanSession: lockScanSession
+  });
+  const lockRiskBudget = guard.buildRiskBudget({
+    actionList: guard.actions,
+    selectedIds: lockSelection,
+    intakePolicy: intakeAllowedPolicy
+  });
+  const waitingPlanLock = guard.buildPlanLock({
+    planSnapshot: lockPlanSnapshot,
+    scanSession: lockScanSession,
+    riskBudget: lockRiskBudget
+  });
+  assert.strictEqual(waitingPlanLock.schemaVersion, "spaceguard-plan-lock/v1", "plan locks should expose a schema version");
+  assert.strictEqual(waitingPlanLock.status, "plan-lock-ready", "fresh plan, scan, and risk evidence should create a preflight-ready lock");
+  assert.strictEqual(waitingPlanLock.readyForPreflight, true, "plan lock should allow preflight before consent");
+  assert.strictEqual(waitingPlanLock.readyForLaunch, false, "plan lock should not allow launch before consent");
+  assert.strictEqual(waitingPlanLock.counts.realRun, 0, "plan locks must not grant real execution");
+  const lockReadiness = guard.getExecutionReadinessForActions(lockSelection, lockApprovals, guard.actions, [], null, intakeAllowedPolicy);
+  const lockPreflight = guard.buildExecutionPreflight({
+    scanned: true,
+    scanning: false,
+    selectedIds: lockSelection,
+    actionList: guard.actions,
+    readiness: lockReadiness,
+    protectedPaths: [],
+    ledger: [],
+    planSnapshot: lockPlanSnapshot,
+    scanSession: lockScanSession,
+    riskBudget: lockRiskBudget,
+    planLock: waitingPlanLock
+  });
+  assert.strictEqual(lockPreflight.ready, true, "current plan lock should pass execution preflight");
+  assert(lockPreflight.items.some((item) => item.id === "plan-lock" && item.passed), "preflight should expose passing plan-lock evidence");
+  const lockExecutorPlan = guard.buildExecutorPlan({
+    selectedIds: lockSelection,
+    actionList: guard.actions,
+    approvals: lockApprovals,
+    preflight: lockPreflight,
+    intakePolicy: intakeAllowedPolicy
+  });
+  const lockRunReadiness = guard.buildRunReadiness(lockPreflight, guard.buildExecutorReadiness(lockExecutorPlan, lockPreflight));
+  assert.strictEqual(lockRunReadiness.ready, true, "lock fixture should be run-ready before consent");
+  const stalePlanLockConsent = { accepted: true, planId: lockPlanSnapshot.id, planLockId: "lock-stale", acceptedAt: "2026-06-04T10:00:00.000Z" };
+  const stalePlanLock = guard.buildPlanLock({
+    planSnapshot: lockPlanSnapshot,
+    scanSession: lockScanSession,
+    riskBudget: lockRiskBudget,
+    consent: stalePlanLockConsent
+  });
+  assert.strictEqual(stalePlanLock.status, "plan-lock-stale-consent", "stale lock id should invalidate consent");
+  assert.strictEqual(stalePlanLock.readyForLaunch, false, "stale consent must block launch");
+  const staleConsentReceipt = guard.buildExecutionConsentReceipt({
+    planSnapshot: lockPlanSnapshot,
+    executorPlan: lockExecutorPlan,
+    runReadiness: lockRunReadiness,
+    consent: stalePlanLockConsent,
+    planLock: stalePlanLock
+  });
+  assert.strictEqual(staleConsentReceipt.ready, false, "consent receipt should reject stale plan-lock ids");
+  assert.strictEqual(staleConsentReceipt.planLockCurrent, false, "stale consent should be visible on the receipt");
+  const currentConsent = { accepted: true, planId: lockPlanSnapshot.id, planLockId: waitingPlanLock.lockId, acceptedAt: "2026-06-04T10:01:00.000Z" };
+  const consentedPlanLock = guard.buildPlanLock({
+    planSnapshot: lockPlanSnapshot,
+    scanSession: lockScanSession,
+    riskBudget: lockRiskBudget,
+    consent: currentConsent
+  });
+  assert.strictEqual(consentedPlanLock.status, "plan-lock-consented", "matching lock id should consent the current plan lock");
+  assert.strictEqual(consentedPlanLock.readyForLaunch, true, "matching lock consent should be launch-ready");
+  const consentReceipt = guard.buildExecutionConsentReceipt({
+    planSnapshot: lockPlanSnapshot,
+    executorPlan: lockExecutorPlan,
+    runReadiness: lockRunReadiness,
+    consent: currentConsent,
+    planLock: consentedPlanLock
+  });
+  assert.strictEqual(consentReceipt.ready, true, "current plan-lock consent should produce a ready receipt");
+  assert.strictEqual(consentReceipt.acceptedLockId, waitingPlanLock.lockId, "receipt should carry the accepted lock id");
+  const lockLaunchGuard = guard.buildDryRunLaunchGuard({
+    runReadiness: lockRunReadiness,
+    consentReceipt,
+    safetyInterlock: { dryRunAllowed: true, status: "dry-run-interlocked", realRunAllowed: false, destructiveCommands: false, primary: "safe" },
+    planLock: consentedPlanLock
+  });
+  assert.strictEqual(lockLaunchGuard.ready, true, "dry-run launch should allow a current consented plan lock");
+  const stalePlanLockLaunchGuard = guard.buildDryRunLaunchGuard({
+    runReadiness: lockRunReadiness,
+    consentReceipt: staleConsentReceipt,
+    safetyInterlock: { dryRunAllowed: true, status: "dry-run-interlocked", realRunAllowed: false, destructiveCommands: false, primary: "safe" },
+    planLock: stalePlanLock
+  });
+  assert.strictEqual(stalePlanLockLaunchGuard.ready, false, "dry-run launch should block stale plan locks");
+  assert(stalePlanLockLaunchGuard.items.some((item) => item.id === "plan-lock" && !item.passed), "launch guard should name the plan-lock blocker");
+  const driftScanSession = {
+    ...lockScanSession,
+    currentFingerprint: "scan-lock-2",
+    primary: "Native scan settings changed."
+  };
+  const driftPlanLock = guard.buildPlanLock({
+    planSnapshot: lockPlanSnapshot,
+    scanSession: driftScanSession,
+    riskBudget: lockRiskBudget
+  });
+  assert.strictEqual(driftPlanLock.status, "plan-lock-drift", "scan fingerprint drift should invalidate the plan lock");
+  assert.strictEqual(driftPlanLock.readyForPreflight, false, "scan drift should block preflight");
+  const driftPreflight = guard.buildExecutionPreflight({
+    scanned: true,
+    scanning: false,
+    selectedIds: lockSelection,
+    actionList: guard.actions,
+    readiness: lockReadiness,
+    protectedPaths: [],
+    ledger: [],
+    planSnapshot: lockPlanSnapshot,
+    scanSession: driftScanSession,
+    riskBudget: lockRiskBudget,
+    planLock: driftPlanLock
+  });
+  assert.strictEqual(driftPreflight.ready, false, "preflight should fail when lock fingerprint drifts");
+  assert(driftPreflight.items.some((item) => item.id === "plan-lock" && !item.passed), "drift preflight should expose plan-lock blocker");
   const lockedPowerCatalog = guard.buildTaskPowerCatalog({
     actionList: guard.actions,
     selectedIds: new Set(["windows-old"]),

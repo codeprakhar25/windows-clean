@@ -151,6 +151,7 @@ The demo also includes:
 - Native Windows volume evidence for target-drive total, used, and free bytes when the desktop scanner can read it.
 - Intake constraints for target drive, goal, risk tolerance, protected paths, and whether admin/system routes can enter dry-run planning.
 - Risk budget gate that blocks dry-run simulation when selected actions exceed Safe, Balanced, or Emergency mode limits.
+- Plan lock that binds the current plan snapshot to the scan fingerprint, selected rows, risk budget, and dry-run consent so stale consent cannot launch.
 - Task powers panel that maps selected cleanup actions to scoped capabilities such as safe cleanup, rebuildable cache cleanup, reviewed item cleanup, admin cleanup, advanced system strategy, manual storage strategy, and restricted zones.
 - Task grant receipts that bind each selected action to a dry-run-only authority, route, target, plan id, scan fingerprint, consent receipt, allowed operations, forbidden operations, and blockers.
 - Task runbook panel that turns each selected cleanup target into a task-scoped work order with the next user question, allowed operations, forbidden operations, evidence needs, and no cross-task authority.
@@ -267,6 +268,7 @@ Execution is blocked until the preflight passes:
 - Approval gates resolved.
 - No selected protected paths.
 - Selected actions stay within the current Safe, Balanced, or Emergency risk budget.
+- Plan lock matches the active scan fingerprint and risk budget.
 - Ledger has not already run for the current plan snapshot.
 - Executor policy has at least one simulatable dry-run route.
 - No selected executor route is policy-blocked.
@@ -275,7 +277,7 @@ Execution is blocked until the preflight passes:
 
 Every simulation is tagged with a plan id. If the user changes selected actions, approvals, protected paths, item decisions, scan mode, scan-session fingerprint, goal, or admin/system intake allowance, the old ledger becomes stale and the current plan can be simulated again. The verification panel and exported report show whether the ledger is current, stale, missing, or needs rescan.
 
-Final consent is also plan-specific. A user can arm only the current plan after run readiness passes. Changing selection, approvals, protected paths, review item decisions, scan mode, scan-session fingerprint, or goal clears the receipt and disables simulation again.
+Final consent is also plan-lock-specific. A user can arm only the current plan after run readiness passes. The receipt stores the current plan id and plan-lock id. Changing selection, approvals, protected paths, review item decisions, scan mode, scan-session fingerprint, risk budget, or goal clears or stales the receipt and disables simulation again.
 
 The post-run verification panel converts the current ledger into route-level checkpoints. Each checkpoint includes the affected root, expected bytes, route, and evidence required for a read-only rescan comparison. Stale ledgers cannot produce valid checkpoints for the current plan.
 
