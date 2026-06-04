@@ -276,6 +276,8 @@ Validation evidence invariant:
 - Checkbox-only evidence is a draft marker, not release proof.
 - A validation check can pass only with `status=passed`, reviewer, evidence path or artifact id, and persisted timestamp.
 - Legacy `passed` records remain visible as detail-needed evidence and cannot open release gates.
+- Imported fixture evidence can satisfy only the scanner-fixture readiness record after schema, pass/fail, destructive-command, reviewer, and artifact checks pass.
+- Fixture import cannot satisfy protected-path, rollback, command, native-build, privilege, privacy, or ledger/rescan proof.
 - Evidence records can support release review but cannot bypass native runtime, route eligibility, feature flags, rollback, rescan parity, privilege, privacy, or consent.
 
 Public beta invariant:

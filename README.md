@@ -157,7 +157,7 @@ The demo also includes:
 - Tool command inventory panel that lists official inspect/prune command shapes for npm, pnpm, Docker, Gradle, and Windows cleanup without executing shell commands.
 - Release gate panel that shows feature flags, runtime capabilities, missing validation checks, and disposable VM coverage.
 - Write boundary probe panel that records native rejection evidence for the future write request shape without counting recovered space.
-- Local validation evidence ledger and pack export with Windows VM scenarios, fixture roots, required checks, reviewer/artifact records, command checklist, and signoff fields.
+- Local validation evidence ledger and pack export with Windows VM scenarios, fixture roots, required checks, reviewer/artifact records, command checklist, fixture-evidence import, and signoff fields.
 - User-defined protected paths that remove matching actions from executable plans.
 - A plan review queue separating ready, pending, protected, and policy-blocked work.
 - An execution preflight checklist that blocks simulation until scan, selection, gates, protected paths, and ledger state are valid.
@@ -247,6 +247,8 @@ The write-readiness panel is the final real-execution gate. It combines real exe
 The real executor capsule names the next first-safe route that could become a write-capable executor. It lists the route implementation boundary, required fixtures, missing validation, code-path status, and blockers. It always reports destructive action availability separately; in the current build that value is `false`.
 
 The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` rejecting stub in the desktop shell, but success means rejection, not cleanup: `accepted=false`, all entries rejected, and zero reclaimed bytes. Probe entries are never ledger recovery.
+
+The fixture evidence import accepts the JSON produced by `scripts/inspect-spaceguard-fixtures.ps1`. It can fill only the `scanner-fixtures` validation record after the fixture JSON passes schema, count, age, size, destructive-command, reviewer, and artifact checks. Protected-path, rollback, tool-command, native-build, and ledger/rescan evidence still require their own records.
 
 Dry-run records are also saved to local browser storage as an append-only run history. A saved record can block a duplicate simulation for the same plan after reload, but it cannot unlock real execution. The history export is audit evidence only; real cleanup still requires native Windows validation and a post-run rescan.
 

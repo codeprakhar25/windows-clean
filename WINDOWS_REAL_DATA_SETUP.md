@@ -46,10 +46,11 @@ In the app:
 4. Add protected paths before planning any review-heavy route.
 5. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
 6. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, and **Validation evidence** to confirm real cleanup is still locked.
-7. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
-8. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
-9. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, and no mutation.
-10. Export the redacted support bundle first, then the dry-run report and validation pack when path-level evidence is needed.
+7. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
+8. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
+9. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
+10. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, and no mutation.
+11. Export the redacted support bundle first, then the dry-run report and validation pack when path-level evidence is needed.
 
 ## Disposable Fixture Run
 
@@ -82,8 +83,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.p
 4. Confirm fixture-backed findings appear as measured or limited.
 5. Confirm large personal files appear in item review only, not as bulk cleanup.
 6. Attach the fixture evidence JSON path to the validation pack notes.
-7. Export the validation pack.
-8. Restore the VM snapshot before the next validation pass.
+7. Import the fixture evidence JSON in the app to create the scanner-fixture validation record.
+8. Export the validation pack.
+9. Restore the VM snapshot before the next validation pass.
 
 ## Evidence To Capture
 
@@ -104,6 +106,7 @@ For each Windows validation run, capture:
 - Executor manifest selected routes.
 - Tool command inventory state for npm, pnpm, Docker, Gradle, and Windows cleanup command validation.
 - Local validation evidence ledger state.
+- Fixture evidence import result and mapped check ids.
 - Dry-run consent receipt and plan id.
 - Post-run verification checklist.
 - Rescan comparison state, including ledger timestamp, native scan timestamp, matched rows, waiting rows, and mismatches.

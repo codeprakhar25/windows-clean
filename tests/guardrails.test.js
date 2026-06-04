@@ -1097,6 +1097,69 @@ const assert = require("assert");
   });
   assert.strictEqual(partialEvidenceGate.rows.find((row) => row.id === "windows-native-build").passed, true, "release gate should accept recorded validation evidence");
   assert.strictEqual(partialEvidenceGate.readyForRealRun, false, "partial validation evidence must not open real run");
+  const fixtureEvidence = {
+    schemaVersion: "spaceguard-fixture-evidence/v1",
+    generatedAt: "2026-06-04T12:00:00.000Z",
+    manifestPath: "C:\\Temp\\spaceguard-fixture-manifest.json",
+    profileRoot: "C:\\Users\\demo",
+    destructiveCommands: false,
+    passed: true,
+    counts: {
+      records: 4,
+      missing: 0,
+      sizeMismatches: 0,
+      ageMismatches: 0
+    },
+    records: [
+      { purpose: "known-temp-fixture", exists: true, sizeMatches: true, oldEnough: true, expectedBytes: 1024, actualBytes: 1024 },
+      { purpose: "protected-path-fixture", exists: true, sizeMatches: true, oldEnough: true, expectedBytes: 1024, actualBytes: 1024 },
+      { purpose: "review-data-fixture", exists: true, sizeMatches: true, oldEnough: true, expectedBytes: 1024, actualBytes: 1024 },
+      { purpose: "developer-tooling-fixture", exists: true, sizeMatches: true, oldEnough: true, expectedBytes: 1024, actualBytes: 1024 }
+    ]
+  };
+  const fixtureImport = guard.buildFixtureEvidenceImport({
+    evidenceObject: fixtureEvidence,
+    reviewer: "qa-operator",
+    artifactId: "evidence/fixture-evidence.json",
+    currentEvidence: {}
+  });
+  assert.strictEqual(fixtureImport.schemaVersion, "spaceguard-fixture-evidence-import/v1", "fixture import should expose a schema version");
+  assert.strictEqual(fixtureImport.status, "ready", "passing fixture evidence should be importable");
+  assert.strictEqual(fixtureImport.canApply, true, "passing fixture evidence with reviewer should be applicable");
+  assert.deepStrictEqual(fixtureImport.mappedCheckIds, ["scanner-fixtures"], "fixture import should map only to fixture-readiness validation");
+  assert.strictEqual(fixtureImport.validationEvidence["scanner-fixtures"].status, "passed", "fixture import should prepare scanner-fixtures evidence");
+  assert.strictEqual(fixtureImport.validationEvidence["scanner-fixtures"].evidencePath, "evidence/fixture-evidence.json", "fixture import should keep the artifact id");
+  assert.strictEqual(fixtureImport.validationEvidence["protected-path-fixtures"], undefined, "fixture import must not overclaim protected-path validation");
+  assert(fixtureImport.warnings.some((warning) => warning.includes("Protected-path fixture presence")), "fixture import should warn about non-imported protected-path proof");
+  const fixtureImportGate = guard.buildReleaseGate({
+    featureFlags: { realExecutors: true },
+    validationEvidence: fixtureImport.validationEvidence,
+    scanMode: "native-readonly",
+    nativeCapability: { available: true },
+    executorPlan
+  });
+  assert.strictEqual(fixtureImportGate.rows.find((row) => row.id === "scanner-fixtures").passed, true, "fixture import should feed validation evidence");
+  assert.strictEqual(fixtureImportGate.rows.find((row) => row.id === "protected-path-fixtures").passed, false, "fixture import must leave protected-path validation manual");
+  assert.strictEqual(fixtureImportGate.readyForRealRun, false, "fixture import alone must not open real execution");
+  const noReviewerFixtureImport = guard.buildFixtureEvidenceImport({
+    evidenceObject: fixtureEvidence,
+    reviewer: "",
+    currentEvidence: {}
+  });
+  assert.strictEqual(noReviewerFixtureImport.status, "missing-reviewer", "fixture import should require reviewer detail");
+  assert.strictEqual(noReviewerFixtureImport.canApply, false, "fixture import without reviewer should not apply");
+  const destructiveFixtureImport = guard.buildFixtureEvidenceImport({
+    evidenceObject: { ...fixtureEvidence, destructiveCommands: true },
+    reviewer: "qa-operator",
+    currentEvidence: {}
+  });
+  assert.strictEqual(destructiveFixtureImport.status, "destructive-evidence", "destructive fixture evidence should be rejected");
+  const failedFixtureImport = guard.buildFixtureEvidenceImport({
+    evidenceObject: { ...fixtureEvidence, passed: false, counts: { ...fixtureEvidence.counts, missing: 1 } },
+    reviewer: "qa-operator",
+    currentEvidence: {}
+  });
+  assert.strictEqual(failedFixtureImport.status, "fixture-failed", "failed fixture evidence should be rejected");
   const legacyEvidenceGate = guard.buildReleaseGate({
     featureFlags: { realExecutors: true },
     validationEvidence: { "windows-native-build": "passed" },

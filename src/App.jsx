@@ -34,6 +34,7 @@ import {
   buildFamilyGroups,
   buildExecutionPreflight,
   buildExecutionConsentReceipt,
+  buildFixtureEvidenceImport,
   buildPlanReview,
   buildAgentQuestionQueue,
   buildDecisionLog,
@@ -165,6 +166,10 @@ export default function App() {
   const [validationEvidence, setValidationEvidence] = useState(() => readStoredValidationEvidence());
   const [manualStrategyEvidence, setManualStrategyEvidence] = useState(() => readStoredManualStrategyEvidence());
   const [rollbackEvidence, setRollbackEvidence] = useState(() => readStoredRollbackEvidence());
+  const [fixtureImportText, setFixtureImportText] = useState("");
+  const [fixtureImportReviewer, setFixtureImportReviewer] = useState("");
+  const [fixtureImportArtifact, setFixtureImportArtifact] = useState("");
+  const [fixtureImportResult, setFixtureImportResult] = useState(null);
   const [executionConsent, setExecutionConsent] = useState({ accepted: false, planId: "", acceptedAt: "" });
 
   const scenario = useMemo(() => getScenario(scenarioId), [scenarioId]);
@@ -862,6 +867,19 @@ export default function App() {
     setValidationEvidence({});
   }
 
+  function importFixtureEvidence() {
+    const result = buildFixtureEvidenceImport({
+      evidenceText: fixtureImportText,
+      reviewer: fixtureImportReviewer,
+      artifactId: fixtureImportArtifact,
+      currentEvidence: validationEvidence
+    });
+    setFixtureImportResult(result);
+    if (result.canApply) {
+      setValidationEvidence(result.validationEvidence);
+    }
+  }
+
   function setManualStrategyCheckEvidence(checkId, checked) {
     setManualStrategyEvidence((current) => {
       const next = { ...current };
@@ -1396,7 +1414,14 @@ export default function App() {
             />
             <ValidationEvidencePanel
               validationPack={validationPack}
-              validationEvidence={validationEvidence}
+              fixtureImportText={fixtureImportText}
+              fixtureImportReviewer={fixtureImportReviewer}
+              fixtureImportArtifact={fixtureImportArtifact}
+              fixtureImportResult={fixtureImportResult}
+              onFixtureImportText={setFixtureImportText}
+              onFixtureImportReviewer={setFixtureImportReviewer}
+              onFixtureImportArtifact={setFixtureImportArtifact}
+              onImportFixtureEvidence={importFixtureEvidence}
               onToggleEvidence={setValidationCheckEvidence}
               onUpdateEvidence={updateValidationCheckEvidence}
               onReset={resetValidationEvidence}
@@ -3476,7 +3501,21 @@ function SupportBundlePanel({ bundle, onExport }) {
   );
 }
 
-function ValidationEvidencePanel({ validationPack, validationEvidence, onToggleEvidence, onUpdateEvidence, onReset, onExport }) {
+function ValidationEvidencePanel({
+  validationPack,
+  fixtureImportText,
+  fixtureImportReviewer,
+  fixtureImportArtifact,
+  fixtureImportResult,
+  onFixtureImportText,
+  onFixtureImportReviewer,
+  onFixtureImportArtifact,
+  onImportFixtureEvidence,
+  onToggleEvidence,
+  onUpdateEvidence,
+  onReset,
+  onExport
+}) {
   const waitingChecks = validationPack.validationChecks.filter((check) => !check.passed);
   const invariantFailures = validationPack.safetyInvariants.filter((item) => !item.passed);
   const fixturePreview = validationPack.fixtureRoots.slice(0, 3);
@@ -3499,6 +3538,66 @@ function ValidationEvidencePanel({ validationPack, validationEvidence, onToggleE
           <QueueStat label="Waiting" value={waitingChecks.length} tone="review" />
           <QueueStat label="Complete" value={completeCount} tone="safe" />
           <QueueStat label="VMs" value={validationPack.vmScenarios.length} tone="review" />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">Fixture evidence import</span>
+            <Badge variant={fixtureImportResult?.canApply ? "safe" : fixtureImportResult ? "review" : "outline"}>
+              {fixtureImportResult?.status || "waiting"}
+            </Badge>
+          </div>
+          <div className="grid gap-2">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Input
+                value={fixtureImportReviewer}
+                placeholder="Reviewer"
+                aria-label="fixture evidence reviewer"
+                onChange={(event) => onFixtureImportReviewer(event.target.value)}
+              />
+              <Input
+                value={fixtureImportArtifact}
+                placeholder="Evidence path or artifact id"
+                aria-label="fixture evidence artifact id"
+                onChange={(event) => onFixtureImportArtifact(event.target.value)}
+              />
+            </div>
+            <Textarea
+              className="min-h-24 font-mono"
+              value={fixtureImportText}
+              placeholder='{"schemaVersion":"spaceguard-fixture-evidence/v1"}'
+              aria-label="fixture evidence json"
+              onChange={(event) => onFixtureImportText(event.target.value)}
+            />
+            <Button variant="outline" className="w-full" onClick={onImportFixtureEvidence} disabled={!fixtureImportText.trim()}>
+              <ClipboardList className="h-4 w-4" />
+              Import fixture evidence
+            </Button>
+          </div>
+
+          {fixtureImportResult ? (
+            <div className="mt-3 rounded-md border bg-card p-2 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={fixtureImportResult.canApply ? "safe" : "review"}>
+                  {fixtureImportResult.canApply ? "mapped" : "blocked"}
+                </Badge>
+                <span>{fixtureImportResult.detail}</span>
+              </div>
+              <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                <span>Records: {fixtureImportResult.counts.records}</span>
+                <span>Mapped checks: {fixtureImportResult.counts.mappedChecks}</span>
+                <span>Purposes: {fixtureImportResult.purposes.join(", ") || "none"}</span>
+                <span>Artifact: {fixtureImportResult.artifactId || "missing"}</span>
+              </div>
+              {fixtureImportResult.warnings.length ? (
+                <div className="mt-2 flex flex-col gap-1">
+                  {fixtureImportResult.warnings.map((warning) => (
+                    <span key={warning}>{warning}</span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">

@@ -73,6 +73,8 @@ const requiredAppMarkers = [
   "Disposable VM matrix",
   "Validation evidence",
   "Validation evidence ledger",
+  "Fixture evidence import",
+  "Import fixture evidence",
   "Export validation pack",
   "Reset evidence",
   "Fixture roots",
@@ -150,6 +152,7 @@ assert(app.includes("buildRealExecutorCapsule"), "real executor capsule should b
 assert(app.includes("buildWriteBoundaryProbe"), "write boundary probe should be wired");
 assert(app.includes("buildValidationEvidencePack"), "validation evidence pack should be wired");
 assert(app.includes("buildValidationPackMarkdown"), "validation pack markdown export should be wired");
+assert(app.includes("buildFixtureEvidenceImport"), "fixture evidence import should be wired");
 assert(app.includes("VALIDATION_EVIDENCE_STORAGE_KEY"), "validation evidence should be persisted locally");
 assert(app.includes("MANUAL_STRATEGY_EVIDENCE_STORAGE_KEY"), "manual strategy evidence should be persisted separately");
 assert(app.includes("ROLLBACK_EVIDENCE_STORAGE_KEY"), "rollback evidence should be persisted separately");
@@ -215,6 +218,9 @@ assert(model.includes("Real executor implementation"), "write readiness should r
 assert(model.includes("spaceguard-real-executor-capsule/v1"), "model should expose real executor capsule schema");
 assert(model.includes("spaceguard-write-boundary-probe/v1"), "model should expose write boundary probe schema");
 assert(model.includes("normalizeValidationEvidenceRecord"), "model should normalize structured validation evidence");
+assert(model.includes("spaceguard-fixture-evidence-import/v1"), "model should expose fixture evidence import schema");
+assert(model.includes("destructive-evidence"), "fixture evidence import should reject destructive evidence");
+assert(model.includes("scanner-fixtures"), "fixture evidence import should map only fixture readiness evidence");
 assert(model.includes("legacy-needs-detail"), "legacy validation evidence should need details");
 assert(model.includes("needs-evidence-detail"), "marked validation evidence should require reviewer and artifact path");
 assert(model.includes("destructiveActionAvailable"), "real executor capsule should keep destructive availability explicit");

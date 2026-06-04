@@ -3397,6 +3397,173 @@ export function normalizeValidationEvidenceRecord(checkId, value = null) {
   };
 }
 
+export function buildFixtureEvidenceImport({
+  evidenceText = "",
+  evidenceObject = null,
+  reviewer = "",
+  artifactId = "",
+  currentEvidence = {},
+  importedAt = new Date().toISOString()
+} = {}) {
+  const parsed = parseFixtureEvidenceInput(evidenceObject, evidenceText);
+  const cleanReviewer = String(reviewer || "").trim();
+
+  if (!parsed.ok) {
+    return buildRejectedFixtureImport("parse-error", parsed.detail, currentEvidence, importedAt);
+  }
+
+  const evidence = parsed.value;
+  if (evidence.schemaVersion !== "spaceguard-fixture-evidence/v1") {
+    return buildRejectedFixtureImport("schema-mismatch", "Fixture evidence must use spaceguard-fixture-evidence/v1.", currentEvidence, importedAt, evidence);
+  }
+  if (evidence.destructiveCommands !== false) {
+    return buildRejectedFixtureImport("destructive-evidence", "Fixture evidence must prove destructiveCommands=false.", currentEvidence, importedAt, evidence);
+  }
+  if (!evidence.passed) {
+    return buildRejectedFixtureImport("fixture-failed", "Fixture evidence did not pass all existence, size, and age checks.", currentEvidence, importedAt, evidence);
+  }
+  if (!Array.isArray(evidence.records) || evidence.records.length === 0) {
+    return buildRejectedFixtureImport("missing-records", "Fixture evidence has no records.", currentEvidence, importedAt, evidence);
+  }
+  if (!cleanReviewer) {
+    return buildRejectedFixtureImport("missing-reviewer", "Reviewer is required before fixture evidence can update validation records.", currentEvidence, importedAt, evidence);
+  }
+
+  const failingRecords = evidence.records.filter((record) => !record?.exists || !record?.sizeMatches || !record?.oldEnough);
+  if (failingRecords.length) {
+    return buildRejectedFixtureImport("fixture-record-failed", `${failingRecords.length} fixture record(s) failed existence, size, or age assertions.`, currentEvidence, importedAt, evidence);
+  }
+
+  const purposes = Array.from(new Set(evidence.records.map((record) => String(record.purpose || "").trim()).filter(Boolean))).sort();
+  const checkIds = purposes.length ? ["scanner-fixtures"] : [];
+  const evidencePath = String(artifactId || "").trim() || `fixture-evidence:${evidence.generatedAt || importedAt}`;
+  const notes = [
+    "Imported disposable fixture evidence.",
+    `records=${evidence.records.length}`,
+    `purposes=${purposes.join(", ") || "none"}`,
+    "destructiveCommands=false"
+  ].join(" | ");
+  const validationEvidence = {
+    ...currentEvidence
+  };
+  for (const checkId of checkIds) {
+    validationEvidence[checkId] = {
+      status: "passed",
+      evidencePath,
+      reviewer: cleanReviewer,
+      notes,
+      recordedAt: evidence.generatedAt || importedAt,
+      updatedAt: importedAt,
+      source: "fixture-evidence-import",
+      fixtureSummary: {
+        schemaVersion: evidence.schemaVersion,
+        generatedAt: evidence.generatedAt || "",
+        counts: sanitizeFixtureCounts(evidence.counts),
+        purposes
+      }
+    };
+  }
+
+  return {
+    schemaVersion: "spaceguard-fixture-evidence-import/v1",
+    status: checkIds.length ? "ready" : "no-mapped-checks",
+    canApply: checkIds.length > 0,
+    importedAt,
+    generatedAt: evidence.generatedAt || "",
+    reviewer: cleanReviewer,
+    artifactId: evidencePath,
+    mappedCheckIds: checkIds,
+    counts: {
+      records: evidence.records.length,
+      purposes: purposes.length,
+      mappedChecks: checkIds.length,
+      missing: Number(evidence.counts?.missing || 0),
+      sizeMismatches: Number(evidence.counts?.sizeMismatches || 0),
+      ageMismatches: Number(evidence.counts?.ageMismatches || 0)
+    },
+    purposes,
+    detail: checkIds.length
+      ? `Fixture evidence can update ${checkIds.length} validation check(s).`
+      : "Fixture evidence passed, but no validation check mapping exists.",
+    validationEvidence,
+    warnings: buildFixtureImportWarnings(purposes)
+  };
+}
+
+function parseFixtureEvidenceInput(evidenceObject, evidenceText) {
+  if (evidenceObject && typeof evidenceObject === "object" && !Array.isArray(evidenceObject)) {
+    return { ok: true, value: evidenceObject };
+  }
+  const text = String(evidenceText || "").trim();
+  if (!text) {
+    return { ok: false, detail: "Fixture evidence JSON is required." };
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ok: false, detail: "Fixture evidence must be a JSON object." };
+    }
+    return { ok: true, value: parsed };
+  } catch (error) {
+    return {
+      ok: false,
+      detail: error instanceof Error ? error.message : "Fixture evidence JSON could not be parsed."
+    };
+  }
+}
+
+function buildRejectedFixtureImport(status, detail, currentEvidence, importedAt, evidence = null) {
+  return {
+    schemaVersion: "spaceguard-fixture-evidence-import/v1",
+    status,
+    canApply: false,
+    importedAt,
+    generatedAt: evidence?.generatedAt || "",
+    reviewer: "",
+    artifactId: "",
+    mappedCheckIds: [],
+    counts: {
+      records: Array.isArray(evidence?.records) ? evidence.records.length : 0,
+      purposes: 0,
+      mappedChecks: 0,
+      missing: Number(evidence?.counts?.missing || 0),
+      sizeMismatches: Number(evidence?.counts?.sizeMismatches || 0),
+      ageMismatches: Number(evidence?.counts?.ageMismatches || 0)
+    },
+    purposes: [],
+    detail,
+    validationEvidence: currentEvidence || {},
+    warnings: []
+  };
+}
+
+function sanitizeFixtureCounts(counts = {}) {
+  return {
+    records: Number(counts.records || 0),
+    missing: Number(counts.missing || 0),
+    sizeMismatches: Number(counts.sizeMismatches || 0),
+    ageMismatches: Number(counts.ageMismatches || 0)
+  };
+}
+
+function buildFixtureImportWarnings(purposes) {
+  const warnings = [];
+  const knownPurposes = new Set(purposes);
+  if (!knownPurposes.has("known-temp-fixture")) {
+    warnings.push("Known-temp fixture purpose was not present.");
+  }
+  if (knownPurposes.has("protected-path-fixture")) {
+    warnings.push("Protected-path fixture presence is not protected-path validation; verify exclusion separately.");
+  }
+  if (knownPurposes.has("review-data-fixture") || knownPurposes.has("downloads-installers") || knownPurposes.has("large-user-files")) {
+    warnings.push("Review-data fixture presence is not rollback proof; keep rollback evidence separate.");
+  }
+  if (knownPurposes.has("developer-tooling-fixture")) {
+    warnings.push("Developer fixture presence is not tool-native command proof; keep command evidence separate.");
+  }
+  return warnings;
+}
+
 export function buildWriteReadiness({
   releaseGate = null,
   runtimeCapabilities = {},
