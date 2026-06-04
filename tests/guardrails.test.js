@@ -985,6 +985,57 @@ const assert = require("assert");
   assert(!supportMarkdown.includes("C:\\Users"), "support bundle markdown should not include local paths");
   assert(supportMarkdown.includes("SpaceGuard Support Bundle"), "support bundle markdown should have a title");
   assert(supportMarkdown.includes("Redacted paths: yes"), "support bundle markdown should disclose redaction");
+  const supportHandoffQuestions = guard.buildAgentQuestionQueue({
+    scanned: false,
+    scanning: false,
+    nativeCapability: { available: false },
+    actionList: developerActions,
+    selectedIds: new Set()
+  });
+  const supportHandoffAudit = guard.buildProductCompletionAudit({
+    scanned: false,
+    scanMode: "demo",
+    actionList: developerActions,
+    selectedIds: new Set(),
+    agentQuestionQueue: supportHandoffQuestions,
+    supportBundle,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  const workflowHandoff = guard.buildWorkflowHandoffPacket({
+    agentQuestionQueue: supportHandoffQuestions,
+    productCompletionAudit: supportHandoffAudit,
+    supportBundle,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(workflowHandoff.schemaVersion, "spaceguard-workflow-handoff/v1", "workflow handoff should expose a schema version");
+  assert.strictEqual(workflowHandoff.redactedPaths, true, "workflow handoff should be redacted");
+  assert.strictEqual(workflowHandoff.realCleanupEnabled, false, "workflow handoff must not enable cleanup");
+  assert.strictEqual(workflowHandoff.realCleanupLocked, true, "workflow handoff should preserve cleanup lock");
+  assert.strictEqual(workflowHandoff.activeQuestion.id, "run-first-scan", "workflow handoff should preserve the active question");
+  assert(workflowHandoff.nextActions.some((step) => step.includes("Should I scan before suggesting cleanup?")), "workflow handoff should include active question as first next action");
+  const workflowHandoffJson = JSON.stringify(workflowHandoff);
+  const workflowHandoffMarkdown = guard.buildWorkflowHandoffMarkdown(workflowHandoff);
+  assert(!workflowHandoffJson.includes("C:\\Users"), "workflow handoff JSON should not include local paths");
+  assert(!workflowHandoffMarkdown.includes("C:\\Users"), "workflow handoff markdown should not include local paths");
+  assert(workflowHandoffMarkdown.includes("SpaceGuard Workflow Handoff"), "workflow handoff markdown should have a title");
+  const handoffReport = guard.buildReport({
+    scenario: guard.getScenario("developer"),
+    profile: guard.getScenario("developer").profile,
+    actionList: developerActions,
+    selectedIds: new Set(),
+    readiness: { ready: false, unresolved: [] },
+    ledger: [],
+    protectedPaths: [],
+    goalBytes: 10 * guard.GB,
+    workflowHandoff
+  });
+  assert(handoffReport.includes("## Workflow Handoff"), "report should include workflow handoff");
+  assert(handoffReport.includes("Real cleanup locked: yes"), "workflow handoff report should keep cleanup lock visible");
+  const unsafeHandoff = guard.buildWorkflowHandoffPacket({
+    agentQuestionQueue: supportHandoffQuestions,
+    runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
+  });
+  assert.strictEqual(unsafeHandoff.status, "unsafe-stop", "workflow handoff should stop on unsafe runtime signals");
 
   const review = guard.buildPlanReview(
     developerActions,

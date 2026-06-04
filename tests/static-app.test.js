@@ -230,6 +230,10 @@ assert(app.includes("buildRescanComparisonMarkdown"), "rescan comparison export 
 assert(app.includes("buildRollbackPlan"), "rollback plan should be wired");
 assert(app.includes("buildSupportBundle"), "support bundle should be wired");
 assert(app.includes("buildSupportBundleMarkdown"), "support bundle markdown export should be wired");
+assert(app.includes("buildWorkflowHandoffPacket"), "workflow handoff packet should be wired");
+assert(app.includes("buildWorkflowHandoffMarkdown"), "workflow handoff export should be wired");
+assert(app.includes("WorkflowHandoffPanel"), "workflow handoff panel should be rendered");
+assert(app.includes("Export handoff"), "workflow handoff export action should be visible");
 assert(app.includes("buildRunReadiness"), "combined run readiness should be wired");
 assert(app.includes("buildLedgerRunRecord"), "ledger run records should be wired");
 assert(app.includes("buildLedgerHistorySummary"), "ledger history summary should be wired");
@@ -302,6 +306,8 @@ assert(model.includes("spaceguard-rescan-comparison/v1"), "model should expose r
 assert(model.includes("executedAt"), "ledger entries should carry absolute execution timestamps");
 assert(model.includes("spaceguard-public-beta-readiness/v1"), "model should expose public beta readiness schema");
 assert(model.includes("spaceguard-support-bundle/v1"), "model should expose support bundle schema");
+assert(model.includes("spaceguard-workflow-handoff/v1"), "model should expose workflow handoff schema");
+assert(model.includes("SpaceGuard Workflow Handoff"), "model should export workflow handoff markdown");
 assert(model.includes("spaceguard-release-review-packet/v1"), "model should expose release review packet schema");
 assert(model.includes("unsafe-stop"), "release review packet should stop on unsafe signals");
 assert(model.includes("This packet is release review evidence only"), "release packet export should not enable cleanup");

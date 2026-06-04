@@ -128,6 +128,7 @@ The UI must also expose a recovery advisor and decision log:
 - `public beta readiness`: web-demo versus native read-only beta status, signing/support/uninstall evidence, privacy posture, and public claim boundary.
 - `release review packet`: one exportable review artifact that combines plan, scan session, task grants, contract, write-boundary rejection, validation, rollback, rescan, privilege, privacy, support redaction, public claims, and real-cleanup lock evidence.
 - `support bundle`: redacted diagnostics for support triage that exclude local paths and filenames by default.
+- `workflow handoff`: redacted resume artifact with active question, next actions, audit status, setup/demo/release state, and real-cleanup lock.
 - `validation evidence`: disposable VM checklists, seeded fixture roots, required commands, selected executor routes, reviewer/artifact records, and signoff fields.
 - `validation evidence ledger`: local operator records for completed Windows validation checks; evidence can reduce missing checks only when reviewer and artifact path are present, and it cannot bypass native runtime, feature-flag, route, or safety gates.
 - `verification`: current plan id, expected bytes, ledger bytes, stale-ledger state, and next verification steps.
@@ -347,6 +348,12 @@ Support bundle invariant:
 - Default support exports must not include local paths or filenames.
 - Support bundles may include recipe ids, statuses, byte counts, runtime state, release blockers, warning counts, and selected route summaries.
 - Path-level diagnosis requires a separate explicit dry-run report export.
+
+Workflow handoff invariant:
+
+- Handoffs are resume guidance, not support diagnosis or release evidence.
+- They must include the active question, next actions, product audit state, and real-cleanup lock while excluding local paths and filenames.
+- They cannot grant cleanup authority, satisfy validation, or replace the full dry-run report when path-level diagnosis is needed.
 
 ## Recipe Schema
 

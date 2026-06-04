@@ -87,6 +87,8 @@ import {
   buildValidationPackMarkdown,
   buildVerificationSummary,
   buildWindowsSetupAssistant,
+  buildWorkflowHandoffMarkdown,
+  buildWorkflowHandoffPacket,
   buildWriteBoundaryProbe,
   buildWriteReadiness,
   computeTotals,
@@ -888,6 +890,35 @@ export default function App() {
       runtimeCapabilities.result
     ]
   );
+  const workflowHandoff = useMemo(
+    () =>
+      buildWorkflowHandoffPacket({
+        agentQuestionQueue,
+        productCompletionAudit,
+        demoRehearsalRunbook,
+        windowsSetupAssistant,
+        scanSession,
+        supportBundle,
+        releaseReviewPacket,
+        runReadiness,
+        consentReceipt,
+        ledgerHistorySummary,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [
+      agentQuestionQueue,
+      productCompletionAudit,
+      demoRehearsalRunbook,
+      windowsSetupAssistant,
+      scanSession,
+      supportBundle,
+      releaseReviewPacket,
+      runReadiness,
+      consentReceipt,
+      ledgerHistorySummary,
+      runtimeCapabilities.result
+    ]
+  );
   const families = useMemo(() => buildFamilyGroups(selectedIds, actionList, { approvals, itemReviewsByAction }), [selectedIds, actionList, approvals, itemReviewsByAction]);
   const usedPercent = Math.round((profile.usedBytes / profile.totalBytes) * 100);
   const selectedPercent = Math.min(100, Math.round((totals.selectedBytes / (goalGb * GB)) * 100));
@@ -1436,6 +1467,7 @@ export default function App() {
       windowsSetupAssistant,
       demoRehearsalRunbook,
       productCompletionAudit,
+      workflowHandoff,
       itemReview,
       executorPlan,
       releaseGate,
@@ -1515,6 +1547,23 @@ export default function App() {
       "```"
     ].join("\n");
     downloadTextFile("spaceguard-support-bundle.md", body, "text/markdown;charset=utf-8");
+  }
+
+  function exportWorkflowHandoff() {
+    const exportedPacket = { ...workflowHandoff, generatedAt: new Date().toISOString() };
+    const markdown = buildWorkflowHandoffMarkdown(exportedPacket);
+    const body = [
+      markdown,
+      "",
+      "---",
+      "",
+      "## Redacted Handoff JSON",
+      "",
+      "```json",
+      JSON.stringify(exportedPacket, null, 2),
+      "```"
+    ].join("\n");
+    downloadTextFile("spaceguard-workflow-handoff.md", body, "text/markdown;charset=utf-8");
   }
 
   function exportReleaseReviewPacket() {
@@ -1706,6 +1755,8 @@ export default function App() {
             <DemoRehearsalRunbookPanel runbook={demoRehearsalRunbook} onExport={exportReport} />
 
             <ProductCompletionAuditPanel audit={productCompletionAudit} />
+
+            <WorkflowHandoffPanel handoff={workflowHandoff} onExport={exportWorkflowHandoff} />
 
             <ScanSessionPanel session={scanSession} />
 
@@ -2326,6 +2377,83 @@ function ProductCompletionAuditPanel({ audit }) {
             </div>
           ))}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function WorkflowHandoffPanel({ handoff, onExport }) {
+  return (
+    <Card id="workflow-handoff-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Workflow handoff
+            </CardTitle>
+            <CardDescription>{handoff.primary}</CardDescription>
+          </div>
+          <Badge variant={handoff.tone}>{handoff.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Questions" value={handoff.counts.questions} tone={handoff.counts.questions ? "review" : "safe"} />
+          <QueueStat label="Actionable" value={handoff.counts.actionableQuestions} tone={handoff.counts.actionableQuestions ? "advanced" : "safe"} />
+          <QueueStat label="Proven" value={handoff.counts.provenRequirements} tone={handoff.counts.provenRequirements ? "safe" : "review"} />
+          <QueueStat label="Writes" value={handoff.realCleanupLocked ? "locked" : "ready"} tone={handoff.realCleanupLocked ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Resume boundary</span>
+            <Badge variant={handoff.redactedPaths ? "safe" : "restricted"}>{handoff.redactedPaths ? "paths redacted" : "paths visible"}</Badge>
+            <Badge variant={handoff.realCleanupEnabled ? "restricted" : "safe"}>{handoff.realCleanupEnabled ? "cleanup enabled" : "no cleanup authority"}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {handoff.activeQuestion ? handoff.activeQuestion.detail : "No active question is blocking this handoff."}
+          </p>
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 text-sm font-medium">Next resume actions</div>
+          <div className="flex flex-col gap-2">
+            {handoff.steps.slice(0, 4).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <ClipboardList className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="rounded-md border bg-card p-3">
+            <div className="text-sm font-medium">Active question</div>
+            <p className="mt-1 text-xs text-muted-foreground">{handoff.activeQuestion?.prompt || "None"}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Badge variant={handoff.activeQuestion?.actionable ? "safe" : "outline"}>
+                {handoff.activeQuestion?.action || "none"}
+              </Badge>
+              {handoff.activeQuestion?.targetPanel ? <Badge variant="outline">{handoff.activeQuestion.targetPanel}</Badge> : null}
+            </div>
+          </div>
+          <div className="rounded-md border bg-card p-3">
+            <div className="text-sm font-medium">Workflow state</div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+              <span>Scan: {handoff.workflow.scanStatus}</span>
+              <span>Audit: {handoff.workflow.auditStatus}</span>
+              <span>Setup: {handoff.workflow.setupStatus}</span>
+              <span>Release: {handoff.workflow.releaseReviewStatus}</span>
+            </div>
+          </div>
+        </div>
+
+        <Button variant="outline" className="w-full" onClick={onExport}>
+          <Download className="h-4 w-4" />
+          Export handoff
+        </Button>
       </CardContent>
     </Card>
   );

@@ -3987,6 +3987,151 @@ export function buildProductCompletionAudit({
   };
 }
 
+export function buildWorkflowHandoffPacket({
+  agentQuestionQueue = null,
+  productCompletionAudit = null,
+  demoRehearsalRunbook = null,
+  windowsSetupAssistant = null,
+  scanSession = null,
+  supportBundle = null,
+  releaseReviewPacket = null,
+  runReadiness = null,
+  consentReceipt = null,
+  ledgerHistorySummary = null,
+  runtimeCapabilities = {},
+  generatedAt = "set-on-export"
+} = {}) {
+  const activeQuestion = agentQuestionQueue?.activeQuestion || null;
+  const unsafeRuntime = Boolean(runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands || releaseReviewPacket?.status === "unsafe-stop" || productCompletionAudit?.unsafeRows?.length);
+  const productComplete = Boolean(productCompletionAudit?.productComplete);
+  const realCleanupLocked = !productComplete;
+  const status = unsafeRuntime
+    ? "unsafe-stop"
+    : activeQuestion?.action && activeQuestion.action !== "none"
+      ? "next-action-ready"
+      : activeQuestion
+        ? "user-evidence-needed"
+        : productCompletionAudit?.demoWorkflowComplete
+          ? "demo-handoff-ready"
+          : productCompletionAudit?.readOnlyRealDataReady
+            ? "readonly-handoff-ready"
+            : "workflow-open";
+  const auditSteps = productCompletionAudit?.steps || [];
+  const activeStep = activeQuestion
+    ? `${activeQuestion.prompt} ${activeQuestion.action && activeQuestion.action !== "none" ? `Action: ${activeQuestion.action}.` : "Record evidence in the indicated panel."}`
+    : "";
+  const nextActions = [activeStep, ...auditSteps]
+    .filter(Boolean)
+    .filter((step, index, list) => list.indexOf(step) === index)
+    .slice(0, 6);
+
+  return {
+    schemaVersion: "spaceguard-workflow-handoff/v1",
+    product: "SpaceGuard",
+    generatedAt,
+    status,
+    tone: unsafeRuntime ? "restricted" : productComplete ? "safe" : "review",
+    redactedPaths: true,
+    productComplete,
+    realCleanupLocked,
+    realCleanupEnabled: false,
+    runtimeRealRunEnabled: Boolean(runtimeCapabilities?.realRunEnabled),
+    destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
+    activeQuestion: activeQuestion
+      ? {
+          id: activeQuestion.id,
+          lane: activeQuestion.lane,
+          title: activeQuestion.title,
+          prompt: activeQuestion.prompt,
+          detail: activeQuestion.detail,
+          action: activeQuestion.action || "none",
+          targetPanel: activeQuestion.targetPanel || "",
+          actionable: Boolean(activeQuestion.action && activeQuestion.action !== "none")
+        }
+      : null,
+    workflow: {
+      scanStatus: scanSession?.status || "not-captured",
+      setupStatus: windowsSetupAssistant?.status || "not-evaluated",
+      demoStatus: demoRehearsalRunbook?.status || "not-evaluated",
+      auditStatus: productCompletionAudit?.status || "not-evaluated",
+      supportStatus: supportBundle?.summary?.status || "not-evaluated",
+      releaseReviewStatus: releaseReviewPacket?.status || "not-evaluated",
+      runReady: Boolean(runReadiness?.ready),
+      consentReady: Boolean(consentReceipt?.ready)
+    },
+    counts: {
+      questions: agentQuestionQueue?.counts?.total || 0,
+      actionableQuestions: agentQuestionQueue?.counts?.actionable || 0,
+      provenRequirements: productCompletionAudit?.counts?.proven || 0,
+      waitingRequirements: productCompletionAudit?.counts?.waiting || 0,
+      lockedRequirements: productCompletionAudit?.counts?.locked || 0,
+      ledgerRecords: ledgerHistorySummary?.counts?.records || 0,
+      currentPlanRecords: ledgerHistorySummary?.counts?.current || 0,
+      realRun: 0
+    },
+    nextActions,
+    safetyNotes: [
+      "This handoff intentionally excludes local paths and filenames.",
+      "It is resume guidance only; it does not grant cleanup authority.",
+      "Real cleanup remains locked until write readiness, release review, validation, rollback, rescan, consent, and native runtime evidence all pass."
+    ],
+    primary: getWorkflowHandoffPrimary(status, { activeQuestion, productCompletionAudit }),
+    steps: nextActions.length ? nextActions : ["Run a scan.", "Resolve the active question.", "Export a dry-run report when evidence is needed."]
+  };
+}
+
+export function buildWorkflowHandoffMarkdown(packet) {
+  const question = packet.activeQuestion
+    ? [
+        `- ${packet.activeQuestion.title}: ${packet.activeQuestion.prompt}`,
+        `  - Lane: ${packet.activeQuestion.lane}`,
+        `  - Action: ${packet.activeQuestion.action}`,
+        packet.activeQuestion.targetPanel ? `  - Target panel: ${packet.activeQuestion.targetPanel}` : "",
+        `  - Detail: ${packet.activeQuestion.detail}`
+      ].filter(Boolean).join("\n")
+    : "- No active question.";
+  const steps = packet.nextActions.length ? packet.nextActions.map((step) => `- ${step}`).join("\n") : "- No next actions.";
+  const notes = packet.safetyNotes.map((note) => `- ${note}`).join("\n");
+
+  return [
+    "# SpaceGuard Workflow Handoff",
+    "",
+    `Generated: ${packet.generatedAt}`,
+    `Schema: ${packet.schemaVersion}`,
+    `Status: ${packet.status}`,
+    `Redacted paths: ${packet.redactedPaths ? "yes" : "no"}`,
+    `Product complete: ${packet.productComplete ? "yes" : "no"}`,
+    `Real cleanup locked: ${packet.realCleanupLocked ? "yes" : "no"}`,
+    `Real cleanup enabled: ${packet.realCleanupEnabled ? "yes" : "no"}`,
+    "",
+    "## Workflow State",
+    `Scan: ${packet.workflow.scanStatus}`,
+    `Setup: ${packet.workflow.setupStatus}`,
+    `Demo: ${packet.workflow.demoStatus}`,
+    `Audit: ${packet.workflow.auditStatus}`,
+    `Release review: ${packet.workflow.releaseReviewStatus}`,
+    `Run ready: ${packet.workflow.runReady ? "yes" : "no"}`,
+    `Consent ready: ${packet.workflow.consentReady ? "yes" : "no"}`,
+    "",
+    "## Active Question",
+    question,
+    "",
+    "## Next Actions",
+    steps,
+    "",
+    "## Counts",
+    `Questions: ${packet.counts.questions}`,
+    `Actionable questions: ${packet.counts.actionableQuestions}`,
+    `Proven requirements: ${packet.counts.provenRequirements}`,
+    `Waiting requirements: ${packet.counts.waitingRequirements}`,
+    `Locked requirements: ${packet.counts.lockedRequirements}`,
+    `Ledger records: ${packet.counts.ledgerRecords}`,
+    "",
+    "## Safety Notes",
+    notes
+  ].join("\n");
+}
+
 export function buildExecutorPlan({
   selectedIds = new Set(),
   actionList = actions,
@@ -6519,6 +6664,7 @@ export function buildReport({
   windowsSetupAssistant = null,
   demoRehearsalRunbook = null,
   productCompletionAudit = null,
+  workflowHandoff = null,
   releaseGate = null,
   validationPack = null,
   runtimeCapabilities = null,
@@ -6586,6 +6732,23 @@ export function buildReport({
           productCompletionAudit.rows.length
             ? productCompletionAudit.rows.map((row) => `- ${row.requirement}: ${row.status} | proof=${row.proofLevel} | ${row.detail}`).join("\n")
             : "- No audit rows."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Workflow Handoff",
+    workflowHandoff
+      ? [
+          `- Status: ${workflowHandoff.status}`,
+          `- Redacted paths: ${workflowHandoff.redactedPaths ? "yes" : "no"}`,
+          `- Product complete: ${workflowHandoff.productComplete ? "yes" : "no"}`,
+          `- Real cleanup locked: ${workflowHandoff.realCleanupLocked ? "yes" : "no"}`,
+          `- Real cleanup enabled: ${workflowHandoff.realCleanupEnabled ? "yes" : "no"}`,
+          `- Active question: ${workflowHandoff.activeQuestion?.prompt || "none"}`,
+          `- Questions: ${workflowHandoff.counts.questions}`,
+          `- Actionable questions: ${workflowHandoff.counts.actionableQuestions}`,
+          workflowHandoff.nextActions.length
+            ? workflowHandoff.nextActions.map((step) => `- Next: ${step}`).join("\n")
+            : "- No next actions."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -8025,6 +8188,16 @@ function getProductCompletionAuditSteps(status, { rows = [], waitingRows = [], l
   return nextRows.length
     ? nextRows.map((row) => `${row.requirement}: ${row.nextStep}`)
     : rows.slice(0, 3).map((row) => `${row.requirement}: ${row.nextStep}`);
+}
+
+function getWorkflowHandoffPrimary(status, { activeQuestion = null, productCompletionAudit = null } = {}) {
+  if (status === "unsafe-stop") return "Unsafe runtime or release-review signal is visible; stop before continuing.";
+  if (status === "next-action-ready") return activeQuestion?.prompt || "A guarded next action is ready.";
+  if (status === "user-evidence-needed") return activeQuestion?.prompt || "User evidence is needed before the next action.";
+  if (status === "demo-handoff-ready") return "Demo workflow evidence is ready to hand off; real cleanup remains locked.";
+  if (status === "readonly-handoff-ready") return "Read-only native evidence is ready to hand off; write-capable cleanup remains locked.";
+  if (productCompletionAudit?.primary) return productCompletionAudit.primary;
+  return "Workflow can be resumed from the active question and audit steps.";
 }
 
 function buildRestrictionPolicyRow({
