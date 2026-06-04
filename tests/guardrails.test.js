@@ -730,6 +730,18 @@ const assert = require("assert");
     }
   });
   assert.strictEqual(matchedComparison.status, "matched", "zero remaining bytes after a full temp cleanup should match within tolerance");
+  const unixTimestampComparison = guard.buildRescanComparison({
+    postRunVerification: tempPostRunVerification,
+    ledger: tempLedger,
+    scanMode: "native-readonly",
+    nativeScan: {
+      available: true,
+      generatedAt: "unix:1780574700",
+      findings: [{ recipeId: "windows-temp", title: "Windows temp", path: "%TEMP%", bytes: 0, status: "measured" }]
+    }
+  });
+  assert.strictEqual(unixTimestampComparison.postRunScanEvidence, true, "native unix timestamps should compare against ISO ledger timestamps");
+  assert.strictEqual(unixTimestampComparison.status, "matched", "native unix timestamp scans should be allowed to prove matched parity");
   const skippedPlanSnapshot = guard.buildPlanSnapshot({
     selectedIds: new Set(["browser-identity"]),
     actionList: developerActions,

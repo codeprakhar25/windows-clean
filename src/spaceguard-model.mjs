@@ -3456,9 +3456,9 @@ export function buildRescanComparison({
   const currentEntries = planId ? ledger.filter((entry) => entry.planId === planId) : ledger;
   const staleEntries = planId ? ledger.filter((entry) => entry.planId !== planId) : [];
   const nativeEvidence = scanMode === "native-readonly" && Boolean(nativeScan?.available !== false && nativeScan);
-  const latestExecutionAt = latestIsoTimestamp(currentEntries.map((entry) => entry.executedAt));
+  const latestExecutionAt = latestComparableTimestamp(currentEntries.map((entry) => entry.executedAt));
   const scanGeneratedAt = nativeScan?.generatedAt || "";
-  const postRunScanEvidence = Boolean(nativeEvidence && latestExecutionAt && isIsoAtOrAfter(scanGeneratedAt, latestExecutionAt));
+  const postRunScanEvidence = Boolean(nativeEvidence && latestExecutionAt && isTimestampAtOrAfter(scanGeneratedAt, latestExecutionAt));
   const rows = checkpoints.map((checkpoint) =>
     buildRescanComparisonRow({
       checkpoint,
@@ -4566,18 +4566,31 @@ function normalizeComparablePath(path) {
     .trim();
 }
 
-function latestIsoTimestamp(values = []) {
+function latestComparableTimestamp(values = []) {
   const timestamps = values
-    .map((value) => ({ value, time: Date.parse(value) }))
+    .map((value) => ({ value, time: parseComparableTimestamp(value) }))
     .filter((entry) => entry.value && Number.isFinite(entry.time))
     .sort((a, b) => b.time - a.time);
   return timestamps[0]?.value || "";
 }
 
-function isIsoAtOrAfter(value, baseline) {
-  const valueTime = Date.parse(value || "");
-  const baselineTime = Date.parse(baseline || "");
+function isTimestampAtOrAfter(value, baseline) {
+  const valueTime = parseComparableTimestamp(value);
+  const baselineTime = parseComparableTimestamp(baseline);
   return Number.isFinite(valueTime) && Number.isFinite(baselineTime) && valueTime >= baselineTime;
+}
+
+function parseComparableTimestamp(value) {
+  if (typeof value === "number") return value < 10_000_000_000 ? value * 1000 : value;
+  const text = String(value || "").trim();
+  if (!text) return Number.NaN;
+  const unixMatch = text.match(/^unix:(\d+(?:\.\d+)?)$/i);
+  if (unixMatch) return Number(unixMatch[1]) * 1000;
+  if (/^\d+(?:\.\d+)?$/.test(text)) {
+    const numeric = Number(text);
+    return numeric < 10_000_000_000 ? numeric * 1000 : numeric;
+  }
+  return Date.parse(text);
 }
 
 function getRescanComparisonStatus({ rows, nativeEvidence, postRunScanEvidence }) {
