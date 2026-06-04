@@ -147,6 +147,7 @@ The demo also includes:
 - Task powers panel that maps selected cleanup actions to scoped capabilities such as safe cleanup, rebuildable cache cleanup, reviewed item cleanup, admin cleanup, advanced system strategy, manual storage strategy, and restricted zones.
 - Task grant receipts that bind each selected action to a dry-run-only authority, route, target, plan id, scan fingerprint, consent receipt, allowed operations, forbidden operations, and blockers.
 - Task runbook panel that turns each selected cleanup target into a task-scoped work order with the next user question, allowed operations, forbidden operations, evidence needs, and no cross-task authority.
+- Restriction matrix that makes hard-blocked, manual-only, review-gated, intake-gated, and future-disabled cleanup classes visible with allowed and forbidden operations.
 - Real scan settings for target drive, project artifact inclusion, traversal depth, per-root entry caps, and custom read-only roots.
 - Scan session freshness guard that fingerprints target drive, custom roots, traversal caps, project-artifact setting, and protected paths, then blocks preflight when native evidence is stale.
 - Scan coverage confidence showing measured, limited, unsupported, missing, custom-root, and demo-estimated cleanup roots.
@@ -239,6 +240,8 @@ User-protected paths are treated as a runtime block even if the matching recipe 
 Admin/system-sensitive routes are also intake-gated. Windows.old, hibernation changes, WSL compaction, and other admin-sensitive routes stay out of suggested and selectable dry-run plans until the user explicitly allows admin/system actions. Allowing them only affects dry-run planning; it does not enable real execution, self-elevation, UAC prompts, or destructive commands.
 
 Task runbook work orders are agent-facing instructions, not new permissions. A selected cache cleanup task can ask for its own approval or enter its own dry-run simulation after grants are issued, but it cannot reuse that power for Downloads, custom roots, browser identity data, partitions, registry keys, or any sibling folder.
+
+The restriction matrix is the refusal surface. Browser identity stores, Docker volumes, pagefile and registry tuning, partition writes, custom roots, admin/system routes, personal/project data, and tool-native shell commands each show what the agent may still do and what remains forbidden. Hard-blocked and manual-only rows cannot create executor routes, and the matrix always keeps real-run routes at zero in this build.
 
 Execution is blocked until the preflight passes:
 

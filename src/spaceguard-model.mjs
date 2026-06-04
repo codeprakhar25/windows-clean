@@ -501,6 +501,81 @@ export const taskPowerDefinitions = [
   }
 ];
 
+export const restrictionPolicyRules = [
+  {
+    id: "browser-identity",
+    title: "Browser identity stores",
+    lane: "hard-blocked",
+    actionIds: ["browser-identity"],
+    reason: "Cookies, sessions, saved logins, browser profile databases, and extensions are account state, not disposable cache.",
+    allowedOperations: ["Explain why identity data is protected.", "Scan browser cache roots separately when supported."],
+    forbiddenOperations: ["Delete cookies, sessions, saved logins, extension state, or profile databases.", "Treat browser profile roots as cache folders."]
+  },
+  {
+    id: "docker-volumes",
+    title: "Docker volumes and stateful containers",
+    lane: "hard-blocked",
+    actionIds: ["docker-volumes"],
+    reason: "Docker volumes can contain databases, queues, uploads, and app state.",
+    allowedOperations: ["Explain manual Docker inspection steps.", "Use Docker build-cache inventory separately."],
+    forbiddenOperations: ["Delete Docker volumes automatically.", "Run docker system prune with volume removal."]
+  },
+  {
+    id: "pagefile-registry",
+    title: "Pagefile, registry, and low-level system tuning",
+    lane: "hard-blocked",
+    actionIds: ["pagefile"],
+    reason: "Memory and registry changes can destabilize the system and are not space-cleanup cache work.",
+    allowedOperations: ["Show advisory explanation only.", "Recommend backup-first expert review when needed."],
+    forbiddenOperations: ["Tune pagefile settings.", "Run registry cleanup or direct registry edits."]
+  },
+  {
+    id: "partitioning",
+    title: "Partition and disk layout writes",
+    lane: "advisory-only",
+    actionIds: ["partitioning"],
+    reason: "Partition resize, format, and drive migration are storage operations with data-loss risk.",
+    allowedOperations: ["Track backup and recovery-key evidence.", "Suggest a manual drive or partition plan."],
+    forbiddenOperations: ["Resize, format, repartition, or move disk layouts automatically.", "Count partition guidance as cleanup recovery."]
+  },
+  {
+    id: "custom-roots",
+    title: "Custom discovered folders",
+    lane: "manual-only",
+    actionIds: [],
+    reason: "User-entered roots are unknown ownership areas and can only be measured read-only.",
+    allowedOperations: ["Measure custom roots read-only.", "Record Keep, Archive, Move, Inspect, or Escalate disposition."],
+    forbiddenOperations: ["Create executor routes from custom roots.", "Bulk-delete custom folders or count manual archive as executor recovery."]
+  },
+  {
+    id: "admin-system",
+    title: "Admin/system cleanup routes",
+    lane: "intake-gated",
+    actionIds: ["windows-old", "wsl-vhdx", "hibernation"],
+    reason: "System cleanup can affect rollback, boot, power behavior, or virtual disk state.",
+    allowedOperations: ["Ask for admin/system dry-run allowance.", "Require typed acknowledgement or rollback context for advanced routes."],
+    forbiddenOperations: ["Self-elevate or trigger UAC automatically.", "Directly delete system directories or change power settings in this build."]
+  },
+  {
+    id: "personal-review",
+    title: "Personal and project data",
+    lane: "review-gated",
+    actionIds: ["downloads-installers", "large-user-files", "node-modules-old", "android-studio"],
+    reason: "Downloads, media, project artifacts, and tooling entries may be valuable user data.",
+    allowedOperations: ["Ask item-by-item Remove, Move, Archive, or Keep.", "Count only explicit Remove decisions in executor previews."],
+    forbiddenOperations: ["Use broad folder approval for personal or project data.", "Count Move or Archive as automated cleanup bytes."]
+  },
+  {
+    id: "tool-native-shell",
+    title: "Tool-native shell commands",
+    lane: "future-disabled",
+    actionIds: ["npm-cache", "pnpm-store", "docker-build-cache"],
+    reason: "Official tool commands need validation evidence before any executor can call them.",
+    allowedOperations: ["Document inspect/prune command shape.", "Use dry-run inventory and validation fixtures."],
+    forbiddenOperations: ["Run shell cleanup commands in the current build.", "Delete package stores, Docker data, or project folders directly."]
+  }
+];
+
 export const customRootDispositionOptions = [
   {
     id: "keep",
@@ -3343,6 +3418,64 @@ export function buildAgentTaskRunbook({
   };
 }
 
+export function buildRestrictionPolicyMatrix({
+  actionList = actions,
+  selectedIds = new Set(),
+  protectedPaths = [],
+  intakePolicy = null,
+  customRootTriage = null,
+  taskRunbook = null,
+  runtimeCapabilities = {}
+} = {}) {
+  const rows = restrictionPolicyRules.map((rule) =>
+    buildRestrictionPolicyRow({
+      rule,
+      actionList,
+      selectedIds,
+      protectedPaths,
+      intakePolicy,
+      customRootTriage,
+      taskRunbook
+    })
+  );
+  const hardRows = rows.filter((row) => row.status === "hard-blocked");
+  const manualRows = rows.filter((row) => row.status === "manual-only" || row.status === "advisory-only");
+  const gatedRows = rows.filter((row) => row.status === "intake-gated" || row.status === "review-gated" || row.status === "future-disabled");
+  const selectedBlockedRows = rows.filter((row) => row.selectedCount > 0 && !row.canCreateExecutor);
+  const unsafeRuntime = Boolean(runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands);
+  const status = unsafeRuntime
+    ? "unsafe-runtime"
+    : selectedBlockedRows.length
+      ? "restricted-selection-visible"
+      : gatedRows.length
+        ? "restrictions-active"
+        : "restrictions-clear";
+
+  return {
+    schemaVersion: "spaceguard-restriction-policy-matrix/v1",
+    status,
+    tone: unsafeRuntime || selectedBlockedRows.length ? "restricted" : "review",
+    realRunEnabled: false,
+    destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
+    rows,
+    hardRows,
+    manualRows,
+    gatedRows,
+    selectedBlockedRows,
+    counts: {
+      rules: rows.length,
+      hardBlocked: hardRows.length,
+      manualOnly: manualRows.length,
+      gated: gatedRows.length,
+      selectedBlocked: selectedBlockedRows.length,
+      executorRoutes: rows.filter((row) => row.canCreateExecutor).length,
+      realRun: 0
+    },
+    primary: getRestrictionPolicyPrimary(status, { selectedBlockedRows, gatedRows }),
+    steps: getRestrictionPolicySteps(status, { selectedBlockedRows, gatedRows, hardRows })
+  };
+}
+
 export function buildExecutorPlan({
   selectedIds = new Set(),
   actionList = actions,
@@ -5871,6 +6004,7 @@ export function buildReport({
   itemReview = null,
   executorPlan = null,
   taskRunbook = null,
+  restrictionPolicyMatrix = null,
   releaseGate = null,
   validationPack = null,
   runtimeCapabilities = null,
@@ -5984,6 +6118,24 @@ export function buildReport({
                 .map((row) => `- ${row.title}: ${row.status} | ${row.powerLabel} | route=${row.route} | canDryRun=${row.canDryRun ? "yes" : "no"} | question=${row.userQuestion}`)
                 .join("\n")
             : "- No task work orders."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Restriction Policy Matrix",
+    restrictionPolicyMatrix
+      ? [
+          `- Status: ${restrictionPolicyMatrix.status}`,
+          `- Real run enabled: ${restrictionPolicyMatrix.realRunEnabled ? "yes" : "no"}`,
+          `- Hard-blocked lanes: ${restrictionPolicyMatrix.counts.hardBlocked}`,
+          `- Manual-only lanes: ${restrictionPolicyMatrix.counts.manualOnly}`,
+          `- Gated lanes: ${restrictionPolicyMatrix.counts.gated}`,
+          `- Selected blocked lanes: ${restrictionPolicyMatrix.counts.selectedBlocked}`,
+          `- Real-run routes: ${restrictionPolicyMatrix.counts.realRun}`,
+          restrictionPolicyMatrix.rows.length
+            ? restrictionPolicyMatrix.rows
+                .map((row) => `- ${row.title}: ${row.status} | executor=${row.canCreateExecutor ? "yes" : "no"} | real=${row.canRealRun ? "yes" : "no"} | ${row.nextStep}`)
+                .join("\n")
+            : "- No restriction rows."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -7146,6 +7298,140 @@ function getAgentTaskRunbookSteps(status, { readyRows = [], waitingRows = [], bl
   if (status === "unsafe-stop") return unsafeRows.slice(0, 3).map((row) => `${row.title}: ${row.agentStep}`);
   const waiting = [...blockedRows, ...waitingRows].slice(0, 3).map((row) => `${row.title}: ${row.agentStep}`);
   return waiting.length ? waiting : ["Run a scan.", "Select cleanup tasks.", "Resolve gates before dry-run work orders are issued."];
+}
+
+function buildRestrictionPolicyRow({
+  rule,
+  actionList = actions,
+  selectedIds = new Set(),
+  protectedPaths = [],
+  intakePolicy = null,
+  customRootTriage = null,
+  taskRunbook = null
+}) {
+  const relatedActions = (rule.actionIds || [])
+    .map((id) => actionList.find((action) => action.id === id))
+    .filter(Boolean);
+  const selectedActions = relatedActions.filter((action) => selectedIds.has(action.id));
+  const protectedActions = relatedActions.filter((action) => isActionProtected(action, protectedPaths));
+  const intakeBlockedActions = relatedActions.filter((action) => !actionAllowedByIntake(action, intakePolicy));
+  const relatedRunbookRows = taskRunbook?.rows?.filter((row) => relatedActions.some((action) => action.id === row.id)) || [];
+  const customRootCount = rule.id === "custom-roots" ? customRootTriage?.counts?.rows || 0 : 0;
+  const visibleBytes = relatedActions.reduce((sum, action) => sum + Number(action.bytes || 0), 0)
+    + (rule.id === "custom-roots" ? Number(customRootTriage?.visibleBytes || 0) : 0);
+  const selectedBytes = selectedActions.reduce((sum, action) => sum + Number(action.bytes || 0), 0);
+  const status = getRestrictionPolicyRowStatus({
+    rule,
+    selectedActions,
+    protectedActions,
+    intakeBlockedActions,
+    customRootCount
+  });
+  const canCreateExecutor = getRestrictionPolicyExecutorEligibility({
+    rule,
+    status,
+    relatedRunbookRows,
+    intakeBlockedActions
+  });
+
+  return {
+    id: rule.id,
+    title: rule.title,
+    lane: rule.lane,
+    status,
+    tone: getRestrictionPolicyRowTone(status),
+    reason: rule.reason,
+    actionIds: relatedActions.map((action) => action.id),
+    actionTitles: relatedActions.map((action) => action.title),
+    selectedCount: selectedActions.length,
+    protectedCount: protectedActions.length,
+    intakeBlockedCount: intakeBlockedActions.length,
+    customRootCount,
+    visibleBytes,
+    selectedBytes,
+    canAskUser: true,
+    canScan: rule.id !== "browser-identity" && rule.id !== "pagefile-registry",
+    canCreateExecutor,
+    canRealRun: false,
+    allowedOperations: rule.allowedOperations,
+    forbiddenOperations: rule.forbiddenOperations,
+    nextStep: getRestrictionPolicyRowNextStep({
+      rule,
+      status,
+      selectedActions,
+      intakeBlockedActions,
+      customRootTriage
+    })
+  };
+}
+
+function getRestrictionPolicyRowStatus({
+  rule,
+  selectedActions = [],
+  protectedActions = [],
+  intakeBlockedActions = [],
+  customRootCount = 0
+}) {
+  if (rule.lane === "hard-blocked") return "hard-blocked";
+  if (rule.lane === "advisory-only") return "advisory-only";
+  if (rule.lane === "manual-only") return customRootCount > 0 ? "manual-only" : "manual-ready";
+  if (protectedActions.length) return "protected";
+  if (rule.lane === "intake-gated") return intakeBlockedActions.length ? "intake-gated" : "dry-run-gated";
+  if (rule.lane === "review-gated") return selectedActions.length ? "review-gated" : "review-ready";
+  if (rule.lane === "future-disabled") return "future-disabled";
+  return "restricted-visible";
+}
+
+function getRestrictionPolicyExecutorEligibility({
+  rule,
+  status,
+  relatedRunbookRows = [],
+  intakeBlockedActions = []
+}) {
+  if (rule.lane === "hard-blocked" || rule.lane === "advisory-only" || rule.lane === "manual-only" || rule.lane === "future-disabled") return false;
+  if (status === "protected" || intakeBlockedActions.length) return false;
+  return relatedRunbookRows.some((row) => row.canDryRun) || status === "dry-run-gated" || status === "review-gated";
+}
+
+function getRestrictionPolicyRowTone(status) {
+  if (status === "hard-blocked" || status === "protected" || status === "intake-gated") return "restricted";
+  if (status === "manual-ready" || status === "review-ready") return "outline";
+  if (status === "dry-run-gated") return "safe";
+  return "review";
+}
+
+function getRestrictionPolicyRowNextStep({
+  rule,
+  status,
+  selectedActions = [],
+  intakeBlockedActions = [],
+  customRootTriage = null
+}) {
+  if (status === "hard-blocked") return "Keep this class visible for education only; no executor route exists.";
+  if (status === "advisory-only") return "Use the manual strategy checklist and require backup evidence before external action.";
+  if (status === "manual-only") return `${customRootTriage?.counts?.waiting || 0} custom root finding(s) need manual disposition.`;
+  if (status === "manual-ready") return "Add custom read-only roots only when the user wants manual review.";
+  if (status === "protected") return "Remove or narrow the protected path before any related dry-run route can be considered.";
+  if (status === "intake-gated") return `${intakeBlockedActions.length} admin/system route(s) are held behind intake.`;
+  if (status === "dry-run-gated") return "Admin/system routes can be planned in dry-run only; real execution remains locked.";
+  if (status === "review-gated") return `${selectedActions.length} selected review class(es) need item-level decisions.`;
+  if (status === "review-ready") return "Select a review-gated action only when the user wants item-level decisions.";
+  if (status === "future-disabled") return "Keep command execution disabled until disposable Windows validation evidence exists.";
+  return rule.reason;
+}
+
+function getRestrictionPolicyPrimary(status, { selectedBlockedRows = [], gatedRows = [] } = {}) {
+  if (status === "unsafe-runtime") return "Runtime write capability is visible; restriction policy must stop the workflow.";
+  if (status === "restricted-selection-visible") return `${selectedBlockedRows.length} selected restriction row(s) cannot become executor routes.`;
+  if (status === "restrictions-active") return `${gatedRows.length} restriction lane(s) are active and visible.`;
+  return "Restriction matrix is clear for the current dry-run plan.";
+}
+
+function getRestrictionPolicySteps(status, { selectedBlockedRows = [], gatedRows = [], hardRows = [] } = {}) {
+  if (status === "unsafe-runtime") return ["Stop workflow.", "Confirm runtime realRunEnabled and destructiveCommands are false.", "Rebuild policy evidence after capability review."];
+  if (status === "restricted-selection-visible") return selectedBlockedRows.slice(0, 3).map((row) => `${row.title}: ${row.nextStep}`);
+  if (status === "restrictions-active") return gatedRows.slice(0, 3).map((row) => `${row.title}: ${row.nextStep}`);
+  return hardRows.slice(0, 3).map((row) => `${row.title}: ${row.reason}`);
 }
 
 function buildTaskPowerBlockers(definition, availableActions = [], selectedActions = [], unresolved = [], intakePolicy = null) {

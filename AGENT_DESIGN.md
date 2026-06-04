@@ -116,6 +116,7 @@ The UI must also expose a recovery advisor and decision log:
 - `task powers`: scoped per-task capabilities that show whether safe cleanup, rebuildable cache cleanup, reviewed item cleanup, admin cleanup, advanced system strategy, manual storage strategy, or restricted zones are active, locked, advisory, or blocked.
 - `task grants`: per-selected-action receipts that bind a scoped power to the current plan id, scan fingerprint, dry-run consent receipt, route, target, allowed operations, forbidden operations, and blockers.
 - `task runbook`: per-selected-task work orders that expose the next user question, allowed operations, forbidden operations, evidence needs, and no cross-task authority.
+- `restriction matrix`: explicit refusal surface for hard-blocked, manual-only, review-gated, intake-gated, and future-disabled cleanup classes.
 - `executor policy`: dry-run route, future executor lane, blocked reason, guardrails, and verification requirement.
 - `release gate`: feature flags, runtime capability, validation evidence, and disposable VM coverage before real execution.
 - `write readiness`: final real-execution gate combining implementation, runtime write capability, validation, rollback, rescan parity, privilege, privacy, and consent.
@@ -169,6 +170,7 @@ Task power invariant:
 - Every power reports real execution unavailable until a future native executor, validation evidence, rollback proof, privilege boundary, privacy boundary, and consent path all pass.
 - Task grants are issued only as `dry-run-only` authority. They wait on the current scan session and dry-run consent, refuse issuance when runtime write capability is visible, and expire when the plan, selection, approval state, protected paths, or scanner settings change.
 - Task runbook work orders can summarize and sequence selected task grants, but they cannot add authority, reuse one task power for another target, or bypass the selected route boundary.
+- The restriction matrix is authoritative for refusal classes. Hard-blocked, advisory-only, manual-only, and future-disabled rows cannot create executor routes, cannot count real-run routes, and cannot be bypassed by task powers, runbook work orders, validation records, or release packets.
 
 Review gate invariant:
 

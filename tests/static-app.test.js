@@ -155,6 +155,8 @@ assert(app.includes("buildTaskCapabilityGrants"), "task capability grants should
 assert(app.includes("TaskCapabilityGrantPanel"), "task capability grant panel should be rendered");
 assert(app.includes("buildAgentTaskRunbook"), "task runbook should be wired");
 assert(app.includes("TaskRunbookPanel"), "task runbook panel should be rendered");
+assert(app.includes("buildRestrictionPolicyMatrix"), "restriction policy matrix should be wired");
+assert(app.includes("RestrictionPolicyMatrixPanel"), "restriction policy matrix panel should be rendered");
 assert(app.includes("runNativeReadonlyScan"), "real read-only scan workflow should be wired");
 assert(app.includes("scanSettings"), "native scan settings should be wired");
 assert(app.includes("targetDrive"), "native scan settings should include target drive");
@@ -247,6 +249,10 @@ assert(model.includes("expiresWith"), "task capability grants should carry expir
 assert(model.includes("spaceguard-agent-task-runbook/v1"), "model should expose task runbook schema");
 assert(model.includes("task-scoped-dry-run"), "task runbook should stay task-scoped");
 assert(model.includes("noCrossTaskAuthority"), "task runbook should forbid cross-task authority");
+assert(model.includes("spaceguard-restriction-policy-matrix/v1"), "model should expose restriction policy matrix schema");
+assert(model.includes("restrictionPolicyRules"), "model should define restriction policy rules");
+assert(model.includes("browser-identity"), "restriction policy should include browser identity stores");
+assert(model.includes("counts.realRun"), "restriction policy report should keep real-run count visible");
 assert(model.includes("admin-cleanup"), "model should classify admin cleanup as a scoped power");
 assert(model.includes("reviewed-item-cleanup"), "model should classify reviewed item cleanup as a scoped power");
 assert(model.includes("permanentConfirm"), "model should expose permanent-removal confirmation gate");

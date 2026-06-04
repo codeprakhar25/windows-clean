@@ -263,6 +263,50 @@ const assert = require("assert");
   });
   assert(taskRunbookReport.includes("## Task Runbook"), "report should include task runbook");
   assert(taskRunbookReport.includes("No cross-task authority: yes"), "task runbook report should preserve scope boundary");
+  const restrictionMatrix = guard.buildRestrictionPolicyMatrix({
+    actionList: guard.actions,
+    selectedIds: new Set(["browser-identity", "partitioning", "windows-old"]),
+    intakePolicy: intakeBlockedPolicy,
+    taskRunbook: issuedTaskRunbook,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(restrictionMatrix.schemaVersion, "spaceguard-restriction-policy-matrix/v1", "restriction matrix should expose a schema version");
+  assert.strictEqual(restrictionMatrix.realRunEnabled, false, "restriction matrix should not enable real runs");
+  assert.strictEqual(restrictionMatrix.counts.realRun, 0, "restriction matrix should never count real-run routes");
+  assert.strictEqual(
+    restrictionMatrix.rows.find((row) => row.id === "browser-identity").canCreateExecutor,
+    false,
+    "browser identity restriction should never create executor routes"
+  );
+  assert.strictEqual(
+    restrictionMatrix.rows.find((row) => row.id === "partitioning").status,
+    "advisory-only",
+    "partition restriction should stay advisory-only"
+  );
+  assert.strictEqual(
+    restrictionMatrix.rows.find((row) => row.id === "admin-system").status,
+    "intake-gated",
+    "admin/system restriction should follow intake gate"
+  );
+  const unsafeRestrictionMatrix = guard.buildRestrictionPolicyMatrix({
+    actionList: guard.actions,
+    selectedIds: grantSelectedIds,
+    runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
+  });
+  assert.strictEqual(unsafeRestrictionMatrix.status, "unsafe-runtime", "runtime write capability should stop restriction policy");
+  const restrictionReport = guard.buildReport({
+    scenario: guard.getScenario("developer"),
+    profile: guard.getScenario("developer").profile,
+    actionList: guard.actions,
+    selectedIds: grantSelectedIds,
+    readiness: { ready: true, unresolved: [] },
+    ledger: [],
+    protectedPaths: [],
+    goalBytes: 10 * guard.GB,
+    restrictionPolicyMatrix: restrictionMatrix
+  });
+  assert(restrictionReport.includes("## Restriction Policy Matrix"), "report should include restriction policy matrix");
+  assert(restrictionReport.includes("Real-run routes: 0"), "restriction matrix report should keep real-run routes at zero");
   assert.strictEqual(
     guard.buildTaskPowerCatalog({ actionList: guard.actions }).rows.find((row) => row.id === "restricted-zones").status,
     "blocked",

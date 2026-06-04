@@ -58,6 +58,7 @@ import {
   buildRescanComparison,
   buildRescanComparisonMarkdown,
   buildManualStrategyChecklist,
+  buildRestrictionPolicyMatrix,
   buildReleaseGate,
   buildReleaseReviewPacket,
   buildReleaseReviewPacketMarkdown,
@@ -668,6 +669,19 @@ export default function App() {
         rollbackPlan
       }),
     [executorPlan, taskCapabilityGrants, agentQuestionQueue, rollbackPlan]
+  );
+  const restrictionPolicyMatrix = useMemo(
+    () =>
+      buildRestrictionPolicyMatrix({
+        actionList,
+        selectedIds,
+        protectedPaths,
+        intakePolicy,
+        customRootTriage,
+        taskRunbook,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [actionList, selectedIds, protectedPaths, intakePolicy, customRootTriage, taskRunbook, runtimeCapabilities.result]
   );
   const publicBetaReadiness = useMemo(
     () =>
@@ -1291,6 +1305,7 @@ export default function App() {
       decisionLog,
       agentQuestionQueue,
       taskRunbook,
+      restrictionPolicyMatrix,
       itemReview,
       executorPlan,
       releaseGate,
@@ -1569,6 +1584,8 @@ export default function App() {
             <TaskCapabilityGrantPanel grants={taskCapabilityGrants} />
 
             <TaskRunbookPanel runbook={taskRunbook} />
+
+            <RestrictionPolicyMatrixPanel matrix={restrictionPolicyMatrix} />
 
             <NativeScanSettingsPanel
               settings={scanSettings}
@@ -2291,6 +2308,89 @@ function TaskRunbookPanel({ runbook }) {
               No selected cleanup task has a runbook row yet.
             </div>
           )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RestrictionPolicyMatrixPanel({ matrix }) {
+  const previewRows = matrix.rows.slice(0, 8);
+
+  return (
+    <Card id="restriction-policy-matrix-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              Restriction matrix
+            </CardTitle>
+            <CardDescription>{matrix.primary}</CardDescription>
+          </div>
+          <Badge variant={matrix.tone}>{matrix.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Hard" value={matrix.counts.hardBlocked} tone="restricted" />
+          <QueueStat label="Manual" value={matrix.counts.manualOnly} tone={matrix.counts.manualOnly ? "advisory" : "safe"} />
+          <QueueStat label="Gated" value={matrix.counts.gated} tone={matrix.counts.gated ? "review" : "safe"} />
+          <QueueStat label="Real" value={matrix.counts.realRun} tone={matrix.counts.realRun ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Global block</span>
+            <Badge variant={matrix.realRunEnabled ? "restricted" : "safe"}>{matrix.realRunEnabled ? "real run visible" : "real run locked"}</Badge>
+            <Badge variant={matrix.destructiveCommands ? "restricted" : "safe"}>{matrix.destructiveCommands ? "destructive command visible" : "no destructive commands"}</Badge>
+          </div>
+          <div className="flex flex-col gap-2">
+            {matrix.steps.slice(0, 3).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <Lock className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {previewRows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="mr-auto min-w-0 text-sm font-medium">{row.title}</div>
+                <Badge variant={row.tone}>{row.status}</Badge>
+                <Badge variant="outline">{row.lane}</Badge>
+                <Badge variant="outline">{formatBytes(row.visibleBytes)}</Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">{row.reason}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{row.nextStep}</p>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                <div className="rounded-md border bg-muted/20 p-2">
+                  <div className="mb-1 text-xs font-medium">Allowed</div>
+                  <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                    {row.allowedOperations.slice(0, 2).map((operation) => (
+                      <span key={operation}>{operation}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-md border bg-muted/20 p-2">
+                  <div className="mb-1 text-xs font-medium">Forbidden</div>
+                  <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                    {row.forbiddenOperations.slice(0, 2).map((operation) => (
+                      <span key={operation}>{operation}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Badge variant={row.canCreateExecutor ? "review" : "safe"}>{row.canCreateExecutor ? "executor gated" : "no executor"}</Badge>
+                <Badge variant={row.canRealRun ? "restricted" : "safe"}>{row.canRealRun ? "real run visible" : "real run locked"}</Badge>
+                {row.selectedCount ? <Badge variant="outline">{row.selectedCount} selected</Badge> : null}
+              </div>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>

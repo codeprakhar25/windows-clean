@@ -48,15 +48,16 @@ In the app:
 6. Check **Task powers** to confirm selected routes activate only scoped powers and that admin, advanced, manual, or restricted powers stay locked or advisory as expected.
 7. Check **Task grants** after arming dry-run consent. Every issued grant must be `dry-run-only`, tied to the current plan id and scan fingerprint, and must refuse issuance if runtime write capability appears.
 8. Check **Task runbook** to confirm each selected cleanup target has its own next question, allowed operations, forbidden operations, evidence needs, and no cross-task authority.
-9. Add protected paths before planning any review-heavy route.
-10. Use **Custom root triage** for custom read-only findings. Mark each unknown folder Keep, Archive, Move, Inspect, or Escalate; these dispositions stay manual and cannot create executor routes.
-11. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
-12. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, **Release review packet**, and **Validation evidence** to confirm real cleanup is still locked.
-13. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
-14. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
-15. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
-16. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
-17. Export the redacted support bundle first, then export the release review packet, dry-run report, and validation pack when path-level evidence is needed.
+9. Check **Restriction matrix** to confirm browser identity, Docker volumes, pagefile or registry tuning, partition writes, custom roots, admin/system work, personal/project data, and tool-native commands stay in the correct refusal or gated lane.
+10. Add protected paths before planning any review-heavy route.
+11. Use **Custom root triage** for custom read-only findings. Mark each unknown folder Keep, Archive, Move, Inspect, or Escalate; these dispositions stay manual and cannot create executor routes.
+12. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
+13. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, **Release review packet**, and **Validation evidence** to confirm real cleanup is still locked.
+14. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
+15. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
+16. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
+17. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
+18. Export the redacted support bundle first, then export the release review packet, dry-run report, and validation pack when path-level evidence is needed.
 
 ## Disposable Fixture Run
 
