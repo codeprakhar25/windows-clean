@@ -124,6 +124,89 @@ const assert = require("assert");
     "active",
     "rebuildable cache power should activate after approval"
   );
+  const grantScanSession = {
+    status: "current",
+    readyForPlanning: true,
+    currentFingerprint: "scan-grant-1"
+  };
+  const grantSelectedIds = new Set(["gradle-cache"]);
+  const grantApprovals = { groupConfirm: true, reviewed: {}, reviewItems: {}, typed: {} };
+  const unapprovedGrantPlanSnapshot = guard.buildPlanSnapshot({
+    selectedIds: grantSelectedIds,
+    actionList: guard.actions,
+    approvals: { groupConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
+    intakePolicy: intakeAllowedPolicy,
+    scanSession: grantScanSession
+  });
+  const unapprovedGrantExecutorPlan = guard.buildExecutorPlan({
+    selectedIds: grantSelectedIds,
+    actionList: guard.actions,
+    approvals: { groupConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
+    intakePolicy: intakeAllowedPolicy
+  });
+  const unapprovedTaskGrants = guard.buildTaskCapabilityGrants({
+    executorPlan: unapprovedGrantExecutorPlan,
+    taskPowerCatalog: cachePowerCatalog,
+    planSnapshot: unapprovedGrantPlanSnapshot,
+    scanSession: grantScanSession,
+    consentReceipt: { ready: false, planId: unapprovedGrantPlanSnapshot.id },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(unapprovedTaskGrants.status, "grants-waiting", "unapproved cache grants should wait rather than block");
+  assert.strictEqual(unapprovedTaskGrants.rows[0].status, "waiting-gate", "unapproved cache grant should show a gate wait state");
+  const grantPlanSnapshot = guard.buildPlanSnapshot({
+    selectedIds: grantSelectedIds,
+    actionList: guard.actions,
+    approvals: grantApprovals,
+    intakePolicy: intakeAllowedPolicy,
+    scanSession: grantScanSession
+  });
+  const grantExecutorPlan = guard.buildExecutorPlan({
+    selectedIds: grantSelectedIds,
+    actionList: guard.actions,
+    approvals: grantApprovals,
+    intakePolicy: intakeAllowedPolicy
+  });
+  const waitingTaskGrants = guard.buildTaskCapabilityGrants({
+    executorPlan: grantExecutorPlan,
+    taskPowerCatalog: activeCachePowerCatalog,
+    planSnapshot: grantPlanSnapshot,
+    scanSession: grantScanSession,
+    consentReceipt: { ready: false, planId: grantPlanSnapshot.id },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(waitingTaskGrants.schemaVersion, "spaceguard-task-capability-grants/v1", "task grants should expose a schema version");
+  assert.strictEqual(waitingTaskGrants.status, "grants-waiting", "task grants should wait on current consent");
+  assert.strictEqual(waitingTaskGrants.rows[0].status, "waiting-consent", "selected task grant should show consent wait state");
+  assert.strictEqual(waitingTaskGrants.rows[0].realRunAvailable, false, "task grant must not expose real-run authority");
+  const grantConsent = guard.buildExecutionConsentReceipt({
+    planSnapshot: grantPlanSnapshot,
+    executorPlan: grantExecutorPlan,
+    runReadiness: { ready: true },
+    consent: { accepted: true, planId: grantPlanSnapshot.id, acceptedAt: "2026-06-04T09:30:00.000Z" }
+  });
+  const issuedTaskGrants = guard.buildTaskCapabilityGrants({
+    executorPlan: grantExecutorPlan,
+    taskPowerCatalog: activeCachePowerCatalog,
+    planSnapshot: grantPlanSnapshot,
+    scanSession: grantScanSession,
+    consentReceipt: grantConsent,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(issuedTaskGrants.status, "dry-run-grants-issued", "task grants should issue after scan and consent evidence are current");
+  assert.strictEqual(issuedTaskGrants.counts.issued, 1, "one selected action should receive one dry-run grant");
+  assert.strictEqual(issuedTaskGrants.rows[0].authority, "dry-run-only", "task grant authority should be dry-run only");
+  assert(issuedTaskGrants.rows[0].expiresWith.includes("scan:scan-grant-1"), "task grant should expire with scan fingerprint");
+  const unsafeTaskGrants = guard.buildTaskCapabilityGrants({
+    executorPlan: grantExecutorPlan,
+    taskPowerCatalog: activeCachePowerCatalog,
+    planSnapshot: grantPlanSnapshot,
+    scanSession: grantScanSession,
+    consentReceipt: grantConsent,
+    runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
+  });
+  assert.strictEqual(unsafeTaskGrants.status, "unsafe-runtime", "runtime write capability should refuse task grants");
+  assert.strictEqual(unsafeTaskGrants.realRunEnabled, false, "task grants must not inherit runtime write authority");
   assert.strictEqual(
     guard.buildTaskPowerCatalog({ actionList: guard.actions }).rows.find((row) => row.id === "restricted-zones").status,
     "blocked",

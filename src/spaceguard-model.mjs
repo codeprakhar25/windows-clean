@@ -3016,6 +3016,79 @@ export function buildTaskPowerCatalog({
   };
 }
 
+export function buildTaskCapabilityGrants({
+  executorPlan = null,
+  taskPowerCatalog = null,
+  planSnapshot = null,
+  scanSession = null,
+  consentReceipt = null,
+  firstSafeExecutorContract = null,
+  writeBoundaryProbe = null,
+  runtimeCapabilities = {}
+} = {}) {
+  const rows = executorPlan?.rows || [];
+  const planId = planSnapshot?.id || "";
+  const scanFingerprint = scanSession?.currentFingerprint || "";
+  const scanCurrent = Boolean(scanSession?.readyForPlanning);
+  const consentCurrent = Boolean(consentReceipt?.ready && planId && consentReceipt.planId === planId);
+  const unsafeRuntime = Boolean(runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands);
+  const grants = rows.map((row) =>
+    buildTaskCapabilityGrantRow({
+      row,
+      taskPowerCatalog,
+      planId,
+      scanFingerprint,
+      scanCurrent,
+      consentReceipt,
+      consentCurrent,
+      firstSafeExecutorContract,
+      writeBoundaryProbe,
+      unsafeRuntime,
+      runtimeCapabilities
+    })
+  );
+  const blockedGrants = grants.filter((grant) => grant.status === "blocked" || grant.status === "unsafe-runtime");
+  const waitingGrants = grants.filter((grant) => grant.status.startsWith("waiting"));
+  const issuedGrants = grants.filter((grant) => grant.status === "issued-dry-run");
+  const status = !grants.length
+    ? "no-grants"
+    : unsafeRuntime
+      ? "unsafe-runtime"
+      : blockedGrants.length
+        ? "grants-blocked"
+        : waitingGrants.length
+          ? "grants-waiting"
+          : "dry-run-grants-issued";
+
+  return {
+    schemaVersion: "spaceguard-task-capability-grants/v1",
+    status,
+    tone: getTaskCapabilityGrantTone(status),
+    authority: "dry-run-only",
+    realRunEnabled: false,
+    destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
+    planId,
+    scanFingerprint,
+    scanCurrent,
+    consentPlanId: consentReceipt?.planId || "",
+    consentCurrent,
+    rows: grants,
+    issuedGrants,
+    waitingGrants,
+    blockedGrants,
+    counts: {
+      selected: grants.length,
+      issued: issuedGrants.length,
+      waiting: waitingGrants.length,
+      blocked: blockedGrants.length,
+      realRun: 0,
+      destructiveCommands: runtimeCapabilities?.destructiveCommands ? 1 : 0
+    },
+    primary: getTaskCapabilityGrantPrimary(status, grants, waitingGrants, blockedGrants),
+    steps: getTaskCapabilityGrantSteps(status, waitingGrants, blockedGrants)
+  };
+}
+
 export function buildExecutorPlan({
   selectedIds = new Set(),
   actionList = actions,
@@ -5432,7 +5505,8 @@ export function buildReport({
   manualStrategyChecklist = null,
   scanCoverage = null,
   intakePolicy = null,
-  taskPowerCatalog = null
+  taskPowerCatalog = null,
+  taskCapabilityGrants = null
 }) {
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, nativeScan, protectedPaths, {});
   const totals = computeTotals(selectedIds, actionList, { itemReviewsByAction: reviewsByAction });
@@ -5479,6 +5553,26 @@ export function buildReport({
           taskPowerCatalog.rows
             .map((row) => `- ${row.label}: ${row.status} | selected=${row.selectedCount}/${row.availableCount} | dry-run=${row.dryRunCount} | ${row.nextStep}`)
             .join("\n")
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Task Capability Grants",
+    taskCapabilityGrants
+      ? [
+          `- Status: ${taskCapabilityGrants.status}`,
+          `- Authority: ${taskCapabilityGrants.authority}`,
+          `- Real run enabled: ${taskCapabilityGrants.realRunEnabled ? "yes" : "no"}`,
+          `- Plan id: ${taskCapabilityGrants.planId || "missing"}`,
+          `- Scan fingerprint: ${taskCapabilityGrants.scanFingerprint || "missing"}`,
+          `- Consent current: ${taskCapabilityGrants.consentCurrent ? "yes" : "no"}`,
+          `- Issued grants: ${taskCapabilityGrants.counts.issued}`,
+          `- Waiting grants: ${taskCapabilityGrants.counts.waiting}`,
+          `- Blocked grants: ${taskCapabilityGrants.counts.blocked}`,
+          taskCapabilityGrants.rows.length
+            ? taskCapabilityGrants.rows
+                .map((grant) => `- ${grant.title}: ${grant.status} | ${grant.powerLabel} | route=${grant.route} | target=${grant.target || "none"} | next=${grant.nextStep}`)
+                .join("\n")
+            : "- No task grants."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -5981,6 +6075,249 @@ function getActionTaskPowerId(action, policy = null) {
 
 function getTaskPowerDefinition(powerId) {
   return taskPowerDefinitions.find((power) => power.id === powerId) || taskPowerDefinitions[taskPowerDefinitions.length - 1];
+}
+
+function buildTaskCapabilityGrantRow({
+  row,
+  taskPowerCatalog = null,
+  planId = "",
+  scanFingerprint = "",
+  scanCurrent = false,
+  consentReceipt = null,
+  consentCurrent = false,
+  firstSafeExecutorContract = null,
+  writeBoundaryProbe = null,
+  unsafeRuntime = false,
+  runtimeCapabilities = {}
+}) {
+  const power = getTaskPowerDefinition(row.powerId);
+  const powerRow = taskPowerCatalog?.rows?.find((item) => item.id === power.id) || null;
+  const firstSafeActionIds = firstSafeExecutorContract?.requestPreview?.actionIds || [];
+  const contractAttached = firstSafeActionIds.includes(row.id);
+  const contractReady = contractAttached ? firstSafeExecutorContract?.status === "disabled-contract-ready" : false;
+  const probeAttached = Boolean(contractAttached && writeBoundaryProbe?.contractRequired);
+  const blockers = buildTaskCapabilityGrantBlockers({
+    row,
+    powerRow,
+    planId,
+    scanCurrent,
+    consentCurrent,
+    unsafeRuntime,
+    runtimeCapabilities
+  });
+  const status = getTaskCapabilityGrantStatus(row, blockers, {
+    scanCurrent,
+    consentCurrent,
+    unsafeRuntime
+  });
+  const stablePayload = {
+    actionId: row.id,
+    route: row.route,
+    planId,
+    scanFingerprint,
+    consentPlanId: consentReceipt?.planId || "",
+    bytes: Number(row.bytes || 0),
+    status
+  };
+
+  return {
+    id: `grant-${hashText(stableStringify(stablePayload))}`,
+    actionId: row.id,
+    title: row.title,
+    status,
+    tone: getTaskCapabilityGrantRowTone(status),
+    authority: "dry-run-only",
+    powerId: power.id,
+    powerLabel: power.label,
+    route: row.route,
+    lane: row.lane,
+    target: row.path || "",
+    plannedBytes: Number(row.bytes || 0),
+    canSimulate: Boolean(row.canSimulate),
+    realRunAvailable: false,
+    runtimeRealRunEnabled: Boolean(runtimeCapabilities?.realRunEnabled),
+    scope: power.scope,
+    allowedOperations: getTaskCapabilityAllowedOperations(row, power),
+    forbiddenOperations: getTaskCapabilityForbiddenOperations(row, power),
+    guardrails: Array.from(new Set([...(power.guardrails || []), ...(row.guardrails || [])])),
+    evidence: {
+      planId,
+      scanFingerprint,
+      scanCurrent,
+      consentPlanId: consentReceipt?.planId || "",
+      consentCurrent,
+      contractAttached,
+      contractReady,
+      writeBoundaryProbe: probeAttached ? writeBoundaryProbe?.status || "not-run" : "not-required"
+    },
+    expiresWith: [
+      planId ? `plan:${planId}` : "plan snapshot missing",
+      scanFingerprint ? `scan:${scanFingerprint}` : "scan fingerprint missing",
+      consentReceipt?.planId ? `consent:${consentReceipt.planId}` : "consent missing",
+      "selection, approval, protected path, or scanner setting change"
+    ],
+    blockers,
+    nextStep: getTaskCapabilityGrantNextStep(status, blockers, row)
+  };
+}
+
+function buildTaskCapabilityGrantBlockers({
+  row,
+  powerRow = null,
+  planId = "",
+  scanCurrent = false,
+  consentCurrent = false,
+  unsafeRuntime = false,
+  runtimeCapabilities = {}
+}) {
+  const blockers = [];
+  const routePolicyBlocked = row.lane === "blocked" || row.lane === "advisory" || row.gate === "blocked" || row.gate === "advisory";
+  if (unsafeRuntime) {
+    blockers.push({
+      id: "unsafe-runtime",
+      label: "Runtime write capability visible",
+      detail: runtimeCapabilities?.destructiveCommands
+        ? "Runtime reports destructive command capability; dry-run grants cannot be issued."
+        : "Runtime reports real-run capability; task grants must be re-reviewed."
+    });
+  }
+  if (!planId) {
+    blockers.push({
+      id: "missing-plan",
+      label: "Plan snapshot missing",
+      detail: "A stable plan id is required before a task power can be scoped."
+    });
+  }
+  if (!scanCurrent) {
+    blockers.push({
+      id: "scan-session",
+      label: "Current scan required",
+      detail: "The grant must expire with a current scan-session fingerprint."
+    });
+  }
+  if (row.status === "blocked" || row.blockers?.length) {
+    blockers.push({
+      id: routePolicyBlocked ? "executor-row-blocked" : "approval-gate",
+      label: routePolicyBlocked ? "Route policy blocked" : "Approval gate waiting",
+      detail: row.blockers?.length ? row.blockers.join(", ") : row.realBlockedReason || "The selected action cannot enter the executor preview."
+    });
+  }
+  if (!row.canSimulate) {
+    blockers.push({
+      id: routePolicyBlocked ? "dry-run-unavailable" : "dry-run-waiting",
+      label: routePolicyBlocked ? "Dry-run unavailable" : "Dry-run waiting",
+      detail: Number(row.bytes || 0) > 0 ? "Resolve gates before this action can simulate." : "No approved bytes are selected for this action."
+    });
+  }
+  if (powerRow?.status === "locked" || powerRow?.status === "blocked" || powerRow?.status === "needs-approval") {
+    blockers.push({
+      id: powerRow.status === "needs-approval" ? "power-approval" : `power-${powerRow.status}`,
+      label: powerRow.label,
+      detail: powerRow.nextStep || `${powerRow.label} is ${powerRow.status}.`
+    });
+  }
+  if (!consentCurrent) {
+    blockers.push({
+      id: "consent",
+      label: "Current dry-run consent required",
+      detail: "The user must arm the current plan before a task grant is issued."
+    });
+  }
+  return dedupeGrantBlockers(blockers);
+}
+
+function dedupeGrantBlockers(blockers = []) {
+  const seen = new Set();
+  return blockers.filter((blocker) => {
+    if (seen.has(blocker.id)) return false;
+    seen.add(blocker.id);
+    return true;
+  });
+}
+
+function getTaskCapabilityGrantStatus(row, blockers = [], { scanCurrent = false, consentCurrent = false, unsafeRuntime = false } = {}) {
+  if (unsafeRuntime) return "unsafe-runtime";
+  const hardBlocker = blockers.find((blocker) => blocker.id === "executor-row-blocked" || blocker.id === "dry-run-unavailable" || blocker.id === "power-locked" || blocker.id === "power-blocked");
+  if (hardBlocker) return "blocked";
+  if (!scanCurrent) return "waiting-scan";
+  if (blockers.some((blocker) => blocker.id === "approval-gate" || blocker.id === "dry-run-waiting" || blocker.id === "power-approval")) return "waiting-gate";
+  if (!consentCurrent) return "waiting-consent";
+  if (!row.canSimulate) return "blocked";
+  return "issued-dry-run";
+}
+
+function getTaskCapabilityGrantTone(status) {
+  if (status === "dry-run-grants-issued") return "safe";
+  if (status === "unsafe-runtime" || status === "grants-blocked") return "restricted";
+  return "review";
+}
+
+function getTaskCapabilityGrantRowTone(status) {
+  if (status === "issued-dry-run") return "safe";
+  if (status === "blocked" || status === "unsafe-runtime") return "restricted";
+  return "review";
+}
+
+function getTaskCapabilityAllowedOperations(row, power) {
+  const operations = [
+    "Use this selected action in the dry-run executor preview.",
+    "Record zero-mutation ledger and verification evidence for this exact route.",
+    "Ask for missing approval, review, or rollback evidence tied to this action."
+  ];
+  if (row.route === "tool-native-prune") operations.push("Document the tool-native command path without executing shell commands.");
+  if (row.route?.startsWith("item-review")) operations.push("Use only item-level Remove decisions in the planned byte count.");
+  if (power.id === "manual-storage-strategy") operations.push("Track manual evidence and next steps without automating storage changes.");
+  return operations;
+}
+
+function getTaskCapabilityForbiddenOperations(row, power) {
+  const forbidden = [
+    "Mutate files, folders, registry keys, partitions, services, or power settings.",
+    "Expand from the selected target into sibling folders or arbitrary user data.",
+    "Self-elevate, request UAC, or run shell commands outside a disabled validation contract."
+  ];
+  if (row.route === "browser-cache-only" || power.id === "safe-cleanup") {
+    forbidden.push("Touch cookies, sessions, saved logins, browser profiles, or extension data.");
+  }
+  if (row.route === "tool-native-prune" || row.route === "item-review-project-cache") {
+    forbidden.push("Delete project source folders, Docker volumes, or package globals.");
+  }
+  if (power.id === "advanced-system-strategy") {
+    forbidden.push("Change pagefile settings or interrupt WSL/system operations automatically.");
+  }
+  if (power.id === "manual-storage-strategy") {
+    forbidden.push("Perform uninstall, archive, drive migration, or partition writes automatically.");
+  }
+  return Array.from(new Set(forbidden));
+}
+
+function getTaskCapabilityGrantPrimary(status, grants = [], waitingGrants = [], blockedGrants = []) {
+  if (status === "dry-run-grants-issued") return `${grants.length} task-specific dry-run grant(s) are issued for the current plan.`;
+  if (status === "unsafe-runtime") return "Runtime write capability is visible, so task grants are refused.";
+  if (status === "grants-blocked") return `${blockedGrants.length} selected task grant(s) are blocked by gates or route policy.`;
+  if (status === "grants-waiting") return `${waitingGrants.length} selected task grant(s) are waiting on scan or consent evidence.`;
+  return "Select cleanup actions to create task-specific grant receipts.";
+}
+
+function getTaskCapabilityGrantSteps(status, waitingGrants = [], blockedGrants = []) {
+  if (status === "dry-run-grants-issued") {
+    return ["Run simulation only.", "Keep every grant tied to the current plan, scan fingerprint, and consent receipt.", "Reject any real-write path until release gates pass."];
+  }
+  if (status === "unsafe-runtime") {
+    return ["Stop grant issuance.", "Confirm realRunEnabled and destructiveCommands are false.", "Review runtime capability evidence before continuing."];
+  }
+  const blockers = [...blockedGrants, ...waitingGrants]
+    .flatMap((grant) => grant.blockers || [])
+    .slice(0, 3)
+    .map((blocker) => `${blocker.label}: ${blocker.detail}`);
+  return blockers.length ? blockers : ["Run a scan.", "Resolve selected action gates.", "Arm dry-run consent for the current plan."];
+}
+
+function getTaskCapabilityGrantNextStep(status, blockers = [], row = {}) {
+  if (status === "issued-dry-run") return `${row.title} can enter dry-run simulation only; real cleanup remains disabled.`;
+  if (status === "unsafe-runtime") return "Re-check runtime capabilities before granting any task authority.";
+  if (blockers[0]) return blockers[0].detail;
+  return "Resolve scan, approval, and consent evidence before issuing this grant.";
 }
 
 function buildTaskPowerBlockers(definition, availableActions = [], selectedActions = [], unresolved = [], intakePolicy = null) {

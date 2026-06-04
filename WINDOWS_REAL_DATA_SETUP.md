@@ -46,14 +46,15 @@ In the app:
 4. Check **Scan session** and confirm the captured fingerprint is current. If target drive, custom roots, traversal caps, project-artifact setting, or protected paths changed, rerun the native scan before planning.
 5. Review **Intake constraints**. Leave admin/system actions off unless this validation run intentionally includes Windows.old, hibernation, WSL compaction, or another admin-sensitive dry-run route.
 6. Check **Task powers** to confirm selected routes activate only scoped powers and that admin, advanced, manual, or restricted powers stay locked or advisory as expected.
-7. Add protected paths before planning any review-heavy route.
-8. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
-9. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, and **Validation evidence** to confirm real cleanup is still locked.
-10. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
-11. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
-12. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
-13. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
-14. Export the redacted support bundle first, then the dry-run report and validation pack when path-level evidence is needed.
+7. Check **Task grants** after arming dry-run consent. Every issued grant must be `dry-run-only`, tied to the current plan id and scan fingerprint, and must refuse issuance if runtime write capability appears.
+8. Add protected paths before planning any review-heavy route.
+9. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
+10. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, and **Validation evidence** to confirm real cleanup is still locked.
+11. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
+12. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
+13. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
+14. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
+15. Export the redacted support bundle first, then the dry-run report and validation pack when path-level evidence is needed.
 
 ## Disposable Fixture Run
 

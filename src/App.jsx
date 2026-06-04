@@ -10,6 +10,7 @@ import {
   Eye,
   FileText,
   HardDrive,
+  KeyRound,
   Lock,
   Plus,
   Play,
@@ -72,6 +73,7 @@ import {
   buildStorageStrategyPlan,
   buildSupportBundle,
   buildSupportBundleMarkdown,
+  buildTaskCapabilityGrants,
   buildTaskPowerCatalog,
   buildToolCommandInventory,
   buildValidationEvidencePack,
@@ -557,6 +559,20 @@ export default function App() {
         runtimeCapabilities: runtimeCapabilities.result
       }),
     [nativeWriteBoundary, realExecutorCapsule, firstSafeExecutorContract, runtimeCapabilities.result]
+  );
+  const taskCapabilityGrants = useMemo(
+    () =>
+      buildTaskCapabilityGrants({
+        executorPlan,
+        taskPowerCatalog,
+        planSnapshot,
+        scanSession,
+        consentReceipt,
+        firstSafeExecutorContract,
+        writeBoundaryProbe,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [executorPlan, taskPowerCatalog, planSnapshot, scanSession, consentReceipt, firstSafeExecutorContract, writeBoundaryProbe, runtimeCapabilities.result]
   );
   const toolCommandInventory = useMemo(
     () => buildToolCommandInventory({ actionList, executorPlan, releaseGate }),
@@ -1197,7 +1213,8 @@ export default function App() {
       manualStrategyChecklist,
       scanCoverage,
       intakePolicy,
-      taskPowerCatalog
+      taskPowerCatalog,
+      taskCapabilityGrants
     });
     downloadTextFile("spaceguard-dry-run-report.md", report, "text/markdown;charset=utf-8");
   }
@@ -1424,6 +1441,8 @@ export default function App() {
             />
 
             <TaskPowerPanel catalog={taskPowerCatalog} />
+
+            <TaskCapabilityGrantPanel grants={taskCapabilityGrants} />
 
             <NativeScanSettingsPanel
               settings={scanSettings}
@@ -1964,6 +1983,84 @@ function TaskPowerPanel({ catalog }) {
               )}
             </div>
           ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TaskCapabilityGrantPanel({ grants }) {
+  const previewRows = grants.rows.length ? grants.rows.slice(0, 5) : [];
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4" />
+              Task grants
+            </CardTitle>
+            <CardDescription>{grants.primary}</CardDescription>
+          </div>
+          <Badge variant={grants.tone}>{grants.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Selected" value={grants.counts.selected} tone={grants.counts.selected ? "review" : "safe"} />
+          <QueueStat label="Issued" value={grants.counts.issued} tone={grants.counts.issued ? "safe" : "review"} />
+          <QueueStat label="Waiting" value={grants.counts.waiting} tone={grants.counts.waiting ? "review" : "safe"} />
+          <QueueStat label="Blocked" value={grants.counts.blocked} tone={grants.counts.blocked ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Grant envelope</span>
+            <Badge variant={grants.realRunEnabled ? "restricted" : "safe"}>{grants.authority}</Badge>
+            <Badge variant={grants.consentCurrent ? "safe" : "outline"}>{grants.consentCurrent ? "consent current" : "consent waiting"}</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+            <div className="truncate">Plan {grants.planId || "missing"}</div>
+            <div className="truncate">Scan {grants.scanFingerprint || "missing"}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {previewRows.length ? (
+            previewRows.map((grant) => (
+              <div key={grant.id} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="mr-auto min-w-0 text-sm font-medium">{grant.title}</div>
+                  <Badge variant={grant.tone}>{grant.status}</Badge>
+                  <Badge variant="outline">{grant.powerLabel}</Badge>
+                  <Badge variant="outline">{formatBytes(grant.plannedBytes)}</Badge>
+                </div>
+                <div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-[0.8fr_1fr]">
+                  <div className="truncate">{grant.route} | {grant.target || "no target"}</div>
+                  <div>{grant.nextStep}</div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {grant.blockers.length ? (
+                    grant.blockers.slice(0, 2).map((blocker) => (
+                      <Badge key={`${grant.id}-${blocker.id}`} variant="restricted">{blocker.label}</Badge>
+                    ))
+                  ) : (
+                    <>
+                      <Badge variant="safe">dry-run only</Badge>
+                      <Badge variant={grant.evidence.contractReady ? "safe" : "outline"}>
+                        {grant.evidence.contractAttached ? "contract attached" : "no write contract"}
+                      </Badge>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              No selected task has a grant receipt yet.
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

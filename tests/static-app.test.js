@@ -151,6 +151,8 @@ assert(app.includes("simulateCleanup"), "execution should be simulated");
 assert(app.includes("getExecutionReadiness"), "execution gate checks should be wired");
 assert(app.includes("buildExecutionConsentReceipt"), "execution consent receipt should be wired");
 assert(app.includes("buildTaskPowerCatalog"), "task power catalog should be wired");
+assert(app.includes("buildTaskCapabilityGrants"), "task capability grants should be wired");
+assert(app.includes("TaskCapabilityGrantPanel"), "task capability grant panel should be rendered");
 assert(app.includes("runNativeReadonlyScan"), "real read-only scan workflow should be wired");
 assert(app.includes("scanSettings"), "native scan settings should be wired");
 assert(app.includes("targetDrive"), "native scan settings should include target drive");
@@ -230,6 +232,9 @@ assert(model.includes("spaceguard-intake-policy/v1"), "model should expose intak
 assert(model.includes("normalizeTargetDrive"), "model should normalize target drives");
 assert(model.includes("spaceguard-task-powers/v1"), "model should expose task power schema");
 assert(model.includes("taskPowerDefinitions"), "model should define scoped task powers");
+assert(model.includes("spaceguard-task-capability-grants/v1"), "model should expose task capability grant schema");
+assert(model.includes("dry-run-only"), "task capability grants should keep authority dry-run only");
+assert(model.includes("expiresWith"), "task capability grants should carry expiry evidence");
 assert(model.includes("admin-cleanup"), "model should classify admin cleanup as a scoped power");
 assert(model.includes("reviewed-item-cleanup"), "model should classify reviewed item cleanup as a scoped power");
 assert(model.includes("permanentConfirm"), "model should expose permanent-removal confirmation gate");
