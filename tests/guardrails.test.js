@@ -518,6 +518,65 @@ const assert = require("assert");
   assert(demoRehearsalReport.includes("## Demo Rehearsal Runbook"), "report should include demo rehearsal runbook");
   assert(demoRehearsalReport.includes("Requires native data: no"), "demo rehearsal report should keep native-data boundary visible");
   assert(demoRehearsalReport.includes("Real-run routes: 0"), "demo rehearsal report should keep real-run routes at zero");
+  const productCompletionAudit = guard.buildProductCompletionAudit({
+    scanned: true,
+    scanMode: "demo",
+    actionList: guard.actions,
+    selectedIds: demoSelectedIds,
+    readiness: demoReadiness,
+    scanSession: demoScanSession,
+    scanCoverage: { schemaVersion: "spaceguard-scan-coverage/v1", confidenceScore: 40 },
+    demoRehearsalRunbook: evidenceReadyRunbook,
+    windowsSetupAssistant: browserSetupAssistant,
+    taskPowerCatalog: activeCachePowerCatalog,
+    taskCapabilityGrants: issuedTaskGrants,
+    taskRunbook: issuedTaskRunbook,
+    restrictionPolicyMatrix: restrictionMatrix,
+    agentQuestionQueue: grantQuestionQueue,
+    executorPlan: demoExecutorPlan,
+    runReadiness: demoRunReadiness,
+    consentReceipt: demoConsentReceipt,
+    ledger: demoLedger,
+    planSnapshot: demoPlanSnapshot,
+    privacyBoundary: { cloudDisabled: true, telemetryDisabled: true, exportOnly: true, status: "demo-local-only" },
+    supportBundle: { schemaVersion: "spaceguard-support-bundle/v1" },
+    validationPack: { schemaVersion: "spaceguard-validation-pack/v1" },
+    releaseReviewPacket: { schemaVersion: "spaceguard-release-review-packet/v1", status: "review-waiting", counts: { passed: 4, total: 12 }, writeSignalVisible: false, readyForRealExecution: false },
+    writeReadiness: { schemaVersion: "spaceguard-write-readiness/v1", status: "implementation-locked", readyForRealExecution: false, primary: "Real executor implementation is missing." },
+    realExecutorCapsule: { schemaVersion: "spaceguard-real-executor-capsule/v1", destructiveActionAvailable: false },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(productCompletionAudit.schemaVersion, "spaceguard-product-completion-audit/v1", "product audit should expose a schema version");
+  assert.strictEqual(productCompletionAudit.status, "demo-workflow-proven", "product audit should recognize proven demo workflow");
+  assert.strictEqual(productCompletionAudit.publicDemoReady, true, "product audit should mark public demo ready when rehearsal is safe");
+  assert.strictEqual(productCompletionAudit.productComplete, false, "product audit must not mark full product complete while real cleanup is locked");
+  assert.strictEqual(productCompletionAudit.realCleanupLocked, true, "product audit should keep real cleanup lock visible");
+  assert.strictEqual(
+    productCompletionAudit.rows.find((row) => row.id === "real-cleanup").status,
+    "future-locked",
+    "real cleanup row should remain future locked"
+  );
+  const unsafeProductAudit = guard.buildProductCompletionAudit({
+    scanned: true,
+    scanMode: "demo",
+    demoRehearsalRunbook: evidenceReadyRunbook,
+    runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
+  });
+  assert.strictEqual(unsafeProductAudit.status, "unsafe-stop", "product audit should stop on runtime write signals");
+  const productAuditReport = guard.buildReport({
+    scenario: guard.getScenario("developer"),
+    profile: guard.getScenario("developer").profile,
+    actionList: guard.actions,
+    selectedIds: demoSelectedIds,
+    readiness: demoReadiness,
+    ledger: demoLedger,
+    protectedPaths: [],
+    goalBytes: 10 * guard.GB,
+    productCompletionAudit
+  });
+  assert(productAuditReport.includes("## Product Completion Audit"), "report should include product completion audit");
+  assert(productAuditReport.includes("Product complete: no"), "product audit report should not overclaim full completion");
+  assert(productAuditReport.includes("Real cleanup locked: yes"), "product audit report should preserve real cleanup lock");
   const staleScanSession = guard.buildScanSessionEvidence({
     scanned: true,
     scanning: false,

@@ -326,6 +326,13 @@ Demo rehearsal invariant:
 - It must expose `requiresNativeData=false`, `realCleanupEnabled=false`, destructive commands disabled, and zero real-run routes.
 - It cannot count as native scanner validation, fixture evidence, release-gate evidence, write readiness, or real Windows cleanup proof.
 
+Product completion audit invariant:
+
+- The audit must map the product goal to current evidence rows instead of summarizing optimistic intent.
+- It can mark demo workflow, read-only native scan, privacy, restrictions, task powers, and reports as proven only when the corresponding runtime artifact exists.
+- Real cleanup remains `future-locked` until write readiness, release review, executor capsule, validation evidence, rollback, rescan, consent, and native runtime evidence all pass together.
+- The audit cannot mark `productComplete=true` while real cleanup is locked or while any unsafe runtime write signal is visible.
+
 Manual strategy invariant:
 
 - Manual storage actions are tracked, not executed.

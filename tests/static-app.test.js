@@ -164,6 +164,8 @@ assert(app.includes("buildWindowsSetupAssistant"), "Windows setup assistant shou
 assert(app.includes("WindowsSetupAssistantPanel"), "Windows setup assistant panel should be rendered");
 assert(app.includes("buildDemoRehearsalRunbook"), "demo rehearsal runbook should be wired");
 assert(app.includes("DemoRehearsalRunbookPanel"), "demo rehearsal runbook panel should be rendered");
+assert(app.includes("buildProductCompletionAudit"), "product completion audit should be wired");
+assert(app.includes("ProductCompletionAuditPanel"), "product completion audit panel should be rendered");
 assert(app.includes("scanSettings"), "native scan settings should be wired");
 assert(app.includes("targetDrive"), "native scan settings should include target drive");
 assert(app.includes("updateScanSetting"), "native scan settings should invalidate stale evidence");
@@ -265,6 +267,9 @@ assert(model.includes("Remove-Item"), "setup assistant should forbid direct dele
 assert(model.includes("spaceguard-demo-rehearsal-runbook/v1"), "model should expose demo rehearsal runbook schema");
 assert(model.includes("safeForPublicDemo"), "demo rehearsal should expose public demo safety");
 assert(model.includes("requiresNativeData: false"), "demo rehearsal should not require native data");
+assert(model.includes("spaceguard-product-completion-audit/v1"), "model should expose product completion audit schema");
+assert(model.includes("realCleanupLocked"), "product audit should expose real cleanup lock state");
+assert(model.includes("future-locked"), "product audit should name future-locked real cleanup");
 assert(model.includes("admin-cleanup"), "model should classify admin cleanup as a scoped power");
 assert(model.includes("reviewed-item-cleanup"), "model should classify reviewed item cleanup as a scoped power");
 assert(model.includes("permanentConfirm"), "model should expose permanent-removal confirmation gate");

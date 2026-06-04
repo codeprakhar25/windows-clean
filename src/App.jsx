@@ -70,6 +70,7 @@ import {
   buildReport,
   buildPlanSnapshot,
   buildReviewItemsByAction,
+  buildProductCompletionAudit,
   buildReviewWorkbench,
   buildScenarioActions,
   buildSuggestedPlan,
@@ -820,6 +821,73 @@ export default function App() {
       consentReceipt
     ]
   );
+  const productCompletionAudit = useMemo(
+    () =>
+      buildProductCompletionAudit({
+        scanned,
+        scanMode: dataMode,
+        actionList,
+        selectedIds,
+        readiness,
+        scanSession,
+        scanCoverage,
+        demoRehearsalRunbook,
+        windowsSetupAssistant,
+        taskPowerCatalog,
+        taskCapabilityGrants,
+        taskRunbook,
+        restrictionPolicyMatrix,
+        agentQuestionQueue,
+        executorPlan,
+        runReadiness,
+        consentReceipt,
+        ledger: activeLedger,
+        planSnapshot,
+        storageStrategy,
+        manualStrategyChecklist,
+        customRootTriage,
+        privacyBoundary,
+        publicBetaReadiness,
+        supportBundle,
+        validationPack,
+        releaseReviewPacket,
+        writeReadiness,
+        realExecutorCapsule,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [
+      scanned,
+      dataMode,
+      actionList,
+      selectedIds,
+      readiness,
+      scanSession,
+      scanCoverage,
+      demoRehearsalRunbook,
+      windowsSetupAssistant,
+      taskPowerCatalog,
+      taskCapabilityGrants,
+      taskRunbook,
+      restrictionPolicyMatrix,
+      agentQuestionQueue,
+      executorPlan,
+      runReadiness,
+      consentReceipt,
+      activeLedger,
+      planSnapshot,
+      storageStrategy,
+      manualStrategyChecklist,
+      customRootTriage,
+      privacyBoundary,
+      publicBetaReadiness,
+      supportBundle,
+      validationPack,
+      releaseReviewPacket,
+      writeReadiness,
+      realExecutorCapsule,
+      runtimeCapabilities.result
+    ]
+  );
   const families = useMemo(() => buildFamilyGroups(selectedIds, actionList, { approvals, itemReviewsByAction }), [selectedIds, actionList, approvals, itemReviewsByAction]);
   const usedPercent = Math.round((profile.usedBytes / profile.totalBytes) * 100);
   const selectedPercent = Math.min(100, Math.round((totals.selectedBytes / (goalGb * GB)) * 100));
@@ -1367,6 +1435,7 @@ export default function App() {
       restrictionPolicyMatrix,
       windowsSetupAssistant,
       demoRehearsalRunbook,
+      productCompletionAudit,
       itemReview,
       executorPlan,
       releaseGate,
@@ -1635,6 +1704,8 @@ export default function App() {
             <WindowsSetupAssistantPanel assistant={windowsSetupAssistant} />
 
             <DemoRehearsalRunbookPanel runbook={demoRehearsalRunbook} onExport={exportReport} />
+
+            <ProductCompletionAuditPanel audit={productCompletionAudit} />
 
             <ScanSessionPanel session={scanSession} />
 
@@ -2176,6 +2247,84 @@ function DemoRehearsalRunbookPanel({ runbook, onExport }) {
               </div>
             ))}
           </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProductCompletionAuditPanel({ audit }) {
+  const progressValue = audit.counts.total ? Math.round((audit.counts.proven / audit.counts.total) * 100) : 0;
+  const previewRows = audit.rows.slice(0, 8);
+
+  return (
+    <Card id="product-completion-audit-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Product completion audit
+            </CardTitle>
+            <CardDescription>{audit.primary}</CardDescription>
+          </div>
+          <Badge variant={audit.tone}>{audit.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Proven" value={audit.counts.proven} tone={audit.counts.proven ? "safe" : "review"} />
+          <QueueStat label="Waiting" value={audit.counts.waiting + audit.counts.partial} tone={audit.counts.waiting || audit.counts.partial ? "review" : "safe"} />
+          <QueueStat label="Locked" value={audit.counts.locked} tone={audit.counts.locked ? "restricted" : "safe"} />
+          <QueueStat label="Real run" value={audit.realCleanupComplete ? "ready" : "locked"} tone={audit.realCleanupComplete ? "safe" : "restricted"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">Audited requirement coverage</span>
+            <span className="text-muted-foreground">{progressValue}% proven</span>
+          </div>
+          <Progress value={progressValue} />
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Badge variant={audit.publicDemoReady ? "safe" : "review"}>
+              {audit.publicDemoReady ? "public demo safe" : "public demo waiting"}
+            </Badge>
+            <Badge variant={audit.readOnlyRealDataReady ? "safe" : "outline"}>
+              {audit.readOnlyRealDataReady ? "real scan current" : "real scan not proven"}
+            </Badge>
+            <Badge variant={audit.realCleanupLocked ? "restricted" : "safe"}>
+              {audit.realCleanupLocked ? "real cleanup locked" : "real cleanup ready"}
+            </Badge>
+          </div>
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 text-sm font-medium">Next audit moves</div>
+          <div className="flex flex-col gap-2">
+            {audit.steps.slice(0, 4).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {previewRows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="mr-auto min-w-0 text-sm font-medium">{row.requirement}</div>
+                <Badge variant={row.tone}>{row.status}</Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{row.detail}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge variant="outline">{row.proofLevel}</Badge>
+                <Badge variant={row.canRealRun ? "restricted" : "safe"}>{row.canRealRun ? "real run" : "no real run"}</Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{row.nextStep}</p>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>

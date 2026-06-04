@@ -3761,6 +3761,229 @@ export function buildDemoRehearsalRunbook({
   };
 }
 
+export function buildProductCompletionAudit({
+  scanned = false,
+  scanMode = "demo",
+  actionList = actions,
+  selectedIds = new Set(),
+  readiness = null,
+  scanSession = null,
+  scanCoverage = null,
+  demoRehearsalRunbook = null,
+  windowsSetupAssistant = null,
+  taskPowerCatalog = null,
+  taskCapabilityGrants = null,
+  taskRunbook = null,
+  restrictionPolicyMatrix = null,
+  agentQuestionQueue = null,
+  executorPlan = null,
+  runReadiness = null,
+  consentReceipt = null,
+  ledger = [],
+  planSnapshot = null,
+  storageStrategy = null,
+  manualStrategyChecklist = null,
+  customRootTriage = null,
+  privacyBoundary = null,
+  publicBetaReadiness = null,
+  supportBundle = null,
+  validationPack = null,
+  releaseReviewPacket = null,
+  writeReadiness = null,
+  realExecutorCapsule = null,
+  runtimeCapabilities = {}
+} = {}) {
+  const selectedCount = selectedIds?.size || 0;
+  const ledgerEntries = Array.isArray(ledger) ? ledger : [];
+  const unsafeRuntime = Boolean(
+    runtimeCapabilities?.destructiveCommands
+      || runtimeCapabilities?.realRunEnabled
+      || releaseReviewPacket?.writeSignalVisible
+      || demoRehearsalRunbook?.destructiveCommands
+      || windowsSetupAssistant?.destructiveCommands
+  );
+  const nativeScanCurrent = Boolean(scanMode === "native-readonly" && scanSession?.readyForPlanning && scanSession?.nativeEvidence);
+  const demoWorkflowComplete = Boolean(demoRehearsalRunbook?.evidenceComplete);
+  const publicDemoReady = Boolean(demoRehearsalRunbook?.safeForPublicDemo && !unsafeRuntime);
+  const dryRunLedgerCurrent = Boolean(
+    ledgerEntries.length
+      && (planSnapshot?.id
+        ? ledgerEntries.every((entry) => entry.planId === planSnapshot.id)
+        : ledgerEntries.every((entry) => !ledgerEntries[0]?.planId || entry.planId === ledgerEntries[0].planId))
+  );
+  const realCleanupComplete = Boolean(writeReadiness?.readyForRealExecution && releaseReviewPacket?.readyForRealExecution && realExecutorCapsule?.destructiveActionAvailable);
+
+  const rows = [
+    buildProductCompletionAuditRow({
+      id: "discover-c-drive",
+      requirement: "Search C: and surface cleanup candidates",
+      status: nativeScanCurrent ? "native-proven" : scanned || scanSession?.status === "demo-current" ? "demo-proven" : "waiting-evidence",
+      detail: nativeScanCurrent
+        ? `Native read-only scan is current with ${scanCoverage?.confidenceScore || 0}% coverage confidence.`
+        : scanned || scanSession?.status === "demo-current"
+          ? "Demo scan proves the discovery workflow with sample data."
+          : "Run demo scan or native read-only scan.",
+      evidence: scanSession?.status || "no scan session",
+      nextStep: nativeScanCurrent ? "Use current native evidence for planning." : "Run the scan path needed for this review."
+    }),
+    buildProductCompletionAuditRow({
+      id: "classify-and-rank",
+      requirement: "Classify findings into safe cleanup recipes",
+      status: actionList.length && scanCoverage?.schemaVersion ? "proven" : "waiting-evidence",
+      detail: `${actionList.length} recipe candidate(s) are available; ${selectedCount} currently selected.`,
+      evidence: scanCoverage?.schemaVersion || "scan coverage not evaluated",
+      nextStep: "Keep unsupported, protected, and demo-estimated roots visible."
+    }),
+    buildProductCompletionAuditRow({
+      id: "ask-and-follow",
+      requirement: "Ask the user the next required question",
+      status: agentQuestionQueue?.schemaVersion && taskRunbook?.schemaVersion ? "proven" : "waiting-evidence",
+      detail: agentQuestionQueue?.active?.prompt || "Question queue is ready when workflow state needs user input.",
+      evidence: agentQuestionQueue ? `${agentQuestionQueue.counts?.total || 0} question(s), ${agentQuestionQueue.counts?.actionable || 0} actionable` : "question queue missing",
+      nextStep: agentQuestionQueue?.active?.action ? `Use ${agentQuestionQueue.active.action}.` : "Continue through the guarded workflow."
+    }),
+    buildProductCompletionAuditRow({
+      id: "approval-gates",
+      requirement: "Require user approval before cleanup actions",
+      status: readiness?.ready ? "proven" : readiness ? "waiting-evidence" : "waiting-evidence",
+      detail: readiness?.ready ? "All current approval and review gates are resolved." : `${readiness?.unresolved?.length || 0} current gate(s) remain.`,
+      evidence: readiness ? "execution readiness evaluated" : "execution readiness missing",
+      nextStep: readiness?.ready ? "Arm dry-run consent." : "Resolve the next approval or item-review question."
+    }),
+    buildProductCompletionAuditRow({
+      id: "task-scoped-powers",
+      requirement: "Grant powers only for specific selected tasks",
+      status: taskPowerCatalog?.schemaVersion && taskCapabilityGrants?.schemaVersion && taskCapabilityGrants?.realRunEnabled === false ? "proven" : "waiting-evidence",
+      detail: taskCapabilityGrants
+        ? `${taskCapabilityGrants.counts?.issued || 0} issued, ${taskCapabilityGrants.counts?.waiting || 0} waiting, ${taskCapabilityGrants.counts?.blocked || 0} blocked.`
+        : "Task grants have not been evaluated.",
+      evidence: taskRunbook?.authority || taskCapabilityGrants?.authority || "no grant authority",
+      nextStep: "Keep powers tied to plan id, scan fingerprint, consent, and route target."
+    }),
+    buildProductCompletionAuditRow({
+      id: "restriction-policy",
+      requirement: "Restrict risky, manual, and future-only actions",
+      status: restrictionPolicyMatrix?.status === "unsafe-runtime" ? "unsafe" : restrictionPolicyMatrix?.schemaVersion && restrictionPolicyMatrix?.counts?.realRun === 0 ? "proven" : "waiting-evidence",
+      detail: restrictionPolicyMatrix
+        ? `${restrictionPolicyMatrix.counts.hardBlocked} hard-blocked, ${restrictionPolicyMatrix.counts.manualOnly} manual-only, ${restrictionPolicyMatrix.counts.gated} gated.`
+        : "Restriction policy has not been evaluated.",
+      evidence: restrictionPolicyMatrix?.status || "restriction matrix missing",
+      nextStep: "Keep browser identity, registry, partitions, Docker volumes, and custom roots out of executor routes."
+    }),
+    buildProductCompletionAuditRow({
+      id: "dry-run-ledger",
+      requirement: "Perform a dry-run and produce an auditable ledger",
+      status: dryRunLedgerCurrent ? "proven" : consentReceipt?.ready && runReadiness?.ready ? "waiting-evidence" : "partial",
+      detail: dryRunLedgerCurrent
+        ? `${ledgerEntries.length} ledger entr${ledgerEntries.length === 1 ? "y" : "ies"} captured for the current dry-run path.`
+        : consentReceipt?.ready ? "Consent is armed; simulation can produce ledger evidence." : "Dry-run consent and readiness are not complete yet.",
+      evidence: runReadiness?.status || consentReceipt?.status || "dry-run readiness pending",
+      nextStep: dryRunLedgerCurrent ? "Export report or compare with native rescan evidence." : "Arm consent, then simulate."
+    }),
+    buildProductCompletionAuditRow({
+      id: "manual-strategies",
+      requirement: "Offer non-delete strategies when cleanup is insufficient",
+      status: storageStrategy?.schemaVersion && manualStrategyChecklist?.schemaVersion && customRootTriage?.schemaVersion ? "proven" : "waiting-evidence",
+      detail: manualStrategyChecklist
+        ? `${manualStrategyChecklist.counts?.done || 0}/${manualStrategyChecklist.counts?.total || 0} manual strategy evidence rows complete.`
+        : "Manual strategy checklist has not been evaluated.",
+      evidence: customRootTriage?.status || storageStrategy?.status || "manual strategy missing",
+      nextStep: "Track user-owned moves, archives, app uninstalls, upgrades, and partition prep without automation."
+    }),
+    buildProductCompletionAuditRow({
+      id: "demo-rehearsal",
+      requirement: "Demo the full workflow without real data",
+      status: demoWorkflowComplete ? "proven" : publicDemoReady ? "partial" : "waiting-evidence",
+      detail: demoRehearsalRunbook?.primary || "Demo rehearsal runbook has not completed.",
+      evidence: demoRehearsalRunbook?.status || "demo rehearsal missing",
+      nextStep: demoWorkflowComplete ? "Export demo report as no-real-data proof." : "Complete scan, gates, consent, simulation, and report export in demo mode."
+    }),
+    buildProductCompletionAuditRow({
+      id: "real-readonly-data",
+      requirement: "Use real local data without mutating files",
+      status: nativeScanCurrent ? "native-proven" : windowsSetupAssistant?.nativeAvailable ? "partial" : "waiting-evidence",
+      detail: nativeScanCurrent
+        ? "Desktop shell has current read-only scan evidence."
+        : windowsSetupAssistant?.nativeAvailable ? "Desktop shell is available; scan evidence is not current." : "Browser demo cannot inspect local folders.",
+      evidence: windowsSetupAssistant?.status || "setup assistant missing",
+      nextStep: nativeScanCurrent ? "Use native evidence for dry-run planning." : "Start desktop shell and run real read-only scan."
+    }),
+    buildProductCompletionAuditRow({
+      id: "privacy-and-support",
+      requirement: "Keep data local and export only on user action",
+      status: privacyBoundary?.cloudDisabled && privacyBoundary?.telemetryDisabled && privacyBoundary?.exportOnly && supportBundle?.schemaVersion ? "proven" : "partial",
+      detail: supportBundle?.schemaVersion
+        ? "Redacted support bundle exists and excludes path-level details by default."
+        : "Support bundle or privacy boundary is incomplete.",
+      evidence: privacyBoundary?.status || supportBundle?.schemaVersion || "privacy/support missing",
+      nextStep: "Keep path-level dry-run report as a separate explicit export."
+    }),
+    buildProductCompletionAuditRow({
+      id: "release-validation",
+      requirement: "Prove validation, rollback, and release gates before public/native beta",
+      status: releaseReviewPacket?.status === "review-packet-ready" && validationPack?.schemaVersion ? "proven" : releaseReviewPacket?.schemaVersion && validationPack?.schemaVersion ? "partial" : "waiting-evidence",
+      detail: releaseReviewPacket
+        ? `${releaseReviewPacket.counts.passed}/${releaseReviewPacket.counts.total} release review rows passed.`
+        : "Release review packet has not been evaluated.",
+      evidence: releaseReviewPacket?.status || validationPack?.status || "release evidence missing",
+      nextStep: "Fill reviewer, artifact path, rollback, fixture, signing, support, and rescan evidence."
+    }),
+    buildProductCompletionAuditRow({
+      id: "real-cleanup",
+      requirement: "Perform real cleanup only after all gates pass",
+      status: unsafeRuntime ? "unsafe" : realCleanupComplete ? "proven" : "future-locked",
+      detail: realCleanupComplete
+        ? "Write readiness and release review claim real execution is ready."
+        : writeReadiness?.primary || "Real cleanup is intentionally locked until a validated executor exists.",
+      evidence: writeReadiness?.status || realExecutorCapsule?.status || "write readiness missing",
+      nextStep: realCleanupComplete ? "Proceed only through the validated executor route." : "Implement one first-safe executor behind a feature flag after validation evidence exists."
+    })
+  ];
+  const unsafeRows = rows.filter((row) => row.status === "unsafe");
+  const provenRows = rows.filter((row) => row.status === "proven" || row.status === "native-proven" || row.status === "demo-proven");
+  const partialRows = rows.filter((row) => row.status === "partial");
+  const waitingRows = rows.filter((row) => row.status === "waiting-evidence");
+  const lockedRows = rows.filter((row) => row.status === "future-locked");
+  const status = unsafeRows.length
+    ? "unsafe-stop"
+    : realCleanupComplete
+      ? "complete-real-cleanup-ready"
+      : nativeScanCurrent
+        ? "native-readonly-validation"
+        : demoWorkflowComplete
+          ? "demo-workflow-proven"
+          : "workflow-in-progress";
+
+  return {
+    schemaVersion: "spaceguard-product-completion-audit/v1",
+    status,
+    tone: unsafeRows.length ? "restricted" : realCleanupComplete ? "safe" : "review",
+    productComplete: Boolean(realCleanupComplete && !unsafeRows.length),
+    publicDemoReady,
+    demoWorkflowComplete,
+    readOnlyRealDataReady: nativeScanCurrent,
+    realCleanupComplete,
+    realCleanupLocked: !realCleanupComplete,
+    rows,
+    provenRows,
+    partialRows,
+    waitingRows,
+    lockedRows,
+    unsafeRows,
+    counts: {
+      total: rows.length,
+      proven: provenRows.length,
+      partial: partialRows.length,
+      waiting: waitingRows.length,
+      locked: lockedRows.length,
+      unsafe: unsafeRows.length,
+      realRun: realCleanupComplete ? 1 : 0
+    },
+    primary: getProductCompletionAuditPrimary(status, { provenRows, waitingRows, lockedRows, unsafeRows }),
+    steps: getProductCompletionAuditSteps(status, { rows, waitingRows, lockedRows, unsafeRows })
+  };
+}
+
 export function buildExecutorPlan({
   selectedIds = new Set(),
   actionList = actions,
@@ -6292,6 +6515,7 @@ export function buildReport({
   restrictionPolicyMatrix = null,
   windowsSetupAssistant = null,
   demoRehearsalRunbook = null,
+  productCompletionAudit = null,
   releaseGate = null,
   validationPack = null,
   runtimeCapabilities = null,
@@ -6341,6 +6565,26 @@ export function buildReport({
     `Simulated reclaimed: ${formatBytes(reclaimed)}`,
     `Pending gates: ${readiness.unresolved.length}`,
     `Admin/system actions: ${intakePolicy?.adminAllowed ? "allowed for dry-run planning" : "blocked by intake"}`,
+    "",
+    "## Product Completion Audit",
+    productCompletionAudit
+      ? [
+          `- Status: ${productCompletionAudit.status}`,
+          `- Product complete: ${productCompletionAudit.productComplete ? "yes" : "no"}`,
+          `- Public demo ready: ${productCompletionAudit.publicDemoReady ? "yes" : "no"}`,
+          `- Demo workflow complete: ${productCompletionAudit.demoWorkflowComplete ? "yes" : "no"}`,
+          `- Read-only real data ready: ${productCompletionAudit.readOnlyRealDataReady ? "yes" : "no"}`,
+          `- Real cleanup complete: ${productCompletionAudit.realCleanupComplete ? "yes" : "no"}`,
+          `- Real cleanup locked: ${productCompletionAudit.realCleanupLocked ? "yes" : "no"}`,
+          `- Proven requirements: ${productCompletionAudit.counts.proven}/${productCompletionAudit.counts.total}`,
+          `- Waiting requirements: ${productCompletionAudit.counts.waiting}`,
+          `- Locked requirements: ${productCompletionAudit.counts.locked}`,
+          `- Real-run audit routes: ${productCompletionAudit.counts.realRun}`,
+          productCompletionAudit.rows.length
+            ? productCompletionAudit.rows.map((row) => `- ${row.requirement}: ${row.status} | proof=${row.proofLevel} | ${row.detail}`).join("\n")
+            : "- No audit rows."
+        ].join("\n")
+      : "- Not evaluated.",
     "",
     "## Intake Policy",
     intakePolicy
@@ -7722,6 +7966,62 @@ function getDemoRehearsalSteps(status, { rows = [], activeQuestion = null } = {}
   return nextRows.length
     ? nextRows.map((row) => `${row.label}: ${row.action}`)
     : ["Run demo scan.", "Resolve gates.", "Simulate dry-run.", "Export report."];
+}
+
+function buildProductCompletionAuditRow({
+  id,
+  requirement,
+  status,
+  detail,
+  evidence,
+  nextStep
+}) {
+  return {
+    id,
+    requirement,
+    status,
+    tone: getProductCompletionAuditRowTone(status),
+    detail,
+    evidence,
+    nextStep,
+    proofLevel: getProductCompletionAuditProofLevel(status),
+    canRealRun: status === "proven" && id === "real-cleanup"
+  };
+}
+
+function getProductCompletionAuditRowTone(status) {
+  if (status === "proven" || status === "native-proven" || status === "demo-proven") return "safe";
+  if (status === "unsafe" || status === "future-locked") return "restricted";
+  if (status === "partial") return "review";
+  return "advisory";
+}
+
+function getProductCompletionAuditProofLevel(status) {
+  if (status === "native-proven") return "native-readonly";
+  if (status === "demo-proven") return "demo";
+  if (status === "proven") return "current-state";
+  if (status === "partial") return "partial";
+  if (status === "future-locked") return "locked";
+  if (status === "unsafe") return "unsafe";
+  return "missing-evidence";
+}
+
+function getProductCompletionAuditPrimary(status, { provenRows = [], waitingRows = [], lockedRows = [], unsafeRows = [] } = {}) {
+  if (status === "unsafe-stop") return `${unsafeRows.length} unsafe signal(s) require stopping product completion review.`;
+  if (status === "complete-real-cleanup-ready") return "Every audited requirement is ready for the validated real-cleanup route.";
+  if (status === "native-readonly-validation") return "Real local data can be scanned read-only; write-capable cleanup remains locked.";
+  if (status === "demo-workflow-proven") return "The no-real-data demo workflow is proven; real local scan and cleanup validation remain separate.";
+  if (lockedRows.length) return `${provenRows.length} requirement(s) proven; ${lockedRows.length} real-cleanup requirement(s) remain locked.`;
+  return `${waitingRows.length} requirement(s) still need current workflow evidence.`;
+}
+
+function getProductCompletionAuditSteps(status, { rows = [], waitingRows = [], lockedRows = [], unsafeRows = [] } = {}) {
+  if (status === "unsafe-stop") return unsafeRows.slice(0, 3).map((row) => `${row.requirement}: ${row.nextStep}`);
+  if (status === "complete-real-cleanup-ready") return ["Export release evidence.", "Run only the validated executor route.", "Keep audit evidence attached to the run ledger."];
+  const nextRows = [...waitingRows, ...lockedRows].slice(0, 4);
+  return nextRows.length
+    ? nextRows.map((row) => `${row.requirement}: ${row.nextStep}`)
+    : rows.slice(0, 3).map((row) => `${row.requirement}: ${row.nextStep}`);
 }
 
 function buildRestrictionPolicyRow({
