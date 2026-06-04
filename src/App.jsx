@@ -67,6 +67,7 @@ import {
   buildSuggestedPlan,
   buildRunReadiness,
   buildScanCoverageSummary,
+  buildScanSessionEvidence,
   buildStorageStrategyPlan,
   buildSupportBundle,
   buildSupportBundleMarkdown,
@@ -264,6 +265,18 @@ export default function App() {
     () => buildScanCoverageSummary({ actionList, scanMode: dataMode, nativeScan: nativeScan.result }),
     [actionList, dataMode, nativeScan.result]
   );
+  const scanSession = useMemo(
+    () =>
+      buildScanSessionEvidence({
+        scanned,
+        scanning,
+        scanMode: dataMode,
+        scanSettings,
+        protectedPaths,
+        nativeScan: nativeScan.result
+      }),
+    [scanned, scanning, dataMode, scanSettings, protectedPaths, nativeScan.result]
+  );
   const privacyBoundary = useMemo(
     () =>
       buildPrivacyBoundary({
@@ -303,9 +316,10 @@ export default function App() {
         itemReviewsByAction,
         scanMode: dataMode,
         goalBytes: goalGb * GB,
-        intakePolicy
+        intakePolicy,
+        scanSession
       }),
-    [selectedIds, actionList, approvals, protectedPaths, itemReviewsByAction, dataMode, goalGb, intakePolicy]
+    [selectedIds, actionList, approvals, protectedPaths, itemReviewsByAction, dataMode, goalGb, intakePolicy, scanSession]
   );
   const ledgerHistorySummary = useMemo(
     () => buildLedgerHistorySummary(runHistory, planSnapshot),
@@ -377,9 +391,10 @@ export default function App() {
         goalBytes: goalGb * GB,
         itemReviewsByAction,
         intakePolicy,
+        scanSession,
         taskPowerCatalog
       }),
-    [scanned, scanning, dataMode, actionList, selectedIds, approvals, readiness, protectedPaths, activeLedger, goalGb, itemReviewsByAction, intakePolicy, taskPowerCatalog]
+    [scanned, scanning, dataMode, scanSession, actionList, selectedIds, approvals, readiness, protectedPaths, activeLedger, goalGb, itemReviewsByAction, intakePolicy, taskPowerCatalog]
   );
   const reviewWorkbench = useMemo(
     () => buildReviewWorkbench(actionList, selectedIds, approvals, protectedPaths, itemReviewsByAction, intakePolicy),
@@ -390,8 +405,8 @@ export default function App() {
     [focusedReviewId, itemReviewsByAction, actionList, nativeScan.result, protectedPaths, approvals]
   );
   const preflight = useMemo(
-    () => buildExecutionPreflight({ scanned, scanning, selectedIds, actionList, readiness, protectedPaths, ledger: activeLedger, planSnapshot }),
-    [scanned, scanning, selectedIds, actionList, readiness, protectedPaths, activeLedger, planSnapshot]
+    () => buildExecutionPreflight({ scanned, scanning, selectedIds, actionList, readiness, protectedPaths, ledger: activeLedger, planSnapshot, scanSession }),
+    [scanned, scanning, selectedIds, actionList, readiness, protectedPaths, activeLedger, planSnapshot, scanSession]
   );
   const executorPlan = useMemo(
     () =>
@@ -550,6 +565,7 @@ export default function App() {
         scanned,
         scanning,
         scanMode: dataMode,
+        scanSession,
         nativeCapability,
         runtimeCapabilities: runtimeCapabilities.result,
         actionList,
@@ -573,6 +589,7 @@ export default function App() {
       scanned,
       scanning,
       dataMode,
+      scanSession,
       nativeCapability,
       runtimeCapabilities.result,
       actionList,
@@ -615,6 +632,7 @@ export default function App() {
         profile,
         scanMode: dataMode,
         scanSettings,
+        scanSession,
         nativeScan: nativeScan.result,
         scanCoverage,
         privacyBoundary,
@@ -625,7 +643,7 @@ export default function App() {
         rollbackPlan,
         ledgerHistorySummary
       }),
-    [profile, dataMode, scanSettings, nativeScan.result, scanCoverage, privacyBoundary, publicBetaReadiness, releaseGate, runtimeCapabilities.result, executorPlan, rollbackPlan, ledgerHistorySummary]
+    [profile, dataMode, scanSettings, scanSession, nativeScan.result, scanCoverage, privacyBoundary, publicBetaReadiness, releaseGate, runtimeCapabilities.result, executorPlan, rollbackPlan, ledgerHistorySummary]
   );
   const families = useMemo(() => buildFamilyGroups(selectedIds, actionList, { approvals, itemReviewsByAction }), [selectedIds, actionList, approvals, itemReviewsByAction]);
   const usedPercent = Math.round((profile.usedBytes / profile.totalBytes) * 100);
@@ -1127,6 +1145,8 @@ export default function App() {
       protectedPaths,
       goalBytes: goalGb * GB,
       scanMode: dataMode,
+      scanSettings,
+      scanSession,
       nativeScan: nativeScan.result,
       advisor: recoveryAdvisor,
       decisionLog,
@@ -1374,6 +1394,8 @@ export default function App() {
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_430px]">
           <div className="space-y-3">
             <NativeScannerPanel capability={nativeCapability} nativeScan={nativeScan} />
+
+            <ScanSessionPanel session={scanSession} />
 
             <IntakePolicyPanel
               policy={intakePolicy}
@@ -1738,6 +1760,70 @@ function NativeScannerPanel({ capability, nativeScan }) {
             The browser demo cannot inspect local folders. Start the desktop shell to populate this panel with real path sizes.
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ScanSessionPanel({ session }) {
+  const changed = session.changedSettings || [];
+  const steps = session.steps || [];
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Scan session
+            </CardTitle>
+            <CardDescription>{session.primary}</CardDescription>
+          </div>
+          <Badge variant={session.tone}>{session.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid gap-2 md:grid-cols-3">
+          <QueueStat label="Drive" value={session.targetDrive} tone="review" />
+          <QueueStat label="Current" value={session.current ? "yes" : "no"} tone={session.current ? "safe" : "restricted"} />
+          <QueueStat label="Ready" value={session.readyForPlanning ? "yes" : "no"} tone={session.readyForPlanning ? "safe" : "review"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">Evidence fingerprint</span>
+            <Badge variant="outline">{session.currentFingerprint}</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+            <span>Captured: {session.capturedFingerprint || "none"}</span>
+            <span>Generated: {session.generatedAt || "not captured"}</span>
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          {session.items.map((item) => (
+            <div key={item.id} className="grid grid-cols-[18px_1fr] gap-2 rounded-md border bg-card p-3 text-sm">
+              <CheckCircle2 className={`mt-0.5 h-4 w-4 ${item.passed ? "text-emerald-600" : "text-muted-foreground"}`} />
+              <div>
+                <div className={item.passed ? "font-medium" : "font-medium text-muted-foreground"}>{item.label}</div>
+                <div className="text-xs text-muted-foreground">{item.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {changed.length ? (
+          <div className="rounded-md border bg-amber-50 p-3 text-sm text-amber-950">
+            Changed since scan: {changed.join(", ")}. Run a fresh native read-only scan before simulation.
+          </div>
+        ) : null}
+
+        <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+          {steps.slice(0, 3).map((step) => (
+            <div key={step}>- {step}</div>
+          ))}
+        </div>
       </CardContent>
     </Card>
   );

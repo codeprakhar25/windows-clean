@@ -129,6 +129,91 @@ const assert = require("assert");
     "blocked",
     "restricted-zone power should always remain blocked"
   );
+  const sessionSettings = {
+    targetDrive: "C:",
+    includeProjectArtifacts: true,
+    maxDepth: 8,
+    maxEntriesPerRoot: 25000,
+    customRoots: ["C:\\Users\\demo\\Archives"]
+  };
+  const capturedNativeScan = {
+    available: true,
+    generatedAt: "2026-06-04T09:00:00.000Z",
+    targetDrive: "C:",
+    request: {
+      ...sessionSettings,
+      protectedPaths: ["C:\\Users\\demo\\ClientWork"]
+    },
+    findings: [],
+    warnings: [],
+    writeCapability: false,
+    destructiveCommands: false
+  };
+  const currentScanSession = guard.buildScanSessionEvidence({
+    scanned: true,
+    scanning: false,
+    scanMode: "native-readonly",
+    scanSettings: sessionSettings,
+    protectedPaths: ["C:\\Users\\demo\\ClientWork"],
+    nativeScan: capturedNativeScan
+  });
+  assert.strictEqual(currentScanSession.schemaVersion, "spaceguard-scan-session/v1", "scan sessions should expose a schema version");
+  assert.strictEqual(currentScanSession.status, "native-current", "matching native request evidence should be current");
+  assert.strictEqual(currentScanSession.readyForPlanning, true, "current native session should allow planning");
+  const staleScanSession = guard.buildScanSessionEvidence({
+    scanned: true,
+    scanning: false,
+    scanMode: "native-readonly",
+    scanSettings: { ...sessionSettings, targetDrive: "D:" },
+    protectedPaths: ["C:\\Users\\demo\\ClientWork", "C:\\Users\\demo\\DoNotTouch"],
+    nativeScan: capturedNativeScan
+  });
+  assert.strictEqual(staleScanSession.status, "native-stale", "changed scan settings should stale native evidence");
+  assert.strictEqual(staleScanSession.readyForPlanning, false, "stale native sessions must block planning");
+  assert(staleScanSession.changedSettings.includes("target drive"), "stale scan session should name target drive changes");
+  assert(staleScanSession.changedSettings.includes("protected paths"), "stale scan session should name protected path changes");
+  const scanSessionPlan = guard.buildPlanSnapshot({
+    selectedIds: new Set(["windows-temp"]),
+    actionList: guard.actions,
+    scanMode: "native-readonly",
+    scanSession: currentScanSession
+  });
+  const staleScanSessionPlan = guard.buildPlanSnapshot({
+    selectedIds: new Set(["windows-temp"]),
+    actionList: guard.actions,
+    scanMode: "native-readonly",
+    scanSession: staleScanSession
+  });
+  assert.notStrictEqual(scanSessionPlan.id, staleScanSessionPlan.id, "plan snapshots should change when scan-session evidence changes");
+  const staleSessionPreflight = guard.buildExecutionPreflight({
+    scanned: true,
+    scanning: false,
+    selectedIds: new Set(["windows-temp"]),
+    actionList: guard.actions,
+    readiness: { unresolved: [] },
+    ledger: [],
+    planSnapshot: staleScanSessionPlan,
+    scanSession: staleScanSession
+  });
+  assert.strictEqual(staleSessionPreflight.ready, false, "stale scan sessions should block execution preflight");
+  assert.strictEqual(
+    staleSessionPreflight.items.find((item) => item.id === "scan-session-current").passed,
+    false,
+    "preflight should expose stale scan session as a failed item"
+  );
+  const staleSessionQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    scanning: false,
+    scanMode: "native-readonly",
+    scanSession: staleScanSession,
+    nativeCapability: { available: true },
+    actionList: guard.actions,
+    selectedIds: new Set(["windows-temp"]),
+    approvals: {},
+    readiness: { unresolved: [] }
+  });
+  assert.strictEqual(staleSessionQuestions.activeQuestion.id, "refresh-scan-session", "agent should ask for a fresh scan when session evidence is stale");
+  assert.strictEqual(staleSessionQuestions.activeQuestion.action, "run-real-scan", "stale native evidence should route to a fresh real scan");
 
   const wslOnly = new Set(["wsl-vhdx"]);
   assert.strictEqual(

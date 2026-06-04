@@ -1250,6 +1250,121 @@ export function normalizeTargetDrive(value = "C:") {
   return `${match[1].toUpperCase()}:`;
 }
 
+export function normalizeScanSessionSettings({ scanSettings = {}, protectedPaths = [] } = {}) {
+  const settings = scanSettings && typeof scanSettings === "object" ? scanSettings : {};
+  const explicitProtectedPaths = Array.isArray(protectedPaths) ? protectedPaths : [];
+  return {
+    targetDrive: normalizeTargetDrive(settings.targetDrive || settings.target_drive || "C:"),
+    includeProjectArtifacts: Boolean(settings.includeProjectArtifacts ?? settings.include_project_artifacts ?? true),
+    maxDepth: Number(settings.maxDepth || settings.max_depth || 8),
+    maxEntriesPerRoot: Number(settings.maxEntriesPerRoot || settings.max_entries_per_root || 25000),
+    customRoots: normalizeSessionPathList(settings.customRoots || settings.custom_roots),
+    protectedPaths: normalizeSessionPathList(explicitProtectedPaths.length ? explicitProtectedPaths : settings.protectedPaths || settings.protected_paths)
+  };
+}
+
+export function buildScanSessionEvidence({
+  scanned = false,
+  scanning = false,
+  scanMode = "demo",
+  scanSettings = {},
+  protectedPaths = [],
+  nativeScan = null
+} = {}) {
+  const currentSettings = normalizeScanSessionSettings({ scanSettings, protectedPaths });
+  const capturedSettings = nativeScan?.request
+    ? normalizeScanSessionSettings({
+        scanSettings: nativeScan.request,
+        protectedPaths: nativeScan.request.protectedPaths || []
+      })
+    : null;
+  const currentFingerprint = `scan-${hashText(stableStringify(currentSettings))}`;
+  const capturedFingerprint = capturedSettings ? `scan-${hashText(stableStringify(capturedSettings))}` : "";
+  const nativeEvidence = scanMode === "native-readonly" && Boolean(nativeScan?.available !== false && nativeScan);
+  const changedSettings = capturedSettings ? getScanSessionChanges(currentSettings, capturedSettings) : [];
+  const settingsMatch = nativeEvidence && Boolean(capturedFingerprint) && currentFingerprint === capturedFingerprint;
+
+  let status = "not-scanned";
+  if (scanning) status = "scanning";
+  else if (!scanned) status = "not-scanned";
+  else if (nativeEvidence && !capturedSettings) status = "native-unverified";
+  else if (nativeEvidence && !settingsMatch) status = "native-stale";
+  else if (nativeEvidence) status = "native-current";
+  else if (scanned) status = "demo-current";
+
+  const current = status === "native-current" || status === "demo-current";
+  const readyForPlanning = Boolean(scanned && !scanning && current);
+  const items = [
+    {
+      id: "scan-complete",
+      label: "Scan complete",
+      detail: scanned ? "Discovery has produced a plan source." : "Run discovery before planning.",
+      passed: scanned
+    },
+    {
+      id: "scanner-idle",
+      label: "Scanner idle",
+      detail: scanning ? "A scan is still running." : "No scan is currently running.",
+      passed: !scanning
+    },
+    {
+      id: "session-captured",
+      label: "Session settings captured",
+      detail: nativeEvidence
+        ? capturedSettings
+          ? `Native evidence captured as ${capturedFingerprint}.`
+          : "Native evidence does not include the settings that produced it."
+        : "Demo scans use the current UI settings only for workflow rehearsal.",
+      passed: !nativeEvidence || Boolean(capturedSettings)
+    },
+    {
+      id: "session-current",
+      label: "Evidence matches current settings",
+      detail: nativeEvidence
+        ? settingsMatch
+          ? "Target drive, custom roots, traversal caps, artifact setting, and protected paths match."
+          : changedSettings.length
+            ? `Changed since scan: ${changedSettings.join(", ")}.`
+            : "Native evidence cannot be matched to the current scan settings."
+        : scanned
+          ? "Demo scan evidence is current for the active scenario."
+          : "No scan evidence exists yet.",
+      passed: nativeEvidence ? settingsMatch : scanned
+    },
+    {
+      id: "read-only-boundary",
+      label: "Read-only boundary",
+      detail: nativeScan?.writeCapability || nativeScan?.destructiveCommands
+        ? "Native scan reports write or destructive capability; release gates must stay locked."
+        : "No write capability is used for scan-session evidence.",
+      passed: !nativeScan?.writeCapability && !nativeScan?.destructiveCommands
+    }
+  ];
+
+  return {
+    schemaVersion: "spaceguard-scan-session/v1",
+    status,
+    tone: status === "native-current" || status === "demo-current" ? "safe" : status === "native-stale" || status === "native-unverified" ? "restricted" : "review",
+    current,
+    readyForPlanning,
+    scanned,
+    scanning,
+    scanMode,
+    nativeEvidence,
+    targetDrive: currentSettings.targetDrive,
+    generatedAt: nativeScan?.generatedAt || "",
+    currentFingerprint,
+    capturedFingerprint,
+    settings: currentSettings,
+    capturedSettings,
+    changedSettings,
+    items,
+    blockedCount: items.filter((item) => !item.passed).length,
+    primary: getScanSessionPrimary(status, changedSettings),
+    steps: getScanSessionSteps(status, nativeEvidence)
+  };
+}
+
 export function buildIntakePolicy({
   targetDrive = "C:",
   goalBytes = 0,
@@ -1544,7 +1659,8 @@ export function buildPlanSnapshot({
   itemReviewsByAction = null,
   scanMode = "demo",
   goalBytes = 0,
-  intakePolicy = null
+  intakePolicy = null,
+  scanSession = null
 } = {}) {
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, approvals);
   const selected = actionList.filter((action) => selectedIds.has(action.id));
@@ -1580,6 +1696,17 @@ export function buildPlanSnapshot({
           mode: intakePolicy.mode,
           adminAllowed: Boolean(intakePolicy.adminAllowed),
           adminSensitiveBlocked: Boolean(intakePolicy.adminSensitiveBlocked)
+        }
+      : null,
+    scanSession: scanSession
+      ? {
+          status: scanSession.status,
+          current: Boolean(scanSession.current),
+          readyForPlanning: Boolean(scanSession.readyForPlanning),
+          currentFingerprint: scanSession.currentFingerprint,
+          capturedFingerprint: scanSession.capturedFingerprint || "",
+          targetDrive: scanSession.targetDrive,
+          generatedAt: scanSession.generatedAt || ""
         }
       : null,
     protectedPaths: [...protectedPaths].sort(),
@@ -2203,6 +2330,7 @@ export function buildDecisionLog({
   scanned = false,
   scanning = false,
   scanMode = "demo",
+  scanSession = null,
   actionList = actions,
   selectedIds = new Set(),
   approvals = { groupConfirm: false, permanentConfirm: false, reviewed: {}, typed: {} },
@@ -2234,9 +2362,9 @@ export function buildDecisionLog({
     {
       id: "scan",
       title: "Scan state",
-      status: scanning ? "running" : scanned ? "complete" : "waiting",
-      tone: scanned ? "safe" : "review",
-      detail: scanning ? "Scanner is running." : scanned ? "Planner can use the current scan profile." : "Run a scan before execution."
+      status: scanSession?.status || (scanning ? "running" : scanned ? "complete" : "waiting"),
+      tone: scanSession?.tone || (scanned ? "safe" : "review"),
+      detail: scanSession?.primary || (scanning ? "Scanner is running." : scanned ? "Planner can use the current scan profile." : "Run a scan before execution.")
     },
     {
       id: "plan",
@@ -2282,6 +2410,7 @@ export function buildAgentQuestionQueue({
   scanned = false,
   scanning = false,
   scanMode = "demo",
+  scanSession = null,
   nativeCapability = { available: false },
   runtimeCapabilities = {},
   actionList = actions,
@@ -2340,6 +2469,20 @@ export function buildAgentQuestionQueue({
       status: "active",
       action: "run-scan",
       options: nativeCapability?.available ? ["Run real read-only scan", "Run demo scan"] : ["Run demo scan"]
+    });
+  }
+
+  if (scanned && !scanning && scanSession && !scanSession.readyForPlanning) {
+    addQuestion({
+      id: "refresh-scan-session",
+      lane: "discovery",
+      priority: 96,
+      title: "Refresh scan evidence",
+      prompt: "Should I run a fresh scan for the current settings?",
+      detail: scanSession.primary,
+      status: "active",
+      action: nativeCapability?.available ? "run-real-scan" : "run-scan",
+      options: nativeCapability?.available ? ["Run real read-only scan", "Treat old scan as audit-only"] : ["Run demo scan", "Use desktop shell for local evidence"]
     });
   }
 
@@ -4180,6 +4323,7 @@ export function buildSupportBundle({
   profile: supportProfile = null,
   scanMode = "demo",
   scanSettings = null,
+  scanSession = null,
   nativeScan = null,
   scanCoverage = null,
   privacyBoundary = null,
@@ -4230,6 +4374,17 @@ export function buildSupportBundle({
       elevationSource: runtimeCapabilities?.elevationSource || ""
     },
     scan: {
+      session: scanSession
+        ? {
+            status: scanSession.status,
+            current: Boolean(scanSession.current),
+            readyForPlanning: Boolean(scanSession.readyForPlanning),
+            currentFingerprint: scanSession.currentFingerprint,
+            capturedFingerprint: scanSession.capturedFingerprint || "",
+            changedSettings: scanSession.changedSettings || [],
+            generatedAt: scanSession.generatedAt || ""
+          }
+        : null,
       settings: scanSettings
         ? {
             targetDrive: normalizeTargetDrive(scanSettings.targetDrive || supportProfile?.drive || "C:"),
@@ -4328,6 +4483,8 @@ export function buildSupportBundleMarkdown(bundle) {
     `Free space: ${formatBytes(bundle.environment.freeBytes)}`,
     "",
     "## Scan",
+    `Session: ${bundle.scan.session?.status || "not-captured"}`,
+    `Session current: ${bundle.scan.session?.current ? "yes" : "no"}`,
     `Coverage: ${bundle.scan.coverageStatus} (${bundle.scan.coverageConfidence}%)`,
     `Measured bytes: ${formatBytes(bundle.scan.totalMeasuredBytes)}`,
     `Findings: ${bundle.scan.findingCount}`,
@@ -4956,13 +5113,15 @@ export function buildExecutionPreflight({
   readiness,
   protectedPaths = [],
   ledger = [],
-  planSnapshot = null
+  planSnapshot = null,
+  scanSession = null
 } = {}) {
   const selected = actionList.filter((action) => selectedIds.has(action.id));
   const selectedProtected = selected.filter((action) => isActionProtected(action, protectedPaths));
   const unresolvedCount = readiness?.unresolved?.length ?? 0;
   const currentLedgerCount = planSnapshot?.id ? ledger.filter((entry) => entry.planId === planSnapshot.id).length : ledger.length;
   const staleLedgerCount = planSnapshot?.id ? ledger.filter((entry) => entry.planId !== planSnapshot.id).length : 0;
+  const scanSessionReady = scanSession ? scanSession.readyForPlanning : scanned && !scanning;
   const items = [
     {
       id: "scan-complete",
@@ -4975,6 +5134,18 @@ export function buildExecutionPreflight({
       label: "Scanner idle",
       detail: scanning ? "Wait for the current scan to finish." : "No scan is currently running.",
       passed: !scanning
+    },
+    {
+      id: "scan-session-current",
+      label: "Scan session current",
+      detail: scanSession
+        ? scanSession.readyForPlanning
+          ? scanSession.primary
+          : scanSession.primary
+        : scanned
+          ? "No scan-session fingerprint is available; using legacy scan state."
+          : "Run a scan before simulation.",
+      passed: scanSessionReady
     },
     {
       id: "selection",
@@ -5035,6 +5206,7 @@ export function buildReport({
   goalBytes,
   scanMode = "demo",
   scanSettings = null,
+  scanSession = null,
   nativeScan = null,
   advisor = null,
   decisionLog = [],
@@ -5139,6 +5311,20 @@ export function buildReport({
           nativeScan.warnings?.length ? nativeScan.warnings.map((warning) => `- Warning: ${warning}`).join("\n") : "- No scanner warnings."
         ].join("\n")
       : "- Not run.",
+    "",
+    "## Scan Session",
+    scanSession
+      ? [
+          `- Status: ${scanSession.status}`,
+          `- Current: ${scanSession.current ? "yes" : "no"}`,
+          `- Ready for planning: ${scanSession.readyForPlanning ? "yes" : "no"}`,
+          `- Target drive: ${scanSession.targetDrive}`,
+          `- Current fingerprint: ${scanSession.currentFingerprint}`,
+          `- Captured fingerprint: ${scanSession.capturedFingerprint || "none"}`,
+          `- Changed settings: ${scanSession.changedSettings?.length ? scanSession.changedSettings.join(", ") : "none"}`,
+          `- Generated at: ${scanSession.generatedAt || "not captured"}`
+        ].join("\n")
+      : "- Not captured.",
     "",
     "## Scan Settings",
     scanSettings
@@ -6566,6 +6752,55 @@ function manualStrategyChecksForOption(option) {
 
 function uniqueStrings(values) {
   return Array.from(new Set(values.filter(Boolean)));
+}
+
+function normalizeSessionPathList(values = []) {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set();
+  const rows = [];
+  for (const value of values) {
+    const row = String(value || "").trim();
+    const key = row.toLowerCase();
+    if (!row || seen.has(key)) continue;
+    seen.add(key);
+    rows.push(row);
+  }
+  return rows.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+
+function getScanSessionChanges(currentSettings, capturedSettings) {
+  if (!capturedSettings) return [];
+  const labels = {
+    targetDrive: "target drive",
+    includeProjectArtifacts: "project artifact setting",
+    maxDepth: "max depth",
+    maxEntriesPerRoot: "entry cap",
+    customRoots: "custom roots",
+    protectedPaths: "protected paths"
+  };
+  return Object.keys(labels).filter((key) => stableStringify(currentSettings?.[key]) !== stableStringify(capturedSettings?.[key])).map((key) => labels[key]);
+}
+
+function getScanSessionPrimary(status, changedSettings = []) {
+  if (status === "native-current") return "Native scan evidence matches the current scan session.";
+  if (status === "demo-current") return "Demo scan evidence is current for this scenario.";
+  if (status === "native-stale") return changedSettings.length ? `Native scan is stale: ${changedSettings.join(", ")} changed.` : "Native scan evidence is stale.";
+  if (status === "native-unverified") return "Native scan evidence has no captured request fingerprint.";
+  if (status === "scanning") return "Scan session is still running.";
+  return "No scan session is ready yet.";
+}
+
+function getScanSessionSteps(status, nativeEvidence) {
+  if (status === "native-current" || status === "demo-current") {
+    return ["Select cleanup actions from the current scan.", "Resolve gates.", "Arm dry-run consent for this plan snapshot."];
+  }
+  if (status === "native-stale" || status === "native-unverified") {
+    return ["Run a fresh native read-only scan with the current settings.", "Rebuild the selected plan from that scan.", "Treat old scan data as audit-only evidence."];
+  }
+  if (status === "scanning") return ["Wait for scan completion.", "Do not change cleanup decisions mid-scan.", "Review the session fingerprint after results arrive."];
+  return nativeEvidence
+    ? ["Run native read-only discovery.", "Confirm target drive and protected paths.", "Review measured roots before planning."]
+    : ["Run demo discovery or start the desktop shell.", "Use demo data only for workflow rehearsal.", "Do not count demo evidence as local cleanup proof."];
 }
 
 function isLedgerRunRecord(record) {

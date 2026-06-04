@@ -196,7 +196,8 @@ After execution:
 Ledger invariant:
 
 - Every simulated ledger entry is tied to a plan snapshot id.
-- A plan snapshot includes selected actions, planned bytes, scan mode, target, protected paths, typed approvals, and review item decisions.
+- A plan snapshot includes selected actions, planned bytes, scan mode, scan-session fingerprint, target, protected paths, typed approvals, and review item decisions.
+- Native scan evidence is current only when its captured target drive, custom roots, traversal caps, project-artifact setting, and protected paths match the active scan settings.
 - A ledger from another plan is stale evidence; it can be exported for audit but cannot verify the current plan.
 - Duplicate simulation is blocked only when a ledger already exists for the current plan snapshot.
 - Local run history stores dry-run records as append-only audit evidence and separates current-plan records from stale records.

@@ -13,6 +13,7 @@ const assert = require("assert");
 
   const unavailable = await native.runNativeReadonlyScan({}, {});
   assert.strictEqual(unavailable.available, false, "native scan should report unavailable outside Tauri");
+  assert.strictEqual(unavailable.request.targetDrive, "C:", "browser fallback should still expose normalized scan request");
   assert.strictEqual(unavailable.volume, null, "browser fallback must not expose volume evidence");
   assert.strictEqual(unavailable.writeCapability, false, "browser fallback must not expose write capability");
   assert.strictEqual(unavailable.destructiveCommands, false, "browser fallback must not expose destructive commands");
@@ -29,7 +30,7 @@ const assert = require("assert");
   assert.strictEqual(capabilityUnavailable.realRunEnabled, false, "browser runtime capability must keep real run disabled");
   assert.strictEqual(capabilityUnavailable.executeCleanupPlan, false, "browser runtime capability must not expose write command");
   let scanInvocation = null;
-  await native.runNativeReadonlyScan(
+  const invokedScan = await native.runNativeReadonlyScan(
     {
       protectedPaths: ["C:\\Users\\demo\\ClientWork"],
       includeProjectArtifacts: false,
@@ -56,6 +57,8 @@ const assert = require("assert");
   assert.strictEqual(scanInvocation.payload.request.maxEntriesPerRoot, 5000, "native scan should pass entry cap setting");
   assert.strictEqual(scanInvocation.payload.request.targetDrive, "D:", "native scan should pass normalized target drive");
   assert.deepStrictEqual(scanInvocation.payload.request.customRoots, ["C:\\Users\\demo\\Archives"], "native scan should pass deduped custom roots");
+  assert.strictEqual(invokedScan.request.targetDrive, "D:", "native scan should return the request that produced evidence");
+  assert.deepStrictEqual(invokedScan.request.customRoots, ["C:\\Users\\demo\\Archives"], "native scan request evidence should keep normalized custom roots");
 
   const actionList = guard.buildScenarioActions("developer");
   const scan = native.normalizeNativeScan({
@@ -71,6 +74,14 @@ const assert = require("assert");
       source: "GetDiskFreeSpaceExW"
     },
     totalBytes: 42 * guard.GB,
+    scan_request: {
+      protected_paths: ["C:\\Users\\real\\ClientWork"],
+      include_project_artifacts: true,
+      max_depth: 8,
+      max_entries_per_root: 25000,
+      target_drive: "C:",
+      custom_roots: ["C:\\Users\\real\\Archives"]
+    },
     findings: [
       {
         recipeId: "gradle-cache",
@@ -120,6 +131,8 @@ const assert = require("assert");
     destructiveCommands: false
   });
   assert.strictEqual(scan.targetDrive, "C:", "native scan should normalize target drive");
+  assert.strictEqual(scan.request.targetDrive, "C:", "native scan should normalize captured scan request");
+  assert.deepStrictEqual(scan.request.protectedPaths, ["C:\\Users\\real\\ClientWork"], "native scan should normalize request protected paths");
   assert.strictEqual(scan.volume.drive, "C:", "native scan should normalize volume drive");
   assert.strictEqual(scan.volume.freeBytes, 64 * guard.GB, "native scan should normalize volume free bytes");
   assert.strictEqual(scan.volume.usedBytes, 448 * guard.GB, "native scan should normalize volume used bytes");

@@ -146,6 +146,7 @@ The demo also includes:
 - Intake constraints for target drive, goal, risk tolerance, protected paths, and whether admin/system routes can enter dry-run planning.
 - Task powers panel that maps selected cleanup actions to scoped capabilities such as safe cleanup, rebuildable cache cleanup, reviewed item cleanup, admin cleanup, advanced system strategy, manual storage strategy, and restricted zones.
 - Real scan settings for target drive, project artifact inclusion, traversal depth, per-root entry caps, and custom read-only roots.
+- Scan session freshness guard that fingerprints target drive, custom roots, traversal caps, project-artifact setting, and protected paths, then blocks preflight when native evidence is stale.
 - Scan coverage confidence showing measured, limited, unsupported, missing, custom-root, and demo-estimated cleanup roots.
 - Custom root discovery that measures user-entered folders read-only for manual review and never creates executor routes.
 - Runtime privilege boundary that shows whether the desktop shell is elevated and which selected routes would need admin validation later.
@@ -234,6 +235,7 @@ Execution is blocked until the preflight passes:
 
 - Scan complete.
 - Scanner idle.
+- Scan session fingerprint matches the current settings when native evidence is used.
 - At least one action selected.
 - Approval gates resolved.
 - No selected protected paths.
@@ -243,9 +245,9 @@ Execution is blocked until the preflight passes:
 - Real deletion is still disabled.
 - The current plan snapshot has been armed through the final dry-run consent receipt.
 
-Every simulation is tagged with a plan id. If the user changes selected actions, approvals, protected paths, item decisions, scan mode, goal, or admin/system intake allowance, the old ledger becomes stale and the current plan can be simulated again. The verification panel and exported report show whether the ledger is current, stale, missing, or needs rescan.
+Every simulation is tagged with a plan id. If the user changes selected actions, approvals, protected paths, item decisions, scan mode, scan-session fingerprint, goal, or admin/system intake allowance, the old ledger becomes stale and the current plan can be simulated again. The verification panel and exported report show whether the ledger is current, stale, missing, or needs rescan.
 
-Final consent is also plan-specific. A user can arm only the current plan after run readiness passes. Changing selection, approvals, protected paths, review item decisions, scan mode, or goal clears the receipt and disables simulation again.
+Final consent is also plan-specific. A user can arm only the current plan after run readiness passes. Changing selection, approvals, protected paths, review item decisions, scan mode, scan-session fingerprint, or goal clears the receipt and disables simulation again.
 
 The post-run verification panel converts the current ledger into route-level checkpoints. Each checkpoint includes the affected root, expected bytes, route, and evidence required for a read-only rescan comparison. Stale ledgers cannot produce valid checkpoints for the current plan.
 

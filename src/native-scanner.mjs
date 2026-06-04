@@ -15,13 +15,15 @@ export function getNativeScannerCapability(host = globalThis) {
 
 export async function runNativeReadonlyScan(request = {}, host = globalThis) {
   const capability = getNativeScannerCapability(host);
+  const normalizedRequest = normalizeNativeScanRequest(request);
   if (!capability.available) {
     return {
       available: false,
       mode: capability.mode,
       platform: "browser",
       windows: false,
-      targetDrive: normalizeTargetDriveRequest(request.targetDrive),
+      targetDrive: normalizedRequest.targetDrive,
+      request: normalizedRequest,
       volume: null,
       totalBytes: 0,
       findings: [],
@@ -33,16 +35,19 @@ export async function runNativeReadonlyScan(request = {}, host = globalThis) {
 
   const result = await host.__TAURI__.core.invoke("scan_known_roots", {
     request: {
-      protectedPaths: request.protectedPaths || [],
-      includeProjectArtifacts: Boolean(request.includeProjectArtifacts),
-      maxDepth: request.maxDepth || 8,
-      maxEntriesPerRoot: request.maxEntriesPerRoot || 25000,
-      targetDrive: normalizeTargetDriveRequest(request.targetDrive),
-      customRoots: normalizeCustomRootRequest(request.customRoots)
+      protectedPaths: normalizedRequest.protectedPaths,
+      includeProjectArtifacts: normalizedRequest.includeProjectArtifacts,
+      maxDepth: normalizedRequest.maxDepth,
+      maxEntriesPerRoot: normalizedRequest.maxEntriesPerRoot,
+      targetDrive: normalizedRequest.targetDrive,
+      customRoots: normalizedRequest.customRoots
     }
   });
 
-  return normalizeNativeScan(result);
+  return {
+    ...normalizeNativeScan(result),
+    request: normalizedRequest
+  };
 }
 
 function normalizeTargetDriveRequest(value = "C:") {
@@ -65,6 +70,32 @@ function normalizeCustomRootRequest(customRoots = []) {
     if (roots.length >= 8) break;
   }
   return roots;
+}
+
+function normalizeNativeScanRequest(request = {}) {
+  const source = request && typeof request === "object" ? request : {};
+  return {
+    protectedPaths: normalizeRequestStringList(source.protectedPaths || source.protected_paths),
+    includeProjectArtifacts: Boolean(source.includeProjectArtifacts ?? source.include_project_artifacts ?? true),
+    maxDepth: Number(source.maxDepth || source.max_depth || 8),
+    maxEntriesPerRoot: Number(source.maxEntriesPerRoot || source.max_entries_per_root || 25000),
+    targetDrive: normalizeTargetDriveRequest(source.targetDrive || source.target_drive || "C:"),
+    customRoots: normalizeCustomRootRequest(source.customRoots || source.custom_roots)
+  };
+}
+
+function normalizeRequestStringList(values = []) {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set();
+  const rows = [];
+  for (const value of values) {
+    const row = String(value || "").trim();
+    const key = row.toLowerCase();
+    if (!row || seen.has(key)) continue;
+    seen.add(key);
+    rows.push(row);
+  }
+  return rows;
 }
 
 export async function runNativeExecutorDryRun(executorPlan, host = globalThis) {
@@ -225,6 +256,9 @@ export function normalizeNativeScan(scanResult = {}) {
     windows: Boolean(scanResult.windows),
     targetDrive: normalizeTargetDriveRequest(scanResult.targetDrive || scanResult.target_drive || scanResult.volume?.drive || "C:"),
     generatedAt: scanResult.generatedAt || scanResult.generated_at || "",
+    request: scanResult.request || scanResult.scanRequest || scanResult.scan_request
+      ? normalizeNativeScanRequest(scanResult.request || scanResult.scanRequest || scanResult.scan_request)
+      : null,
     volume: normalizeNativeVolume(scanResult.volume),
     totalBytes: Number(scanResult.totalBytes || scanResult.total_bytes || findings.reduce((sum, finding) => sum + finding.bytes, 0)),
     findings,

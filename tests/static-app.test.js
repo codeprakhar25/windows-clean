@@ -125,7 +125,10 @@ const requiredAppMarkers = [
   "no shell",
   "Run history",
   "Persisted records",
-  "Export history"
+  "Export history",
+  "Scan session",
+  "Evidence fingerprint",
+  "Changed since scan"
 ];
 
 for (const marker of requiredAppMarkers) {
@@ -150,6 +153,7 @@ assert(app.includes("updateScanSetting"), "native scan settings should invalidat
 assert(app.includes("customRoots"), "native scan settings should include custom read-only roots");
 assert(app.includes("addCustomScanRoot"), "custom scan roots should be editable");
 assert(app.includes("buildScanCoverageSummary"), "scan coverage summary should be wired");
+assert(app.includes("buildScanSessionEvidence"), "scan session freshness guard should be wired");
 assert(app.includes("buildRecoveryAdvisor"), "recovery advisor should be wired");
 assert(app.includes("buildAgentQuestionQueue"), "agent question queue should be wired");
 assert(app.includes("buildStorageStrategyPlan"), "storage strategy workflow should be wired");
