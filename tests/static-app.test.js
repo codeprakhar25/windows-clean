@@ -93,6 +93,10 @@ const requiredAppMarkers = [
   "Export rescan comparison",
   "needs later scan",
   "Rollback plan",
+  "Rollback proof ledger",
+  "Restore, backup, or acknowledgement reference",
+  "Rollback proof notes",
+  "Reset proof",
   "Restore posture",
   "real run locked",
   "Dry-run consent",
@@ -148,11 +152,16 @@ assert(app.includes("buildValidationEvidencePack"), "validation evidence pack sh
 assert(app.includes("buildValidationPackMarkdown"), "validation pack markdown export should be wired");
 assert(app.includes("VALIDATION_EVIDENCE_STORAGE_KEY"), "validation evidence should be persisted locally");
 assert(app.includes("MANUAL_STRATEGY_EVIDENCE_STORAGE_KEY"), "manual strategy evidence should be persisted separately");
+assert(app.includes("ROLLBACK_EVIDENCE_STORAGE_KEY"), "rollback evidence should be persisted separately");
 assert(app.includes("readStoredValidationEvidence"), "validation evidence should be loaded from local storage");
 assert(app.includes("readStoredManualStrategyEvidence"), "manual strategy evidence should be loaded from local storage");
+assert(app.includes("readStoredRollbackEvidence"), "rollback evidence should be loaded from local storage");
 assert(app.includes("setValidationCheckEvidence"), "validation evidence checklist should be editable");
 assert(app.includes("updateValidationCheckEvidence"), "validation evidence detail records should be editable");
 assert(app.includes("coerceValidationEvidenceFormRecord"), "validation evidence storage should migrate legacy records");
+assert(app.includes("setRollbackProofEvidence"), "rollback evidence checklist should be editable");
+assert(app.includes("updateRollbackProofEvidence"), "rollback evidence detail records should be editable");
+assert(app.includes("coerceRollbackEvidenceFormRecord"), "rollback evidence storage should migrate legacy records");
 assert(app.includes("Evidence path or artifact id"), "validation evidence should require artifact path input");
 assert(app.includes("Reviewer"), "validation evidence should require reviewer input");
 assert(app.includes("setManualStrategyCheckEvidence"), "manual strategy checklist should be editable");
@@ -193,6 +202,9 @@ assert(model.includes("isItemReviewDecision"), "model should validate expanded i
 assert(model.includes("spaceguard-scan-coverage/v1"), "model should expose scan coverage schema");
 assert(model.includes("spaceguard-privacy-boundary/v1"), "model should expose privacy boundary schema");
 assert(model.includes("spaceguard-rollback-plan/v1"), "model should expose rollback plan schema");
+assert(model.includes("normalizeRollbackEvidenceRecord"), "model should normalize structured rollback evidence");
+assert(model.includes("legacy-needs-detail"), "legacy rollback evidence should need details");
+assert(model.includes("proof-complete"), "rollback rows should expose complete proof status");
 assert(model.includes("spaceguard-rescan-comparison/v1"), "model should expose rescan comparison schema");
 assert(model.includes("executedAt"), "ledger entries should carry absolute execution timestamps");
 assert(model.includes("spaceguard-public-beta-readiness/v1"), "model should expose public beta readiness schema");

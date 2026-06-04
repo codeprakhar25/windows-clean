@@ -46,9 +46,10 @@ In the app:
 4. Add protected paths before planning any review-heavy route.
 5. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
 6. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, and **Validation evidence** to confirm real cleanup is still locked.
-7. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
-8. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, and no mutation.
-9. Export the redacted support bundle first, then the dry-run report and validation pack when path-level evidence is needed.
+7. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
+8. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
+9. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, and no mutation.
+10. Export the redacted support bundle first, then the dry-run report and validation pack when path-level evidence is needed.
 
 ## Disposable Fixture Run
 
@@ -120,7 +121,7 @@ Do not implement write-capable executors until:
 - Disposable VM fixture parity is repeatable.
 - Validation evidence records include reviewer and artifact path for every passed check; checkbox-only legacy records do not count.
 - Protected-path and browser-identity fixtures pass.
-- Rollback or Recycle Bin behavior is proven for review routes.
+- Rollback or Recycle Bin behavior is proven for review routes, with reviewer, artifact path, and restore/backup/acknowledgement reference recorded in the rollback proof ledger.
 - Ledger/rescan parity is proven.
 - Write readiness is blocked only by intentionally unfinished implementation work, not by missing validation, rollback, privilege, privacy, or consent evidence.
 - Real executor capsule identifies a single first-safe route and reports `destructiveActionAvailable: false` until implementation is explicit.

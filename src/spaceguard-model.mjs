@@ -2728,6 +2728,7 @@ export function buildRollbackPlan({
   executorPlan = null,
   itemReviewsByAction = {},
   postRunVerification = null,
+  rollbackEvidence = {},
   scanMode = "demo"
 } = {}) {
   const rows = (executorPlan?.rows || []).map((row) => {
@@ -2735,16 +2736,21 @@ export function buildRollbackPlan({
     const itemReview = itemReviewsByAction?.[row.id] || null;
     const checkpoint = postRunVerification?.checkpoints?.find((item) => item.id === row.id) || null;
     const posture = getRollbackPosture(row, requirement, itemReview);
+    const proof = normalizeRollbackEvidenceRecord(row.id, posture, rollbackEvidence[row.id]);
+    const proofRequired = isRollbackProofRequired(posture.status);
+    const status = proofRequired && proof.complete ? "proof-complete" : posture.status;
     return {
       id: row.id,
       title: row.title,
       route: row.route,
       lane: row.lane,
-      status: posture.status,
-      tone: posture.tone,
+      status,
+      rollbackStatus: posture.status,
+      tone: status === "proof-complete" ? "safe" : posture.tone,
       bytes: Number(row.bytes || 0),
       dryRunAllowed: Boolean(row.canSimulate),
       realRunAllowed: false,
+      proofRequired,
       restoreMode: posture.restoreMode,
       recovery: posture.recovery,
       reviewedItems: itemReview?.removeCount || 0,
@@ -2754,13 +2760,16 @@ export function buildRollbackPlan({
       checkpointStatus: checkpoint?.status || "not-run",
       checkpointEvidence: checkpoint?.evidenceRequired || "",
       requiredEvidence: posture.requiredEvidence,
+      proof,
       blockers: row.blockers || []
     };
   });
   const executableRows = rows.filter((row) => row.dryRunAllowed);
-  const needsProofRows = rows.filter((row) => row.status === "restore-proof-required" || row.status === "backup-required" || row.status === "permanent-warning");
+  const needsProofRows = rows.filter((row) => row.proofRequired && !row.proof.complete);
   const blockedRows = rows.filter((row) => row.status === "not-executable");
   const rebuildableRows = rows.filter((row) => row.status === "rebuildable-rescan");
+  const proofCompleteRows = rows.filter((row) => row.status === "proof-complete");
+  const proofDraftRows = rows.filter((row) => row.proofRequired && row.proof.status !== "missing" && !row.proof.complete);
   const status = !rows.length
     ? "no-selection"
     : executableRows.length === 0
@@ -2782,15 +2791,103 @@ export function buildRollbackPlan({
       routes: rows.length,
       dryRunAllowed: executableRows.length,
       rebuildable: rebuildableRows.length,
+      proofComplete: proofCompleteRows.length,
+      proofDraft: proofDraftRows.length,
       needsProof: needsProofRows.length,
       blocked: blockedRows.length,
-      permanent: rows.filter((row) => row.status === "permanent-warning").length,
+      permanent: rows.filter((row) => row.rollbackStatus === "permanent-warning").length,
       checkpoints: postRunVerification?.checkpoints?.length || 0
     },
     detail: getRollbackPlanDetail(status, rows, needsProofRows),
     steps: buildRollbackSteps(status, rows, needsProofRows, postRunVerification)
   };
 }
+
+export function normalizeRollbackEvidenceRecord(rowId, posture = {}, value = null) {
+  const proofRequired = isRollbackProofRequired(posture.status);
+
+  if (value === true || value === "complete" || value === "proved") {
+    return {
+      id: rowId,
+      status: proofRequired ? "legacy-needs-detail" : "proved",
+      complete: !proofRequired,
+      restoreLocation: "",
+      evidencePath: "",
+      reviewer: "",
+      notes: "",
+      recordedAt: "",
+      updatedAt: "",
+      detail: proofRequired
+        ? "Legacy rollback proof needs reviewer, artifact path, and route-specific reference."
+        : "Rebuildable route does not require rollback proof detail."
+    };
+  }
+
+  if (!value || typeof value !== "object") {
+    return {
+      id: rowId,
+      status: "missing",
+      complete: false,
+      restoreLocation: "",
+      evidencePath: "",
+      reviewer: "",
+      notes: "",
+      recordedAt: "",
+      updatedAt: "",
+      detail: proofRequired
+        ? "Rollback proof has not been recorded."
+        : "Rebuildable route uses ledger and rescan proof instead of rollback proof."
+    };
+  }
+
+  const status =
+    value.status === "proved" || value.status === "complete"
+      ? "proved"
+      : value.status === "failed"
+        ? "failed"
+        : "draft";
+  const restoreLocation = String(
+    value.restoreLocation ||
+      value.restore_location ||
+      value.backupReference ||
+      value.backup_reference ||
+      value.acknowledgementReference ||
+      value.acknowledgement_reference ||
+      ""
+  ).trim();
+  const evidencePath = String(value.evidencePath || value.evidence_path || value.artifactId || value.artifact_id || "").trim();
+  const reviewer = String(value.reviewer || "").trim();
+  const notes = String(value.notes || "").trim();
+  const recordedAt = String(value.recordedAt || value.recorded_at || "").trim();
+  const updatedAt = String(value.updatedAt || value.updated_at || "").trim();
+  const complete =
+    proofRequired &&
+    status === "proved" &&
+    Boolean(reviewer) &&
+    Boolean(evidencePath) &&
+    Boolean(restoreLocation);
+
+  return {
+    id: rowId,
+    status,
+    complete,
+    restoreLocation,
+    evidencePath,
+    reviewer,
+    notes,
+    recordedAt,
+    updatedAt,
+    detail: complete
+      ? `Rollback proof recorded by ${reviewer}.`
+      : status === "proved"
+        ? "Reviewer, evidence path, and route-specific restore, backup, or acknowledgement reference are required."
+        : status === "failed"
+          ? "Rollback proof was marked failed and cannot satisfy write readiness."
+        : "Draft rollback proof is visible but does not satisfy write readiness."
+  };
+}
+
+export const normalizeRollbackProofRecord = normalizeRollbackEvidenceRecord;
 
 export function buildExecutorManifest({
   actionList = actions,
@@ -4596,13 +4693,15 @@ export function buildReport({
           `- Real run enabled: ${rollbackPlan.realRunEnabled ? "yes" : "no"}`,
           `- Routes: ${rollbackPlan.counts.routes}`,
           `- Rebuildable routes: ${rollbackPlan.counts.rebuildable}`,
+          `- Proof complete: ${rollbackPlan.counts.proofComplete}`,
+          `- Proof drafts: ${rollbackPlan.counts.proofDraft}`,
           `- Routes needing proof: ${rollbackPlan.counts.needsProof}`,
           `- Permanent-removal routes: ${rollbackPlan.counts.permanent}`,
           `- Rescan checkpoints: ${rollbackPlan.counts.checkpoints}`,
           `- Detail: ${rollbackPlan.detail}`,
           rollbackPlan.rows.length
             ? rollbackPlan.rows
-                .map((row) => `- ${row.title}: ${row.status} | ${row.route} | ${row.recovery} | evidence=${row.requiredEvidence.join("; ")}`)
+                .map((row) => `- ${row.title}: ${row.status} | ${row.route} | ${row.recovery} | proof=${row.proof.status}${row.proof.evidencePath ? ` @ ${row.proof.evidencePath}` : ""} | evidence=${row.requiredEvidence.join("; ")}`)
                 .join("\n")
             : "- No selected rollback rows."
         ].join("\n")
@@ -5181,6 +5280,10 @@ function getRollbackPlanDetail(status, rows, needsProofRows) {
   if (status === "needs-rollback-proof") {
     return `${needsProofRows.length} selected route(s) need restore, backup, or permanent-removal proof before real cleanup.`;
   }
+  const proofCompleteRows = rows.filter((row) => row.status === "proof-complete");
+  if (proofCompleteRows.length) {
+    return `${proofCompleteRows.length} selected route(s) have structured rollback proof recorded; real cleanup still needs ledger and rescan evidence.`;
+  }
   return `${rows.length} selected route(s) are disposable or rebuildable, but still need ledger and rescan evidence.`;
 }
 
@@ -5193,13 +5296,13 @@ function buildRollbackSteps(status, rows, needsProofRows, postRunVerification = 
   }
 
   const steps = ["Keep real execution locked until rollback proof is captured."];
-  if (rows.some((row) => row.status === "restore-proof-required")) {
+  if (rows.some((row) => row.rollbackStatus === "restore-proof-required" && !row.proof.complete)) {
     steps.push("Show Recycle Bin, quarantine, or archive restore location for every reviewed item route.");
   }
-  if (rows.some((row) => row.status === "permanent-warning")) {
+  if (rows.some((row) => row.rollbackStatus === "permanent-warning" && !row.proof.complete)) {
     steps.push("Require permanent-removal acknowledgement for Recycle Bin emptying.");
   }
-  if (rows.some((row) => row.status === "backup-required")) {
+  if (rows.some((row) => row.rollbackStatus === "backup-required" && !row.proof.complete)) {
     steps.push("Capture backup or recovery-state evidence for admin and advanced routes.");
   }
   if (postRunVerification?.checkpoints?.length) {
@@ -5211,6 +5314,10 @@ function buildRollbackSteps(status, rows, needsProofRows, postRunVerification = 
     steps.push("Use native read-only rescan parity as the restore proof for rebuildable routes.");
   }
   return steps;
+}
+
+function isRollbackProofRequired(status) {
+  return status === "restore-proof-required" || status === "backup-required" || status === "permanent-warning";
 }
 
 function buildRescanComparisonRow({

@@ -825,8 +825,52 @@ const assert = require("assert");
   assert.strictEqual(itemRollbackPlan.status, "needs-rollback-proof", "reviewed item routes should require restore proof");
   assert.strictEqual(itemRollbackPlan.realRunEnabled, false, "rollback plan must not imply real execution");
   assert.strictEqual(downloadsRollbackRow.status, "restore-proof-required", "downloads review route should require a restore location");
+  assert.strictEqual(downloadsRollbackRow.proofRequired, true, "downloads review route should require structured rollback proof");
+  assert.strictEqual(downloadsRollbackRow.proof.status, "missing", "missing rollback evidence should be visible");
   assert(downloadsRollbackRow.restoreTarget.includes("Recycle Bin"), "downloads rollback row should prefer Recycle Bin or quarantine");
   assert(downloadsRollbackRow.requiredEvidence.some((item) => item.includes("Per-item")), "rollback plan should require item-decision evidence");
+  const incompleteRollbackPlan = guard.buildRollbackPlan({
+    planSnapshot: itemPlanSnapshot,
+    executorPlan: itemExecutorPlan,
+    itemReviewsByAction: itemExecutorReviews,
+    postRunVerification,
+    rollbackEvidence: {
+      "downloads-installers": {
+        status: "proved",
+        evidencePath: "evidence/downloads-rollback.json",
+        reviewer: "qa-operator"
+      }
+    },
+    scanMode: "demo"
+  });
+  assert.strictEqual(incompleteRollbackPlan.status, "needs-rollback-proof", "marked rollback proof without restore reference should still block");
+  assert.strictEqual(incompleteRollbackPlan.counts.proofDraft, 1, "incomplete rollback proof should count as a draft");
+  assert.strictEqual(incompleteRollbackPlan.rows[0].proof.complete, false, "incomplete rollback proof must not become complete");
+  const completeRollbackPlan = guard.buildRollbackPlan({
+    planSnapshot: itemPlanSnapshot,
+    executorPlan: itemExecutorPlan,
+    itemReviewsByAction: itemExecutorReviews,
+    postRunVerification,
+    rollbackEvidence: {
+      "downloads-installers": {
+        status: "proved",
+        restoreLocation: "Recycle Bin restore check SG-RB-001",
+        evidencePath: "evidence/downloads-rollback.json",
+        reviewer: "qa-operator",
+        notes: "Reviewed items have a visible restore location.",
+        recordedAt: "2026-06-04T11:00:00.000Z"
+      }
+    },
+    scanMode: "demo"
+  });
+  assert.strictEqual(completeRollbackPlan.status, "rebuildable-routes", "complete rollback proof should clear rollback-proof blockers only");
+  assert.strictEqual(completeRollbackPlan.realRunEnabled, false, "complete rollback proof still must not imply real execution");
+  assert.strictEqual(completeRollbackPlan.counts.needsProof, 0, "complete rollback proof should clear the proof count");
+  assert.strictEqual(completeRollbackPlan.counts.proofComplete, 1, "complete rollback proof should be counted");
+  assert.strictEqual(completeRollbackPlan.rows[0].status, "proof-complete", "complete rollback proof should be visible on the route row");
+  const legacyRollbackProof = guard.normalizeRollbackEvidenceRecord("downloads-installers", { status: "restore-proof-required" }, true);
+  assert.strictEqual(legacyRollbackProof.status, "legacy-needs-detail", "legacy rollback proof should need structured detail");
+  assert.strictEqual(legacyRollbackProof.complete, false, "legacy rollback proof must not satisfy write readiness");
   const tempRollbackPlan = guard.buildRollbackPlan({
     executorPlan: guard.buildExecutorPlan({
       selectedIds: new Set(["windows-temp"]),
@@ -855,6 +899,21 @@ const assert = require("assert");
   });
   assert(rollbackReport.includes("## Rollback Plan"), "dry-run report should include rollback plan");
   assert(rollbackReport.includes("Routes needing proof: 1"), "rollback report should include proof count");
+  const completeRollbackReport = guard.buildReport({
+    scenario: guard.getScenario("developer"),
+    profile: guard.getScenario("developer").profile,
+    actionList: developerActions,
+    selectedIds: new Set(["downloads-installers"]),
+    readiness: guard.getExecutionReadinessForActions(new Set(["downloads-installers"]), itemExecutorApprovals, developerActions, [], itemExecutorReviews),
+    ledger: taggedItemLedger,
+    protectedPaths: [],
+    goalBytes: 10 * guard.GB,
+    itemReviewsByAction: itemExecutorReviews,
+    rollbackPlan: completeRollbackPlan,
+    rescanComparison: demoRescanComparison
+  });
+  assert(completeRollbackReport.includes("Proof complete: 1"), "rollback report should include completed proof count");
+  assert(completeRollbackReport.includes("evidence/downloads-rollback.json"), "rollback report should include proof evidence path");
   assert(rollbackReport.includes("## Rescan Comparison"), "dry-run report should include rescan comparison");
   assert(rollbackReport.includes("Post-run scan evidence: no"), "rescan comparison report should show missing post-run evidence");
   const staleVerification = guard.buildVerificationSummary({

@@ -97,6 +97,7 @@ import {
 const RUN_HISTORY_STORAGE_KEY = "spaceguard.ledgerHistory.v1";
 const VALIDATION_EVIDENCE_STORAGE_KEY = "spaceguard.validationEvidence.v1";
 const MANUAL_STRATEGY_EVIDENCE_STORAGE_KEY = "spaceguard.manualStrategyEvidence.v1";
+const ROLLBACK_EVIDENCE_STORAGE_KEY = "spaceguard.rollbackEvidence.v1";
 const RUN_HISTORY_LIMIT = 25;
 const filters = ["all", "safe", "rebuildable", "review", "advanced", "restricted"];
 const modes = [
@@ -163,6 +164,7 @@ export default function App() {
   const [runHistory, setRunHistory] = useState(() => readStoredRunHistory());
   const [validationEvidence, setValidationEvidence] = useState(() => readStoredValidationEvidence());
   const [manualStrategyEvidence, setManualStrategyEvidence] = useState(() => readStoredManualStrategyEvidence());
+  const [rollbackEvidence, setRollbackEvidence] = useState(() => readStoredRollbackEvidence());
   const [executionConsent, setExecutionConsent] = useState({ accepted: false, planId: "", acceptedAt: "" });
 
   const scenario = useMemo(() => getScenario(scenarioId), [scenarioId]);
@@ -199,6 +201,10 @@ export default function App() {
   useEffect(() => {
     writeStoredManualStrategyEvidence(manualStrategyEvidence);
   }, [manualStrategyEvidence]);
+
+  useEffect(() => {
+    writeStoredRollbackEvidence(rollbackEvidence);
+  }, [rollbackEvidence]);
 
   const dataMode = nativeScan.result?.available ? "native-readonly" : "demo";
   const profile = useMemo(
@@ -402,9 +408,10 @@ export default function App() {
         executorPlan,
         itemReviewsByAction,
         postRunVerification,
+        rollbackEvidence,
         scanMode: dataMode
       }),
-    [planSnapshot, executorPlan, itemReviewsByAction, postRunVerification, dataMode]
+    [planSnapshot, executorPlan, itemReviewsByAction, postRunVerification, rollbackEvidence, dataMode]
   );
   const releaseGate = useMemo(
     () =>
@@ -868,6 +875,54 @@ export default function App() {
     setManualStrategyEvidence({});
   }
 
+  function setRollbackProofEvidence(rowId, checked) {
+    setRollbackEvidence((current) => {
+      const next = { ...current };
+      if (checked) {
+        const currentRecord = coerceRollbackEvidenceFormRecord(current[rowId]);
+        const now = new Date().toISOString();
+        next[rowId] = {
+          ...currentRecord,
+          status: "proved",
+          recordedAt: currentRecord.recordedAt || now,
+          updatedAt: now
+        };
+      } else {
+        const currentRecord = coerceRollbackEvidenceFormRecord(current[rowId]);
+        const hasDetail = Boolean(currentRecord.restoreLocation || currentRecord.evidencePath || currentRecord.reviewer || currentRecord.notes);
+        if (hasDetail) {
+          next[rowId] = {
+            ...currentRecord,
+            status: "draft",
+            updatedAt: new Date().toISOString()
+          };
+        } else {
+          delete next[rowId];
+        }
+      }
+      return next;
+    });
+  }
+
+  function updateRollbackProofEvidence(rowId, field, value) {
+    setRollbackEvidence((current) => {
+      const currentRecord = coerceRollbackEvidenceFormRecord(current[rowId]);
+      return {
+        ...current,
+        [rowId]: {
+          ...currentRecord,
+          [field]: value,
+          status: currentRecord.status === "proved" ? "proved" : "draft",
+          updatedAt: new Date().toISOString()
+        }
+      };
+    });
+  }
+
+  function resetRollbackEvidence() {
+    setRollbackEvidence({});
+  }
+
   function changeScenario(nextScenarioId) {
     const nextActions = buildScenarioActions(nextScenarioId);
     setScenarioId(nextScenarioId);
@@ -1319,7 +1374,13 @@ export default function App() {
             <VerificationPanel planSnapshot={planSnapshot} verificationSummary={verificationSummary} />
             <PostRunVerificationPanel verification={postRunVerification} onExport={exportPostRunVerification} />
             <RescanComparisonPanel comparison={rescanComparison} onExport={exportRescanComparison} />
-            <RollbackPlanPanel plan={rollbackPlan} />
+            <RollbackPlanPanel
+              plan={rollbackPlan}
+              rollbackEvidence={rollbackEvidence}
+              onToggleProof={setRollbackProofEvidence}
+              onUpdateProof={updateRollbackProofEvidence}
+              onResetProof={resetRollbackEvidence}
+            />
             <PrivilegeBoundaryPanel boundary={privilegeBoundary} />
             <PrivacyBoundaryPanel boundary={privacyBoundary} />
             <PublicBetaReadinessPanel readiness={publicBetaReadiness} />
@@ -3069,23 +3130,32 @@ function RescanComparisonPanel({ comparison, onExport }) {
   );
 }
 
-function RollbackPlanPanel({ plan }) {
+function RollbackPlanPanel({ plan, rollbackEvidence, onToggleProof, onUpdateProof, onResetProof }) {
   const preview = plan.rows.slice(0, 4);
 
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center justify-between gap-3">
-          Rollback plan
-          <Badge variant={plan.tone}>{plan.status}</Badge>
-        </CardTitle>
-        <CardDescription>{plan.detail}</CardDescription>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              Rollback plan
+              <Badge variant={plan.tone}>{plan.status}</Badge>
+            </CardTitle>
+            <CardDescription>{plan.detail}</CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={onResetProof} disabled={!Object.keys(rollbackEvidence).length}>
+            <X className="h-4 w-4" />
+            Reset proof
+          </Button>
+        </div>
+        <div className="mt-2 text-sm font-medium">Rollback proof ledger</div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="grid grid-cols-3 gap-2">
-          <QueueStat label="Routes" value={plan.counts.routes} tone="review" />
-          <QueueStat label="Proof" value={plan.counts.needsProof} tone={plan.counts.needsProof ? "review" : "safe"} />
-          <QueueStat label="Permanent" value={plan.counts.permanent} tone={plan.counts.permanent ? "restricted" : "safe"} />
+          <QueueStat label="Proof needed" value={plan.counts.needsProof} tone={plan.counts.needsProof ? "review" : "safe"} />
+          <QueueStat label="Proof complete" value={plan.counts.proofComplete} tone={plan.counts.proofComplete ? "safe" : "review"} />
+          <QueueStat label="Drafts" value={plan.counts.proofDraft} tone={plan.counts.proofDraft ? "review" : "safe"} />
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
@@ -3107,24 +3177,71 @@ function RollbackPlanPanel({ plan }) {
 
         <div className="flex flex-col gap-2">
           {preview.length ? (
-            preview.map((row) => (
-              <div key={row.id} className="rounded-md border bg-card p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="mr-auto min-w-0 text-sm font-medium">{row.title}</div>
-                  <Badge variant={row.tone}>{row.status}</Badge>
-                  <Badge variant="outline">{row.route}</Badge>
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">{row.recovery}</p>
-                <div className="mt-2 grid gap-2 text-xs text-muted-foreground">
-                  {row.requiredEvidence.slice(0, 2).map((item) => (
-                    <div key={item} className="grid grid-cols-[16px_1fr] gap-2">
-                      {row.tone === "restricted" ? <AlertTriangle className="mt-0.5 h-3.5 w-3.5 text-red-600" /> : <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-emerald-600" />}
-                      <span>{item}</span>
+            preview.map((row) => {
+              const proofRecord = coerceRollbackEvidenceFormRecord(rollbackEvidence[row.id]);
+              const proofMarked = proofRecord.status === "proved";
+              return (
+                <div key={row.id} className="rounded-md border bg-card p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="mr-auto min-w-0 text-sm font-medium">{row.title}</div>
+                    <Badge variant={row.tone}>{row.status}</Badge>
+                    <Badge variant="outline">{row.route}</Badge>
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">{row.recovery}</p>
+                  <div className="mt-2 grid gap-2 text-xs text-muted-foreground">
+                    {row.requiredEvidence.slice(0, 2).map((item) => (
+                      <div key={item} className="grid grid-cols-[16px_1fr] gap-2">
+                        {row.tone === "restricted" ? <AlertTriangle className="mt-0.5 h-3.5 w-3.5 text-red-600" /> : <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-emerald-600" />}
+                        <span>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {row.proofRequired ? (
+                    <div className="mt-3 flex flex-col gap-2 rounded-md border bg-muted/20 p-2">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={proofMarked}
+                          aria-label={`${row.title} proof recorded`}
+                          onClick={() => onToggleProof(row.id, !proofMarked)}
+                        />
+                        <span className="text-sm font-medium">Proof recorded</span>
+                        <Badge variant={row.proof.complete ? "safe" : "review"}>{row.proof.status}</Badge>
+                      </div>
+                      <Input
+                        value={proofRecord.restoreLocation}
+                        placeholder="Restore, backup, or acknowledgement reference"
+                        aria-label={`${row.title} restore backup acknowledgement reference`}
+                        onChange={(event) => onUpdateProof(row.id, "restoreLocation", event.target.value)}
+                      />
+                      <Input
+                        value={proofRecord.evidencePath}
+                        placeholder="Evidence path or artifact id"
+                        aria-label={`${row.title} rollback evidence path`}
+                        onChange={(event) => onUpdateProof(row.id, "evidencePath", event.target.value)}
+                      />
+                      <Input
+                        value={proofRecord.reviewer}
+                        placeholder="Reviewer"
+                        aria-label={`${row.title} rollback reviewer`}
+                        onChange={(event) => onUpdateProof(row.id, "reviewer", event.target.value)}
+                      />
+                      <Textarea
+                        value={proofRecord.notes}
+                        placeholder="Rollback proof notes"
+                        aria-label={`${row.title} rollback proof notes`}
+                        onChange={(event) => onUpdateProof(row.id, "notes", event.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">{row.proof.detail}</p>
                     </div>
-                  ))}
+                  ) : (
+                    <p className="mt-2 rounded-md border bg-muted/20 p-2 text-xs text-muted-foreground">
+                      Rebuildable route uses ledger and rescan proof instead of rollback proof detail.
+                    </p>
+                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">Select and approve a cleanup route to generate rollback requirements.</div>
           )}
@@ -3813,6 +3930,62 @@ function readStoredManualStrategyEvidence() {
 function writeStoredManualStrategyEvidence(evidence) {
   try {
     globalThis.localStorage?.setItem(MANUAL_STRATEGY_EVIDENCE_STORAGE_KEY, JSON.stringify(evidence || {}));
+  } catch {
+    // Local storage can be unavailable in hardened browser contexts.
+  }
+}
+
+function readStoredRollbackEvidence() {
+  try {
+    const raw = globalThis.localStorage?.getItem(ROLLBACK_EVIDENCE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, value]) => value === true || value === "proved" || value === "complete" || (value && typeof value === "object" && !Array.isArray(value)))
+    );
+  } catch {
+    return {};
+  }
+}
+
+function coerceRollbackEvidenceFormRecord(value) {
+  if (value === true || value === "proved" || value === "complete") {
+    return {
+      status: "proved",
+      restoreLocation: "",
+      evidencePath: "",
+      reviewer: "",
+      notes: "",
+      recordedAt: "",
+      updatedAt: ""
+    };
+  }
+  if (!value || typeof value !== "object") {
+    return {
+      status: "draft",
+      restoreLocation: "",
+      evidencePath: "",
+      reviewer: "",
+      notes: "",
+      recordedAt: "",
+      updatedAt: ""
+    };
+  }
+  return {
+    status: value.status === "proved" || value.status === "complete" ? "proved" : value.status === "failed" ? "failed" : "draft",
+    restoreLocation: value.restoreLocation || value.restore_location || value.backupReference || value.backup_reference || value.acknowledgementReference || value.acknowledgement_reference || "",
+    evidencePath: value.evidencePath || value.evidence_path || value.artifactId || value.artifact_id || "",
+    reviewer: value.reviewer || "",
+    notes: value.notes || "",
+    recordedAt: value.recordedAt || value.recorded_at || "",
+    updatedAt: value.updatedAt || value.updated_at || ""
+  };
+}
+
+function writeStoredRollbackEvidence(evidence) {
+  try {
+    globalThis.localStorage?.setItem(ROLLBACK_EVIDENCE_STORAGE_KEY, JSON.stringify(evidence || {}));
   } catch {
     // Local storage can be unavailable in hardened browser contexts.
   }

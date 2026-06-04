@@ -232,6 +232,8 @@ Rollback invariant:
 - Reviewed personal files require a visible Recycle Bin, quarantine, or archive restore location before real cleanup.
 - Recycle Bin emptying must be treated as permanent-removal, not reversible cleanup.
 - Admin and advanced routes require backup or recovery-state evidence.
+- Proof-route evidence requires reviewer, artifact path, and restore/backup/acknowledgement reference before it can clear rollback-proof blockers.
+- Legacy or checkbox-only rollback evidence remains draft evidence and cannot satisfy write readiness.
 - Rollback evidence can support release review but cannot bypass dry-run, native validation, consent, or feature-flag gates.
 
 Run readiness invariant:
