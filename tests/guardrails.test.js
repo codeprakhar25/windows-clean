@@ -207,6 +207,62 @@ const assert = require("assert");
   });
   assert.strictEqual(unsafeTaskGrants.status, "unsafe-runtime", "runtime write capability should refuse task grants");
   assert.strictEqual(unsafeTaskGrants.realRunEnabled, false, "task grants must not inherit runtime write authority");
+  const grantQuestionQueue = guard.buildAgentQuestionQueue({
+    scanned: true,
+    scanning: false,
+    scanMode: "native-readonly",
+    scanSession: grantScanSession,
+    nativeCapability: { available: true },
+    actionList: guard.actions,
+    selectedIds: grantSelectedIds,
+    approvals: grantApprovals,
+    readiness: { ready: true, unresolved: [] },
+    runReadiness: { ready: true },
+    consentReceipt: { ready: false, planId: grantPlanSnapshot.id },
+    intakePolicy: intakeAllowedPolicy
+  });
+  const waitingTaskRunbook = guard.buildAgentTaskRunbook({
+    executorPlan: grantExecutorPlan,
+    taskCapabilityGrants: waitingTaskGrants,
+    agentQuestionQueue: grantQuestionQueue
+  });
+  assert.strictEqual(waitingTaskRunbook.schemaVersion, "spaceguard-agent-task-runbook/v1", "task runbook should expose a schema version");
+  assert.strictEqual(waitingTaskRunbook.authority, "task-scoped-dry-run", "task runbook should stay task-scoped");
+  assert.strictEqual(waitingTaskRunbook.noCrossTaskAuthority, true, "task runbook must refuse cross-task authority");
+  assert.strictEqual(waitingTaskRunbook.rows[0].status, "waiting-consent", "task runbook should surface grant wait state");
+  assert.strictEqual(waitingTaskRunbook.rows[0].questionId, "arm-dry-run", "task runbook should attach the next user question");
+  assert(waitingTaskRunbook.rows[0].forbiddenOperations.some((operation) => operation.includes("Mutate files")), "task runbook should list forbidden mutation");
+  const issuedTaskRunbook = guard.buildAgentTaskRunbook({
+    executorPlan: grantExecutorPlan,
+    taskCapabilityGrants: issuedTaskGrants,
+    agentQuestionQueue: grantQuestionQueue
+  });
+  assert.strictEqual(issuedTaskRunbook.status, "ready-for-dry-run", "issued task grants should create ready dry-run work orders");
+  assert.strictEqual(issuedTaskRunbook.counts.ready, 1, "one selected grant should create one ready work order");
+  assert.strictEqual(issuedTaskRunbook.rows[0].canDryRun, true, "ready work order can enter dry-run simulation");
+  assert.strictEqual(issuedTaskRunbook.rows[0].canRealRun, false, "task runbook must keep real run locked");
+  const unsafeTaskRunbook = guard.buildAgentTaskRunbook({
+    executorPlan: grantExecutorPlan,
+    taskCapabilityGrants: unsafeTaskGrants,
+    agentQuestionQueue: grantQuestionQueue
+  });
+  assert.strictEqual(unsafeTaskRunbook.status, "unsafe-stop", "unsafe runtime should stop task runbook");
+  assert.strictEqual(unsafeTaskRunbook.counts.realRun, 0, "task runbook should never count real-run work orders");
+  const taskRunbookReport = guard.buildReport({
+    scenario: guard.getScenario("developer"),
+    profile: guard.getScenario("developer").profile,
+    actionList: guard.actions,
+    selectedIds: grantSelectedIds,
+    readiness: { ready: true, unresolved: [] },
+    ledger: [],
+    protectedPaths: [],
+    goalBytes: 10 * guard.GB,
+    taskRunbook: issuedTaskRunbook,
+    taskCapabilityGrants: issuedTaskGrants,
+    taskPowerCatalog: activeCachePowerCatalog
+  });
+  assert(taskRunbookReport.includes("## Task Runbook"), "report should include task runbook");
+  assert(taskRunbookReport.includes("No cross-task authority: yes"), "task runbook report should preserve scope boundary");
   assert.strictEqual(
     guard.buildTaskPowerCatalog({ actionList: guard.actions }).rows.find((row) => row.id === "restricted-zones").status,
     "blocked",

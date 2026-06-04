@@ -146,6 +146,7 @@ The demo also includes:
 - Intake constraints for target drive, goal, risk tolerance, protected paths, and whether admin/system routes can enter dry-run planning.
 - Task powers panel that maps selected cleanup actions to scoped capabilities such as safe cleanup, rebuildable cache cleanup, reviewed item cleanup, admin cleanup, advanced system strategy, manual storage strategy, and restricted zones.
 - Task grant receipts that bind each selected action to a dry-run-only authority, route, target, plan id, scan fingerprint, consent receipt, allowed operations, forbidden operations, and blockers.
+- Task runbook panel that turns each selected cleanup target into a task-scoped work order with the next user question, allowed operations, forbidden operations, evidence needs, and no cross-task authority.
 - Real scan settings for target drive, project artifact inclusion, traversal depth, per-root entry caps, and custom read-only roots.
 - Scan session freshness guard that fingerprints target drive, custom roots, traversal caps, project-artifact setting, and protected paths, then blocks preflight when native evidence is stale.
 - Scan coverage confidence showing measured, limited, unsupported, missing, custom-root, and demo-estimated cleanup roots.
@@ -236,6 +237,8 @@ Manual strategy guidance has its own checklist. The user can mark evidence such 
 User-protected paths are treated as a runtime block even if the matching recipe would normally be selectable.
 
 Admin/system-sensitive routes are also intake-gated. Windows.old, hibernation changes, WSL compaction, and other admin-sensitive routes stay out of suggested and selectable dry-run plans until the user explicitly allows admin/system actions. Allowing them only affects dry-run planning; it does not enable real execution, self-elevation, UAC prompts, or destructive commands.
+
+Task runbook work orders are agent-facing instructions, not new permissions. A selected cache cleanup task can ask for its own approval or enter its own dry-run simulation after grants are issued, but it cannot reuse that power for Downloads, custom roots, browser identity data, partitions, registry keys, or any sibling folder.
 
 Execution is blocked until the preflight passes:
 

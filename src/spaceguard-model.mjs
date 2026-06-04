@@ -3284,6 +3284,65 @@ export function buildTaskCapabilityGrants({
   };
 }
 
+export function buildAgentTaskRunbook({
+  executorPlan = null,
+  taskCapabilityGrants = null,
+  agentQuestionQueue = null,
+  rollbackPlan = null
+} = {}) {
+  const selectedRows = executorPlan?.rows || [];
+  const grantsByAction = new Map((taskCapabilityGrants?.rows || []).map((grant) => [grant.actionId, grant]));
+  const rollbackByAction = new Map((rollbackPlan?.rows || []).map((row) => [row.id, row]));
+  const questions = agentQuestionQueue?.questions || [];
+  const rows = selectedRows.map((row) =>
+    buildAgentTaskRunbookRow({
+      row,
+      grant: grantsByAction.get(row.id) || null,
+      rollback: rollbackByAction.get(row.id) || null,
+      questions
+    })
+  );
+  const unsafeRows = rows.filter((row) => row.status === "unsafe-stop");
+  const blockedRows = rows.filter((row) => row.status === "blocked");
+  const waitingRows = rows.filter((row) => row.status.startsWith("waiting"));
+  const readyRows = rows.filter((row) => row.status === "ready-dry-run");
+  const status = !rows.length
+    ? "no-selected-tasks"
+    : unsafeRows.length
+      ? "unsafe-stop"
+      : blockedRows.length
+        ? "runbook-blocked"
+        : waitingRows.length
+          ? "runbook-waiting"
+          : "ready-for-dry-run";
+
+  return {
+    schemaVersion: "spaceguard-agent-task-runbook/v1",
+    status,
+    tone: getAgentTaskRunbookTone(status),
+    authority: "task-scoped-dry-run",
+    realRunEnabled: false,
+    destructiveCommands: Boolean(taskCapabilityGrants?.destructiveCommands),
+    noCrossTaskAuthority: true,
+    rows,
+    readyRows,
+    waitingRows,
+    blockedRows,
+    unsafeRows,
+    counts: {
+      selected: rows.length,
+      ready: readyRows.length,
+      waiting: waitingRows.length,
+      blocked: blockedRows.length,
+      unsafe: unsafeRows.length,
+      realRun: 0,
+      crossTask: 0
+    },
+    primary: getAgentTaskRunbookPrimary(status, { rows, readyRows, waitingRows, blockedRows, unsafeRows }),
+    steps: getAgentTaskRunbookSteps(status, { rows, readyRows, waitingRows, blockedRows, unsafeRows })
+  };
+}
+
 export function buildExecutorPlan({
   selectedIds = new Set(),
   actionList = actions,
@@ -5811,6 +5870,7 @@ export function buildReport({
   agentQuestionQueue = null,
   itemReview = null,
   executorPlan = null,
+  taskRunbook = null,
   releaseGate = null,
   validationPack = null,
   runtimeCapabilities = null,
@@ -5906,6 +5966,24 @@ export function buildReport({
                 .map((grant) => `- ${grant.title}: ${grant.status} | ${grant.powerLabel} | route=${grant.route} | target=${grant.target || "none"} | next=${grant.nextStep}`)
                 .join("\n")
             : "- No task grants."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Task Runbook",
+    taskRunbook
+      ? [
+          `- Status: ${taskRunbook.status}`,
+          `- Authority: ${taskRunbook.authority}`,
+          `- Real run enabled: ${taskRunbook.realRunEnabled ? "yes" : "no"}`,
+          `- No cross-task authority: ${taskRunbook.noCrossTaskAuthority ? "yes" : "no"}`,
+          `- Ready tasks: ${taskRunbook.counts.ready}`,
+          `- Waiting tasks: ${taskRunbook.counts.waiting}`,
+          `- Blocked tasks: ${taskRunbook.counts.blocked}`,
+          taskRunbook.rows.length
+            ? taskRunbook.rows
+                .map((row) => `- ${row.title}: ${row.status} | ${row.powerLabel} | route=${row.route} | canDryRun=${row.canDryRun ? "yes" : "no"} | question=${row.userQuestion}`)
+                .join("\n")
+            : "- No task work orders."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -6906,6 +6984,168 @@ function getTaskCapabilityGrantNextStep(status, blockers = [], row = {}) {
   if (status === "unsafe-runtime") return "Re-check runtime capabilities before granting any task authority.";
   if (blockers[0]) return blockers[0].detail;
   return "Resolve scan, approval, and consent evidence before issuing this grant.";
+}
+
+function buildAgentTaskRunbookRow({
+  row,
+  grant = null,
+  rollback = null,
+  questions = []
+}) {
+  const question = findAgentTaskRunbookQuestion(row, grant, questions);
+  const status = getAgentTaskRunbookRowStatus(row, grant);
+  const blockers = getAgentTaskRunbookBlockers(row, grant);
+  const allowedOperations = grant?.allowedOperations?.length
+    ? grant.allowedOperations
+    : getFallbackAgentTaskAllowedOperations(row, status);
+  const forbiddenOperations = grant?.forbiddenOperations?.length
+    ? grant.forbiddenOperations
+    : getFallbackAgentTaskForbiddenOperations(row);
+
+  return {
+    id: row.id,
+    title: row.title,
+    status,
+    tone: getAgentTaskRunbookRowTone(status),
+    authority: grant?.authority || "dry-run-only",
+    noCrossTaskAuthority: true,
+    powerId: grant?.powerId || row.powerId || "restricted-zones",
+    powerLabel: grant?.powerLabel || row.powerLabel || "Restricted zones",
+    route: row.route,
+    lane: row.lane,
+    target: row.path || grant?.target || "",
+    plannedBytes: Number(row.bytes || grant?.plannedBytes || 0),
+    canAskUser: true,
+    canDryRun: status === "ready-dry-run",
+    canRealRun: false,
+    questionId: question?.id || "",
+    userQuestion: question?.prompt || getAgentTaskRunbookFallbackQuestion(status, row, grant),
+    agentStep: getAgentTaskRunbookAgentStep(status, row, grant, question),
+    allowedOperations,
+    forbiddenOperations,
+    blockers,
+    evidenceNeeded: getAgentTaskRunbookEvidenceNeeded({ row, grant, rollback, question, blockers }),
+    rollbackRequired: Boolean(rollback?.proofRequired),
+    rollbackStatus: rollback?.status || "",
+    rollbackEvidenceComplete: Boolean(rollback?.proof?.complete),
+    expiresWith: grant?.expiresWith || ["selection, approval, protected path, or scanner setting change"]
+  };
+}
+
+function getAgentTaskRunbookRowStatus(row, grant = null) {
+  if (grant?.status === "unsafe-runtime") return "unsafe-stop";
+  if (row.status === "blocked" || grant?.status === "blocked") return "blocked";
+  if (grant?.status?.startsWith("waiting")) return grant.status;
+  if (grant?.status === "issued-dry-run") return "ready-dry-run";
+  if (row.canSimulate) return "waiting-grant";
+  return "blocked";
+}
+
+function getAgentTaskRunbookRowTone(status) {
+  if (status === "ready-dry-run") return "safe";
+  if (status === "blocked" || status === "unsafe-stop") return "restricted";
+  return "review";
+}
+
+function getAgentTaskRunbookTone(status) {
+  if (status === "ready-for-dry-run") return "safe";
+  if (status === "unsafe-stop" || status === "runbook-blocked") return "restricted";
+  return "review";
+}
+
+function getAgentTaskRunbookBlockers(row, grant = null) {
+  if (grant?.blockers?.length) return grant.blockers;
+  return (row.blockers || []).map((blocker, index) => ({
+    id: `row-blocker-${index + 1}`,
+    label: blocker,
+    detail: blocker
+  }));
+}
+
+function findAgentTaskRunbookQuestion(row, grant = null, questions = []) {
+  const byAction = questions.find((question) => question.actionId === row.id);
+  if (byAction) return byAction;
+
+  const blockerIds = new Set((grant?.blockers || []).map((blocker) => blocker.id));
+  if (blockerIds.has("scan-session")) {
+    return questions.find((question) => question.id === "refresh-scan-session" || question.id === "run-first-scan") || null;
+  }
+  if (blockerIds.has("consent")) {
+    return questions.find((question) => question.id === "arm-dry-run") || null;
+  }
+  if (blockerIds.has("power-approval") || blockerIds.has("rebuildable-approval")) {
+    return questions.find((question) => question.id === "approve-rebuildable-caches") || null;
+  }
+  if (blockerIds.has("permanent-confirm") || row.gate === "permanentConfirm") {
+    return questions.find((question) => question.id === "confirm-permanent-removal") || null;
+  }
+  return null;
+}
+
+function getAgentTaskRunbookFallbackQuestion(status, row, grant = null) {
+  if (status === "ready-dry-run") return `Should ${row.title} enter dry-run simulation for this exact plan?`;
+  if (status === "unsafe-stop") return "Runtime write capability is visible. Should grant issuance stop?";
+  if (grant?.blockers?.[0]) return grant.blockers[0].detail;
+  if (row.blockers?.[0]) return row.blockers[0];
+  return `What evidence is needed before ${row.title} can proceed?`;
+}
+
+function getAgentTaskRunbookAgentStep(status, row, grant = null, question = null) {
+  if (status === "ready-dry-run") return `Use the ${row.route} dry-run route for ${row.title}; do not mutate files.`;
+  if (status === "unsafe-stop") return "Stop the workflow and re-check runtime capabilities before asking for more authority.";
+  if (question?.prompt) return question.prompt;
+  if (grant?.nextStep) return grant.nextStep;
+  return `Resolve blockers before ${row.title} can proceed.`;
+}
+
+function getFallbackAgentTaskAllowedOperations(row, status) {
+  const operations = ["Ask the user for evidence tied to this selected task.", "Keep the selected route visible in the dry-run report."];
+  if (status === "ready-dry-run") operations.push("Run dry-run simulation for this exact route only.");
+  return operations;
+}
+
+function getFallbackAgentTaskForbiddenOperations(row) {
+  const forbidden = [
+    "Mutate files, folders, registry keys, partitions, services, or power settings.",
+    "Use this task to operate on sibling folders or unrelated cleanup targets.",
+    "Self-elevate or request broader machine authority."
+  ];
+  if (row.route === "tool-native-prune") forbidden.push("Run shell commands in the current build.");
+  return forbidden;
+}
+
+function getAgentTaskRunbookEvidenceNeeded({ row, grant = null, rollback = null, question = null, blockers = [] } = {}) {
+  const evidence = [];
+  blockers.slice(0, 3).forEach((blocker) => evidence.push(`${blocker.label}: ${blocker.detail}`));
+  if (question?.detail) evidence.push(question.detail);
+  if (grant?.evidence?.planId) evidence.push(`Plan id ${grant.evidence.planId}`);
+  if (grant?.evidence?.scanFingerprint) evidence.push(`Scan fingerprint ${grant.evidence.scanFingerprint}`);
+  if (rollback?.proofRequired && !rollback?.proof?.complete) {
+    evidence.push(`${rollback.title} rollback proof: ${rollback.requiredEvidence?.[0] || rollback.recovery}`);
+  }
+  if (row.verification) evidence.push(row.verification);
+  return Array.from(new Set(evidence)).slice(0, 5);
+}
+
+function getAgentTaskRunbookPrimary(status, { rows = [], readyRows = [], waitingRows = [], blockedRows = [], unsafeRows = [] } = {}) {
+  if (status === "ready-for-dry-run") return `${readyRows.length} selected task(s) have scoped dry-run work orders.`;
+  if (status === "unsafe-stop") return `${unsafeRows.length} selected task(s) must stop because runtime write capability is visible.`;
+  if (status === "runbook-blocked") return `${blockedRows.length} selected task(s) are blocked by route policy or gates.`;
+  if (status === "runbook-waiting") return `${waitingRows.length} selected task(s) are waiting on scan, approval, or consent evidence.`;
+  return "Select cleanup tasks to build task-scoped agent work orders.";
+}
+
+function getAgentTaskRunbookSteps(status, { readyRows = [], waitingRows = [], blockedRows = [], unsafeRows = [] } = {}) {
+  if (status === "ready-for-dry-run") {
+    return [
+      "Run simulation only for issued task grants.",
+      "Keep every work order tied to its selected route, plan id, and scan fingerprint.",
+      "Do not reuse a task power for another folder or cleanup class."
+    ];
+  }
+  if (status === "unsafe-stop") return unsafeRows.slice(0, 3).map((row) => `${row.title}: ${row.agentStep}`);
+  const waiting = [...blockedRows, ...waitingRows].slice(0, 3).map((row) => `${row.title}: ${row.agentStep}`);
+  return waiting.length ? waiting : ["Run a scan.", "Select cleanup tasks.", "Resolve gates before dry-run work orders are issued."];
 }
 
 function buildTaskPowerBlockers(definition, availableActions = [], selectedActions = [], unresolved = [], intakePolicy = null) {

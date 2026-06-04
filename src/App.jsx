@@ -41,6 +41,7 @@ import {
   buildCustomRootTriage,
   buildPlanReview,
   buildAgentQuestionQueue,
+  buildAgentTaskRunbook,
   buildDecisionLog,
   appendLedgerRunRecord,
   buildExecutorManifest,
@@ -657,6 +658,16 @@ export default function App() {
       writeBoundaryProbe,
       intakePolicy
     ]
+  );
+  const taskRunbook = useMemo(
+    () =>
+      buildAgentTaskRunbook({
+        executorPlan,
+        taskCapabilityGrants,
+        agentQuestionQueue,
+        rollbackPlan
+      }),
+    [executorPlan, taskCapabilityGrants, agentQuestionQueue, rollbackPlan]
   );
   const publicBetaReadiness = useMemo(
     () =>
@@ -1279,6 +1290,7 @@ export default function App() {
       advisor: recoveryAdvisor,
       decisionLog,
       agentQuestionQueue,
+      taskRunbook,
       itemReview,
       executorPlan,
       releaseGate,
@@ -1555,6 +1567,8 @@ export default function App() {
             <TaskPowerPanel catalog={taskPowerCatalog} />
 
             <TaskCapabilityGrantPanel grants={taskCapabilityGrants} />
+
+            <TaskRunbookPanel runbook={taskRunbook} />
 
             <NativeScanSettingsPanel
               settings={scanSettings}
@@ -2179,6 +2193,102 @@ function TaskCapabilityGrantPanel({ grants }) {
           ) : (
             <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
               No selected task has a grant receipt yet.
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TaskRunbookPanel({ runbook }) {
+  const previewRows = runbook.rows.slice(0, 5);
+
+  return (
+    <Card id="task-runbook-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Task runbook
+            </CardTitle>
+            <CardDescription>{runbook.primary}</CardDescription>
+          </div>
+          <Badge variant={runbook.tone}>{runbook.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Tasks" value={runbook.counts.selected} tone={runbook.counts.selected ? "review" : "safe"} />
+          <QueueStat label="Ready" value={runbook.counts.ready} tone={runbook.counts.ready ? "safe" : "review"} />
+          <QueueStat label="Waiting" value={runbook.counts.waiting} tone={runbook.counts.waiting ? "review" : "safe"} />
+          <QueueStat label="Blocked" value={runbook.counts.blocked + runbook.counts.unsafe} tone={runbook.counts.blocked || runbook.counts.unsafe ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Work order boundary</span>
+            <Badge variant={runbook.realRunEnabled ? "restricted" : "safe"}>{runbook.authority}</Badge>
+            <Badge variant={runbook.noCrossTaskAuthority ? "safe" : "restricted"}>
+              {runbook.noCrossTaskAuthority ? "no cross-task power" : "authority widened"}
+            </Badge>
+          </div>
+          <div className="flex flex-col gap-2">
+            {runbook.steps.slice(0, 3).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <Lock className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {previewRows.length ? (
+            previewRows.map((row) => (
+              <div key={row.id} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="mr-auto min-w-0 text-sm font-medium">{row.title}</div>
+                  <Badge variant={row.tone}>{row.status}</Badge>
+                  <Badge variant="outline">{row.powerLabel}</Badge>
+                  <Badge variant="outline">{formatBytes(row.plannedBytes)}</Badge>
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">{row.agentStep}</p>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  <div className="rounded-md border bg-muted/20 p-2">
+                    <div className="mb-1 flex items-center gap-2 text-xs font-medium">
+                      <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                      Allowed now
+                    </div>
+                    <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      {row.allowedOperations.slice(0, 3).map((operation) => (
+                        <span key={operation}>{operation}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-md border bg-muted/20 p-2">
+                    <div className="mb-1 flex items-center gap-2 text-xs font-medium">
+                      <Lock className="h-4 w-4 text-muted-foreground" />
+                      Forbidden
+                    </div>
+                    <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      {row.forbiddenOperations.slice(0, 3).map((operation) => (
+                        <span key={operation}>{operation}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge variant={row.canDryRun ? "safe" : "outline"}>{row.canDryRun ? "dry-run ready" : "ask first"}</Badge>
+                  <Badge variant={row.canRealRun ? "restricted" : "safe"}>{row.canRealRun ? "real run visible" : "real run locked"}</Badge>
+                  {row.questionId ? <Badge variant="outline">{row.questionId}</Badge> : null}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              No selected cleanup task has a runbook row yet.
             </div>
           )}
         </div>
