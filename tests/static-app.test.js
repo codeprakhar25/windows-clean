@@ -162,6 +162,8 @@ assert(app.includes("RestrictionPolicyMatrixPanel"), "restriction policy matrix 
 assert(app.includes("runNativeReadonlyScan"), "real read-only scan workflow should be wired");
 assert(app.includes("buildWindowsSetupAssistant"), "Windows setup assistant should be wired");
 assert(app.includes("WindowsSetupAssistantPanel"), "Windows setup assistant panel should be rendered");
+assert(app.includes("buildDemoRehearsalRunbook"), "demo rehearsal runbook should be wired");
+assert(app.includes("DemoRehearsalRunbookPanel"), "demo rehearsal runbook panel should be rendered");
 assert(app.includes("scanSettings"), "native scan settings should be wired");
 assert(app.includes("targetDrive"), "native scan settings should include target drive");
 assert(app.includes("updateScanSetting"), "native scan settings should invalidate stale evidence");
@@ -260,6 +262,9 @@ assert(model.includes("counts.realRun"), "restriction policy report should keep 
 assert(model.includes("spaceguard-windows-setup-assistant/v1"), "model should expose Windows setup assistant schema");
 assert(model.includes("forbiddenCommands"), "setup assistant should list forbidden commands");
 assert(model.includes("Remove-Item"), "setup assistant should forbid direct delete commands");
+assert(model.includes("spaceguard-demo-rehearsal-runbook/v1"), "model should expose demo rehearsal runbook schema");
+assert(model.includes("safeForPublicDemo"), "demo rehearsal should expose public demo safety");
+assert(model.includes("requiresNativeData: false"), "demo rehearsal should not require native data");
 assert(model.includes("admin-cleanup"), "model should classify admin cleanup as a scoped power");
 assert(model.includes("reviewed-item-cleanup"), "model should classify reviewed item cleanup as a scoped power");
 assert(model.includes("permanentConfirm"), "model should expose permanent-removal confirmation gate");

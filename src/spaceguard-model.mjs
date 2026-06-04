@@ -3595,6 +3595,172 @@ export function buildWindowsSetupAssistant({
   };
 }
 
+export function buildDemoRehearsalRunbook({
+  scanned = false,
+  scanning = false,
+  scanMode = "demo",
+  scanSession = null,
+  actionList = actions,
+  selectedIds = new Set(),
+  readiness = null,
+  executorPlan = null,
+  taskRunbook = null,
+  restrictionPolicyMatrix = null,
+  windowsSetupAssistant = null,
+  runReadiness = null,
+  consentReceipt = null,
+  ledger = [],
+  planSnapshot = null,
+  agentQuestionQueue = null,
+  runtimeCapabilities = {}
+} = {}) {
+  const selected = actionList.filter((action) => selectedIds.has(action.id));
+  const selectedBytes = selected.reduce((sum, action) => sum + Number(action.bytes || 0), 0);
+  const isDemoMode = scanMode === "demo";
+  const unsafeRuntime = Boolean(
+    runtimeCapabilities?.realRunEnabled
+      || runtimeCapabilities?.destructiveCommands
+      || windowsSetupAssistant?.destructiveCommands
+      || restrictionPolicyMatrix?.destructiveCommands
+      || taskRunbook?.destructiveCommands
+  );
+  const ledgerEntries = Array.isArray(ledger) ? ledger : [];
+  const ledgerCurrent = ledgerEntries.length > 0 && (!planSnapshot?.id || ledgerEntries.every((entry) => entry.planId === planSnapshot.id));
+  const scanReady = Boolean(isDemoMode && scanned && !scanning && scanSession?.status === "demo-current");
+  const planReady = selected.length > 0 && (executorPlan?.rows?.length || selectedBytes > 0);
+  const gatesReady = Boolean(readiness?.ready && !readiness?.unresolved?.length);
+  const routesReady = Boolean(runReadiness?.ready && executorPlan?.dryRunCount > 0);
+  const consentReady = Boolean(consentReceipt?.ready);
+  const realCleanupEnabled = false;
+
+  const rows = [
+    buildDemoRehearsalRow({
+      id: "demo-mode-boundary",
+      label: "Demo data boundary",
+      passed: isDemoMode && !unsafeRuntime,
+      blocked: unsafeRuntime,
+      detail: isDemoMode
+        ? "Rehearsal uses browser sample data and cannot inspect local folders."
+        : "Switch away from native read-only data before recording the public demo rehearsal.",
+      action: isDemoMode ? "Keep the rehearsal in demo mode." : "Run the browser demo scan."
+    }),
+    buildDemoRehearsalRow({
+      id: "demo-scan",
+      label: "Demo scan",
+      passed: scanReady,
+      blocked: unsafeRuntime || !isDemoMode,
+      detail: scanReady
+        ? `Demo scan fingerprint ${scanSession.currentFingerprint || "current"} is ready for planning.`
+        : "Run the demo scan so workflow state is derived from sample data.",
+      action: "Run demo scan."
+    }),
+    buildDemoRehearsalRow({
+      id: "candidate-plan",
+      label: "Candidate plan",
+      passed: planReady,
+      blocked: unsafeRuntime || !isDemoMode,
+      detail: planReady
+        ? `${selected.length} selected task(s) expose ${formatBytes(selectedBytes)} before approval gates.`
+        : "Select at least one cleanup candidate from the demo plan.",
+      action: "Suggest or adjust the guarded plan."
+    }),
+    buildDemoRehearsalRow({
+      id: "user-gates",
+      label: "User gates",
+      passed: gatesReady,
+      blocked: unsafeRuntime || !isDemoMode,
+      detail: gatesReady
+        ? "Approvals and item review gates are resolved for the selected demo plan."
+        : `${readiness?.unresolved?.length || 0} approval or item-review gate(s) remain.`,
+      action: "Answer the next gate question."
+    }),
+    buildDemoRehearsalRow({
+      id: "dry-run-consent",
+      label: "Dry-run consent",
+      passed: consentReady && routesReady,
+      blocked: unsafeRuntime || !isDemoMode,
+      detail: consentReady
+        ? `Consent is tied to plan ${consentReceipt.planId || "current"}.`
+        : "Arm the current dry-run plan after readiness passes.",
+      action: "Arm current dry-run."
+    }),
+    buildDemoRehearsalRow({
+      id: "simulation-ledger",
+      label: "Simulated ledger",
+      passed: ledgerCurrent,
+      blocked: unsafeRuntime || !isDemoMode,
+      detail: ledgerCurrent
+        ? `${ledgerEntries.length} demo ledger entr${ledgerEntries.length === 1 ? "y" : "ies"} match the current plan.`
+        : "Run simulation to produce a local dry-run ledger.",
+      action: "Simulate dry-run."
+    }),
+    buildDemoRehearsalRow({
+      id: "report-export",
+      label: "Report export",
+      passed: ledgerCurrent && Boolean(windowsSetupAssistant?.schemaVersion),
+      blocked: unsafeRuntime || !isDemoMode,
+      detail: "Export the dry-run report as the public demo evidence packet.",
+      action: "Export report."
+    })
+  ];
+  const blockedRows = rows.filter((row) => row.status === "blocked");
+  const waitingRows = rows.filter((row) => row.status === "waiting");
+  const readyRows = rows.filter((row) => row.status === "ready");
+  const status = unsafeRuntime
+    ? "unsafe-stop"
+    : !isDemoMode
+      ? "switch-to-demo"
+      : !scanReady
+        ? "demo-scan-waiting"
+        : !planReady
+          ? "demo-plan-waiting"
+          : !gatesReady
+            ? "demo-gates-waiting"
+            : !routesReady
+              ? "demo-readiness-waiting"
+              : !consentReady
+                ? "demo-consent-waiting"
+                : !ledgerCurrent
+                  ? "demo-simulation-ready"
+                  : "demo-evidence-ready";
+  const safeForPublicDemo = isDemoMode && !unsafeRuntime && !realCleanupEnabled;
+
+  return {
+    schemaVersion: "spaceguard-demo-rehearsal-runbook/v1",
+    status,
+    tone: getDemoRehearsalTone(status),
+    safeForPublicDemo,
+    evidenceComplete: status === "demo-evidence-ready",
+    requiresNativeData: false,
+    realCleanupEnabled,
+    destructiveCommands: unsafeRuntime,
+    noLocalFileAccess: isDemoMode,
+    activeQuestionId: agentQuestionQueue?.active?.id || "",
+    activeQuestion: agentQuestionQueue?.active?.prompt || "",
+    rows,
+    readyRows,
+    waitingRows,
+    blockedRows,
+    inAppActions: getDemoRehearsalInAppActions({ nativeMode: !isDemoMode, ledgerCurrent }),
+    forbiddenOperations: [
+      "Inspect local filesystem paths during public demo rehearsal.",
+      "Run native cleanup, shell commands, registry edits, partition writes, or direct deletes.",
+      "Present demo-estimated bytes as real Windows cleanup proof."
+    ],
+    counts: {
+      rows: rows.length,
+      ready: readyRows.length,
+      waiting: waitingRows.length,
+      blocked: blockedRows.length,
+      selected: selected.length,
+      ledger: ledgerEntries.length,
+      realRun: 0
+    },
+    primary: getDemoRehearsalPrimary(status, { selected, ledgerEntries, activeQuestion: agentQuestionQueue?.active }),
+    steps: getDemoRehearsalSteps(status, { rows, activeQuestion: agentQuestionQueue?.active })
+  };
+}
+
 export function buildExecutorPlan({
   selectedIds = new Set(),
   actionList = actions,
@@ -6125,6 +6291,7 @@ export function buildReport({
   taskRunbook = null,
   restrictionPolicyMatrix = null,
   windowsSetupAssistant = null,
+  demoRehearsalRunbook = null,
   releaseGate = null,
   validationPack = null,
   runtimeCapabilities = null,
@@ -6276,6 +6443,26 @@ export function buildReport({
           windowsSetupAssistant.commands.length
             ? windowsSetupAssistant.commands.map((command) => `- Command: ${command.command} | destructive=${command.destructive ? "yes" : "no"} | ${command.detail}`).join("\n")
             : "- No setup commands."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Demo Rehearsal Runbook",
+    demoRehearsalRunbook
+      ? [
+          `- Status: ${demoRehearsalRunbook.status}`,
+          `- Safe for public demo: ${demoRehearsalRunbook.safeForPublicDemo ? "yes" : "no"}`,
+          `- Evidence complete: ${demoRehearsalRunbook.evidenceComplete ? "yes" : "no"}`,
+          `- Requires native data: ${demoRehearsalRunbook.requiresNativeData ? "yes" : "no"}`,
+          `- Real cleanup enabled: ${demoRehearsalRunbook.realCleanupEnabled ? "yes" : "no"}`,
+          `- Destructive commands: ${demoRehearsalRunbook.destructiveCommands ? "yes" : "no"}`,
+          `- Real-run routes: ${demoRehearsalRunbook.counts.realRun}`,
+          `- Active question: ${demoRehearsalRunbook.activeQuestion || "none"}`,
+          demoRehearsalRunbook.rows.length
+            ? demoRehearsalRunbook.rows.map((row) => `- ${row.label}: ${row.status} | ${row.detail}`).join("\n")
+            : "- No rehearsal rows.",
+          demoRehearsalRunbook.inAppActions.length
+            ? demoRehearsalRunbook.inAppActions.map((action) => `- Action: ${action.label} | destructive=${action.destructive ? "yes" : "no"} | ${action.detail}`).join("\n")
+            : "- No rehearsal actions."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -7438,6 +7625,103 @@ function getAgentTaskRunbookSteps(status, { readyRows = [], waitingRows = [], bl
   if (status === "unsafe-stop") return unsafeRows.slice(0, 3).map((row) => `${row.title}: ${row.agentStep}`);
   const waiting = [...blockedRows, ...waitingRows].slice(0, 3).map((row) => `${row.title}: ${row.agentStep}`);
   return waiting.length ? waiting : ["Run a scan.", "Select cleanup tasks.", "Resolve gates before dry-run work orders are issued."];
+}
+
+function buildDemoRehearsalRow({
+  id,
+  label,
+  passed = false,
+  blocked = false,
+  detail,
+  action
+}) {
+  const status = blocked ? "blocked" : passed ? "ready" : "waiting";
+  return {
+    id,
+    label,
+    status,
+    tone: blocked ? "restricted" : passed ? "safe" : "review",
+    detail,
+    action,
+    passed: Boolean(passed),
+    canAskUser: !blocked,
+    canRealRun: false
+  };
+}
+
+function getDemoRehearsalTone(status) {
+  if (status === "demo-evidence-ready") return "safe";
+  if (status === "unsafe-stop") return "restricted";
+  return "review";
+}
+
+function getDemoRehearsalInAppActions({ nativeMode = false, ledgerCurrent = false } = {}) {
+  return [
+    {
+      id: "run-demo-scan",
+      label: "Run demo scan",
+      destructive: false,
+      status: nativeMode ? "needed" : "available",
+      detail: "Uses bundled sample data only."
+    },
+    {
+      id: "suggest-plan",
+      label: "Suggest guarded plan",
+      destructive: false,
+      status: "available",
+      detail: "Selects eligible demo cleanup candidates without touching disk."
+    },
+    {
+      id: "resolve-gates",
+      label: "Resolve gates",
+      destructive: false,
+      status: "available",
+      detail: "Asks for approvals, item review, and dry-run consent."
+    },
+    {
+      id: "simulate-dry-run",
+      label: "Simulate dry-run",
+      destructive: false,
+      status: ledgerCurrent ? "complete" : "available",
+      detail: "Creates local demo ledger entries only."
+    },
+    {
+      id: "export-report",
+      label: "Export report",
+      destructive: false,
+      status: ledgerCurrent ? "ready" : "waiting",
+      detail: "Exports the dry-run report as demo evidence."
+    }
+  ];
+}
+
+function getDemoRehearsalPrimary(status, { selected = [], ledgerEntries = [], activeQuestion = null } = {}) {
+  if (status === "demo-evidence-ready") return `${ledgerEntries.length} simulated ledger entr${ledgerEntries.length === 1 ? "y" : "ies"} can be exported as demo evidence.`;
+  if (status === "unsafe-stop") return "Runtime write capability is visible; stop the public demo rehearsal.";
+  if (status === "switch-to-demo") return "Switch to browser demo data before recording a no-real-data rehearsal.";
+  if (status === "demo-scan-waiting") return "Run the demo scan before building the rehearsal packet.";
+  if (status === "demo-plan-waiting") return "Select at least one demo cleanup task.";
+  if (status === "demo-gates-waiting") return activeQuestion?.prompt || "Resolve the next user gate before dry-run consent.";
+  if (status === "demo-readiness-waiting") return "Executor readiness still blocks dry-run simulation.";
+  if (status === "demo-consent-waiting") return "Arm the current dry-run plan before simulation.";
+  if (status === "demo-simulation-ready") return `${selected.length} selected task(s) are ready for demo simulation.`;
+  return "Rehearse the cleanup workflow without local data or real writes.";
+}
+
+function getDemoRehearsalSteps(status, { rows = [], activeQuestion = null } = {}) {
+  if (status === "demo-evidence-ready") {
+    return [
+      "Export the dry-run report.",
+      "Use the packet as public demo evidence only.",
+      "Do not claim real Windows cleanup from demo-estimated bytes."
+    ];
+  }
+  if (status === "unsafe-stop") return ["Stop rehearsal.", "Inspect runtime capabilities.", "Hide public demo claims until write signals are resolved."];
+  if (activeQuestion?.prompt) return [activeQuestion.prompt, activeQuestion.detail || "Use the guarded UI action attached to this question."];
+  const nextRows = rows.filter((row) => row.status !== "ready").slice(0, 3);
+  return nextRows.length
+    ? nextRows.map((row) => `${row.label}: ${row.action}`)
+    : ["Run demo scan.", "Resolve gates.", "Simulate dry-run.", "Export report."];
 }
 
 function buildRestrictionPolicyRow({

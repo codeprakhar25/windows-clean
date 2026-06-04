@@ -43,6 +43,7 @@ import {
   buildAgentQuestionQueue,
   buildAgentTaskRunbook,
   buildDecisionLog,
+  buildDemoRehearsalRunbook,
   appendLedgerRunRecord,
   buildExecutorManifest,
   buildExecutorPlan,
@@ -735,6 +736,47 @@ export default function App() {
       }),
     [nativeCapability, runtimeCapabilities.result, dataMode, scanSession, scanCoverage, privacyBoundary, publicBetaReadiness, validationPack, releaseGate, supportBundle]
   );
+  const demoRehearsalRunbook = useMemo(
+    () =>
+      buildDemoRehearsalRunbook({
+        scanned,
+        scanning,
+        scanMode: dataMode,
+        scanSession,
+        actionList,
+        selectedIds,
+        readiness,
+        executorPlan,
+        taskRunbook,
+        restrictionPolicyMatrix,
+        windowsSetupAssistant,
+        runReadiness,
+        consentReceipt,
+        ledger: activeLedger,
+        planSnapshot,
+        agentQuestionQueue,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [
+      scanned,
+      scanning,
+      dataMode,
+      scanSession,
+      actionList,
+      selectedIds,
+      readiness,
+      executorPlan,
+      taskRunbook,
+      restrictionPolicyMatrix,
+      windowsSetupAssistant,
+      runReadiness,
+      consentReceipt,
+      activeLedger,
+      planSnapshot,
+      agentQuestionQueue,
+      runtimeCapabilities.result
+    ]
+  );
   const releaseReviewPacket = useMemo(
     () =>
       buildReleaseReviewPacket({
@@ -1324,6 +1366,7 @@ export default function App() {
       taskRunbook,
       restrictionPolicyMatrix,
       windowsSetupAssistant,
+      demoRehearsalRunbook,
       itemReview,
       executorPlan,
       releaseGate,
@@ -1590,6 +1633,8 @@ export default function App() {
             <NativeScannerPanel capability={nativeCapability} nativeScan={nativeScan} />
 
             <WindowsSetupAssistantPanel assistant={windowsSetupAssistant} />
+
+            <DemoRehearsalRunbookPanel runbook={demoRehearsalRunbook} onExport={exportReport} />
 
             <ScanSessionPanel session={scanSession} />
 
@@ -2043,6 +2088,90 @@ function WindowsSetupAssistantPanel({ assistant }) {
                 </div>
                 <Badge variant={command.destructive ? "restricted" : command.status === "available" || command.status === "detected" ? "safe" : "review"}>
                   {command.destructive ? "destructive" : command.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DemoRehearsalRunbookPanel({ runbook, onExport }) {
+  return (
+    <Card id="demo-rehearsal-runbook-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Play className="h-4 w-4" />
+              Demo rehearsal runbook
+            </CardTitle>
+            <CardDescription>{runbook.primary}</CardDescription>
+          </div>
+          <Badge variant={runbook.tone}>{runbook.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Safe" value={runbook.safeForPublicDemo ? "yes" : "no"} tone={runbook.safeForPublicDemo ? "safe" : "restricted"} />
+          <QueueStat label="Evidence" value={runbook.evidenceComplete ? "ready" : "open"} tone={runbook.evidenceComplete ? "safe" : "review"} />
+          <QueueStat label="Native" value={runbook.requiresNativeData ? "needs" : "none"} tone={runbook.requiresNativeData ? "restricted" : "safe"} />
+          <QueueStat label="Writes" value={runbook.realCleanupEnabled ? "on" : "locked"} tone={runbook.realCleanupEnabled ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Public demo boundary</span>
+            <Badge variant={runbook.noLocalFileAccess ? "safe" : "review"}>
+              {runbook.noLocalFileAccess ? "no local file access" : "not demo data"}
+            </Badge>
+            <Badge variant={runbook.destructiveCommands ? "restricted" : "safe"}>
+              {runbook.destructiveCommands ? "destructive visible" : "no destructive commands"}
+            </Badge>
+            <Badge variant="outline">{runbook.counts.realRun} real-run routes</Badge>
+          </div>
+          <div className="flex flex-col gap-2">
+            {runbook.steps.slice(0, 3).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <Lock className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {runbook.rows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex items-center gap-2">
+                <div className="mr-auto text-sm font-medium">{row.label}</div>
+                <Badge variant={row.tone}>{row.status}</Badge>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{row.detail}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{row.action}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="text-sm font-medium">In-app rehearsal actions</div>
+            <Button type="button" size="sm" variant="outline" onClick={onExport}>
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+          </div>
+          <div className="flex flex-col gap-2">
+            {runbook.inAppActions.map((action) => (
+              <div key={action.id} className="grid gap-1 rounded-md border bg-card p-2 text-xs sm:grid-cols-[1fr_auto]">
+                <div className="min-w-0">
+                  <div className="font-medium">{action.label}</div>
+                  <div className="text-muted-foreground">{action.detail}</div>
+                </div>
+                <Badge variant={action.destructive ? "restricted" : action.status === "ready" || action.status === "complete" ? "safe" : "review"}>
+                  {action.status}
                 </Badge>
               </div>
             ))}

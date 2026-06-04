@@ -389,6 +389,135 @@ const assert = require("assert");
   });
   assert(setupReport.includes("## Windows Setup Assistant"), "report should include setup assistant");
   assert(setupReport.includes("Real-run setup routes: 0"), "setup report should keep real-run setup routes at zero");
+  const demoNoScanRunbook = guard.buildDemoRehearsalRunbook({
+    scanned: false,
+    scanning: false,
+    scanMode: "demo",
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(demoNoScanRunbook.schemaVersion, "spaceguard-demo-rehearsal-runbook/v1", "demo rehearsal should expose a schema version");
+  assert.strictEqual(demoNoScanRunbook.status, "demo-scan-waiting", "demo rehearsal should start by waiting for a demo scan");
+  assert.strictEqual(demoNoScanRunbook.requiresNativeData, false, "demo rehearsal should not require real local data");
+  assert.strictEqual(demoNoScanRunbook.realCleanupEnabled, false, "demo rehearsal must not enable real cleanup");
+  assert.strictEqual(demoNoScanRunbook.safeForPublicDemo, true, "browser demo rehearsal should be safe while writes are locked");
+  assert(demoNoScanRunbook.inAppActions.every((action) => action.destructive === false), "demo rehearsal actions must be non-destructive");
+  const demoScanSession = guard.buildScanSessionEvidence({
+    scanned: true,
+    scanning: false,
+    scanMode: "demo",
+    scanSettings: sessionSettings,
+    protectedPaths: [],
+    nativeScan: null
+  });
+  const demoSelectedIds = new Set(["gradle-cache"]);
+  const demoApprovals = { groupConfirm: true, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} };
+  const demoReadiness = guard.getExecutionReadinessForActions(demoSelectedIds, demoApprovals, guard.actions, [], {}, intakeAllowedPolicy);
+  const demoPlanSnapshot = guard.buildPlanSnapshot({
+    selectedIds: demoSelectedIds,
+    actionList: guard.actions,
+    approvals: demoApprovals,
+    scanMode: "demo",
+    scanSession: demoScanSession,
+    intakePolicy: intakeAllowedPolicy
+  });
+  const demoPreflight = guard.buildExecutionPreflight({
+    scanned: true,
+    scanning: false,
+    selectedIds: demoSelectedIds,
+    actionList: guard.actions,
+    readiness: demoReadiness,
+    protectedPaths: [],
+    ledger: [],
+    planSnapshot: demoPlanSnapshot,
+    scanSession: demoScanSession
+  });
+  const demoExecutorPlan = guard.buildExecutorPlan({
+    selectedIds: demoSelectedIds,
+    actionList: guard.actions,
+    approvals: demoApprovals,
+    protectedPaths: [],
+    scanMode: "demo",
+    preflight: demoPreflight,
+    intakePolicy: intakeAllowedPolicy
+  });
+  const demoRunReadiness = guard.buildRunReadiness(demoPreflight, guard.buildExecutorReadiness(demoExecutorPlan, demoPreflight));
+  const demoConsentReceipt = guard.buildExecutionConsentReceipt({
+    planSnapshot: demoPlanSnapshot,
+    executorPlan: demoExecutorPlan,
+    runReadiness: demoRunReadiness,
+    consent: { accepted: true, planId: demoPlanSnapshot.id, acceptedAt: "2026-06-04T10:00:00.000Z" }
+  });
+  const simulationReadyRunbook = guard.buildDemoRehearsalRunbook({
+    scanned: true,
+    scanning: false,
+    scanMode: "demo",
+    scanSession: demoScanSession,
+    actionList: guard.actions,
+    selectedIds: demoSelectedIds,
+    readiness: demoReadiness,
+    executorPlan: demoExecutorPlan,
+    windowsSetupAssistant: browserSetupAssistant,
+    runReadiness: demoRunReadiness,
+    consentReceipt: demoConsentReceipt,
+    planSnapshot: demoPlanSnapshot,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(simulationReadyRunbook.status, "demo-simulation-ready", "armed demo rehearsal should be ready for simulated ledger");
+  assert.strictEqual(simulationReadyRunbook.counts.realRun, 0, "demo rehearsal should never count real-run routes");
+  const demoLedger = guard.makeExecutionLedgerForActions(demoSelectedIds, guard.actions, [], {
+    approvals: demoApprovals,
+    planSnapshot: demoPlanSnapshot,
+    executedAt: "2026-06-04T10:02:00.000Z"
+  });
+  const evidenceReadyRunbook = guard.buildDemoRehearsalRunbook({
+    scanned: true,
+    scanning: false,
+    scanMode: "demo",
+    scanSession: demoScanSession,
+    actionList: guard.actions,
+    selectedIds: demoSelectedIds,
+    readiness: demoReadiness,
+    executorPlan: demoExecutorPlan,
+    windowsSetupAssistant: browserSetupAssistant,
+    runReadiness: demoRunReadiness,
+    consentReceipt: demoConsentReceipt,
+    ledger: demoLedger,
+    planSnapshot: demoPlanSnapshot,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(evidenceReadyRunbook.status, "demo-evidence-ready", "demo ledger should complete rehearsal evidence");
+  assert.strictEqual(evidenceReadyRunbook.evidenceComplete, true, "demo rehearsal should expose complete evidence state");
+  const nativeModeRehearsal = guard.buildDemoRehearsalRunbook({
+    scanned: true,
+    scanning: false,
+    scanMode: "native-readonly",
+    scanSession: currentScanSession,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(nativeModeRehearsal.status, "switch-to-demo", "rehearsal should not use native local data");
+  const unsafeDemoRehearsal = guard.buildDemoRehearsalRunbook({
+    scanned: true,
+    scanning: false,
+    scanMode: "demo",
+    scanSession: demoScanSession,
+    runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
+  });
+  assert.strictEqual(unsafeDemoRehearsal.status, "unsafe-stop", "demo rehearsal should stop on runtime write capability");
+  assert.strictEqual(unsafeDemoRehearsal.safeForPublicDemo, false, "unsafe runtime should not be public-demo safe");
+  const demoRehearsalReport = guard.buildReport({
+    scenario: guard.getScenario("developer"),
+    profile: guard.getScenario("developer").profile,
+    actionList: guard.actions,
+    selectedIds: demoSelectedIds,
+    readiness: demoReadiness,
+    ledger: demoLedger,
+    protectedPaths: [],
+    goalBytes: 10 * guard.GB,
+    demoRehearsalRunbook: evidenceReadyRunbook
+  });
+  assert(demoRehearsalReport.includes("## Demo Rehearsal Runbook"), "report should include demo rehearsal runbook");
+  assert(demoRehearsalReport.includes("Requires native data: no"), "demo rehearsal report should keep native-data boundary visible");
+  assert(demoRehearsalReport.includes("Real-run routes: 0"), "demo rehearsal report should keep real-run routes at zero");
   const staleScanSession = guard.buildScanSessionEvidence({
     scanned: true,
     scanning: false,

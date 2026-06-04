@@ -319,6 +319,13 @@ Public beta invariant:
 - Public beta requires local-only privacy, no real-cleanup claims, distribution/signing/support/uninstall evidence, and the Windows real-data runbook.
 - Real-executor release gates remain separate and stricter.
 
+Demo rehearsal invariant:
+
+- Browser-demo rehearsal is no-real-data proof only.
+- It can include demo scan, selected plan, approvals, task-scoped dry-run consent, simulated ledger, and report export.
+- It must expose `requiresNativeData=false`, `realCleanupEnabled=false`, destructive commands disabled, and zero real-run routes.
+- It cannot count as native scanner validation, fixture evidence, release-gate evidence, write readiness, or real Windows cleanup proof.
+
 Manual strategy invariant:
 
 - Manual storage actions are tracked, not executed.
@@ -365,6 +372,7 @@ The current React/shadcn app implements this as a guarded planner with browser-d
 - Blocked risky actions.
 - Simulated execution ledger.
 - Plan-specific dry-run consent receipt.
+- Demo rehearsal runbook for scan-to-report proof without native data.
 - Post-run verification checklist.
 - Local run history panel.
 - Exportable dry-run report.
