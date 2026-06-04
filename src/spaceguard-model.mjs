@@ -2222,10 +2222,11 @@ export function buildAgentQuestionQueue({
   rollbackPlan = null,
   validationPack = null,
   fixtureImportResult = null,
-  writeBoundaryProbe = null
+  writeBoundaryProbe = null,
+  intakePolicy = null
 } = {}) {
   const selected = actionList.filter((action) => selectedIds.has(action.id));
-  const gateState = readiness || getExecutionReadinessForActions(selectedIds, approvals, actionList, []);
+  const gateState = readiness || getExecutionReadinessForActions(selectedIds, approvals, actionList, [], null, intakePolicy);
   const questions = [];
   const addQuestion = (question) => {
     questions.push({
@@ -2276,6 +2277,31 @@ export function buildAgentQuestionQueue({
       detail: "The agent needs at least one selected action before approvals, dry-run consent, or verification can happen.",
       action: "suggest-plan",
       options: ["Suggest safest plan"]
+    });
+  }
+
+  const intakeBlockedAdminCandidates = actionList
+    .filter((action) => !selectedIds.has(action.id) && !actionAllowedByIntake(action, intakePolicy) && action.gate !== "blocked" && action.gate !== "advisory")
+    .sort((a, b) => b.bytes - a.bytes);
+  const intakeBlockedBytes = intakeBlockedAdminCandidates.reduce((sum, action) => sum + Number(action.bytes || 0), 0);
+  if (
+    scanned &&
+    intakePolicy?.adminSensitiveBlocked &&
+    intakeBlockedAdminCandidates.length > 0 &&
+    (recoveryAdvisor?.gapBytes || 0) > 0 &&
+    recoveryAdvisor?.status === "strategy-needed" &&
+    (gateState?.unresolved || []).length === 0 &&
+    !questions.some((question) => question.id === "run-first-scan" || question.id === "choose-plan")
+  ) {
+    addQuestion({
+      id: "allow-admin-system-routes",
+      lane: "intake",
+      priority: 90,
+      title: "Allow admin/system dry-run routes",
+      prompt: "Should admin/system cleanup routes be allowed into this dry-run plan?",
+      detail: `${formatBytes(intakeBlockedBytes)} is visible behind the intake boundary. This only allows dry-run planning; real execution stays locked.`,
+      action: "allow-admin-routes",
+      options: ["Allow admin/system dry-run routes", "Keep admin routes gated"]
     });
   }
 
@@ -2479,6 +2505,7 @@ export function buildAgentQuestionQueue({
       total: sorted.length,
       active: activeQuestion ? 1 : 0,
       approval: sorted.filter((question) => question.lane === "approval").length,
+      intake: sorted.filter((question) => question.lane === "intake").length,
       review: sorted.filter((question) => question.lane === "review").length,
       validation: sorted.filter((question) => question.lane === "validation").length,
       rollback: sorted.filter((question) => question.lane === "rollback").length,
@@ -6020,7 +6047,7 @@ function buildWriteBoundaryProbeSteps(status) {
 
 function questionTone(lane) {
   if (lane === "discovery" || lane === "planning" || lane === "execution") return "review";
-  if (lane === "approval" || lane === "review" || lane === "validation" || lane === "rollback") return "review";
+  if (lane === "approval" || lane === "intake" || lane === "review" || lane === "validation" || lane === "rollback") return "review";
   if (lane === "advanced" || lane === "strategy") return "advanced";
   if (lane === "verification" || lane === "consent") return "safe";
   return "outline";

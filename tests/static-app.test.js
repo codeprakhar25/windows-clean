@@ -31,6 +31,7 @@ const requiredAppMarkers = [
   "Intake constraints",
   "Admin/system actions",
   "intake gated",
+  "Allow admin routes",
   "Run real scan",
   "Native app required",
   "Real scan settings",
@@ -209,6 +210,8 @@ assert(model.includes("spaceguard-manual-strategy-checklist/v1"), "model should 
 assert(model.includes("spaceguard-question-queue/v1"), "model should expose agent question queue schema");
 assert(model.includes("spaceguard-intake-policy/v1"), "model should expose intake policy schema");
 assert(model.includes("intake admin boundary"), "model should name admin intake blockers");
+assert(model.includes("allow-admin-system-routes"), "question queue should ask admin intake questions");
+assert(model.includes("allow-admin-routes"), "question queue should expose admin allowance action");
 assert(model.includes("run-first-scan"), "question queue should ask scan-first questions");
 assert(model.includes("approve-rebuildable-caches"), "question queue should ask approval questions");
 assert(model.includes("validation-evidence-detail"), "question queue should ask validation evidence questions");

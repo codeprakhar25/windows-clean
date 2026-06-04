@@ -149,6 +149,7 @@ The demo also includes:
 - Runtime privilege boundary that shows whether the desktop shell is elevated and which selected routes would need admin validation later.
 - Recovery advisor that explains the next useful move when the target is unmet.
 - Agent questions panel that turns scan state, approvals, review items, consent, validation evidence, and verification into the next user-facing question.
+- Agent questions also ask whether to allow admin/system dry-run routes when lower-risk cleanup is exhausted and admin-sensitive recovery remains intake-gated.
 - Storage strategy panel for manual app uninstall, archive, library move, drive upgrade, or partition planning when cleanup cannot hit the target.
 - Manual strategy checklist that lets the user track backup, archive, app-native move, uninstall, and partition-prep evidence without automation.
 - Review workbench that separates measured evidence, unresolved decisions, protected paths, and unsupported roots.
@@ -241,7 +242,7 @@ Final consent is also plan-specific. A user can arm only the current plan after 
 
 The post-run verification panel converts the current ledger into route-level checkpoints. Each checkpoint includes the affected root, expected bytes, route, and evidence required for a read-only rescan comparison. Stale ledgers cannot produce valid checkpoints for the current plan.
 
-The agent questions panel is the workflow control surface. It asks for the next decision only after deriving it from current state: scan first, approve rebuildable caches, review per-item decisions, arm dry-run consent, simulate the armed plan, capture validation details, or probe the rejecting write boundary. These actions reuse existing gates and cannot bypass preflight, consent, release gates, or real-execution locks.
+The agent questions panel is the workflow control surface. It asks for the next decision only after deriving it from current state: scan first, approve rebuildable caches, allow admin/system routes into dry-run planning when lower-risk cleanup is exhausted, review per-item decisions, arm dry-run consent, simulate the armed plan, capture validation details, or probe the rejecting write boundary. These actions reuse existing gates and cannot bypass preflight, consent, release gates, or real-execution locks.
 
 The rescan comparison panel is stricter than the checklist. It requires an absolute ledger timestamp and a native scan timestamp newer than that ledger before any affected-root row can be marked as matched. Demo scans, stale ledgers, and scans taken before the dry-run ledger stay in a waiting state. If native bytes remain where the plan expected removal, the row is marked as a mismatch and cannot count as ledger/rescan parity evidence.
 

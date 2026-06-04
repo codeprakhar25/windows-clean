@@ -449,6 +449,45 @@ const assert = require("assert");
     itemReviewsByAction: normalReviewItems
   });
   assert.strictEqual(advancedAdvisor.status, "advanced-options", "advisor should separate typed system options from normal expansion");
+  const intakeLimitedSelection = new Set(
+    developerActions
+      .filter((action) => guard.selectableAction(action, [], intakeBlockedPolicy))
+      .map((action) => action.id)
+  );
+  const intakeLimitedApprovals = makeReviewApprovals(developerActions);
+  const intakeLimitedReviews = guard.buildReviewItemsByAction(developerActions, null, [], intakeLimitedApprovals);
+  const intakeLimitedAdvisor = guard.buildRecoveryAdvisor({
+    scanned: true,
+    goalBytes: 500 * guard.GB,
+    actionList: developerActions,
+    selectedIds: intakeLimitedSelection,
+    approvals: intakeLimitedApprovals,
+    protectedPaths: [],
+    itemReviewsByAction: intakeLimitedReviews,
+    intakePolicy: intakeBlockedPolicy
+  });
+  assert.strictEqual(intakeLimitedAdvisor.status, "strategy-needed", "intake-blocked admin routes should keep exhausted normal cleanup in strategy-needed state");
+  const intakeLimitedQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    actionList: developerActions,
+    selectedIds: intakeLimitedSelection,
+    approvals: intakeLimitedApprovals,
+    readiness: guard.getExecutionReadinessForActions(intakeLimitedSelection, intakeLimitedApprovals, developerActions, [], intakeLimitedReviews, intakeBlockedPolicy),
+    recoveryAdvisor: intakeLimitedAdvisor,
+    intakePolicy: intakeBlockedPolicy
+  });
+  assert(intakeLimitedQuestions.questions.some((question) => question.id === "allow-admin-system-routes"), "question queue should ask to allow admin/system routes when normal cleanup is exhausted");
+  assert.strictEqual(intakeLimitedQuestions.counts.intake, 1, "question queue should count intake questions");
+  const adminAllowedQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    actionList: developerActions,
+    selectedIds: intakeLimitedSelection,
+    approvals: intakeLimitedApprovals,
+    readiness: guard.getExecutionReadinessForActions(intakeLimitedSelection, intakeLimitedApprovals, developerActions, [], intakeLimitedReviews, intakeAllowedPolicy),
+    recoveryAdvisor: intakeLimitedAdvisor,
+    intakePolicy: intakeAllowedPolicy
+  });
+  assert(!adminAllowedQuestions.questions.some((question) => question.id === "allow-admin-system-routes"), "question queue should not ask admin allowance after it is enabled");
 
   const strategyApprovals = {
     ...makeReviewApprovals(developerActions),

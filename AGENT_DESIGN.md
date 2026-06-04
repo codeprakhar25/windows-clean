@@ -104,7 +104,7 @@ The UI must also expose a recovery advisor and decision log:
 
 - `recovery advisor`: the current gap, the reason the goal is or is not reachable, and the next decision branch.
 - `intake constraints`: the target drive, free-space goal, risk tolerance, protected-path count, and whether admin/system routes may enter dry-run planning.
-- `agent questions`: a prioritized queue of the next user-facing questions derived from scan, plan, approval, review, consent, rollback, validation, fixture import, and verification state.
+- `agent questions`: a prioritized queue of the next user-facing questions derived from scan, plan, intake, approval, review, consent, rollback, validation, fixture import, and verification state.
 - `real scan settings`: project artifact inclusion, traversal depth, and per-root entry cap for the next native read-only scan.
 - `scan coverage`: confidence summary for measured, limited, missing, protected, unsupported, and demo-estimated roots; partial native scans must remain visibly partial.
 - `storage strategy`: manual-only guidance for app uninstall review, library migration, archive storage, drive upgrades, and backup-first partition planning when cleanup cannot meet the target.
@@ -254,7 +254,7 @@ Consent receipt invariant:
 Agent question invariant:
 
 - Questions are derived from current state, not hardcoded walkthrough copy.
-- A question can trigger only an existing guarded action such as scan, suggest plan, focus item review, focus rollback proof, focus fixture import, approve rebuildable cache group, arm dry-run consent, simulate dry-run, run native read-only scan, or probe the rejecting write boundary.
+- A question can trigger only an existing guarded action such as scan, suggest plan, allow admin/system routes into dry-run planning, focus item review, focus rollback proof, focus fixture import, approve rebuildable cache group, arm dry-run consent, simulate dry-run, run native read-only scan, or probe the rejecting write boundary.
 - Questions cannot mark item decisions, rollback evidence, validation evidence, typed approvals, write readiness, or release gates complete on their own.
 - The active question and queue must be exportable in the dry-run report for audit.
 

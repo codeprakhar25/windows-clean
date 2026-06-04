@@ -541,7 +541,8 @@ export default function App() {
         rollbackPlan,
         validationPack,
         fixtureImportResult,
-        writeBoundaryProbe
+        writeBoundaryProbe,
+        intakePolicy
       }),
     [
       scanned,
@@ -563,7 +564,8 @@ export default function App() {
       rollbackPlan,
       validationPack,
       fixtureImportResult,
-      writeBoundaryProbe
+      writeBoundaryProbe,
+      intakePolicy
     ]
   );
   const publicBetaReadiness = useMemo(
@@ -1366,6 +1368,7 @@ export default function App() {
               onRunRealScan={runRealReadonlyScan}
               onSuggestPlan={suggestPlan}
               onApproveRebuildable={approveRebuildableCaches}
+              onAllowAdminRoutes={() => setAdminAllowance(true)}
               onFocusReview={setFocusedReviewId}
               onFocusPanel={focusWorkflowPanel}
               onArmConsent={armExecutionConsent}
@@ -2006,6 +2009,7 @@ function AgentQuestionPanel({
   onRunRealScan,
   onSuggestPlan,
   onApproveRebuildable,
+  onAllowAdminRoutes,
   onFocusReview,
   onFocusPanel,
   onArmConsent,
@@ -2019,6 +2023,7 @@ function AgentQuestionPanel({
     if (!question) return;
     if (question.action === "suggest-plan") onSuggestPlan();
     if (question.action === "approve-rebuildable") onApproveRebuildable();
+    if (question.action === "allow-admin-routes") onAllowAdminRoutes();
     if (question.action === "focus-review" && question.actionId) onFocusReview(question.actionId);
     if (question.action === "focus-panel" && question.targetPanel) onFocusPanel(question.targetPanel);
     if (question.action === "arm-consent") onArmConsent();
@@ -2110,6 +2115,7 @@ function AgentQuestionPanel({
 function questionActionLabel(question) {
   if (question.action === "suggest-plan") return "Rebuild plan";
   if (question.action === "approve-rebuildable") return "Approve caches";
+  if (question.action === "allow-admin-routes") return "Allow admin routes";
   if (question.action === "focus-review") return "Open item review";
   if (question.action === "focus-panel" && question.targetPanel === "rollback-plan-panel") return "Open rollback proof";
   if (question.action === "focus-panel" && question.targetPanel === "validation-evidence-panel") return "Open validation import";
