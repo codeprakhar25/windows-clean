@@ -1653,6 +1653,18 @@ const assert = require("assert");
         realRunEnabled: false,
         destructiveCommands: false,
         reason: "disabled",
+        contractEcho: {
+          schemaVersion: firstSafeContract.schemaVersion,
+          requestMode: firstSafeContract.requestPreview.mode,
+          planId: firstSafeContract.requestPreview.planId,
+          route: firstSafeContract.requestPreview.route,
+          scanFingerprint: firstSafeContract.requestPreview.scanFingerprint,
+          consentPlanId: firstSafeContract.requestPreview.consentPlanId,
+          expectedBytes: firstSafeContract.requestPreview.expectedBytes,
+          dryRunOnly: true,
+          mutationAttempted: false,
+          actionCount: firstSafeContract.requestPreview.actionCount
+        },
         entries: [
           {
             id: "windows-temp",
@@ -1667,12 +1679,44 @@ const assert = require("assert");
       }
     },
     realExecutorCapsule: currentBuildExecutorCapsule,
+    firstSafeExecutorContract: firstSafeContract,
     runtimeCapabilities: { available: true, executeCleanupPlan: true, realRunEnabled: false, destructiveCommands: false }
   });
   assert.strictEqual(rejectedWriteBoundaryProbe.status, "rejected", "zero-byte rejected native result should pass as rejection evidence");
   assert.strictEqual(rejectedWriteBoundaryProbe.rejectionEvidence, true, "rejected native result should be evidence");
+  assert.strictEqual(rejectedWriteBoundaryProbe.contractMatch, true, "rejected native result should match the first-safe contract echo");
   assert.strictEqual(rejectedWriteBoundaryProbe.counts.rejected, 1, "rejected probe should count rejected entries");
   assert.strictEqual(rejectedWriteBoundaryProbe.counts.bytes, 0, "rejected probe must not reclaim bytes");
+  const mismatchedContractProbe = guard.buildWriteBoundaryProbe({
+    nativeWriteBoundary: {
+      status: "complete",
+      result: {
+        available: true,
+        accepted: false,
+        realRunEnabled: false,
+        destructiveCommands: false,
+        reason: "disabled",
+        contractEcho: {
+          schemaVersion: firstSafeContract.schemaVersion,
+          requestMode: firstSafeContract.requestPreview.mode,
+          planId: "older-plan",
+          route: firstSafeContract.requestPreview.route,
+          scanFingerprint: firstSafeContract.requestPreview.scanFingerprint,
+          consentPlanId: firstSafeContract.requestPreview.consentPlanId,
+          expectedBytes: firstSafeContract.requestPreview.expectedBytes,
+          dryRunOnly: true,
+          mutationAttempted: false,
+          actionCount: firstSafeContract.requestPreview.actionCount
+        },
+        entries: [{ id: "windows-temp", title: "Windows temporary files", route: "known-temp-delete", result: "rejected", bytes: 0 }]
+      }
+    },
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    firstSafeExecutorContract: firstSafeContract,
+    runtimeCapabilities: { available: true, executeCleanupPlan: true, realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(mismatchedContractProbe.status, "contract-mismatch", "write-boundary rejection must not count when contract echo differs");
+  assert.strictEqual(mismatchedContractProbe.rejectionEvidence, false, "contract mismatch should not count as rejection evidence");
   const acceptedWriteBoundaryProbe = guard.buildWriteBoundaryProbe({
     nativeWriteBoundary: {
       status: "complete",

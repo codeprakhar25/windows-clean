@@ -264,7 +264,7 @@ The real executor capsule names the next first-safe route that could become a wr
 
 The first-safe executor contract turns that capsule into a concrete request-shape preview for `execute_cleanup_plan`: selected route, plan id, scan fingerprint, action ids, expected bytes, allowed targets, forbidden targets, and feature flag. The contract is currently `reject-only-preview`; it is useful for validating the native boundary, not for cleanup.
 
-The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` rejecting stub in the desktop shell, but success means rejection, not cleanup: `accepted=false`, all entries rejected, and zero reclaimed bytes. Probe entries are never ledger recovery.
+The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` rejecting stub in the desktop shell, but success means rejection, not cleanup: `accepted=false`, all entries rejected, zero reclaimed bytes, and a native echo that matches the current first-safe executor contract. Probe entries are never ledger recovery.
 
 The fixture evidence import accepts the JSON produced by `scripts/inspect-spaceguard-fixtures.ps1`. It can fill only the `scanner-fixtures` validation record after the fixture JSON passes schema, count, age, size, destructive-command, reviewer, and artifact checks. Protected-path, rollback, tool-command, native-build, and ledger/rescan evidence still require their own records.
 

@@ -130,8 +130,15 @@ struct DryRunEntry {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WriteExecutionRequest {
+    schema_version: Option<String>,
+    request_mode: Option<String>,
     plan_id: String,
     route: String,
+    scan_fingerprint: Option<String>,
+    consent_plan_id: Option<String>,
+    expected_bytes: Option<u64>,
+    dry_run_only: Option<bool>,
+    mutation_attempted: Option<bool>,
     actions: Vec<WriteExecutionAction>,
 }
 
@@ -152,8 +159,24 @@ struct WriteExecutionResponse {
     destructive_commands: bool,
     accepted: bool,
     reason: String,
+    contract_echo: WriteContractEcho,
     entries: Vec<WriteExecutionEntry>,
     warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WriteContractEcho {
+    schema_version: String,
+    request_mode: String,
+    plan_id: String,
+    route: String,
+    scan_fingerprint: String,
+    consent_plan_id: String,
+    expected_bytes: u64,
+    dry_run_only: bool,
+    mutation_attempted: bool,
+    action_count: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -340,12 +363,38 @@ fn simulate_cleanup_plan(request: Option<DryRunRequest>) -> DryRunResponse {
 #[tauri::command]
 fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutionResponse {
     let request = request.unwrap_or(WriteExecutionRequest {
+        schema_version: None,
+        request_mode: None,
         plan_id: String::new(),
         route: String::new(),
+        scan_fingerprint: None,
+        consent_plan_id: None,
+        expected_bytes: None,
+        dry_run_only: Some(true),
+        mutation_attempted: Some(false),
         actions: Vec::new(),
     });
-    let route = request.route;
-    let plan_id = request.plan_id;
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .unwrap_or_else(|| "spaceguard-write-boundary-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .unwrap_or_else(|| "capsule-probe".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
     let entries = request
         .actions
         .into_iter()
@@ -370,6 +419,7 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
         destructive_commands: false,
         accepted: false,
         reason: "Native write boundary is present for request-shape validation only. Real cleanup is disabled.".to_string(),
+        contract_echo,
         entries,
         warnings: vec![
             "No filesystem mutation was attempted by execute_cleanup_plan.".to_string(),

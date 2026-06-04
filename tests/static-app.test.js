@@ -86,6 +86,7 @@ const requiredAppMarkers = [
   "Runtime capability",
   "Write command",
   "rejecting stub",
+  "Contract echo",
   "Disposable VM matrix",
   "Validation evidence",
   "Validation evidence ledger",
@@ -258,6 +259,7 @@ assert(model.includes("Real executor implementation"), "write readiness should r
 assert(model.includes("spaceguard-real-executor-capsule/v1"), "model should expose real executor capsule schema");
 assert(model.includes("spaceguard-first-safe-executor-contract/v1"), "model should expose first-safe executor contract schema");
 assert(model.includes("spaceguard-write-boundary-probe/v1"), "model should expose write boundary probe schema");
+assert(model.includes("contract-mismatch"), "write boundary probe should reject mismatched contract echoes");
 assert(model.includes("normalizeValidationEvidenceRecord"), "model should normalize structured validation evidence");
 assert(model.includes("spaceguard-fixture-evidence-import/v1"), "model should expose fixture evidence import schema");
 assert(model.includes("destructive-evidence"), "fixture evidence import should reject destructive evidence");
@@ -291,6 +293,7 @@ assert(rustScanner.includes("custom_roots"), "Rust scanner should accept custom 
 assert(rustScanner.includes("measure_custom_roots"), "Rust scanner should measure custom roots read-only");
 assert(rustScanner.includes("simulate_cleanup_plan"), "Rust native dry-run command should exist");
 assert(rustScanner.includes("execute_cleanup_plan"), "Rust rejecting write boundary command should exist");
+assert(rustScanner.includes("contract_echo"), "Rust rejecting write boundary should echo the first-safe contract");
 assert(rustScanner.includes("runtime_capabilities"), "Rust runtime capability command should exist");
 assert(rustScanner.includes("GetDiskFreeSpaceExW"), "Rust native scanner should read Windows volume totals");
 assert(rustScanner.includes("IsUserAnAdmin"), "Rust native scanner should read elevation state");

@@ -127,7 +127,7 @@ export async function runNativeExecutorDryRun(executorPlan, host = globalThis) {
   return normalizeNativeExecutorDryRun(result);
 }
 
-export async function runNativeWriteBoundary(capsule = {}, host = globalThis) {
+export async function runNativeWriteBoundary(boundary = {}, host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {
     return {
@@ -141,16 +141,29 @@ export async function runNativeWriteBoundary(capsule = {}, host = globalThis) {
       warnings: ["Native write execution is unavailable and real cleanup is disabled."]
     };
   }
+  const capsule = boundary.capsule || boundary.realExecutorCapsule || boundary;
+  const contract = boundary.contract || boundary.firstSafeExecutorContract || (boundary.schemaVersion === "spaceguard-first-safe-executor-contract/v1" ? boundary : null);
+  const preview = contract?.requestPreview || {};
+  const route = preview.route || capsule.route?.id || "";
+  const rows = Array.isArray(preview.actions) && preview.actions.length ? preview.actions : capsule.selectedRows || [];
+  const expectedBytes = Number(preview.expectedBytes ?? rows.reduce((sum, row) => sum + Number(row.bytes || 0), 0));
 
   const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
     request: {
-      planId: capsule.planId || "",
-      route: capsule.route?.id || "",
-      actions: (capsule.selectedRows || []).map((row) => ({
+      schemaVersion: contract?.schemaVersion || "spaceguard-write-boundary-request/v1",
+      requestMode: preview.mode || "capsule-probe",
+      planId: preview.planId || boundary.planId || capsule.planId || "",
+      route,
+      scanFingerprint: preview.scanFingerprint || "",
+      consentPlanId: preview.consentPlanId || "",
+      expectedBytes,
+      dryRunOnly: preview.dryRunOnly !== false,
+      mutationAttempted: Boolean(preview.mutationAttempted),
+      actions: rows.map((row) => ({
         id: row.id,
         title: row.title,
-        bytes: row.bytes,
-        route: capsule.route?.id || row.route || ""
+        bytes: Number(row.bytes || 0),
+        route: route || row.route || ""
       }))
     }
   });
@@ -322,7 +335,24 @@ export function normalizeNativeWriteBoundary(result = {}) {
           note: entry.note || ""
         }))
       : [],
+    contractEcho: normalizeWriteContractEcho(result.contractEcho || result.contract_echo),
     warnings: Array.isArray(result.warnings) ? result.warnings : []
+  };
+}
+
+function normalizeWriteContractEcho(value = null) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    schemaVersion: value.schemaVersion || value.schema_version || "",
+    requestMode: value.requestMode || value.request_mode || "",
+    planId: value.planId || value.plan_id || "",
+    route: value.route || "",
+    scanFingerprint: value.scanFingerprint || value.scan_fingerprint || "",
+    consentPlanId: value.consentPlanId || value.consent_plan_id || "",
+    expectedBytes: Number(value.expectedBytes || value.expected_bytes || 0),
+    dryRunOnly: value.dryRunOnly ?? value.dry_run_only ?? true,
+    mutationAttempted: Boolean(value.mutationAttempted || value.mutation_attempted),
+    actionCount: Number(value.actionCount || value.action_count || 0)
   };
 }
 

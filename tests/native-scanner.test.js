@@ -218,9 +218,24 @@ const assert = require("assert");
   let writeInvocation = null;
   const rejectedWrite = await native.runNativeWriteBoundary(
     {
-      planId: "plan-temp",
-      route: { id: "known-temp-delete" },
-      selectedRows: [{ id: "windows-temp", title: "Windows temporary files", bytes: 123 }]
+      capsule: {
+        route: { id: "known-temp-delete" },
+        selectedRows: [{ id: "windows-temp", title: "Windows temporary files", bytes: 123 }]
+      },
+      contract: {
+        schemaVersion: "spaceguard-first-safe-executor-contract/v1",
+        requestPreview: {
+          mode: "reject-only-preview",
+          planId: "plan-temp",
+          route: "known-temp-delete",
+          scanFingerprint: "scan-temp",
+          consentPlanId: "plan-temp",
+          expectedBytes: 123,
+          dryRunOnly: true,
+          mutationAttempted: false,
+          actions: [{ id: "windows-temp", title: "Windows temporary files", bytes: 123, route: "known-temp-delete" }]
+        }
+      }
     },
     {
       __TAURI__: {
@@ -233,6 +248,18 @@ const assert = require("assert");
               destructive_commands: false,
               accepted: false,
               reason: "disabled",
+              contract_echo: {
+                schema_version: payload.request.schemaVersion,
+                request_mode: payload.request.requestMode,
+                plan_id: payload.request.planId,
+                route: payload.request.route,
+                scan_fingerprint: payload.request.scanFingerprint,
+                consent_plan_id: payload.request.consentPlanId,
+                expected_bytes: payload.request.expectedBytes,
+                dry_run_only: payload.request.dryRunOnly,
+                mutation_attempted: payload.request.mutationAttempted,
+                action_count: payload.request.actions.length
+              },
               entries: [{ id: "windows-temp", title: "Windows temporary files", route: "known-temp-delete", result: "rejected", bytes: 0, note: "blocked" }],
               warnings: ["no mutation"]
             });
@@ -244,9 +271,16 @@ const assert = require("assert");
   assert.strictEqual(writeInvocation.command, "execute_cleanup_plan", "native write boundary should invoke execute_cleanup_plan");
   assert.strictEqual(writeInvocation.payload.request.planId, "plan-temp", "native write boundary should pass plan id");
   assert.strictEqual(writeInvocation.payload.request.route, "known-temp-delete", "native write boundary should pass capsule route");
+  assert.strictEqual(writeInvocation.payload.request.requestMode, "reject-only-preview", "native write boundary should pass first-safe request mode");
+  assert.strictEqual(writeInvocation.payload.request.scanFingerprint, "scan-temp", "native write boundary should pass scan fingerprint");
+  assert.strictEqual(writeInvocation.payload.request.consentPlanId, "plan-temp", "native write boundary should pass consent plan id");
+  assert.strictEqual(writeInvocation.payload.request.dryRunOnly, true, "native write boundary should keep the request dry-run only");
+  assert.strictEqual(writeInvocation.payload.request.mutationAttempted, false, "native write boundary should mark mutation as not attempted");
   assert.strictEqual(rejectedWrite.realRunEnabled, false, "native write boundary must keep real run disabled");
   assert.strictEqual(rejectedWrite.destructiveCommands, false, "native write boundary must keep destructive commands disabled");
   assert.strictEqual(rejectedWrite.accepted, false, "native write boundary should reject execution");
+  assert.strictEqual(rejectedWrite.contractEcho.requestMode, "reject-only-preview", "native write boundary should normalize contract echo");
+  assert.strictEqual(rejectedWrite.contractEcho.scanFingerprint, "scan-temp", "native write boundary should normalize scan fingerprint echo");
   assert.strictEqual(rejectedWrite.entries[0].result, "rejected", "native write boundary should normalize rejected entries");
   assert.strictEqual(rejectedWrite.entries[0].bytes, 0, "native write boundary should reclaim zero bytes");
 

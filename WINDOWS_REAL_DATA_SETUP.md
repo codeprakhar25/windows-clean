@@ -52,7 +52,7 @@ In the app:
 10. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
 11. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
 12. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
-13. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, and no mutation.
+13. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
 14. Export the redacted support bundle first, then the dry-run report and validation pack when path-level evidence is needed.
 
 ## Disposable Fixture Run
@@ -120,7 +120,7 @@ For each Windows validation run, capture:
 - Rescan comparison state, including ledger timestamp, native scan timestamp, matched rows, waiting rows, and mismatches.
 - Write-readiness state with every final real-execution blocker.
 - Real executor capsule route, code-path status, missing checks, and destructive-action availability.
-- Write boundary probe state if the desktop runtime exposes `execute_cleanup_plan`; current evidence must show accepted false, rejected entries, zero bytes, and no mutation.
+- Write boundary probe state if the desktop runtime exposes `execute_cleanup_plan`; current evidence must show accepted false, rejected entries, zero bytes, matching first-safe contract echo, and no mutation.
 - Exported validation pack.
 
 Rescan comparison only counts when the native scan is taken after the current dry-run ledger. The expected operator order is: finish item decisions, arm and run the dry-run simulation, run the native read-only scan again, then inspect the rescan comparison panel. A native scan captured before the ledger remains evidence for sizing, not parity.

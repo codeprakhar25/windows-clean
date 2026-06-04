@@ -553,9 +553,10 @@ export default function App() {
       buildWriteBoundaryProbe({
         nativeWriteBoundary,
         realExecutorCapsule,
+        firstSafeExecutorContract,
         runtimeCapabilities: runtimeCapabilities.result
       }),
-    [nativeWriteBoundary, realExecutorCapsule, runtimeCapabilities.result]
+    [nativeWriteBoundary, realExecutorCapsule, firstSafeExecutorContract, runtimeCapabilities.result]
   );
   const toolCommandInventory = useMemo(
     () => buildToolCommandInventory({ actionList, executorPlan, releaseGate }),
@@ -945,7 +946,11 @@ export default function App() {
 
     setNativeWriteBoundary({ status: "running", result: null, error: "" });
     try {
-      const result = await runNativeWriteBoundary({ ...realExecutorCapsule, planId: planSnapshot.id });
+      const result = await runNativeWriteBoundary({
+        capsule: realExecutorCapsule,
+        contract: firstSafeExecutorContract,
+        planId: planSnapshot.id
+      });
       setNativeWriteBoundary({ status: "complete", result, error: "" });
     } catch (error) {
       setNativeWriteBoundary({
@@ -3408,7 +3413,7 @@ function WriteBoundaryProbePanel({ probe, nativeWriteBoundary, runtimeCapabiliti
   const runtimeReady = Boolean(runtimeCapabilities.result.executeCleanupPlan);
   const hasRows = probe.counts.selectedRows > 0;
   const running = nativeWriteBoundary.status === "running";
-  const disabled = running || !runtimeReady || !hasRows;
+  const disabled = running || !runtimeReady || !hasRows || (probe.contractRequired && !probe.contractReady);
 
   return (
     <Card>
@@ -3420,10 +3425,11 @@ function WriteBoundaryProbePanel({ probe, nativeWriteBoundary, runtimeCapabiliti
         <CardDescription>{probe.primary}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <QueueStat label="Entries" value={probe.counts.entries} tone={probe.rejectionEvidence ? "safe" : "review"} />
           <QueueStat label="Rejected" value={probe.counts.rejected} tone={probe.rejectionEvidence ? "safe" : "restricted"} />
           <QueueStat label="Bytes" value={formatBytes(probe.counts.bytes)} tone={probe.counts.bytes ? "restricted" : "safe"} />
+          <QueueStat label="Contract" value={probe.contractRequired ? probe.contractMatch ? "match" : "wait" : "n/a"} tone={probe.contractMatch ? "safe" : "review"} />
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
@@ -3438,6 +3444,8 @@ function WriteBoundaryProbePanel({ probe, nativeWriteBoundary, runtimeCapabiliti
             <span>Real run enabled: {probe.realRunEnabled ? "yes" : "no"}</span>
             <span>Destructive commands: {probe.destructiveCommands ? "present" : "disabled"}</span>
             <span>Route: {probe.route?.id || "none"}</span>
+            <span>Contract echo: {probe.contractEcho ? probe.contractEcho.requestMode || "present" : "missing"}</span>
+            <span>Echo match: {probe.contractRequired ? probe.contractMatch ? "yes" : "no" : "not required"}</span>
           </div>
         </div>
 

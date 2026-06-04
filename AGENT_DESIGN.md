@@ -242,9 +242,9 @@ First-safe executor contract invariant:
 Write boundary probe invariant:
 
 - The probe can call `execute_cleanup_plan` only to prove the native boundary rejects the current request shape.
-- Passing probe evidence requires `accepted=false`, `realRunEnabled=false`, `destructiveCommands=false`, every entry rejected, and zero reclaimed bytes.
+- Passing probe evidence requires `accepted=false`, `realRunEnabled=false`, `destructiveCommands=false`, every entry rejected, zero reclaimed bytes, and a native contract echo matching the current first-safe executor contract.
 - Probe entries cannot create ledger records, recovery totals, release-gate credit, or write-readiness credit.
-- Any accepted, destructive, real-run-enabled, non-rejected, or non-zero-byte signal is unsafe and blocks release review.
+- Any accepted, destructive, real-run-enabled, non-rejected, non-zero-byte, or contract-mismatched signal is unsafe and blocks release review.
 
 Rollback invariant:
 
