@@ -206,6 +206,8 @@ const assert = require("assert");
         title: "Windows temporary files",
         route: "known-temp-delete",
         target_path: "C:\\Windows\\Temp",
+        target_scope_status: "target-allowed",
+        reject_code: "",
         result: "dry-run",
         bytes: 123,
         candidate_bytes: 100,
@@ -221,9 +223,29 @@ const assert = require("assert");
   assert.strictEqual(dryRun.destructiveCommands, false, "native dry-run normalization should keep destructive commands disabled");
   assert.strictEqual(dryRun.entries[0].route, "known-temp-delete", "native dry-run route should be preserved");
   assert.strictEqual(dryRun.entries[0].targetPath, "C:\\Windows\\Temp", "native dry-run target path should normalize");
+  assert.strictEqual(dryRun.entries[0].targetScopeStatus, "target-allowed", "native dry-run target scope status should normalize");
+  assert.strictEqual(dryRun.entries[0].rejectCode, "", "native dry-run target scope should omit reject code when allowed");
   assert.strictEqual(dryRun.entries[0].candidateCount, 1, "native dry-run candidate count should normalize");
   assert.strictEqual(dryRun.entries[0].skippedCount, 2, "native dry-run skipped count should normalize");
   assert.strictEqual(dryRun.entries[0].candidates[0].name, "a.tmp", "native dry-run candidate samples should normalize");
+  const blockedDryRun = native.normalizeNativeExecutorDryRun({
+    entries: [
+      {
+        id: "bad-temp",
+        title: "Bad temp target",
+        route: "known-temp-delete",
+        target_path: "C:\\Users\\real\\Downloads",
+        target_scope_status: "target-blocked",
+        reject_code: "target-forbidden",
+        candidate_count: 0,
+        candidates: [],
+        note: "Target rejected"
+      }
+    ]
+  });
+  assert.strictEqual(blockedDryRun.entries[0].targetScopeStatus, "target-blocked", "native dry-run should preserve blocked target scope");
+  assert.strictEqual(blockedDryRun.entries[0].rejectCode, "target-forbidden", "native dry-run should preserve target-scope reject code");
+  assert.strictEqual(blockedDryRun.entries[0].candidateCount, 0, "blocked target scope should not normalize candidate rows");
   let dryRunInvocation = null;
   await native.runNativeExecutorDryRun(
     { rows: [{ id: "windows-temp", title: "Windows temporary files", bytes: 123, route: "known-temp-delete", path: "C:\\Windows\\Temp", canSimulate: true }] },

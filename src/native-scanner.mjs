@@ -311,6 +311,8 @@ export function normalizeNativeExecutorDryRun(result = {}) {
           title: entry.title || "",
           route: entry.route || "",
           targetPath: entry.targetPath || entry.target_path || "",
+          targetScopeStatus: entry.targetScopeStatus || entry.target_scope_status || "",
+          rejectCode: entry.rejectCode || entry.reject_code || "",
           result: entry.result || "dry-run",
           bytes: Number(entry.bytes || 0),
           candidateBytes: Number(entry.candidateBytes || entry.candidate_bytes || 0),

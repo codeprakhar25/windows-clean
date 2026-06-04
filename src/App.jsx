@@ -4202,12 +4202,17 @@ function ExecutorPolicyPanel({ executorPlan, executorReadiness, nativeExecutorDr
                 <div key={`${entry.id}-${entry.route}`} className="rounded-md border bg-card p-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="mr-auto min-w-0 text-sm font-medium">{entry.title}</span>
+                    <Badge variant={entry.rejectCode ? "restricted" : entry.targetScopeStatus === "target-allowed" ? "safe" : "outline"}>
+                      {entry.targetScopeStatus || "scope unreported"}
+                    </Badge>
                     <Badge variant="outline">{entry.candidateCount || 0} candidates</Badge>
                     <Badge variant={entry.skippedCount ? "review" : "safe"}>{entry.skippedCount || 0} skipped</Badge>
                   </div>
                   <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{entry.targetPath || "no target path"}</div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    Sampled {formatBytes(entry.candidateBytes || 0)}. {entry.candidates?.[0]?.name || "No file samples returned."}
+                    {entry.rejectCode
+                      ? `Target scope rejected before sampling: ${entry.rejectCode}.`
+                      : `Sampled ${formatBytes(entry.candidateBytes || 0)}. ${entry.candidates?.[0]?.name || "No file samples returned."}`}
                   </div>
                 </div>
               ))}

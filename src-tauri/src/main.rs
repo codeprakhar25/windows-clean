@@ -124,6 +124,8 @@ struct DryRunEntry {
     title: String,
     route: String,
     target_path: String,
+    target_scope_status: String,
+    reject_code: String,
     result: String,
     bytes: u64,
     candidate_bytes: u64,
@@ -363,6 +365,8 @@ fn simulate_cleanup_plan(request: Option<DryRunRequest>) -> DryRunResponse {
                 title: action.title.clone(),
                 route: action.route.clone(),
                 target_path: action.target_path.clone().unwrap_or_default(),
+                target_scope_status: manifest.target_scope_status,
+                reject_code: manifest.reject_code,
                 result: "dry-run".to_string(),
                 bytes: action.bytes,
                 candidate_bytes: manifest.candidate_bytes,
@@ -596,6 +600,7 @@ fn write_target_allowed(route: &str, target: &str) -> bool {
             target.contains("windows\\temp")
                 || target.contains("appdata\\local\\temp")
                 || target.contains("%temp%")
+                || target.contains("%tmp%")
         }
         "shell-recycle-bin" => target.contains("$recycle.bin") || target.contains("recycle bin"),
         "browser-cache-only" => {
@@ -650,6 +655,8 @@ fn runtime_capabilities() -> RuntimeCapabilities {
 }
 
 struct DryRunCandidateManifest {
+    target_scope_status: String,
+    reject_code: String,
     candidate_bytes: u64,
     candidate_count: u64,
     skipped_count: u64,
@@ -660,6 +667,8 @@ struct DryRunCandidateManifest {
 fn build_dry_run_candidate_manifest(action: &DryRunAction) -> DryRunCandidateManifest {
     if !is_first_safe_write_route(&action.route) {
         return DryRunCandidateManifest {
+            target_scope_status: "route-blocked".to_string(),
+            reject_code: "route-not-first-safe".to_string(),
             candidate_bytes: 0,
             candidate_count: 0,
             skipped_count: 0,
@@ -668,17 +677,21 @@ fn build_dry_run_candidate_manifest(action: &DryRunAction) -> DryRunCandidateMan
         };
     }
 
-    let targets = split_dry_run_targets(action.target_path.as_deref().unwrap_or(""));
-    if targets.is_empty() {
+    if let Some(reject_code) = write_action_target_reject_code(&action.route, &action.target_path) {
         return DryRunCandidateManifest {
+            target_scope_status: "target-blocked".to_string(),
+            reject_code: reject_code.to_string(),
             candidate_bytes: 0,
             candidate_count: 0,
             skipped_count: 1,
             candidates: Vec::new(),
-            note: "Native dry-run only. Target path evidence is missing, so no candidate files were enumerated.".to_string(),
+            note: format!(
+                "Native dry-run only. Target scope was rejected with code {reject_code}; no candidate files were enumerated."
+            ),
         };
     }
 
+    let targets = split_dry_run_targets(action.target_path.as_deref().unwrap_or(""));
     let mut candidates = Vec::new();
     let mut skipped_count = 0_u64;
     let mut candidate_bytes = 0_u64;
@@ -702,6 +715,8 @@ fn build_dry_run_candidate_manifest(action: &DryRunAction) -> DryRunCandidateMan
 
     let candidate_count = candidates.len() as u64;
     DryRunCandidateManifest {
+        target_scope_status: "target-allowed".to_string(),
+        reject_code: String::new(),
         candidate_bytes,
         candidate_count,
         skipped_count,
