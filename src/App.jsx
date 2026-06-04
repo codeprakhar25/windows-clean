@@ -3350,10 +3350,11 @@ function FirstSafeExecutorContractPanel({ contract }) {
         <CardDescription>{contract.primary}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <QueueStat label="Actions" value={contract.counts.actions} tone="review" />
           <QueueStat label="Expected" value={formatBytes(contract.counts.expectedBytes)} tone="safe" />
           <QueueStat label="Blocked" value={contract.counts.blocked} tone={contract.counts.blocked ? "review" : "safe"} />
+          <QueueStat label="Targets" value={contract.counts.targetBlocked ? `${contract.counts.targetBlocked} blocked` : contract.counts.targetRows} tone={contract.counts.targetBlocked ? "restricted" : "safe"} />
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
@@ -3392,6 +3393,26 @@ function FirstSafeExecutorContractPanel({ contract }) {
             </div>
           </div>
         ) : null}
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">Target scope audit</span>
+            <Badge variant={contract.targetAudit.ready ? "safe" : "review"}>{contract.targetAudit.status}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">{contract.targetAudit.summary}</p>
+          <div className="mt-2 flex flex-col gap-2">
+            {contract.targetAudit.rows.slice(0, 3).map((row) => (
+              <div key={row.id} className="rounded-md border bg-card p-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{row.title}</span>
+                  <Badge variant={row.status === "allowed" ? "safe" : "restricted"}>{row.status}</Badge>
+                </div>
+                <div className="mt-1 truncate font-mono text-muted-foreground">{row.path || "no path"}</div>
+                <div className="mt-1 text-muted-foreground">{row.detail}</div>
+              </div>
+            ))}
+          </div>
+        </div>
 
         <div className="flex flex-col gap-2">
           {(blocked.length ? blocked : contract.items.slice(0, 4)).map((item) => (

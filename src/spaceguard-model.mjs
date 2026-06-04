@@ -3662,6 +3662,8 @@ export function buildRealExecutorCapsule({
     selectedRows: selectedRows.map((row) => ({
       id: row.id,
       title: row.title,
+      route: row.route,
+      path: row.path,
       bytes: Number(row.bytes || 0),
       canSimulate: Boolean(row.canSimulate),
       canRealRun: Boolean(row.canRealRun),
@@ -3702,6 +3704,7 @@ export function buildFirstSafeExecutorContract({
   const contract = firstSafeExecutorContracts[routeId] || null;
   const selectedRows = realExecutorCapsule?.selectedRows || [];
   const expectedBytes = selectedRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+  const targetAudit = buildFirstSafeTargetAudit(contract, selectedRows);
   const requestPreview = contract
     ? {
         command: contract.command,
@@ -3737,6 +3740,12 @@ export function buildFirstSafeExecutorContract({
         ? `${requestPreview.actionCount} action(s) map to ${requestPreview.route}.`
         : "Plan id and selected route actions are required before a request shape can be validated.",
       passed: Boolean(requestPreview?.planId && requestPreview.actionCount > 0)
+    },
+    {
+      id: "target-scope",
+      label: "Target scope audited",
+      detail: targetAudit.summary,
+      passed: targetAudit.ready
     },
     {
       id: "scan-session",
@@ -3803,6 +3812,7 @@ export function buildFirstSafeExecutorContract({
         }
       : null,
     requestPreview,
+    targetAudit,
     realRunEnabled: false,
     destructiveActionAvailable: false,
     items,
@@ -3814,7 +3824,9 @@ export function buildFirstSafeExecutorContract({
       total: items.length,
       blocked: blockedItems.length,
       allowedTargets: contract?.allowedTargets?.length || 0,
-      forbiddenTargets: contract?.forbiddenTargets?.length || 0
+      forbiddenTargets: contract?.forbiddenTargets?.length || 0,
+      targetRows: targetAudit.counts.rows,
+      targetBlocked: targetAudit.counts.blocked
     },
     primary: getFirstSafeExecutorContractPrimary(status, contract, blockedItems),
     steps: buildFirstSafeExecutorContractSteps(status, contract, blockedItems)
@@ -5844,7 +5856,12 @@ export function buildReport({
           `- Plan: ${firstSafeExecutorContract.requestPreview?.planId || "none"}`,
           `- Scan fingerprint: ${firstSafeExecutorContract.requestPreview?.scanFingerprint || "none"}`,
           `- Expected bytes: ${formatBytes(firstSafeExecutorContract.counts.expectedBytes || 0)}`,
+          `- Target audit: ${firstSafeExecutorContract.targetAudit?.status || "not-run"}`,
+          `- Target blocked: ${firstSafeExecutorContract.counts.targetBlocked || 0}`,
           `- Passed checks: ${firstSafeExecutorContract.counts.passed}/${firstSafeExecutorContract.counts.total}`,
+          firstSafeExecutorContract.targetAudit?.rows?.length
+            ? firstSafeExecutorContract.targetAudit.rows.map((row) => `- Target: ${row.title} | ${row.status} | route=${row.route} | allowed=${row.allowedRule || "none"} | forbidden=${row.forbiddenRule || "none"} | ${row.path || "no path"}`).join("\n")
+            : "- No target audit rows.",
           firstSafeExecutorContract.items.map((item) => `- ${item.label}: ${item.passed ? "passed" : "blocked"} | ${item.detail}`).join("\n")
         ].join("\n")
       : "- Not evaluated.",
@@ -6729,6 +6746,116 @@ function buildFirstSafeExecutorContractSteps(status, contract, blockedItems = []
   }
   if (blockedItems.length) return blockedItems.slice(0, 3).map((item) => item.detail);
   return ["Run a scan.", "Select a first-safe route such as temp cleanup.", "Arm dry-run consent for the current plan."];
+}
+
+function buildFirstSafeTargetAudit(contract = null, selectedRows = []) {
+  const rows = contract
+    ? selectedRows.map((row) => auditFirstSafeTargetRow(contract, row))
+    : [];
+  const counts = {
+    rows: rows.length,
+    allowed: rows.filter((row) => row.status === "allowed").length,
+    blocked: rows.filter((row) => row.status === "blocked").length,
+    routeMismatch: rows.filter((row) => row.reason === "route-mismatch").length,
+    forbidden: rows.filter((row) => row.reason === "forbidden-target").length,
+    unmatched: rows.filter((row) => row.reason === "unmatched-target").length
+  };
+  const ready = Boolean(contract && rows.length > 0 && counts.blocked === 0);
+
+  return {
+    schemaVersion: "spaceguard-first-safe-target-audit/v1",
+    ready,
+    status: ready ? "targets-allowed" : rows.length ? "target-blocked" : "no-targets",
+    rows,
+    counts,
+    summary: ready
+      ? `${counts.allowed} selected target(s) match the ${contract.title} allowlist.`
+      : rows.length
+        ? `${counts.blocked} selected target(s) do not match the first-safe contract allowlist.`
+        : "No selected target rows are available for the first-safe contract."
+  };
+}
+
+function auditFirstSafeTargetRow(contract, row = {}) {
+  const path = String(row.path || "").trim();
+  const route = row.route || contract.route;
+  const forbiddenRule = getFirstSafeForbiddenRule(contract.route, path);
+  const allowedRule = getFirstSafeAllowedRule(contract.route, path);
+  const routeMatches = route === contract.route;
+  const status = !routeMatches || forbiddenRule || !allowedRule ? "blocked" : "allowed";
+  const reason = !routeMatches
+    ? "route-mismatch"
+    : forbiddenRule
+      ? "forbidden-target"
+      : allowedRule
+        ? "allowed-target"
+        : "unmatched-target";
+
+  return {
+    id: row.id || "",
+    title: row.title || "",
+    route,
+    expectedRoute: contract.route,
+    path,
+    status,
+    reason,
+    allowedRule: allowedRule || "",
+    forbiddenRule: forbiddenRule || "",
+    detail: status === "allowed"
+      ? `${row.title || "Selected action"} matches ${allowedRule}.`
+      : !routeMatches
+        ? `${row.title || "Selected action"} uses ${route || "unknown route"} instead of ${contract.route}.`
+        : forbiddenRule
+          ? `${row.title || "Selected action"} hits forbidden target rule: ${forbiddenRule}.`
+          : `${row.title || "Selected action"} does not match an allowed ${contract.title} target.`
+  };
+}
+
+function getFirstSafeAllowedRule(route, path) {
+  const text = normalizeAuditTargetText(path);
+  if (route === "known-temp-delete") {
+    if (text.includes("windows\\temp")) return "Windows\\Temp";
+    if (text.includes("appdata\\local\\temp")) return "%LOCALAPPDATA%\\Temp";
+    if (text.includes("temp")) return "%TEMP% or temp root";
+  }
+  if (route === "shell-recycle-bin") {
+    if (text.includes("$recycle.bin") || text.includes("recycle bin")) return "Shell Recycle Bin inventory";
+  }
+  if (route === "browser-cache-only") {
+    if (text.includes("cache")) return "Browser cache folders";
+  }
+  return "";
+}
+
+function getFirstSafeForbiddenRule(route, path) {
+  const text = normalizeAuditTargetText(path);
+  if (route === "known-temp-delete") {
+    if (text.includes("downloads")) return "Downloads is not a temp executor target";
+    if (text.includes("documents")) return "Documents is not a temp executor target";
+    if (text.includes("desktop")) return "Desktop is not a temp executor target";
+    if (text.includes("node_modules")) return "Project dependencies are not temp executor targets";
+    if (text.includes("reparse")) return "Reparse point targets are forbidden";
+  }
+  if (route === "shell-recycle-bin") {
+    if (text.includes("downloads")) return "Recycle Bin executor cannot target Downloads by path";
+    if (text.includes("documents")) return "Recycle Bin executor cannot target Documents by path";
+  }
+  if (route === "browser-cache-only") {
+    if (text.includes("cookie")) return "Cookies are forbidden";
+    if (text.includes("session")) return "Sessions are forbidden";
+    if (text.includes("login") || text.includes("password")) return "Saved logins are forbidden";
+    if (text.includes("extension")) return "Extensions are forbidden";
+    if (text.includes("identity") || text.includes("profile database")) return "Browser identity stores are forbidden";
+  }
+  return "";
+}
+
+function normalizeAuditTargetText(path) {
+  return String(path || "")
+    .toLowerCase()
+    .replaceAll("/", "\\")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function getWriteBoundaryProbeReason(status) {

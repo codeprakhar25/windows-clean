@@ -236,6 +236,7 @@ First-safe executor contract invariant:
 
 - A first-safe route can produce only a disabled request-shape preview until real executors are implemented.
 - The contract must include plan id, route, selected action ids, expected bytes, scan-session fingerprint, allowed targets, forbidden targets, and feature flag.
+- The selected route paths must pass the contract target audit: allowed target rule matched, no forbidden target rule hit, and route id matches the contract.
 - Contract status cannot imply cleanup; current mode is `reject-only-preview`.
 - Runtime `realRunEnabled`, `destructiveCommands`, or capsule `destructiveActionAvailable` signals violate the disabled-contract assumption and block release review.
 

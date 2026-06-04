@@ -102,7 +102,7 @@ For each Windows validation run, capture:
 - Scan session status, current fingerprint, captured fingerprint, and any changed settings.
 - Intake constraints, including admin/system action allowance.
 - Task powers state, including active, waiting, locked, advisory, blocked, and real-run-disabled rows.
-- First-safe executor contract status, request mode, selected route, allowed targets, forbidden targets, and write-disabled state.
+- First-safe executor contract status, request mode, selected route, target-scope audit, allowed targets, forbidden targets, and write-disabled state.
 - Custom root discovery rows, if any; these are manual-review evidence and not executor routes.
 - Native scan volume totals.
 - Active agent question and question queue state.

@@ -82,6 +82,7 @@ const requiredAppMarkers = [
   "First-safe executor contract",
   "Allowed targets",
   "Forbidden targets",
+  "Target scope audit",
   "destructive hidden",
   "Runtime capability",
   "Write command",
@@ -258,6 +259,7 @@ assert(model.includes("spaceguard-write-readiness/v1"), "model should expose wri
 assert(model.includes("Real executor implementation"), "write readiness should require real executor implementation");
 assert(model.includes("spaceguard-real-executor-capsule/v1"), "model should expose real executor capsule schema");
 assert(model.includes("spaceguard-first-safe-executor-contract/v1"), "model should expose first-safe executor contract schema");
+assert(model.includes("spaceguard-first-safe-target-audit/v1"), "model should expose first-safe target audit schema");
 assert(model.includes("spaceguard-write-boundary-probe/v1"), "model should expose write boundary probe schema");
 assert(model.includes("contract-mismatch"), "write boundary probe should reject mismatched contract echoes");
 assert(model.includes("normalizeValidationEvidenceRecord"), "model should normalize structured validation evidence");

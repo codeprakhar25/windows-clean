@@ -262,7 +262,7 @@ The write-readiness panel is the final real-execution gate. It combines real exe
 
 The real executor capsule names the next first-safe route that could become a write-capable executor. It lists the route implementation boundary, required fixtures, missing validation, code-path status, and blockers. It always reports destructive action availability separately; in the current build that value is `false`.
 
-The first-safe executor contract turns that capsule into a concrete request-shape preview for `execute_cleanup_plan`: selected route, plan id, scan fingerprint, action ids, expected bytes, allowed targets, forbidden targets, and feature flag. The contract is currently `reject-only-preview`; it is useful for validating the native boundary, not for cleanup.
+The first-safe executor contract turns that capsule into a concrete request-shape preview for `execute_cleanup_plan`: selected route, plan id, scan fingerprint, action ids, expected bytes, allowed targets, forbidden targets, target-scope audit, and feature flag. The contract is currently `reject-only-preview`; it is useful for validating the native boundary, not for cleanup.
 
 The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` rejecting stub in the desktop shell, but success means rejection, not cleanup: `accepted=false`, all entries rejected, zero reclaimed bytes, and a native echo that matches the current first-safe executor contract. Probe entries are never ledger recovery.
 

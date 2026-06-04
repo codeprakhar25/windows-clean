@@ -1617,6 +1617,30 @@ const assert = require("assert");
   assert.strictEqual(firstSafeContract.realRunEnabled, false, "first-safe contract must not enable real execution");
   assert.strictEqual(firstSafeContract.destructiveActionAvailable, false, "first-safe contract must not expose destructive execution");
   assert(firstSafeContract.route.forbiddenTargets.includes("Downloads"), "temp contract should explicitly forbid user Downloads");
+  assert.strictEqual(firstSafeContract.targetAudit.ready, true, "temp first-safe contract should audit selected target paths");
+  assert.strictEqual(firstSafeContract.targetAudit.rows[0].status, "allowed", "windows temp row should match the temp allowlist");
+  assert(firstSafeContract.targetAudit.rows[0].allowedRule.includes("Temp"), "target audit should name the matching temp rule");
+  const forgedCapsule = {
+    ...currentBuildExecutorCapsule,
+    selectedRows: [
+      {
+        ...currentBuildExecutorCapsule.selectedRows[0],
+        path: "C:\\Users\\demo\\Downloads"
+      }
+    ]
+  };
+  const forgedTargetContract = guard.buildFirstSafeExecutorContract({
+    realExecutorCapsule: forgedCapsule,
+    executorPlan,
+    planSnapshot: cleanRunSnapshot,
+    scanSession: currentScanSession,
+    consentReceipt: armedConsent,
+    releaseGate: enabledGate,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(forgedTargetContract.status, "contract-incomplete", "forbidden target paths should block the first-safe contract");
+  assert.strictEqual(forgedTargetContract.targetAudit.ready, false, "forbidden target audit should not be ready");
+  assert.strictEqual(forgedTargetContract.targetAudit.rows[0].reason, "forbidden-target", "target audit should explain forbidden target hits");
   const violatedFirstSafeContract = guard.buildFirstSafeExecutorContract({
     realExecutorCapsule: currentBuildExecutorCapsule,
     executorPlan,
