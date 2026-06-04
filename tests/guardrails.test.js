@@ -829,6 +829,15 @@ const assert = require("assert");
   assert.strictEqual(downloadsRollbackRow.proof.status, "missing", "missing rollback evidence should be visible");
   assert(downloadsRollbackRow.restoreTarget.includes("Recycle Bin"), "downloads rollback row should prefer Recycle Bin or quarantine");
   assert(downloadsRollbackRow.requiredEvidence.some((item) => item.includes("Per-item")), "rollback plan should require item-decision evidence");
+  const rollbackProofQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    actionList: developerActions,
+    selectedIds: new Set(["downloads-installers"]),
+    approvals: itemExecutorApprovals,
+    rollbackPlan: itemRollbackPlan
+  });
+  assert(rollbackProofQuestions.questions.some((question) => question.id === "rollback-proof-detail" && question.action === "focus-panel"), "question queue should ask for rollback proof details");
+  assert.strictEqual(rollbackProofQuestions.counts.rollback, 1, "question queue should count rollback questions");
   const incompleteRollbackPlan = guard.buildRollbackPlan({
     planSnapshot: itemPlanSnapshot,
     executorPlan: itemExecutorPlan,
@@ -1160,6 +1169,20 @@ const assert = require("assert");
     currentEvidence: {}
   });
   assert.strictEqual(failedFixtureImport.status, "fixture-failed", "failed fixture evidence should be rejected");
+  const missingFixtureValidationPack = guard.buildValidationEvidencePack({
+    releaseGate,
+    executorPlan,
+    scanMode: "native-readonly",
+    runtimeCapabilities: { available: true, realRunEnabled: false, destructiveCommands: false }
+  });
+  const fixtureImportQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    actionList: developerActions,
+    selectedIds: new Set(["windows-temp"]),
+    validationPack: missingFixtureValidationPack,
+    fixtureImportResult: null
+  });
+  assert(fixtureImportQuestions.questions.some((question) => question.id === "import-fixture-evidence" && question.targetPanel === "validation-evidence-panel"), "question queue should ask to import missing fixture evidence");
   const legacyEvidenceGate = guard.buildReleaseGate({
     featureFlags: { realExecutors: true },
     validationEvidence: { "windows-native-build": "passed" },

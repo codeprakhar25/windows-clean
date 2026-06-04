@@ -517,7 +517,9 @@ export default function App() {
         consentReceipt,
         verificationSummary,
         rescanComparison,
+        rollbackPlan,
         validationPack,
+        fixtureImportResult,
         writeBoundaryProbe
       }),
     [
@@ -537,7 +539,9 @@ export default function App() {
       consentReceipt,
       verificationSummary,
       rescanComparison,
+      rollbackPlan,
       validationPack,
+      fixtureImportResult,
       writeBoundaryProbe
     ]
   );
@@ -941,6 +945,11 @@ export default function App() {
     setRollbackEvidence({});
   }
 
+  function focusWorkflowPanel(panelId) {
+    if (!panelId) return;
+    globalThis.document?.getElementById(panelId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function changeScenario(nextScenarioId) {
     const nextActions = buildScenarioActions(nextScenarioId);
     setScenarioId(nextScenarioId);
@@ -1285,6 +1294,7 @@ export default function App() {
               onSuggestPlan={suggestPlan}
               onApproveRebuildable={approveRebuildableCaches}
               onFocusReview={setFocusedReviewId}
+              onFocusPanel={focusWorkflowPanel}
               onArmConsent={armExecutionConsent}
               onSimulate={simulateCleanup}
               onProbeWriteBoundary={probeNativeWriteBoundary}
@@ -1809,6 +1819,7 @@ function AgentQuestionPanel({
   onSuggestPlan,
   onApproveRebuildable,
   onFocusReview,
+  onFocusPanel,
   onArmConsent,
   onSimulate,
   onProbeWriteBoundary
@@ -1821,6 +1832,7 @@ function AgentQuestionPanel({
     if (question.action === "suggest-plan") onSuggestPlan();
     if (question.action === "approve-rebuildable") onApproveRebuildable();
     if (question.action === "focus-review" && question.actionId) onFocusReview(question.actionId);
+    if (question.action === "focus-panel" && question.targetPanel) onFocusPanel(question.targetPanel);
     if (question.action === "arm-consent") onArmConsent();
     if (question.action === "simulate") onSimulate();
     if (question.action === "run-real-scan") onRunRealScan();
@@ -1911,6 +1923,8 @@ function questionActionLabel(question) {
   if (question.action === "suggest-plan") return "Rebuild plan";
   if (question.action === "approve-rebuildable") return "Approve caches";
   if (question.action === "focus-review") return "Open item review";
+  if (question.action === "focus-panel" && question.targetPanel === "rollback-plan-panel") return "Open rollback proof";
+  if (question.action === "focus-panel" && question.targetPanel === "validation-evidence-panel") return "Open validation import";
   if (question.action === "arm-consent") return "Arm dry-run";
   if (question.action === "simulate") return "Simulate";
   if (question.action === "run-real-scan") return "Run real scan";
@@ -3159,7 +3173,7 @@ function RollbackPlanPanel({ plan, rollbackEvidence, onToggleProof, onUpdateProo
   const preview = plan.rows.slice(0, 4);
 
   return (
-    <Card>
+    <Card id="rollback-plan-panel">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -3523,7 +3537,7 @@ function ValidationEvidencePanel({
   const draftCount = validationPack.validationChecks.filter((check) => check.evidenceValue && !check.evidenceComplete).length;
 
   return (
-    <Card>
+    <Card id="validation-evidence-panel">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between gap-3">
           Validation evidence

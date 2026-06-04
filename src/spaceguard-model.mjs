@@ -2084,7 +2084,9 @@ export function buildAgentQuestionQueue({
   consentReceipt = null,
   verificationSummary = null,
   rescanComparison = null,
+  rollbackPlan = null,
   validationPack = null,
+  fixtureImportResult = null,
   writeBoundaryProbe = null
 } = {}) {
   const selected = actionList.filter((action) => selectedIds.has(action.id));
@@ -2272,6 +2274,21 @@ export function buildAgentQuestionQueue({
     });
   }
 
+  const rollbackWaiting = rollbackPlan?.rows?.filter((row) => row.proofRequired && !row.proof?.complete) || [];
+  if (rollbackWaiting.length > 0) {
+    addQuestion({
+      id: "rollback-proof-detail",
+      lane: "rollback",
+      priority: 56,
+      title: "Complete rollback proof",
+      prompt: "Which selected route needs restore, backup, or acknowledgement proof?",
+      detail: `${rollbackWaiting[0].title} needs reviewer, evidence path, and route-specific rollback reference before real cleanup can be reviewed.`,
+      action: "focus-panel",
+      targetPanel: "rollback-plan-panel",
+      options: ["Open rollback proof ledger"]
+    });
+  }
+
   const detailNeeded = validationPack?.validationChecks?.filter((check) => check.evidenceValue && !check.evidenceComplete) || [];
   if (detailNeeded.length > 0) {
     addQuestion({
@@ -2283,6 +2300,21 @@ export function buildAgentQuestionQueue({
       detail: `${detailNeeded[0].label} is marked but cannot count until reviewer and evidence path are recorded.`,
       action: "none",
       options: ["Fill validation evidence fields"]
+    });
+  }
+
+  const scannerFixtureCheck = validationPack?.validationChecks?.find((check) => check.id === "scanner-fixtures");
+  if (scannerFixtureCheck && !scannerFixtureCheck.evidenceValue && !fixtureImportResult?.canApply) {
+    addQuestion({
+      id: "import-fixture-evidence",
+      lane: "validation",
+      priority: 50,
+      title: "Import fixture evidence",
+      prompt: "Should I import the disposable fixture evidence JSON?",
+      detail: "Fixture import can fill only scanner-fixtures after reviewer and artifact details are present.",
+      action: "focus-panel",
+      targetPanel: "validation-evidence-panel",
+      options: ["Open fixture evidence import"]
     });
   }
 
@@ -2314,6 +2346,7 @@ export function buildAgentQuestionQueue({
       approval: sorted.filter((question) => question.lane === "approval").length,
       review: sorted.filter((question) => question.lane === "review").length,
       validation: sorted.filter((question) => question.lane === "validation").length,
+      rollback: sorted.filter((question) => question.lane === "rollback").length,
       actionable: sorted.filter((question) => question.action && question.action !== "none").length
     },
     primary: activeQuestion
@@ -5828,7 +5861,7 @@ function buildWriteBoundaryProbeSteps(status) {
 
 function questionTone(lane) {
   if (lane === "discovery" || lane === "planning" || lane === "execution") return "review";
-  if (lane === "approval" || lane === "review" || lane === "validation") return "review";
+  if (lane === "approval" || lane === "review" || lane === "validation" || lane === "rollback") return "review";
   if (lane === "advanced" || lane === "strategy") return "advanced";
   if (lane === "verification" || lane === "consent") return "safe";
   return "outline";

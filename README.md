@@ -158,6 +158,7 @@ The demo also includes:
 - Release gate panel that shows feature flags, runtime capabilities, missing validation checks, and disposable VM coverage.
 - Write boundary probe panel that records native rejection evidence for the future write request shape without counting recovered space.
 - Local validation evidence ledger and pack export with Windows VM scenarios, fixture roots, required checks, reviewer/artifact records, command checklist, fixture-evidence import, and signoff fields.
+- Agent questions that guide scan, approvals, item review, dry-run consent, simulation, rescan parity, rollback proof, fixture import, validation details, and write-boundary probe without marking proof complete on their own.
 - User-defined protected paths that remove matching actions from executable plans.
 - A plan review queue separating ready, pending, protected, and policy-blocked work.
 - An execution preflight checklist that blocks simulation until scan, selection, gates, protected paths, and ledger state are valid.

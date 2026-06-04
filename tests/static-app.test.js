@@ -165,6 +165,8 @@ assert(app.includes("coerceValidationEvidenceFormRecord"), "validation evidence 
 assert(app.includes("setRollbackProofEvidence"), "rollback evidence checklist should be editable");
 assert(app.includes("updateRollbackProofEvidence"), "rollback evidence detail records should be editable");
 assert(app.includes("coerceRollbackEvidenceFormRecord"), "rollback evidence storage should migrate legacy records");
+assert(app.includes("rollback-plan-panel"), "question queue should be able to focus rollback proof");
+assert(app.includes("validation-evidence-panel"), "question queue should be able to focus validation evidence");
 assert(app.includes("Evidence path or artifact id"), "validation evidence should require artifact path input");
 assert(app.includes("Reviewer"), "validation evidence should require reviewer input");
 assert(app.includes("setManualStrategyCheckEvidence"), "manual strategy checklist should be editable");
@@ -200,6 +202,8 @@ assert(model.includes("spaceguard-question-queue/v1"), "model should expose agen
 assert(model.includes("run-first-scan"), "question queue should ask scan-first questions");
 assert(model.includes("approve-rebuildable-caches"), "question queue should ask approval questions");
 assert(model.includes("validation-evidence-detail"), "question queue should ask validation evidence questions");
+assert(model.includes("rollback-proof-detail"), "question queue should ask rollback proof questions");
+assert(model.includes("import-fixture-evidence"), "question queue should ask fixture import questions");
 assert(model.includes("manualDispositionBytes"), "model should separate manual move/archive bytes from executor bytes");
 assert(model.includes("isItemReviewDecision"), "model should validate expanded item review decisions");
 assert(model.includes("spaceguard-scan-coverage/v1"), "model should expose scan coverage schema");
