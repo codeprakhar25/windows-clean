@@ -119,8 +119,8 @@ The UI must also expose a recovery advisor and decision log:
 - `privacy boundary`: local-only data handling, explicit export, browser storage audit records, blocked collection classes, and disabled telemetry/cloud upload.
 - `public beta readiness`: web-demo versus native read-only beta status, signing/support/uninstall evidence, privacy posture, and public claim boundary.
 - `support bundle`: redacted diagnostics for support triage that exclude local paths and filenames by default.
-- `validation evidence`: disposable VM checklists, seeded fixture roots, required commands, selected executor routes, and signoff fields.
-- `validation evidence ledger`: local operator records for completed Windows validation checks; evidence can reduce missing checks but cannot bypass native runtime, feature-flag, route, or safety gates.
+- `validation evidence`: disposable VM checklists, seeded fixture roots, required commands, selected executor routes, reviewer/artifact records, and signoff fields.
+- `validation evidence ledger`: local operator records for completed Windows validation checks; evidence can reduce missing checks only when reviewer and artifact path are present, and it cannot bypass native runtime, feature-flag, route, or safety gates.
 - `verification`: current plan id, expected bytes, ledger bytes, stale-ledger state, and next verification steps.
 - `rollback plan`: selected executor routes classified by restore posture, required proof, permanent-removal risk, backup needs, and whether a post-run checkpoint exists.
 
@@ -260,6 +260,13 @@ Tool command inventory invariant:
 - The app may display official inspect/prune command shapes, but it must not spawn shell commands in the current build.
 - Docker volumes, running containers, global package removal, project source directories, registry cleanup, and direct system-directory deletion stay blocked.
 - Tool-native command evidence must be captured in disposable Windows VMs before any executor flag can be considered.
+
+Validation evidence invariant:
+
+- Checkbox-only evidence is a draft marker, not release proof.
+- A validation check can pass only with `status=passed`, reviewer, evidence path or artifact id, and persisted timestamp.
+- Legacy `passed` records remain visible as detail-needed evidence and cannot open release gates.
+- Evidence records can support release review but cannot bypass native runtime, route eligibility, feature flags, rollback, rescan parity, privilege, privacy, or consent.
 
 Public beta invariant:
 
@@ -447,7 +454,7 @@ Disposable VM matrix:
 
 Validation evidence pack:
 
-- Required release checks with result, evidence path, notes, and reviewer fields.
+- Required release checks with result, evidence path, notes, timestamp, and reviewer fields.
 - Fixture roots for temp files, protected user roots, browser cache versus identity stores, developer tool caches, and review-gated data.
 - Command checklist for `npm test`, `npm run build`, `npm run native:dev`, and `npm run native:build`.
 - Executor routes currently under review with guardrails and verification expectations.

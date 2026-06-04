@@ -156,7 +156,7 @@ The demo also includes:
 - Tool command inventory panel that lists official inspect/prune command shapes for npm, pnpm, Docker, Gradle, and Windows cleanup without executing shell commands.
 - Release gate panel that shows feature flags, runtime capabilities, missing validation checks, and disposable VM coverage.
 - Write boundary probe panel that records native rejection evidence for the future write request shape without counting recovered space.
-- Local validation evidence ledger and pack export with Windows VM scenarios, fixture roots, required checks, command checklist, and signoff fields.
+- Local validation evidence ledger and pack export with Windows VM scenarios, fixture roots, required checks, reviewer/artifact records, command checklist, and signoff fields.
 - User-defined protected paths that remove matching actions from executable plans.
 - A plan review queue separating ready, pending, protected, and policy-blocked work.
 - An execution preflight checklist that blocks simulation until scan, selection, gates, protected paths, and ledger state are valid.
@@ -279,9 +279,9 @@ Use **Export validation pack** from the app before enabling real data execution 
 - Selected executor routes under review.
 - Full executor manifest with route status and next steps.
 - Local dry-run history summary.
-- Operator/reviewer signoff fields.
+- Operator/reviewer signoff fields and per-check artifact paths.
 
-The validation evidence panel lets an operator mark completed checks locally after a Windows VM run. These records are persisted in browser storage and exported in the validation pack. They do not unlock real execution unless native Windows evidence, runtime feature flags, eligible routes, and every release gate also pass.
+The validation evidence panel lets an operator record completed checks locally after a Windows VM run. A check only counts when it has `status=passed`, a reviewer, and an evidence path or artifact id. Legacy checkbox-only records stay visible as detail-needed records. Evidence records are persisted in browser storage and exported in the validation pack, but they do not unlock real execution unless native Windows evidence, runtime feature flags, eligible routes, and every release gate also pass.
 
 The privacy boundary is local-first by default. Native scans can include local paths and filenames in reports only when the user exports them. The current build has no cloud upload, telemetry event sender, registry collection, browser identity collection, or automatic report sync.
 

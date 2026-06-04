@@ -81,6 +81,7 @@ The current native shell should be marketed only as a read-only scanner:
 - It maps scanner findings into recipe statuses instead of guessing unsupported roots.
 - It can produce native dry-run ledger entries, but real execution remains disabled.
 - It has a release gate for feature flags, runtime capabilities, validation evidence, and disposable VM coverage.
+- It requires structured validation records with reviewer and artifact path; checkbox-only records cannot open release gates.
 - It has a visible privacy boundary for local scan metadata, explicit exports, local audit records, blocked data classes, and no telemetry/cloud upload.
 - It has a rollback plan that separates rebuildable routes, reviewed-item restore paths, backup-required admin routes, and permanent Recycle Bin consequences.
 - It has a public beta readiness check that separates publishable web demo, native read-only beta, and real cleanup claims.

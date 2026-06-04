@@ -17,6 +17,21 @@ const assert = require("assert");
     return { ...base, reviewItems };
   }
 
+  function makePassedEvidence(ids) {
+    return Object.fromEntries(
+      ids.map((id) => [
+        id,
+        {
+          status: "passed",
+          evidencePath: `evidence/${id}.json`,
+          reviewer: "qa-operator",
+          notes: "Disposable Windows validation evidence captured.",
+          recordedAt: "2026-06-04T00:00:00.000Z"
+        }
+      ])
+    );
+  }
+
   const selected = new Set(guard.actions.filter(guard.selectedByDefault).map((action) => action.id));
   const totals = guard.computeTotals(selected);
 
@@ -249,12 +264,12 @@ const assert = require("assert");
     },
     privacyBoundary: nativePrivacyBoundary,
     releaseGate: guard.buildReleaseGate({
-      validationEvidence: { "signing-and-smartscreen": "passed" },
+      validationEvidence: makePassedEvidence(["signing-and-smartscreen"]),
       scanMode: "native-readonly",
       nativeCapability: { available: true },
       executorPlan: null
     }),
-    validationEvidence: { "signing-and-smartscreen": "passed" },
+    validationEvidence: makePassedEvidence(["signing-and-smartscreen"]),
     documentationEvidence: { publicReleaseResearch: true, windowsRealDataSetup: true }
   });
   assert.strictEqual(nativePublicReadiness.readyForNativeBeta, true, "native beta should pass when scan, privacy, docs, and signing/support evidence exist");
@@ -978,13 +993,22 @@ const assert = require("assert");
 
   const partialEvidenceGate = guard.buildReleaseGate({
     featureFlags: { realExecutors: true },
-    validationEvidence: { "windows-native-build": "passed" },
+    validationEvidence: makePassedEvidence(["windows-native-build"]),
     scanMode: "native-readonly",
     nativeCapability: { available: true },
     executorPlan
   });
   assert.strictEqual(partialEvidenceGate.rows.find((row) => row.id === "windows-native-build").passed, true, "release gate should accept recorded validation evidence");
   assert.strictEqual(partialEvidenceGate.readyForRealRun, false, "partial validation evidence must not open real run");
+  const legacyEvidenceGate = guard.buildReleaseGate({
+    featureFlags: { realExecutors: true },
+    validationEvidence: { "windows-native-build": "passed" },
+    scanMode: "native-readonly",
+    nativeCapability: { available: true },
+    executorPlan
+  });
+  assert.strictEqual(legacyEvidenceGate.rows.find((row) => row.id === "windows-native-build").passed, false, "legacy checkbox evidence should need reviewer and artifact details");
+  assert.strictEqual(legacyEvidenceGate.rows.find((row) => row.id === "windows-native-build").status, "legacy-needs-detail", "legacy evidence should stay visible as detail-needed");
 
   const executorManifest = guard.buildExecutorManifest({
     actionList: developerActions,
@@ -1026,7 +1050,7 @@ const assert = require("assert");
   assert.strictEqual(validationPack.readyForRealRun, false, "validation pack must not mark real execution ready by default");
   assert.strictEqual(validationPack.vmScenarios.length, guard.disposableVmScenarios.length, "validation pack should include every disposable VM scenario");
   assert(validationPack.fixtureRoots.length >= 5, "validation pack should include concrete fixture roots");
-  assert(validationPack.validationChecks.every((check) => check.result === "not-run"), "default validation checks should be evidence templates");
+  assert(validationPack.validationChecks.every((check) => !check.evidenceComplete && !check.evidencePath && !check.reviewer), "default validation checks should be evidence templates");
   assert(validationPack.commands.some((command) => command.command === "npm run native:build"), "validation pack should include the Windows native build command");
   assert(validationPack.executorRoutes.some((route) => route.route === "known-temp-delete"), "validation pack should include selected executor routes under review");
   assert(validationPack.executorManifest.routes.some((route) => route.route === "browser-cache-only"), "validation pack should include the full executor manifest");
@@ -1042,6 +1066,8 @@ const assert = require("assert");
     runtimeCapabilities: { available: true, realRunEnabled: false, destructiveCommands: false }
   });
   assert.strictEqual(recordedValidationPack.validationChecks.find((check) => check.id === "windows-native-build").evidenceValue, "passed", "validation pack should export recorded evidence values");
+  assert.strictEqual(recordedValidationPack.validationChecks.find((check) => check.id === "windows-native-build").evidenceComplete, true, "validation pack should mark detailed records complete");
+  assert.strictEqual(recordedValidationPack.validationChecks.find((check) => check.id === "windows-native-build").reviewer, "qa-operator", "validation pack should export reviewer");
   assert(guard.buildValidationPackMarkdown(recordedValidationPack).includes("- [x] Windows native build"), "validation markdown should check recorded evidence rows");
 
   const runRecord = guard.buildLedgerRunRecord({
@@ -1074,7 +1100,7 @@ const assert = require("assert");
   assert(historyMarkdown.includes("SpaceGuard Local Run History"), "history markdown should have a title");
   assert(historyMarkdown.includes(itemPlanSnapshot.id), "history markdown should include plan ids");
 
-  const passedEvidence = Object.fromEntries(guard.windowsValidationChecks.map((check) => [check.id, true]));
+  const passedEvidence = makePassedEvidence(guard.windowsValidationChecks.map((check) => check.id));
   const enabledGate = guard.buildReleaseGate({
     featureFlags: { realExecutors: true },
     validationEvidence: passedEvidence,

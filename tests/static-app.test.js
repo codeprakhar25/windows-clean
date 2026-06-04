@@ -147,6 +147,10 @@ assert(app.includes("MANUAL_STRATEGY_EVIDENCE_STORAGE_KEY"), "manual strategy ev
 assert(app.includes("readStoredValidationEvidence"), "validation evidence should be loaded from local storage");
 assert(app.includes("readStoredManualStrategyEvidence"), "manual strategy evidence should be loaded from local storage");
 assert(app.includes("setValidationCheckEvidence"), "validation evidence checklist should be editable");
+assert(app.includes("updateValidationCheckEvidence"), "validation evidence detail records should be editable");
+assert(app.includes("coerceValidationEvidenceFormRecord"), "validation evidence storage should migrate legacy records");
+assert(app.includes("Evidence path or artifact id"), "validation evidence should require artifact path input");
+assert(app.includes("Reviewer"), "validation evidence should require reviewer input");
 assert(app.includes("setManualStrategyCheckEvidence"), "manual strategy checklist should be editable");
 assert(app.includes("buildPlanSnapshot"), "plan snapshot should be wired");
 assert(app.includes("buildVerificationSummary"), "verification summary should be wired");
@@ -190,6 +194,9 @@ assert(model.includes("spaceguard-write-readiness/v1"), "model should expose wri
 assert(model.includes("Real executor implementation"), "write readiness should require real executor implementation");
 assert(model.includes("spaceguard-real-executor-capsule/v1"), "model should expose real executor capsule schema");
 assert(model.includes("spaceguard-write-boundary-probe/v1"), "model should expose write boundary probe schema");
+assert(model.includes("normalizeValidationEvidenceRecord"), "model should normalize structured validation evidence");
+assert(model.includes("legacy-needs-detail"), "legacy validation evidence should need details");
+assert(model.includes("needs-evidence-detail"), "marked validation evidence should require reviewer and artifact path");
 assert(model.includes("destructiveActionAvailable"), "real executor capsule should keep destructive availability explicit");
 assert(model.includes("toolNativeCommandSpecs"), "model should declare tool-native command specs");
 assert(model.includes("commandExecutionEnabled: false"), "tool command inventory should keep command execution disabled");

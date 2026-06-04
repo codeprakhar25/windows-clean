@@ -24,8 +24,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import {
   GB,
   agentStages,
@@ -768,9 +770,34 @@ export default function App() {
   function setValidationCheckEvidence(checkId, checked) {
     setValidationEvidence((current) => {
       const next = { ...current };
-      if (checked) next[checkId] = "passed";
+      if (checked) {
+        const currentRecord = coerceValidationEvidenceFormRecord(current[checkId]);
+        const now = new Date().toISOString();
+        next[checkId] = {
+          ...currentRecord,
+          status: "passed",
+          recordedAt: currentRecord.recordedAt || now,
+          updatedAt: now
+        };
+      }
       else delete next[checkId];
       return next;
+    });
+  }
+
+  function updateValidationCheckEvidence(checkId, field, value) {
+    setValidationEvidence((current) => {
+      const currentRecord = coerceValidationEvidenceFormRecord(current[checkId]);
+      const now = new Date().toISOString();
+      return {
+        ...current,
+        [checkId]: {
+          ...currentRecord,
+          [field]: value,
+          status: currentRecord.status === "passed" ? "passed" : "draft",
+          updatedAt: now
+        }
+      };
     });
   }
 
@@ -1246,6 +1273,7 @@ export default function App() {
               validationPack={validationPack}
               validationEvidence={validationEvidence}
               onToggleEvidence={setValidationCheckEvidence}
+              onUpdateEvidence={updateValidationCheckEvidence}
               onReset={resetValidationEvidence}
               onExport={exportValidationPack}
             />
@@ -3150,11 +3178,12 @@ function SupportBundlePanel({ bundle, onExport }) {
   );
 }
 
-function ValidationEvidencePanel({ validationPack, validationEvidence, onToggleEvidence, onReset, onExport }) {
+function ValidationEvidencePanel({ validationPack, validationEvidence, onToggleEvidence, onUpdateEvidence, onReset, onExport }) {
   const waitingChecks = validationPack.validationChecks.filter((check) => !check.passed);
   const invariantFailures = validationPack.safetyInvariants.filter((item) => !item.passed);
   const fixturePreview = validationPack.fixtureRoots.slice(0, 3);
-  const recordedCount = Object.values(validationEvidence || {}).filter((value) => value === true || value === "passed").length;
+  const completeCount = validationPack.validationChecks.filter((check) => check.evidenceComplete).length;
+  const draftCount = validationPack.validationChecks.filter((check) => check.evidenceValue && !check.evidenceComplete).length;
 
   return (
     <Card>
@@ -3170,7 +3199,7 @@ function ValidationEvidencePanel({ validationPack, validationEvidence, onToggleE
       <CardContent className="flex flex-col gap-3">
         <div className="grid grid-cols-3 gap-2">
           <QueueStat label="Waiting" value={waitingChecks.length} tone="review" />
-          <QueueStat label="Recorded" value={recordedCount} tone="safe" />
+          <QueueStat label="Complete" value={completeCount} tone="safe" />
           <QueueStat label="VMs" value={validationPack.vmScenarios.length} tone="review" />
         </div>
 
@@ -3197,34 +3226,72 @@ function ValidationEvidencePanel({ validationPack, validationEvidence, onToggleE
         <div className="rounded-md border bg-muted/30 p-3">
           <div className="mb-2 flex items-center justify-between gap-3 text-sm">
             <span className="font-medium">Validation evidence ledger</span>
-            <Button variant="ghost" size="sm" onClick={onReset} disabled={!recordedCount}>
+            <Button variant="ghost" size="sm" onClick={onReset} disabled={!completeCount && !draftCount}>
               <X className="h-4 w-4" />
               Reset evidence
             </Button>
           </div>
           <div className="max-h-72 overflow-auto pr-1">
             <div className="flex flex-col gap-2">
-              {validationPack.validationChecks.map((check) => (
-                <div key={check.id} className="grid grid-cols-[24px_1fr_auto] items-start gap-2 rounded-md border bg-card p-2 text-sm">
-                  <Checkbox
-                    className="mt-0.5"
-                    checked={check.passed}
-                    aria-label={`Record evidence for ${check.label}`}
-                    onClick={() => onToggleEvidence(check.id, !check.passed)}
-                  />
-                  <div className="min-w-0">
-                    <div className={check.passed ? "font-medium" : "font-medium text-muted-foreground"}>{check.label}</div>
-                    <div className="text-xs text-muted-foreground">{check.requiredEvidence}</div>
+              {validationPack.validationChecks.map((check) => {
+                const markedPassed = check.evidenceValue === "passed" || check.evidenceValue === "legacy-passed" || check.status === "needs-evidence-detail" || check.status === "legacy-needs-detail";
+                return (
+                  <div key={check.id} className="rounded-md border bg-card p-3 text-sm">
+                    <div className="grid grid-cols-[24px_1fr_auto] items-start gap-2">
+                      <Checkbox
+                        className="mt-0.5"
+                        checked={markedPassed}
+                        aria-label={`Record evidence for ${check.label}`}
+                        onClick={() => onToggleEvidence(check.id, !markedPassed)}
+                      />
+                      <div className="min-w-0">
+                        <div className={check.passed ? "font-medium" : "font-medium text-muted-foreground"}>{check.label}</div>
+                        <div className="text-xs text-muted-foreground">{check.requiredEvidence}</div>
+                      </div>
+                      <Badge variant={check.passed ? "safe" : check.status === "blocked-by-flag" ? "outline" : check.status === "failed" ? "restricted" : "review"}>
+                        {check.passed ? "complete" : check.status}
+                      </Badge>
+                    </div>
+
+                    <div className="mt-3 grid gap-2">
+                      <Input
+                        value={check.evidencePath}
+                        placeholder="Evidence path or artifact id"
+                        aria-label={`${check.label} evidence path`}
+                        onChange={(event) => onUpdateEvidence(check.id, "evidencePath", event.target.value)}
+                      />
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <Input
+                          value={check.reviewer}
+                          placeholder="Reviewer"
+                          aria-label={`${check.label} reviewer`}
+                          onChange={(event) => onUpdateEvidence(check.id, "reviewer", event.target.value)}
+                        />
+                        <Input
+                          value={check.recordedAt}
+                          placeholder="Recorded timestamp"
+                          aria-label={`${check.label} recorded timestamp`}
+                          onChange={(event) => onUpdateEvidence(check.id, "recordedAt", event.target.value)}
+                        />
+                      </div>
+                      <Textarea
+                        value={check.notes}
+                        placeholder="Notes from the Windows VM run"
+                        aria-label={`${check.label} notes`}
+                        onChange={(event) => onUpdateEvidence(check.id, "notes", event.target.value)}
+                      />
+                    </div>
+
+                    {check.evidenceDetail ? (
+                      <p className="mt-2 text-xs text-muted-foreground">{check.evidenceDetail}</p>
+                    ) : null}
                   </div>
-                  <Badge variant={check.passed ? "safe" : check.status === "blocked-by-flag" ? "outline" : "review"}>
-                    {check.passed ? "recorded" : check.status}
-                  </Badge>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            Local evidence records feed the release gate and export pack. They still cannot unlock real execution without native Windows runtime and executor feature flags.
+            Local evidence records need reviewer and artifact path before they feed the release gate. They still cannot unlock real execution without native Windows runtime and executor feature flags.
           </p>
         </div>
 
@@ -3502,11 +3569,42 @@ function readStoredValidationEvidence() {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     return Object.fromEntries(
-      Object.entries(parsed).filter(([, value]) => value === true || value === "passed")
+      Object.entries(parsed).filter(([, value]) => value === true || value === "passed" || (value && typeof value === "object" && !Array.isArray(value)))
     );
   } catch {
     return {};
   }
+}
+
+function coerceValidationEvidenceFormRecord(value) {
+  if (value === true || value === "passed") {
+    return {
+      status: "passed",
+      evidencePath: "",
+      reviewer: "",
+      notes: "",
+      recordedAt: "",
+      updatedAt: ""
+    };
+  }
+  if (!value || typeof value !== "object") {
+    return {
+      status: "draft",
+      evidencePath: "",
+      reviewer: "",
+      notes: "",
+      recordedAt: "",
+      updatedAt: ""
+    };
+  }
+  return {
+    status: value.status === "passed" || value.status === "failed" || value.status === "draft" ? value.status : "draft",
+    evidencePath: value.evidencePath || value.evidence_path || "",
+    reviewer: value.reviewer || "",
+    notes: value.notes || "",
+    recordedAt: value.recordedAt || value.recorded_at || "",
+    updatedAt: value.updatedAt || value.updated_at || ""
+  };
 }
 
 function writeStoredValidationEvidence(evidence) {

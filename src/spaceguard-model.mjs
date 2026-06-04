@@ -2919,21 +2919,24 @@ export function buildReleaseGate({
   const realFlagEnabled = Boolean(flags.realExecutors);
   const nativeReady = scanMode === "native-readonly" && Boolean(nativeCapability.available);
   const rows = windowsValidationChecks.map((check) => {
-    const evidenceValue = validationEvidence[check.id];
-    const passed = evidenceValue === true || evidenceValue === "passed";
+    const evidenceRecord = normalizeValidationEvidenceRecord(check.id, validationEvidence[check.id]);
+    const passed = evidenceRecord.passed;
     const status = passed
       ? "passed"
-      : !realFlagEnabled
-        ? "blocked-by-flag"
-        : !nativeReady
-          ? "needs-native"
-          : "missing-evidence";
+      : evidenceRecord.marked
+        ? evidenceRecord.qualityStatus
+        : !realFlagEnabled
+          ? "blocked-by-flag"
+          : !nativeReady
+            ? "needs-native"
+            : "missing-evidence";
 
     return {
       ...check,
       status,
       passed,
-      evidenceValue: evidenceValue || ""
+      evidenceValue: evidenceRecord.evidenceValue,
+      evidenceRecord
     };
   });
   const vmRows = disposableVmScenarios.map((scenario) => {
@@ -2961,6 +2964,84 @@ export function buildReleaseGate({
     totalCount: rows.length,
     candidateRoutes,
     blockedReason: getReleaseBlockedReason({ realFlagEnabled, nativeReady, missingRows, candidateRoutes })
+  };
+}
+
+export function normalizeValidationEvidenceRecord(checkId, value = null) {
+  if (value === true || value === "passed") {
+    return {
+      id: checkId,
+      status: "passed",
+      evidenceValue: "legacy-passed",
+      marked: true,
+      legacy: true,
+      complete: false,
+      passed: false,
+      qualityStatus: "legacy-needs-detail",
+      evidencePath: "",
+      reviewer: "",
+      notes: "",
+      recordedAt: "",
+      updatedAt: "",
+      detail: "Legacy checkbox evidence must be replaced with reviewer and artifact path before release."
+    };
+  }
+
+  if (!value || typeof value !== "object") {
+    return {
+      id: checkId,
+      status: "not-run",
+      evidenceValue: "",
+      marked: false,
+      legacy: false,
+      complete: false,
+      passed: false,
+      qualityStatus: "missing-evidence",
+      evidencePath: "",
+      reviewer: "",
+      notes: "",
+      recordedAt: "",
+      updatedAt: "",
+      detail: "No evidence record has been captured."
+    };
+  }
+
+  const status = value.status === "passed" || value.status === "failed" || value.status === "draft" ? value.status : "draft";
+  const evidencePath = String(value.evidencePath || value.evidence_path || "").trim();
+  const reviewer = String(value.reviewer || "").trim();
+  const notes = String(value.notes || "").trim();
+  const recordedAt = String(value.recordedAt || value.recorded_at || "").trim();
+  const updatedAt = String(value.updatedAt || value.updated_at || "").trim();
+  const complete = status === "passed" && Boolean(evidencePath) && Boolean(reviewer);
+  const qualityStatus = complete
+    ? "passed"
+    : status === "failed"
+      ? "failed"
+      : status === "passed"
+        ? "needs-evidence-detail"
+        : "draft";
+
+  return {
+    id: checkId,
+    status,
+    evidenceValue: status,
+    marked: status !== "not-run",
+    legacy: false,
+    complete,
+    passed: complete,
+    qualityStatus,
+    evidencePath,
+    reviewer,
+    notes,
+    recordedAt,
+    updatedAt,
+    detail: complete
+      ? `Evidence recorded by ${reviewer}.`
+      : status === "passed"
+        ? "Reviewer and artifact path are required before this check can pass."
+        : status === "failed"
+          ? "Evidence run failed and blocks release."
+          : "Draft evidence is not enough for release."
   };
 }
 
@@ -3089,11 +3170,8 @@ export function buildPublicBetaReadiness({
   validationEvidence = {},
   documentationEvidence = {}
 } = {}) {
-  const signingEvidence = validationEvidence["signing-and-smartscreen"];
-  const signingPassed =
-    signingEvidence === true ||
-    signingEvidence === "passed" ||
-    releaseGate?.rows?.find((row) => row.id === "signing-and-smartscreen")?.passed;
+  const signingRecord = normalizeValidationEvidenceRecord("signing-and-smartscreen", validationEvidence["signing-and-smartscreen"]);
+  const signingPassed = signingRecord.passed || releaseGate?.rows?.find((row) => row.id === "signing-and-smartscreen")?.passed;
   const destructiveLocked = !runtimeCapabilities?.realRunEnabled && !runtimeCapabilities?.destructiveCommands;
   const localOnlyPrivacy = Boolean(privacyBoundary?.cloudDisabled && privacyBoundary?.telemetryDisabled && privacyBoundary?.exportOnly);
   const nativeReadOnly = scanMode === "native-readonly" && Boolean(nativeCapability?.available || runtimeCapabilities?.scanKnownRoots);
@@ -3464,10 +3542,15 @@ export function buildValidationEvidencePack({
       passed: Boolean(row.passed),
       evidenceValue: row.evidenceValue || "",
       requiredEvidence: row.evidence,
-      result: row.passed ? "passed" : "not-run",
-      evidencePath: "",
-      notes: "",
-      reviewer: ""
+      result: row.passed ? "passed" : row.evidenceRecord?.qualityStatus || "not-run",
+      evidencePath: row.evidenceRecord?.evidencePath || "",
+      notes: row.evidenceRecord?.notes || "",
+      reviewer: row.evidenceRecord?.reviewer || "",
+      recordedAt: row.evidenceRecord?.recordedAt || "",
+      updatedAt: row.evidenceRecord?.updatedAt || "",
+      evidenceComplete: Boolean(row.evidenceRecord?.complete),
+      evidenceLegacy: Boolean(row.evidenceRecord?.legacy),
+      evidenceDetail: row.evidenceRecord?.detail || ""
     })),
     vmScenarios: vmRows.map((row) => ({
       id: row.id,
@@ -3545,7 +3628,12 @@ export function buildValidationPackMarkdown(pack) {
     .map((item) => `- ${item.passed ? "PASS" : "WAIT"} ${item.label}: ${item.detail}`)
     .join("\n");
   const checks = pack.validationChecks
-    .map((check) => `- [${check.passed ? "x" : " "}] ${check.label} (${check.lane}) - ${check.requiredEvidence}`)
+    .map((check) => {
+      const detail = check.evidenceComplete
+        ? `evidence=${check.evidencePath}; reviewer=${check.reviewer}; recorded=${check.recordedAt || "unknown"}`
+        : check.evidenceDetail || "evidence details missing";
+      return `- [${check.passed ? "x" : " "}] ${check.label} (${check.lane}) - ${check.requiredEvidence} | ${detail}`;
+    })
     .join("\n");
   const vms = pack.vmScenarios
     .map((scenario) => `- ${scenario.label}: ${scenario.passedCount}/${scenario.totalCount} checks, ${scenario.status}`)
@@ -4445,9 +4533,17 @@ export function buildReport({
       ? [
           `- Ready for real run: ${validationPack.readyForRealRun ? "yes" : "no"}`,
           `- Missing checks: ${validationPack.missingCheckIds.length}`,
+          `- Complete evidence records: ${validationPack.validationChecks.filter((check) => check.evidenceComplete).length}`,
+          `- Detail-needed records: ${validationPack.validationChecks.filter((check) => check.evidenceValue && !check.evidenceComplete).length}`,
           `- VM scenarios: ${validationPack.vmScenarios.length}`,
           `- Fixture roots: ${validationPack.fixtureRoots.length}`,
           `- Safety invariants waiting: ${validationPack.safetyInvariants.filter((item) => !item.passed).length}`,
+          validationPack.validationChecks.length
+            ? validationPack.validationChecks
+                .slice(0, 12)
+                .map((check) => `- Check: ${check.label} | ${check.status} | evidence=${check.evidenceComplete ? "complete" : check.evidenceValue ? "needs-detail" : "missing"}`)
+                .join("\n")
+            : "- No validation checks.",
           validationPack.commands.length
             ? validationPack.commands.map((command) => `- Command: ${command.command} | ${command.result}`).join("\n")
             : "- No validation commands."
