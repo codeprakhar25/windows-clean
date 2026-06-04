@@ -313,7 +313,7 @@ Validation evidence invariant:
 - Checkbox-only evidence is a draft marker, not release proof.
 - A validation check can pass only with `status=passed`, reviewer, evidence path or artifact id, and persisted timestamp.
 - Legacy `passed` records remain visible as detail-needed evidence and cannot open release gates.
-- Imported fixture evidence can satisfy only the scanner-fixture readiness record after schema, pass/fail, destructive-command, reviewer, and artifact checks pass.
+- Imported fixture evidence can satisfy the scanner-fixture readiness record after schema, pass/fail, destructive-command, reviewer, and artifact checks pass. It can satisfy dry-run target-scope validation only when explicit allowed and rejected dry-run scope cases pass with zero samples for rejected targets.
 - Fixture import cannot satisfy protected-path, rollback, command, native-build, privilege, privacy, or ledger/rescan proof.
 - Evidence records can support release review but cannot bypass native runtime, route eligibility, feature flags, rollback, rescan parity, privilege, privacy, or consent.
 
@@ -406,6 +406,7 @@ The current React/shadcn app implements this as a guarded planner with browser-d
 - Executor policy panel.
 - Executor manifest panel.
 - Validation evidence pack export.
+- Dry-run target-scope evidence in the validation pack when fixture import proves the scope cases.
 
 No real cleanup is performed yet.
 

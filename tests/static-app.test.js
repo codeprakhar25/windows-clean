@@ -222,6 +222,7 @@ assert(app.includes("Open checklist"), "agent question action should label manua
 assert(app.includes("Open validation evidence"), "agent question action should label validation detail focus");
 assert(app.includes("Evidence path or artifact id"), "validation evidence should require artifact path input");
 assert(app.includes("Reviewer"), "validation evidence should require reviewer input");
+assert(app.includes("Dry-run scope cases"), "fixture evidence import UI should expose dry-run scope case counts");
 assert(app.includes("setManualStrategyCheckEvidence"), "manual strategy checklist should be editable");
 assert(app.includes("buildPlanSnapshot"), "plan snapshot should be wired");
 assert(app.includes("buildVerificationSummary"), "verification summary should be wired");
@@ -333,7 +334,10 @@ assert(model.includes("contract-mismatch"), "write boundary probe should reject 
 assert(model.includes("normalizeValidationEvidenceRecord"), "model should normalize structured validation evidence");
 assert(model.includes("spaceguard-fixture-evidence-import/v1"), "model should expose fixture evidence import schema");
 assert(model.includes("destructive-evidence"), "fixture evidence import should reject destructive evidence");
-assert(model.includes("scanner-fixtures"), "fixture evidence import should map only fixture readiness evidence");
+assert(model.includes("scanner-fixtures"), "fixture evidence import should map scanner fixture readiness evidence");
+assert(model.includes("dry-run-target-scope"), "model should expose dry-run target-scope validation");
+assert(model.includes("summarizeFixtureDryRunScopeCheck"), "fixture evidence import should summarize dry-run scope proof");
+assert(model.includes("Dry-run target-scope evidence was not present"), "fixture import should keep dry-run scope proof separate when missing");
 assert(model.includes("legacy-needs-detail"), "legacy validation evidence should need details");
 assert(model.includes("needs-evidence-detail"), "marked validation evidence should require reviewer and artifact path");
 assert(model.includes("destructiveActionAvailable"), "real executor capsule should keep destructive availability explicit");
@@ -397,6 +401,10 @@ assert(packageJson.includes("@tauri-apps/cli"), "package should include Tauri CL
 assert(realDataGuide.includes("Run real scan"), "real-data guide should include native scan UI steps");
 assert(realDataGuide.includes("Disposable Fixture Run"), "real-data guide should include fixture validation setup");
 assert(realDataGuide.includes("inspect-spaceguard-fixtures.ps1"), "real-data guide should include fixture evidence inspection");
+assert(realDataGuide.includes("DryRunScopeEvidencePath"), "real-data guide should explain dry-run scope evidence inspection");
+assert(fixtureScript.includes("dryRunScopeCases"), "fixture seeder should emit dry-run scope validation cases");
+assert(fixtureInspectScript.includes("dryRunScopeCheck"), "fixture inspector should emit dry-run scope validation result");
+assert(fixtureInspectScript.includes("DryRunScopeEvidencePath"), "fixture inspector should accept dry-run scope evidence input");
 assert(realDataGuide.includes("Real executors remain disabled"), "real-data guide should keep execution boundary explicit");
 assert(fixtureScript.includes("spaceguard-fixture"), "fixture script should seed named SpaceGuard fixture roots");
 assert(fixtureScript.includes("LargeCandidateMB"), "fixture script should support optional large-file validation");

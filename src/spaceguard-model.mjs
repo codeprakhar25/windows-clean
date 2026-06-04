@@ -700,6 +700,13 @@ export const windowsValidationChecks = [
     evidence: "Protected roots and child items are excluded from plans, native scan traversal, and executor previews."
   },
   {
+    id: "dry-run-target-scope",
+    label: "Dry-run target scope",
+    lane: "guardrail",
+    requiredFor: "first-safe-executors",
+    evidence: "Native dry-run candidate manifests sample only allowed first-safe targets and return no file samples for missing, forbidden, or non-allowlisted targets."
+  },
+  {
     id: "browser-identity-fixtures",
     label: "Browser identity exclusion",
     lane: "guardrail",
@@ -755,19 +762,19 @@ export const disposableVmScenarios = [
     id: "win11-standard-user",
     label: "Windows 11 standard user",
     coverage: "No admin rights, low-risk scan, protected user folders.",
-    mustPass: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "ledger-rescan-parity"]
+    mustPass: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "dry-run-target-scope", "ledger-rescan-parity"]
   },
   {
     id: "win11-admin-low-disk",
     label: "Windows 11 admin, low disk",
     coverage: "Full C: pressure, Windows.old, temp cleanup, hibernation visibility.",
-    mustPass: ["windows-native-build", "scanner-fixtures", "temp-locked-files", "ledger-rescan-parity"]
+    mustPass: ["windows-native-build", "scanner-fixtures", "dry-run-target-scope", "temp-locked-files", "ledger-rescan-parity"]
   },
   {
     id: "browser-heavy-profile",
     label: "Browser-heavy profile",
     coverage: "Chrome, Edge, Firefox cache roots plus identity stores.",
-    mustPass: ["browser-identity-fixtures", "ledger-rescan-parity"]
+    mustPass: ["dry-run-target-scope", "browser-identity-fixtures", "ledger-rescan-parity"]
   },
   {
     id: "developer-toolchains",
@@ -806,6 +813,18 @@ export const windowsValidationFixtures = [
       "Protected parent and child paths are excluded from selected plans.",
       "Item review marks protected children as keep.",
       "Executor preview produces zero executable rows for protected matches."
+    ]
+  },
+  {
+    id: "dry-run-scope-fixture",
+    lane: "guardrail",
+    label: "Native dry-run target scope",
+    seedPaths: ["%TEMP%\\spaceguard-fixture", "%UserProfile%\\Downloads\\spaceguard-fixture", "Browser identity stores"],
+    setup: "Run native dry-run scope cases for an allowed temp target, a forbidden Downloads target, and a forbidden browser identity target.",
+    assertions: [
+      "Allowed first-safe targets report target-allowed before sampling.",
+      "Forbidden or non-allowlisted targets report target-blocked with a reject code.",
+      "Rejected target scopes return zero candidate samples."
     ]
   },
   {
@@ -882,7 +901,7 @@ export const executorRouteRequirements = {
     implementation: "Delete only entries under exact allowlisted temp roots, skip locked files, and never follow reparse points.",
     rollback: "Temp files are disposable; skipped locked files stay in place and every removed byte must be verified by rescan.",
     proof: "A disposable VM fixture must show locked-file skips, allowlist boundaries, and ledger/rescan parity.",
-    requiredValidationIds: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "temp-locked-files", "ledger-rescan-parity"],
+    requiredValidationIds: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "dry-run-target-scope", "temp-locked-files", "ledger-rescan-parity"],
     fixtureIds: ["known-temp-fixture", "protected-path-fixture"],
     preconditions: ["Native Windows scan", "Current plan snapshot", "Root allowlist match", "User-started cleanup"]
   },
@@ -893,7 +912,7 @@ export const executorRouteRequirements = {
     implementation: "Use the shell Recycle Bin API boundary; never treat arbitrary user folders as Recycle Bin content.",
     rollback: "No automated rollback after emptying Recycle Bin; the UI must state permanent-removal consequence before execution.",
     proof: "Fixture evidence must show only existing Recycle Bin entries are removed.",
-    requiredValidationIds: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "recycle-bin-only", "ledger-rescan-parity"],
+    requiredValidationIds: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "dry-run-target-scope", "recycle-bin-only", "ledger-rescan-parity"],
     fixtureIds: ["protected-path-fixture"],
     preconditions: ["Native Windows scan", "Recycle Bin inventory", "Permanent-removal acknowledgement"]
   },
@@ -904,7 +923,7 @@ export const executorRouteRequirements = {
     implementation: "Remove cache directories only while excluding cookies, sessions, saved logins, extensions, and profile databases.",
     rollback: "Browser cache rebuilds automatically; identity stores must remain untouched.",
     proof: "Browser fixture must prove cache changes without identity-store mutations.",
-    requiredValidationIds: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "browser-identity-fixtures", "ledger-rescan-parity"],
+    requiredValidationIds: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "dry-run-target-scope", "browser-identity-fixtures", "ledger-rescan-parity"],
     fixtureIds: ["browser-cache-fixture"],
     preconditions: ["Native Windows scan", "Browser profile cache path match", "Identity store exclusion list"]
   },
@@ -3014,7 +3033,7 @@ export function buildAgentQuestionQueue({
       priority: 50,
       title: "Import fixture evidence",
       prompt: "Should I import the disposable fixture evidence JSON?",
-      detail: "Fixture import can fill only scanner-fixtures after reviewer and artifact details are present.",
+      detail: "Fixture import can fill scanner-fixtures, and dry-run-target-scope only when explicit scope cases pass.",
       action: "focus-panel",
       targetPanel: "validation-evidence-panel",
       options: ["Open fixture evidence import"]
@@ -5367,12 +5386,15 @@ export function buildFixtureEvidenceImport({
   }
 
   const purposes = Array.from(new Set(evidence.records.map((record) => String(record.purpose || "").trim()).filter(Boolean))).sort();
+  const dryRunScope = summarizeFixtureDryRunScopeCheck(evidence);
   const checkIds = purposes.length ? ["scanner-fixtures"] : [];
+  if (dryRunScope.passed) checkIds.push("dry-run-target-scope");
   const evidencePath = String(artifactId || "").trim() || `fixture-evidence:${evidence.generatedAt || importedAt}`;
   const notes = [
     "Imported disposable fixture evidence.",
     `records=${evidence.records.length}`,
     `purposes=${purposes.join(", ") || "none"}`,
+    `dryRunScopeCases=${dryRunScope.caseCount}`,
     "destructiveCommands=false"
   ].join(" | ");
   const validationEvidence = {
@@ -5391,7 +5413,8 @@ export function buildFixtureEvidenceImport({
         schemaVersion: evidence.schemaVersion,
         generatedAt: evidence.generatedAt || "",
         counts: sanitizeFixtureCounts(evidence.counts),
-        purposes
+        purposes,
+        dryRunScope
       }
     };
   }
@@ -5411,14 +5434,58 @@ export function buildFixtureEvidenceImport({
       mappedChecks: checkIds.length,
       missing: Number(evidence.counts?.missing || 0),
       sizeMismatches: Number(evidence.counts?.sizeMismatches || 0),
-      ageMismatches: Number(evidence.counts?.ageMismatches || 0)
+      ageMismatches: Number(evidence.counts?.ageMismatches || 0),
+      dryRunScopeCases: dryRunScope.caseCount,
+      dryRunScopeFailures: dryRunScope.failures
     },
     purposes,
     detail: checkIds.length
       ? `Fixture evidence can update ${checkIds.length} validation check(s).`
       : "Fixture evidence passed, but no validation check mapping exists.",
     validationEvidence,
-    warnings: buildFixtureImportWarnings(purposes)
+    warnings: buildFixtureImportWarnings(purposes, dryRunScope)
+  };
+}
+
+function summarizeFixtureDryRunScopeCheck(evidence = {}) {
+  const check = evidence.dryRunScopeCheck || evidence.dry_run_scope_check || null;
+  if (!check || typeof check !== "object" || Array.isArray(check)) {
+    return {
+      provided: false,
+      passed: false,
+      caseCount: 0,
+      allowed: 0,
+      rejected: 0,
+      failures: 0,
+      detail: "Dry-run target-scope evidence was not provided."
+    };
+  }
+
+  const cases = Array.isArray(check.cases) ? check.cases : [];
+  const failedCases = cases.filter((item) => !item?.passed);
+  const allowed = cases.filter((item) => item?.targetScopeStatus === "target-allowed" || item?.target_scope_status === "target-allowed");
+  const rejected = cases.filter((item) => item?.targetScopeStatus === "target-blocked" || item?.target_scope_status === "target-blocked");
+  const rejectedWithSamples = rejected.filter((item) => Number(item?.candidateCount || item?.candidate_count || 0) > 0);
+  const destructive = check.destructiveCommands !== false && check.destructive_commands !== false;
+  const passed =
+    check.passed === true &&
+    cases.length > 0 &&
+    allowed.length > 0 &&
+    rejected.length > 0 &&
+    failedCases.length === 0 &&
+    rejectedWithSamples.length === 0 &&
+    !destructive;
+
+  return {
+    provided: true,
+    passed,
+    caseCount: cases.length,
+    allowed: allowed.length,
+    rejected: rejected.length,
+    failures: failedCases.length + rejectedWithSamples.length + (destructive ? 1 : 0),
+    detail: passed
+      ? `${cases.length} dry-run target-scope case(s) passed.`
+      : "Dry-run target-scope evidence must include allowed and rejected cases, zero samples for rejected targets, destructiveCommands=false, and no failed cases."
   };
 }
 
@@ -5460,7 +5527,9 @@ function buildRejectedFixtureImport(status, detail, currentEvidence, importedAt,
       mappedChecks: 0,
       missing: Number(evidence?.counts?.missing || 0),
       sizeMismatches: Number(evidence?.counts?.sizeMismatches || 0),
-      ageMismatches: Number(evidence?.counts?.ageMismatches || 0)
+      ageMismatches: Number(evidence?.counts?.ageMismatches || 0),
+      dryRunScopeCases: 0,
+      dryRunScopeFailures: 0
     },
     purposes: [],
     detail,
@@ -5478,7 +5547,7 @@ function sanitizeFixtureCounts(counts = {}) {
   };
 }
 
-function buildFixtureImportWarnings(purposes) {
+function buildFixtureImportWarnings(purposes, dryRunScope = null) {
   const warnings = [];
   const knownPurposes = new Set(purposes);
   if (!knownPurposes.has("known-temp-fixture")) {
@@ -5492,6 +5561,11 @@ function buildFixtureImportWarnings(purposes) {
   }
   if (knownPurposes.has("developer-tooling-fixture")) {
     warnings.push("Developer fixture presence is not tool-native command proof; keep command evidence separate.");
+  }
+  if (!dryRunScope?.provided) {
+    warnings.push("Dry-run target-scope evidence was not present; dry-run-target-scope remains a separate validation record.");
+  } else if (!dryRunScope.passed) {
+    warnings.push("Dry-run target-scope evidence was present but did not pass; dry-run-target-scope was not updated.");
   }
   return warnings;
 }

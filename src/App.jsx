@@ -5395,6 +5395,8 @@ function ValidationEvidencePanel({
               <div className="mt-2 grid gap-1 sm:grid-cols-2">
                 <span>Records: {fixtureImportResult.counts.records}</span>
                 <span>Mapped checks: {fixtureImportResult.counts.mappedChecks}</span>
+                <span>Dry-run scope cases: {fixtureImportResult.counts.dryRunScopeCases || 0}</span>
+                <span>Dry-run scope failures: {fixtureImportResult.counts.dryRunScopeFailures || 0}</span>
                 <span>Purposes: {fixtureImportResult.purposes.join(", ") || "none"}</span>
                 <span>Artifact: {fixtureImportResult.artifactId || "missing"}</span>
               </div>

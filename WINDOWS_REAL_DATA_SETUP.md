@@ -89,10 +89,18 @@ After seeding:
 powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.ps1
 ```
 
+After exporting or saving native dry-run scope evidence from the desktop VM run, inspect it with the fixture evidence:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.ps1 -DryRunScopeEvidencePath .\evidence\native-dry-run-scope.json
+```
+
+The dry-run scope evidence file can be the raw native dry-run response or an object with `entries`. Each entry should include `id`, `route`, `targetPath`, `targetScopeStatus`, `rejectCode`, and `candidateCount`. The fixture manifest expects at least one allowed first-safe target and at least one rejected target with `candidateCount: 0`.
+
 4. Confirm fixture-backed findings appear as measured or limited.
 5. Confirm large personal files appear in item review only, not as bulk cleanup.
 6. Attach the fixture evidence JSON path to the validation pack notes.
-7. Import the fixture evidence JSON in the app to create the scanner-fixture validation record.
+7. Import the fixture evidence JSON in the app to create the scanner-fixture validation record. If `dryRunScopeCheck.passed=true`, the same import can also create the dry-run target-scope validation record.
 8. Export the validation pack.
 9. Restore the VM snapshot before the next validation pass.
 
@@ -122,6 +130,7 @@ For each Windows validation run, capture:
 - Tool command inventory state for npm, pnpm, Docker, Gradle, and Windows cleanup command validation.
 - Local validation evidence ledger state.
 - Fixture evidence import result and mapped check ids.
+- Dry-run scope evidence cases showing at least one allowed first-safe target and one rejected target with zero candidate samples.
 - Dry-run consent receipt and plan id.
 - Post-run verification checklist.
 - Rescan comparison state, including ledger timestamp, native scan timestamp, matched rows, waiting rows, and mismatches.

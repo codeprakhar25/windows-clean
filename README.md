@@ -285,7 +285,7 @@ The first-safe executor contract turns that capsule into a concrete request-shap
 
 The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` rejecting stub in the desktop shell, but success means rejection, not cleanup: `accepted=false`, all entries rejected with native reject codes, zero reclaimed bytes, and a native echo that matches the current first-safe executor contract. Target-scope reject codes are diagnostic only and do not count as passing rejection evidence. Probe entries are never ledger recovery.
 
-The fixture evidence import accepts the JSON produced by `scripts/inspect-spaceguard-fixtures.ps1`. It can fill only the `scanner-fixtures` validation record after the fixture JSON passes schema, count, age, size, destructive-command, reviewer, and artifact checks. Protected-path, rollback, tool-command, native-build, and ledger/rescan evidence still require their own records.
+The fixture evidence import accepts the JSON produced by `scripts/inspect-spaceguard-fixtures.ps1`. It can fill the `scanner-fixtures` validation record after the fixture JSON passes schema, count, age, size, destructive-command, reviewer, and artifact checks. It can also fill `dry-run-target-scope` only when the evidence includes explicit passing dry-run scope cases with allowed and rejected targets. Protected-path, rollback, tool-command, native-build, and ledger/rescan evidence still require their own records.
 
 Dry-run records are also saved to local browser storage as an append-only run history. A saved record can block a duplicate simulation for the same plan after reload, but it cannot unlock real execution. The history export is audit evidence only; real cleanup still requires native Windows validation and a post-run rescan.
 
@@ -317,6 +317,7 @@ Use **Export validation pack** from the app before enabling real data execution 
 - Disposable VM scenario checklists.
 - Fixture roots to seed on test machines.
 - Read-only fixture evidence generated from the seeded Windows VM files.
+- Dry-run target-scope fixture evidence showing rejected targets return zero candidate samples.
 - Native/runtime capability evidence.
 - Selected executor routes under review.
 - Full executor manifest with route status and next steps.

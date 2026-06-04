@@ -2003,7 +2003,17 @@ const assert = require("assert");
       { purpose: "protected-path-fixture", exists: true, sizeMatches: true, oldEnough: true, expectedBytes: 1024, actualBytes: 1024 },
       { purpose: "review-data-fixture", exists: true, sizeMatches: true, oldEnough: true, expectedBytes: 1024, actualBytes: 1024 },
       { purpose: "developer-tooling-fixture", exists: true, sizeMatches: true, oldEnough: true, expectedBytes: 1024, actualBytes: 1024 }
-    ]
+    ],
+    dryRunScopeCheck: {
+      provided: true,
+      destructiveCommands: false,
+      passed: true,
+      counts: { cases: 2, allowed: 1, rejected: 1, failed: 0 },
+      cases: [
+        { id: "windows-temp", route: "known-temp-delete", targetScopeStatus: "target-allowed", rejectCode: "", candidateCount: 1, passed: true },
+        { id: "downloads-forbidden-as-temp", route: "known-temp-delete", targetScopeStatus: "target-blocked", rejectCode: "target-forbidden", candidateCount: 0, passed: true }
+      ]
+    }
   };
   const fixtureImport = guard.buildFixtureEvidenceImport({
     evidenceObject: fixtureEvidence,
@@ -2014,8 +2024,9 @@ const assert = require("assert");
   assert.strictEqual(fixtureImport.schemaVersion, "spaceguard-fixture-evidence-import/v1", "fixture import should expose a schema version");
   assert.strictEqual(fixtureImport.status, "ready", "passing fixture evidence should be importable");
   assert.strictEqual(fixtureImport.canApply, true, "passing fixture evidence with reviewer should be applicable");
-  assert.deepStrictEqual(fixtureImport.mappedCheckIds, ["scanner-fixtures"], "fixture import should map only to fixture-readiness validation");
+  assert.deepStrictEqual(fixtureImport.mappedCheckIds, ["scanner-fixtures", "dry-run-target-scope"], "fixture import should map scanner and explicit dry-run scope validation only");
   assert.strictEqual(fixtureImport.validationEvidence["scanner-fixtures"].status, "passed", "fixture import should prepare scanner-fixtures evidence");
+  assert.strictEqual(fixtureImport.validationEvidence["dry-run-target-scope"].status, "passed", "fixture import should prepare dry-run target-scope evidence when explicit scope cases pass");
   assert.strictEqual(fixtureImport.validationEvidence["scanner-fixtures"].evidencePath, "evidence/fixture-evidence.json", "fixture import should keep the artifact id");
   assert.strictEqual(fixtureImport.validationEvidence["protected-path-fixtures"], undefined, "fixture import must not overclaim protected-path validation");
   assert(fixtureImport.warnings.some((warning) => warning.includes("Protected-path fixture presence")), "fixture import should warn about non-imported protected-path proof");
@@ -2027,8 +2038,18 @@ const assert = require("assert");
     executorPlan
   });
   assert.strictEqual(fixtureImportGate.rows.find((row) => row.id === "scanner-fixtures").passed, true, "fixture import should feed validation evidence");
+  assert.strictEqual(fixtureImportGate.rows.find((row) => row.id === "dry-run-target-scope").passed, true, "explicit dry-run scope fixture evidence should feed target-scope validation");
   assert.strictEqual(fixtureImportGate.rows.find((row) => row.id === "protected-path-fixtures").passed, false, "fixture import must leave protected-path validation manual");
   assert.strictEqual(fixtureImportGate.readyForRealRun, false, "fixture import alone must not open real execution");
+  const noDryRunScopeImport = guard.buildFixtureEvidenceImport({
+    evidenceObject: { ...fixtureEvidence, dryRunScopeCheck: undefined },
+    reviewer: "qa-operator",
+    artifactId: "evidence/fixture-evidence.json",
+    currentEvidence: {}
+  });
+  assert.deepStrictEqual(noDryRunScopeImport.mappedCheckIds, ["scanner-fixtures"], "fixture import without dry-run scope proof should map scanner fixtures only");
+  assert.strictEqual(noDryRunScopeImport.validationEvidence["dry-run-target-scope"], undefined, "missing dry-run scope proof must not create target-scope validation evidence");
+  assert(noDryRunScopeImport.warnings.some((warning) => warning.includes("Dry-run target-scope evidence was not present")), "fixture import should warn when dry-run scope evidence is missing");
   const noReviewerFixtureImport = guard.buildFixtureEvidenceImport({
     evidenceObject: fixtureEvidence,
     reviewer: "",

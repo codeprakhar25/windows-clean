@@ -42,6 +42,8 @@ if (-not $ProfileRoot) {
   throw "ProfileRoot is required."
 }
 
+$localAppDataRoot = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path $ProfileRoot "AppData\Local" }
+
 $records = @()
 $records += New-FixtureFile -Path (Join-Path $env:TEMP "spaceguard-fixture\known-temp.tmp") -SizeMB 8 -AgeDays 14 -Purpose "known-temp-fixture"
 $records += New-FixtureFile -Path (Join-Path $ProfileRoot "Downloads\spaceguard-fixture\old-tool-setup.msi") -SizeMB 16 -AgeDays 60 -Purpose "downloads-installers"
@@ -54,6 +56,36 @@ if ($LargeCandidateMB -gt 0) {
   $records += New-FixtureFile -Path (Join-Path $ProfileRoot "Videos\spaceguard-fixture\old-export.mov") -SizeMB $LargeCandidateMB -AgeDays 120 -Purpose "large-user-files"
 }
 
+$dryRunScopeCases = @(
+  [PSCustomObject]@{
+    id = "windows-temp"
+    title = "Known temp allowed target"
+    route = "known-temp-delete"
+    targetPath = "%TEMP%, C:\Windows\Temp"
+    expectedTargetScopeStatus = "target-allowed"
+    expectedRejectCode = ""
+    minCandidateCount = 0
+  },
+  [PSCustomObject]@{
+    id = "downloads-forbidden-as-temp"
+    title = "Downloads forbidden as temp target"
+    route = "known-temp-delete"
+    targetPath = (Join-Path $ProfileRoot "Downloads")
+    expectedTargetScopeStatus = "target-blocked"
+    expectedRejectCode = "target-forbidden"
+    maxCandidateCount = 0
+  },
+  [PSCustomObject]@{
+    id = "browser-identity-forbidden"
+    title = "Browser identity forbidden as cache target"
+    route = "browser-cache-only"
+    targetPath = (Join-Path $localAppDataRoot "Google\Chrome\User Data\Default\Cookies")
+    expectedTargetScopeStatus = "target-blocked"
+    expectedRejectCode = "target-forbidden"
+    maxCandidateCount = 0
+  }
+)
+
 $manifest = [PSCustomObject]@{
   schemaVersion = "spaceguard-fixture-manifest/v1"
   generatedAt = (Get-Date).ToUniversalTime().ToString("o")
@@ -61,6 +93,7 @@ $manifest = [PSCustomObject]@{
   largeCandidateMB = $LargeCandidateMB
   destructiveCommands = $false
   records = $records
+  dryRunScopeCases = $dryRunScopeCases
 }
 
 $manifestDirectory = Split-Path -Parent $ManifestPath
