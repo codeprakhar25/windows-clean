@@ -89,6 +89,7 @@ import {
   buildTaskPowerCatalog,
   buildTaskPowerLeaseAudit,
   buildToolCommandInventory,
+  buildUserDecisionReceipt,
   buildValidationEvidencePack,
   buildValidationPackMarkdown,
   buildVerificationSummary,
@@ -986,6 +987,37 @@ export default function App() {
       runtimeCapabilities.result
     ]
   );
+  const userDecisionReceipt = useMemo(
+    () =>
+      buildUserDecisionReceipt({
+        actionList,
+        selectedIds,
+        approvals,
+        itemReviewsByAction,
+        protectedPaths,
+        intakePolicy,
+        consentReceipt,
+        planSnapshot,
+        agentQuestionQueue,
+        operatingChecklist,
+        safetyInterlock,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [
+      actionList,
+      selectedIds,
+      approvals,
+      itemReviewsByAction,
+      protectedPaths,
+      intakePolicy,
+      consentReceipt,
+      planSnapshot,
+      agentQuestionQueue,
+      operatingChecklist,
+      safetyInterlock,
+      runtimeCapabilities.result
+    ]
+  );
   const productCompletionAudit = useMemo(
     () =>
       buildProductCompletionAudit({
@@ -1669,6 +1701,7 @@ export default function App() {
       customRootTriage,
       scanCoverage,
       intakePolicy,
+      userDecisionReceipt,
       taskPowerCatalog,
       taskPowerBroker,
       taskCapabilityGrants,
@@ -2122,6 +2155,7 @@ export default function App() {
           <aside className="console-scroll space-y-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
             <PlanReviewPanel review={planReview} />
             <DecisionLogPanel entries={decisionLog} />
+            <UserDecisionReceiptPanel receipt={userDecisionReceipt} />
             <GatePanel
               actionList={actionList}
               selectedIds={selectedIds}
@@ -4556,6 +4590,73 @@ function DecisionLogPanel({ entries }) {
             <p className="mt-1 text-sm text-muted-foreground">{entry.detail}</p>
           </div>
         ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function UserDecisionReceiptPanel({ receipt }) {
+  const previewRows = receipt.unsafeRows.length
+    ? receipt.unsafeRows
+    : receipt.waitingRows.length
+      ? receipt.waitingRows.slice(0, 6)
+      : receipt.rows.slice(0, 6);
+
+  return (
+    <Card id="user-decision-receipt-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4" />
+              User decision receipt
+            </CardTitle>
+            <CardDescription>{receipt.primary}</CardDescription>
+          </div>
+          <Badge variant={receipt.tone}>{receipt.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Accepted" value={receipt.counts.accepted} tone={receipt.counts.accepted ? "safe" : "review"} />
+          <QueueStat label="Waiting" value={receipt.counts.waiting} tone={receipt.counts.waiting ? "review" : "safe"} />
+          <QueueStat label="Unsafe" value={receipt.counts.unsafe} tone={receipt.counts.unsafe ? "restricted" : "safe"} />
+          <QueueStat label="Real run" value={receipt.counts.realRun} tone={receipt.counts.realRun ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Decision boundary</span>
+            <Badge variant={receipt.realRunAllowed ? "restricted" : "safe"}>{receipt.realRunAllowed ? "real run open" : "dry-run only"}</Badge>
+            <Badge variant={receipt.destructiveCommands ? "restricted" : "safe"}>{receipt.destructiveCommands ? "destructive visible" : "no destructive commands"}</Badge>
+            <Badge variant="outline">{receipt.planId || "no-plan"}</Badge>
+          </div>
+          <div className="flex flex-col gap-2">
+            {receipt.steps.slice(0, 3).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {previewRows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="mr-auto min-w-0 text-sm font-medium">{row.label}</div>
+                <Badge variant={row.tone}>{row.status}</Badge>
+                <Badge variant="outline">{row.lane}</Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{row.detail}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge variant={row.canRealRun ? "restricted" : "safe"}>{row.canRealRun ? "real run" : "no real run"}</Badge>
+                {row.count ? <Badge variant="outline">{row.count} recorded</Badge> : null}
+              </div>
+            </div>
+          ))}
+        </div>
       </CardContent>
     </Card>
   );

@@ -202,6 +202,10 @@ assert(app.includes("buildStorageStrategyPlan"), "storage strategy workflow shou
 assert(app.includes("buildManualStrategyChecklist"), "manual strategy checklist should be wired");
 assert(app.includes("buildReviewWorkbench"), "review workbench should be wired");
 assert(app.includes("buildDecisionLog"), "decision log should be wired");
+assert(app.includes("buildUserDecisionReceipt"), "user decision receipt should be wired");
+assert(app.includes("UserDecisionReceiptPanel"), "user decision receipt panel should be rendered");
+assert(app.includes("user-decision-receipt-panel"), "user decision receipt should be focusable");
+assert(app.includes("Decision boundary"), "user decision receipt should expose the decision boundary");
 assert(app.includes("buildItemReview"), "item review should be wired");
 assert(app.includes("buildExecutorPlan"), "executor plan should be wired");
 assert(app.includes("buildExecutorManifest"), "executor manifest should be wired");
@@ -310,6 +314,7 @@ assert(model.includes("requiresNativeData: false"), "demo rehearsal should not r
 assert(model.includes("spaceguard-product-completion-audit/v1"), "model should expose product completion audit schema");
 assert(model.includes("realCleanupLocked"), "product audit should expose real cleanup lock state");
 assert(model.includes("future-locked"), "product audit should name future-locked real cleanup");
+assert(model.includes("spaceguard-user-decision-receipt/v1"), "model should expose user decision receipt schema");
 assert(model.includes("admin-cleanup"), "model should classify admin cleanup as a scoped power");
 assert(model.includes("reviewed-item-cleanup"), "model should classify reviewed item cleanup as a scoped power");
 assert(model.includes("permanentConfirm"), "model should expose permanent-removal confirmation gate");

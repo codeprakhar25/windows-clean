@@ -163,6 +163,7 @@ The demo also includes:
 - Recovery advisor that explains the next useful move when the target is unmet.
 - Agent questions panel that turns scan state, approvals, review items, consent, validation evidence, and verification into the next user-facing question.
 - Agent questions also ask whether to allow admin/system dry-run routes when lower-risk cleanup is exhausted and admin-sensitive recovery remains intake-gated.
+- User decision receipt that records selected tasks, cache/permanent approvals, item-level review choices, protected path count, admin intake, dry-run consent, active question, and the real-run lock.
 - Storage strategy panel for manual app uninstall, archive, library move, drive upgrade, or partition planning when cleanup cannot hit the target.
 - Manual strategy checklist that lets the user track backup, archive, app-native move, uninstall, and partition-prep evidence without automation.
 - Review workbench that separates measured evidence, unresolved decisions, protected paths, and unsupported roots.

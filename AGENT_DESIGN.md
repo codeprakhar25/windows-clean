@@ -114,6 +114,7 @@ The UI must also expose a recovery advisor and decision log:
 - `review workbench`: evidence status, gate, path, and next step for non-trivial findings.
 - `item review`: candidate files or folders under review-gated roots, including size, age, recommendation, reason, and protected-path state.
 - `decision log`: data source, scan state, plan coverage, gate state, policy boundary, and execution state.
+- `user decision receipt`: current-plan receipt for selected tasks, approvals, item decisions, protected path count, admin intake, consent, active question, safe next action, and real-run lock.
 - `task powers`: scoped per-task capabilities that show whether safe cleanup, rebuildable cache cleanup, reviewed item cleanup, admin cleanup, advanced system strategy, manual storage strategy, or restricted zones are active, locked, advisory, or blocked.
 - `task power broker`: current-plan broker that turns selected powers into explicit user-facing power requests, preserves the active question, denies standing permission, and keeps authority dry-run only.
 - `task power lease audit`: current-evidence check that verifies issued dry-run grants still match the active plan id, scan fingerprint, consent receipt, broker request, and runtime write lock.
@@ -314,6 +315,13 @@ Operating checklist invariant:
 - The checklist can route only to existing guarded UI actions; it cannot create approvals, validation evidence, rollback proof, release readiness, write readiness, or real cleanup authority.
 - If any unsafe write/destructive signal is visible, the checklist must route to safety review and suppress actionable simulation.
 - The checklist must report zero real-run rows until a separate validated real-executor release passes every final gate.
+
+User decision receipt invariant:
+
+- Receipts summarize current user choices; they cannot create choices, mark gates complete, or grant cleanup authority.
+- Item-review receipts must distinguish Remove, Keep, Move, Archive, and undecided states; only Remove can contribute to dry-run executor preview.
+- Receipts must include the protected-path count and real-run lock, and must report zero real-run rows in this build.
+- If runtime write or destructive signals are visible, receipts must switch to unsafe-stop instead of honoring the recorded decisions.
 
 Executor manifest invariant:
 

@@ -53,17 +53,18 @@ In the app:
 11. Check **Safety interlock** to confirm unsafe signals are zero, dry-run is either explicitly held or dry-run-interlocked, and real execution remains locked.
 12. Check **Dry-run launch guard** to confirm simulation is blocked until run readiness, current consent, and safety interlock all pass.
 13. Check **Operating checklist** to confirm the safe next action, active user decision, ledger state, and zero real-run rows are visible in one place.
-14. Check **Task runbook** to confirm each selected cleanup target has its own next question, allowed operations, forbidden operations, evidence needs, and no cross-task authority.
-15. Check **Restriction matrix** to confirm browser identity, Docker volumes, pagefile or registry tuning, partition writes, custom roots, admin/system work, personal/project data, and tool-native commands stay in the correct refusal or gated lane.
-16. Add protected paths before planning any review-heavy route.
-17. Use **Custom root triage** for custom read-only findings. Mark each unknown folder Keep, Archive, Move, Inspect, or Escalate; these dispositions stay manual and cannot create executor routes.
-18. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
-19. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, **Release review packet**, **Validation evidence**, and **Product completion audit** to confirm real cleanup is still locked.
-20. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
-21. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
-22. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
-23. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
-24. Export the workflow handoff for resume guidance and the redacted support bundle for diagnostics, then export the release review packet, dry-run report, and validation pack when path-level evidence is needed.
+14. Check **User decision receipt** to confirm selected tasks, approvals, item decisions, protected paths, admin intake, consent, active question, and real-run lock are recorded without granting cleanup authority.
+15. Check **Task runbook** to confirm each selected cleanup target has its own next question, allowed operations, forbidden operations, evidence needs, and no cross-task authority.
+16. Check **Restriction matrix** to confirm browser identity, Docker volumes, pagefile or registry tuning, partition writes, custom roots, admin/system work, personal/project data, and tool-native commands stay in the correct refusal or gated lane.
+17. Add protected paths before planning any review-heavy route.
+18. Use **Custom root triage** for custom read-only findings. Mark each unknown folder Keep, Archive, Move, Inspect, or Escalate; these dispositions stay manual and cannot create executor routes.
+19. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
+20. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, **Release review packet**, **Validation evidence**, and **Product completion audit** to confirm real cleanup is still locked.
+21. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
+22. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
+23. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
+24. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
+25. Export the workflow handoff for resume guidance and the redacted support bundle for diagnostics, then export the release review packet, dry-run report, and validation pack when path-level evidence is needed.
 
 ## Disposable Fixture Run
 
@@ -125,6 +126,7 @@ For each Windows validation run, capture:
 - Safety interlock state, including unsafe rows, hold rows, dry-run blockers, dry-run allowance, real-run lock, and destructive-command visibility.
 - Dry-run launch guard state, including readiness, current consent, safety interlock pass/fail, real-run lock, and blocked checks.
 - Operating checklist state, including safe action, actionable row count, dry-run allowance, real-run lock, and unsafe-row count.
+- User decision receipt state, including approval rows, item-review decision counts, protected-path count, consent row, active question, unsafe rows, and real-run row count.
 - Custom root discovery rows, if any; these are manual-review evidence and not executor routes.
 - Native scan volume totals.
 - Active agent question and question queue state.

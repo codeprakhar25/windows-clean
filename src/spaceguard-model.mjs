@@ -2719,6 +2719,205 @@ export function buildDecisionLog({
   ];
 }
 
+export function buildUserDecisionReceipt({
+  actionList = actions,
+  selectedIds = new Set(),
+  approvals = { groupConfirm: false, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
+  itemReviewsByAction = null,
+  protectedPaths = [],
+  intakePolicy = null,
+  consentReceipt = null,
+  planSnapshot = null,
+  agentQuestionQueue = null,
+  operatingChecklist = null,
+  safetyInterlock = null,
+  runtimeCapabilities = {}
+} = {}) {
+  const selected = actionList.filter((action) => selectedIds.has(action.id));
+  const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, approvals);
+  const selectedBytes = computeTotals(selectedIds, actionList, { approvals, itemReviewsByAction: reviewsByAction }).selectedBytes;
+  const groupActions = selected.filter((action) => action.gate === "groupConfirm");
+  const permanentActions = selected.filter((action) => action.gate === "permanentConfirm");
+  const typedActions = selected.filter((action) => action.gate === "typed");
+  const reviewActions = selected.filter((action) => action.gate === "review");
+  const adminActions = selected.filter((action) => actionRequiresAdminConsent(action));
+  const unsafeRuntime = Boolean(
+    runtimeCapabilities?.realRunEnabled
+      || runtimeCapabilities?.destructiveCommands
+      || safetyInterlock?.status === "unsafe-stop"
+      || operatingChecklist?.status === "unsafe-stop"
+      || operatingChecklist?.realRunAllowed
+  );
+  const rows = [
+    buildUserDecisionReceiptRow({
+      id: "selected-plan",
+      label: "Selected plan",
+      lane: "plan",
+      status: selected.length ? "recorded" : "waiting",
+      detail: `${selected.length} selected action(s), ${formatBytes(selectedBytes)} planned for dry-run review.`,
+      evidence: planSnapshot?.id || "plan snapshot pending",
+      count: selected.length
+    }),
+    buildUserDecisionReceiptRow({
+      id: "group-confirm",
+      label: "Rebuildable cache approval",
+      lane: "approval",
+      status: groupActions.length ? approvals.groupConfirm ? "accepted" : "waiting" : "not-required",
+      detail: groupActions.length
+        ? approvals.groupConfirm
+          ? `${groupActions.length} rebuildable cache route(s) approved for dry-run.`
+          : `${groupActions.length} rebuildable cache route(s) still need group approval.`
+        : "No selected rebuildable-cache approval is required.",
+      evidence: approvals.groupConfirm ? "groupConfirm=true" : "groupConfirm=false",
+      count: groupActions.length
+    }),
+    buildUserDecisionReceiptRow({
+      id: "permanent-confirm",
+      label: "Permanent-removal approval",
+      lane: "approval",
+      status: permanentActions.length ? approvals.permanentConfirm ? "accepted" : "waiting" : "not-required",
+      detail: permanentActions.length
+        ? approvals.permanentConfirm
+          ? `${permanentActions.length} permanent-removal route(s) explicitly confirmed for dry-run.`
+          : `${permanentActions.length} permanent-removal route(s) still need explicit confirmation.`
+        : "No selected permanent-removal route is waiting.",
+      evidence: approvals.permanentConfirm ? "permanentConfirm=true" : "permanentConfirm=false",
+      count: permanentActions.length
+    }),
+    ...reviewActions.map((action) => {
+      const review = reviewsByAction[action.id] || buildItemReview(action.id, actionList, null, protectedPaths, approvals);
+      return buildUserDecisionReceiptRow({
+        id: `item-review:${action.id}`,
+        label: `${action.title} item decisions`,
+        lane: "review",
+        status: review.undecidedCount ? "waiting" : "accepted",
+        detail: `${review.removeCount || 0} remove, ${review.keepCount || 0} keep, ${review.moveCount || 0} move, ${review.archiveCount || 0} archive, ${review.undecidedCount || 0} undecided.`,
+        evidence: `${formatBytes(review.removeBytes || 0)} enters dry-run executor preview; ${formatBytes(review.manualDispositionBytes || 0)} is manual move/archive intent.`,
+        count: review.items?.length || 0,
+        removeCount: review.removeCount || 0,
+        keepCount: review.keepCount || 0,
+        moveCount: review.moveCount || 0,
+        archiveCount: review.archiveCount || 0,
+        undecidedCount: review.undecidedCount || 0
+      });
+    }),
+    ...typedActions.map((action) => {
+      const typedValue = approvals.typed?.[action.id] || "";
+      const accepted = typedValue === action.typedPhrase;
+      return buildUserDecisionReceiptRow({
+        id: `typed:${action.id}`,
+        label: `${action.title} typed acknowledgement`,
+        lane: "approval",
+        status: accepted ? "accepted" : "waiting",
+        detail: accepted ? "Typed acknowledgement matches the required phrase." : "Typed acknowledgement has not matched the required phrase.",
+        evidence: accepted ? "typed phrase matched" : "typed phrase missing",
+        count: accepted ? 1 : 0
+      });
+    }),
+    buildUserDecisionReceiptRow({
+      id: "protected-paths",
+      label: "User-protected paths",
+      lane: "restriction",
+      status: protectedPaths.length ? "recorded" : "none",
+      detail: protectedPaths.length
+        ? `${protectedPaths.length} protected path(s) remove matching actions or items from executable planning.`
+        : "No user-protected paths are recorded.",
+      evidence: protectedPaths.length ? "path details stay in explicit reports only" : "none",
+      count: protectedPaths.length
+    }),
+    buildUserDecisionReceiptRow({
+      id: "admin-intake",
+      label: "Admin/system dry-run intake",
+      lane: "intake",
+      status: adminActions.length ? intakePolicy?.adminAllowed ? "accepted" : "waiting" : intakePolicy?.adminAllowed ? "recorded" : "not-requested",
+      detail: adminActions.length
+        ? intakePolicy?.adminAllowed
+          ? `${adminActions.length} selected admin/system route(s) are allowed only for dry-run planning.`
+          : `${adminActions.length} selected admin/system route(s) are waiting on intake allowance.`
+        : intakePolicy?.adminAllowed
+          ? "Admin/system dry-run planning is allowed, but no selected route currently needs it."
+          : "Admin/system routes remain blocked by default.",
+      evidence: intakePolicy?.status || "intake not evaluated",
+      count: adminActions.length
+    }),
+    buildUserDecisionReceiptRow({
+      id: "dry-run-consent",
+      label: "Dry-run consent receipt",
+      lane: "consent",
+      status: consentReceipt?.ready ? "accepted" : "waiting",
+      detail: consentReceipt?.ready
+        ? `Consent is tied to plan ${consentReceipt.planId || planSnapshot?.id || "current"}.`
+        : "Current plan consent has not been armed.",
+      evidence: consentReceipt?.acceptedAt || consentReceipt?.status || "not armed",
+      count: consentReceipt?.ready ? 1 : 0
+    }),
+    buildUserDecisionReceiptRow({
+      id: "active-question",
+      label: "Active agent question",
+      lane: "question",
+      status: agentQuestionQueue?.activeQuestion ? "waiting" : "none",
+      detail: agentQuestionQueue?.activeQuestion?.prompt || "No active question is waiting.",
+      evidence: agentQuestionQueue?.activeQuestion?.action || agentQuestionQueue?.status || "question queue clear",
+      count: agentQuestionQueue?.activeQuestion ? 1 : 0
+    }),
+    buildUserDecisionReceiptRow({
+      id: "safe-next-action",
+      label: "Safe next action",
+      lane: "workflow",
+      status: operatingChecklist?.safeActionNow ? "recorded" : "none",
+      detail: operatingChecklist?.safeActionNow?.label || "No safe next action is currently exposed.",
+      evidence: operatingChecklist?.status || "operating checklist missing",
+      count: operatingChecklist?.safeActionNow ? 1 : 0
+    }),
+    buildUserDecisionReceiptRow({
+      id: "real-run-lock",
+      label: "Real cleanup authority",
+      lane: "write",
+      status: unsafeRuntime ? "unsafe" : "locked",
+      detail: unsafeRuntime ? "A real-run or destructive signal is visible; stop before honoring decisions." : "Decisions authorize review and dry-run only; real cleanup remains locked.",
+      evidence: `realRun=${runtimeCapabilities?.realRunEnabled ? "yes" : "no"}, destructive=${runtimeCapabilities?.destructiveCommands ? "yes" : "no"}`,
+      count: 0
+    })
+  ];
+  const unsafeRows = rows.filter((row) => row.status === "unsafe");
+  const waitingRows = rows.filter((row) => row.status === "waiting");
+  const acceptedRows = rows.filter((row) => row.status === "accepted" || row.status === "recorded" || row.status === "locked");
+  const status = unsafeRows.length
+    ? "unsafe-stop"
+    : waitingRows.some((row) => row.id !== "active-question")
+      ? "decisions-waiting"
+      : selected.length
+        ? "decisions-current"
+        : "no-plan-selected";
+
+  return {
+    schemaVersion: "spaceguard-user-decision-receipt/v1",
+    status,
+    tone: unsafeRows.length ? "restricted" : status === "decisions-current" ? "safe" : "review",
+    planId: planSnapshot?.id || "",
+    selectedCount: selected.length,
+    selectedBytes,
+    realRunAllowed: false,
+    destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands || safetyInterlock?.destructiveCommands),
+    rows,
+    acceptedRows,
+    waitingRows,
+    unsafeRows,
+    counts: {
+      total: rows.length,
+      accepted: acceptedRows.length,
+      waiting: waitingRows.length,
+      unsafe: unsafeRows.length,
+      selected: selected.length,
+      protectedPaths: protectedPaths.length,
+      reviewRows: reviewActions.length,
+      realRun: 0
+    },
+    primary: getUserDecisionReceiptPrimary(status, { selected, waitingRows, unsafeRows }),
+    steps: getUserDecisionReceiptSteps(status, { waitingRows, unsafeRows })
+  };
+}
+
 export function buildAgentQuestionQueue({
   scanned = false,
   scanning = false,
@@ -7431,6 +7630,7 @@ export function buildReport({
   manualStrategyChecklist = null,
   scanCoverage = null,
   intakePolicy = null,
+  userDecisionReceipt = null,
   safetyInterlock = null,
   dryRunLaunchGuard = null,
   operatingChecklist = null,
@@ -7555,6 +7755,24 @@ export function buildReport({
           `- Boundary: ${intakePolicy.automationBlockedReason}`
         ].join("\n")
       : "- Not captured.",
+    "",
+    "## User Decision Receipt",
+    userDecisionReceipt
+      ? [
+          `- Status: ${userDecisionReceipt.status}`,
+          `- Plan id: ${userDecisionReceipt.planId || "none"}`,
+          `- Selected tasks: ${userDecisionReceipt.selectedCount}`,
+          `- Selected bytes: ${formatBytes(userDecisionReceipt.selectedBytes || 0)}`,
+          `- Real run allowed: ${userDecisionReceipt.realRunAllowed ? "yes" : "no"}`,
+          `- Destructive commands: ${userDecisionReceipt.destructiveCommands ? "present" : "disabled"}`,
+          `- Waiting rows: ${userDecisionReceipt.counts.waiting}`,
+          `- Unsafe rows: ${userDecisionReceipt.counts.unsafe}`,
+          `- Real-run rows: ${userDecisionReceipt.counts.realRun}`,
+          userDecisionReceipt.rows.length
+            ? userDecisionReceipt.rows.map((row) => `- ${row.label}: ${row.status} | lane=${row.lane} | real=${row.canRealRun ? "yes" : "no"} | ${row.detail}`).join("\n")
+            : "- No decision receipt rows."
+        ].join("\n")
+      : "- Not evaluated.",
     "",
     "## Task Powers",
     taskPowerCatalog
@@ -9247,6 +9465,58 @@ function getOperatingChecklistSteps(status, { safeActionNow = null, unsafeRows =
   return nextRows.length
     ? nextRows.map((row) => `${row.label}: ${row.detail}`)
     : ["Review current evidence.", "Export reports only on user action.", "Keep real cleanup locked."];
+}
+
+function buildUserDecisionReceiptRow({
+  id,
+  label,
+  lane,
+  status,
+  detail,
+  evidence = "",
+  count = 0,
+  removeCount = 0,
+  keepCount = 0,
+  moveCount = 0,
+  archiveCount = 0,
+  undecidedCount = 0
+}) {
+  return {
+    id,
+    label,
+    lane,
+    status,
+    tone: getUserDecisionReceiptRowTone(status),
+    detail,
+    evidence,
+    count,
+    removeCount,
+    keepCount,
+    moveCount,
+    archiveCount,
+    undecidedCount,
+    canRealRun: false
+  };
+}
+
+function getUserDecisionReceiptRowTone(status) {
+  if (status === "accepted" || status === "recorded" || status === "locked" || status === "none" || status === "not-required" || status === "not-requested") return "safe";
+  if (status === "unsafe") return "restricted";
+  return "review";
+}
+
+function getUserDecisionReceiptPrimary(status, { selected = [], waitingRows = [], unsafeRows = [] } = {}) {
+  if (status === "unsafe-stop") return `${unsafeRows.length} unsafe decision receipt signal(s) require safety review.`;
+  if (status === "decisions-current") return `${selected.length} selected task decision receipt(s) are current for dry-run only.`;
+  if (status === "decisions-waiting") return `${waitingRows.filter((row) => row.id !== "active-question").length} decision receipt row(s) still need user input.`;
+  return "Select cleanup tasks before decision receipts can bind the plan.";
+}
+
+function getUserDecisionReceiptSteps(status, { waitingRows = [], unsafeRows = [] } = {}) {
+  if (status === "unsafe-stop") return unsafeRows.slice(0, 3).map((row) => `${row.label}: ${row.detail}`);
+  const blockingWaitingRows = waitingRows.filter((row) => row.id !== "active-question");
+  if (blockingWaitingRows.length) return blockingWaitingRows.slice(0, 3).map((row) => `${row.label}: ${row.detail}`);
+  return ["Keep decisions tied to the current plan.", "Use the operating checklist for the next guarded action.", "Keep real cleanup locked."];
 }
 
 function buildDemoRehearsalRow({

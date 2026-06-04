@@ -1494,6 +1494,66 @@ const assert = require("assert");
   assert.strictEqual(demoItemReview.removeBytes, 0, "item review should not select removal bytes without explicit decisions");
   const undecidedDownloadsReview = guard.buildItemReview("downloads-installers", developerActions, null, []);
   assert(undecidedDownloadsReview.undecidedCount > 0, "item review should keep undecided candidates gated");
+  const receiptSelection = new Set(["gradle-cache", "downloads-installers"]);
+  const receiptApprovals = {
+    groupConfirm: true,
+    permanentConfirm: false,
+    reviewed: {},
+    reviewItems: {
+      "downloads-installers": Object.fromEntries(
+        undecidedDownloadsReview.items.map((item, index) => [item.id, index === 0 ? "remove" : "keep"])
+      )
+    },
+    typed: {}
+  };
+  const receiptReviewsByAction = guard.buildReviewItemsByAction(developerActions, null, [], receiptApprovals);
+  const receiptPlan = guard.buildPlanSnapshot({
+    selectedIds: receiptSelection,
+    actionList: developerActions,
+    approvals: receiptApprovals,
+    protectedPaths,
+    scanMode: "demo"
+  });
+  const userDecisionReceipt = guard.buildUserDecisionReceipt({
+    actionList: developerActions,
+    selectedIds: receiptSelection,
+    approvals: receiptApprovals,
+    itemReviewsByAction: receiptReviewsByAction,
+    protectedPaths,
+    intakePolicy: { adminAllowed: true, adminSensitiveBlocked: false, status: "admin-dry-run-allowed" },
+    consentReceipt: { ready: true, planId: receiptPlan.id, acceptedAt: "2026-06-04T12:00:00.000Z" },
+    planSnapshot: receiptPlan,
+    agentQuestionQueue: { activeQuestion: { id: "simulate-current-plan", prompt: "Should I simulate the current plan?", action: "simulate" } },
+    operatingChecklist: { status: "dry-run-ready", safeActionNow: { label: "Dry-run launch guard", action: "simulate" } },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(userDecisionReceipt.schemaVersion, "spaceguard-user-decision-receipt/v1", "user decision receipt should expose a schema version");
+  assert.strictEqual(userDecisionReceipt.status, "decisions-current", "user decision receipt should recognize current decisions");
+  assert.strictEqual(userDecisionReceipt.realRunAllowed, false, "decision receipts must not grant real execution");
+  assert.strictEqual(userDecisionReceipt.counts.realRun, 0, "decision receipts should keep real-run rows at zero");
+  assert(userDecisionReceipt.rows.some((row) => row.id === "group-confirm" && row.status === "accepted"), "receipt should capture rebuildable-cache approval");
+  assert(userDecisionReceipt.rows.some((row) => row.id === "item-review:downloads-installers" && row.removeCount === 1), "receipt should capture per-item remove decisions");
+  assert(userDecisionReceipt.rows.some((row) => row.id === "protected-paths" && row.count === protectedPaths.length), "receipt should capture protected path count");
+  const decisionReceiptReport = guard.buildReport({
+    scenario: guard.getScenario("developer"),
+    profile: guard.getScenario("developer").profile,
+    actionList: developerActions,
+    selectedIds: receiptSelection,
+    readiness: guard.getExecutionReadinessForActions(receiptSelection, receiptApprovals, developerActions, protectedPaths, receiptReviewsByAction),
+    ledger: [],
+    protectedPaths,
+    goalBytes: 10 * guard.GB,
+    userDecisionReceipt
+  });
+  assert(decisionReceiptReport.includes("## User Decision Receipt"), "report should include user decision receipt");
+  assert(decisionReceiptReport.includes("Real-run rows: 0"), "receipt report should keep real-run rows at zero");
+  const unsafeDecisionReceipt = guard.buildUserDecisionReceipt({
+    actionList: developerActions,
+    selectedIds: receiptSelection,
+    approvals: receiptApprovals,
+    runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
+  });
+  assert.strictEqual(unsafeDecisionReceipt.status, "unsafe-stop", "receipt should stop on runtime write signals");
 
   const nativeItemReview = guard.buildItemReview(
     "downloads-installers",
