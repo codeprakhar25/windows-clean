@@ -78,6 +78,7 @@ import {
   buildScenarioActions,
   buildSuggestedPlan,
   buildRunReadiness,
+  buildRiskBudget,
   buildSafetyInterlock,
   buildScanCoverageSummary,
   buildScanSessionEvidence,
@@ -438,9 +439,18 @@ export default function App() {
     () => itemReviewsByAction[focusedReviewId] || buildItemReview(focusedReviewId, actionList, nativeScan.result, protectedPaths, approvals),
     [focusedReviewId, itemReviewsByAction, actionList, nativeScan.result, protectedPaths, approvals]
   );
+  const riskBudget = useMemo(
+    () =>
+      buildRiskBudget({
+        actionList,
+        selectedIds,
+        intakePolicy
+      }),
+    [actionList, selectedIds, intakePolicy]
+  );
   const preflight = useMemo(
-    () => buildExecutionPreflight({ scanned, scanning, selectedIds, actionList, readiness, protectedPaths, ledger: activeLedger, planSnapshot, scanSession }),
-    [scanned, scanning, selectedIds, actionList, readiness, protectedPaths, activeLedger, planSnapshot, scanSession]
+    () => buildExecutionPreflight({ scanned, scanning, selectedIds, actionList, readiness, protectedPaths, ledger: activeLedger, planSnapshot, scanSession, riskBudget }),
+    [scanned, scanning, selectedIds, actionList, readiness, protectedPaths, activeLedger, planSnapshot, scanSession, riskBudget]
   );
   const executorPlan = useMemo(
     () =>
@@ -1701,6 +1711,7 @@ export default function App() {
       customRootTriage,
       scanCoverage,
       intakePolicy,
+      riskBudget,
       userDecisionReceipt,
       taskPowerCatalog,
       taskPowerBroker,
@@ -2167,6 +2178,7 @@ export default function App() {
               itemReviewsByAction={itemReviewsByAction}
               intakePolicy={intakePolicy}
             />
+            <RiskBudgetPanel riskBudget={riskBudget} />
             <TracePanel activeStage={activeStage} />
             <ExecutorPolicyPanel
               executorPlan={executorPlan}
@@ -4525,6 +4537,75 @@ function GatePanel({ actionList, selectedIds, approvals, setApprovals, scanned, 
         {protectedCount > 0 ? <GateNote title="Protected by user" detail={`${protectedCount} action(s) match protected paths and have been removed from executable plans.`} /> : null}
         {intakeBlockedCount > 0 ? <GateNote title="Intake admin boundary" detail={`${intakeBlockedCount} admin/system route(s) stay out of selected plans until the user allows them.`} /> : null}
         <GateNote title="Locked by policy" detail={`${blockedCount} zones are visible but cannot execute: Docker volumes, browser identity data, pagefile changes, and destructive system areas.`} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function RiskBudgetPanel({ riskBudget }) {
+  const previewRows = riskBudget.overrunRows.length || riskBudget.blockedRows.length
+    ? [...riskBudget.overrunRows, ...riskBudget.blockedRows].slice(0, 5)
+    : riskBudget.rows.slice(0, 5);
+
+  return (
+    <Card id="risk-budget-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Risk budget
+            </CardTitle>
+            <CardDescription>{riskBudget.primary}</CardDescription>
+          </div>
+          <Badge variant={riskBudget.tone}>{riskBudget.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Allowed" value={riskBudget.counts.allowed} tone={riskBudget.counts.allowed ? "safe" : "review"} />
+          <QueueStat label="Over" value={riskBudget.counts.overrun} tone={riskBudget.counts.overrun ? "restricted" : "safe"} />
+          <QueueStat label="Blocked" value={riskBudget.counts.blocked} tone={riskBudget.counts.blocked ? "restricted" : "safe"} />
+          <QueueStat label="Real run" value={riskBudget.counts.realRun} tone={riskBudget.counts.realRun ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Mode ceiling</span>
+            <Badge variant="outline">{riskBudget.mode}</Badge>
+            <Badge variant={riskBudget.status === "within-risk-budget" ? "safe" : "review"}>{riskBudget.ceiling.label}</Badge>
+            <Badge variant={riskBudget.realRunAllowed ? "restricted" : "safe"}>{riskBudget.realRunAllowed ? "real run open" : "dry-run only"}</Badge>
+          </div>
+          <div className="flex flex-col gap-2">
+            {riskBudget.steps.slice(0, 3).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <AlertTriangle className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {previewRows.length ? (
+            previewRows.map((row) => (
+              <div key={row.id} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="mr-auto min-w-0 text-sm font-medium">{row.title}</div>
+                  <Badge variant={row.tone}>{row.status}</Badge>
+                  <Badge variant="outline">{row.risk}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{row.detail}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge variant={row.canDryRun ? "safe" : "restricted"}>{row.canDryRun ? "dry-run allowed" : "dry-run blocked"}</Badge>
+                  <Badge variant={row.canRealRun ? "restricted" : "safe"}>{row.canRealRun ? "real run" : "no real run"}</Badge>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">Select cleanup actions to evaluate risk tolerance.</div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

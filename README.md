@@ -150,6 +150,7 @@ The demo also includes:
 - Operating checklist that collapses scan evidence, active user question, run readiness, consent, launch guard, ledger state, and the real-cleanup lock into one safe-next-action surface.
 - Native Windows volume evidence for target-drive total, used, and free bytes when the desktop scanner can read it.
 - Intake constraints for target drive, goal, risk tolerance, protected paths, and whether admin/system routes can enter dry-run planning.
+- Risk budget gate that blocks dry-run simulation when selected actions exceed Safe, Balanced, or Emergency mode limits.
 - Task powers panel that maps selected cleanup actions to scoped capabilities such as safe cleanup, rebuildable cache cleanup, reviewed item cleanup, admin cleanup, advanced system strategy, manual storage strategy, and restricted zones.
 - Task grant receipts that bind each selected action to a dry-run-only authority, route, target, plan id, scan fingerprint, consent receipt, allowed operations, forbidden operations, and blockers.
 - Task runbook panel that turns each selected cleanup target into a task-scoped work order with the next user question, allowed operations, forbidden operations, evidence needs, and no cross-task authority.
@@ -265,6 +266,7 @@ Execution is blocked until the preflight passes:
 - At least one action selected.
 - Approval gates resolved.
 - No selected protected paths.
+- Selected actions stay within the current Safe, Balanced, or Emergency risk budget.
 - Ledger has not already run for the current plan snapshot.
 - Executor policy has at least one simulatable dry-run route.
 - No selected executor route is policy-blocked.

@@ -104,6 +104,7 @@ The UI must also expose a recovery advisor and decision log:
 
 - `recovery advisor`: the current gap, the reason the goal is or is not reachable, and the next decision branch.
 - `intake constraints`: the target drive, free-space goal, risk tolerance, protected-path count, and whether admin/system routes may enter dry-run planning.
+- `risk budget`: hard ceiling that maps Safe to safe/rebuildable routes, Balanced to review-gated routes, and Emergency to advanced dry-run routes while still blocking restricted/advisory rows.
 - `agent questions`: a prioritized queue of the next user-facing questions derived from scan, plan, intake, approval, review, consent, rollback, validation, fixture import, and verification state.
 - `windows setup assistant`: first-run setup state for browser demo, desktop shell, read-only scan evidence, privacy/export, native beta evidence, and real-cleanup lock.
 - `real scan settings`: project artifact inclusion, traversal depth, and per-root entry cap for the next native read-only scan.
@@ -147,6 +148,7 @@ Execution preflight must pass before the agent simulates or performs any action:
 - At least one action is selected.
 - All selected approval gates are resolved.
 - No selected action matches a protected path.
+- Selected actions are within the current risk budget for the user tolerance mode.
 - The current plan snapshot has not already produced a ledger.
 - Executor policy exposes at least one dry-run route.
 - No selected executor route is policy-blocked.
@@ -322,6 +324,13 @@ User decision receipt invariant:
 - Item-review receipts must distinguish Remove, Keep, Move, Archive, and undecided states; only Remove can contribute to dry-run executor preview.
 - Receipts must include the protected-path count and real-run lock, and must report zero real-run rows in this build.
 - If runtime write or destructive signals are visible, receipts must switch to unsafe-stop instead of honoring the recorded decisions.
+
+Risk budget invariant:
+
+- Safe mode can include only safe and rebuildable dry-run routes.
+- Balanced mode can additionally include review-gated routes after item decisions are complete.
+- Emergency mode can additionally include advanced dry-run routes, but it cannot bypass typed acknowledgements, admin intake, rollback, release, consent, or real-run locks.
+- Restricted and advisory rows are outside every risk budget and cannot become dry-run or real-run routes.
 
 Executor manifest invariant:
 

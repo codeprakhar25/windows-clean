@@ -1602,6 +1602,51 @@ export function getIntakeBlocker(action, intakePolicy = null) {
   return "";
 }
 
+export function buildRiskBudget({
+  mode = "safe",
+  actionList = actions,
+  selectedIds = new Set(),
+  intakePolicy = null
+} = {}) {
+  const resolvedMode = intakePolicy?.mode || mode || "safe";
+  const ceiling = getRiskBudgetCeiling(resolvedMode);
+  const selected = actionList.filter((action) => selectedIds.has(action.id));
+  const rows = selected.map((action) => buildRiskBudgetRow(action, ceiling));
+  const overrunRows = rows.filter((row) => row.status === "over-budget");
+  const blockedRows = rows.filter((row) => row.status === "policy-blocked");
+  const allowedRows = rows.filter((row) => row.status === "within-budget");
+  const invalidMode = !["safe", "balanced", "emergency"].includes(resolvedMode);
+  const status = invalidMode
+    ? "invalid-risk-mode"
+    : !rows.length
+      ? "no-selection"
+      : overrunRows.length || blockedRows.length
+        ? "risk-overrun"
+        : "within-risk-budget";
+
+  return {
+    schemaVersion: "spaceguard-risk-budget/v1",
+    status,
+    tone: status === "within-risk-budget" ? "safe" : status === "risk-overrun" || status === "invalid-risk-mode" ? "restricted" : "review",
+    mode: resolvedMode,
+    ceiling,
+    realRunAllowed: false,
+    rows,
+    allowedRows,
+    overrunRows,
+    blockedRows,
+    counts: {
+      total: rows.length,
+      allowed: allowedRows.length,
+      overrun: overrunRows.length,
+      blocked: blockedRows.length,
+      realRun: 0
+    },
+    primary: getRiskBudgetPrimary(status, { mode: resolvedMode, ceiling, overrunRows, blockedRows }),
+    steps: getRiskBudgetSteps(status, { mode: resolvedMode, overrunRows, blockedRows })
+  };
+}
+
 export function selectableAction(action, protectedPaths = [], intakePolicy = null) {
   protectedPaths = Array.isArray(protectedPaths) ? protectedPaths : [];
   return action.gate !== "blocked" && action.gate !== "advisory" && !isActionProtected(action, protectedPaths) && actionAllowedByIntake(action, intakePolicy);
@@ -7498,7 +7543,8 @@ export function buildExecutionPreflight({
   protectedPaths = [],
   ledger = [],
   planSnapshot = null,
-  scanSession = null
+  scanSession = null,
+  riskBudget = null
 } = {}) {
   const selected = actionList.filter((action) => selectedIds.has(action.id));
   const selectedProtected = selected.filter((action) => isActionProtected(action, protectedPaths));
@@ -7550,6 +7596,16 @@ export function buildExecutionPreflight({
       passed: selectedProtected.length === 0
     },
     {
+      id: "risk-budget",
+      label: "Risk budget within intake mode",
+      detail: riskBudget
+        ? riskBudget.status === "within-risk-budget" || riskBudget.status === "no-selection"
+          ? riskBudget.primary
+          : riskBudget.primary
+        : "No risk budget evidence is attached; using legacy approval gates only.",
+      passed: riskBudget ? riskBudget.status === "within-risk-budget" || riskBudget.status === "no-selection" : true
+    },
+    {
       id: "ledger-clear",
       label: "Current ledger clear",
       detail: currentLedgerCount === 0
@@ -7565,7 +7621,8 @@ export function buildExecutionPreflight({
     ready: items.every((item) => item.passed),
     items,
     selectedCount: selected.length,
-    selectedProtectedCount: selectedProtected.length
+    selectedProtectedCount: selectedProtected.length,
+    riskBudgetStatus: riskBudget?.status || "not-evaluated"
   };
 }
 
@@ -7630,6 +7687,7 @@ export function buildReport({
   manualStrategyChecklist = null,
   scanCoverage = null,
   intakePolicy = null,
+  riskBudget = null,
   userDecisionReceipt = null,
   safetyInterlock = null,
   dryRunLaunchGuard = null,
@@ -7755,6 +7813,22 @@ export function buildReport({
           `- Boundary: ${intakePolicy.automationBlockedReason}`
         ].join("\n")
       : "- Not captured.",
+    "",
+    "## Risk Budget",
+    riskBudget
+      ? [
+          `- Status: ${riskBudget.status}`,
+          `- Mode: ${riskBudget.mode}`,
+          `- Ceiling: ${riskBudget.ceiling?.maxRisk || "unknown"}`,
+          `- Allowed rows: ${riskBudget.counts.allowed}`,
+          `- Over-budget rows: ${riskBudget.counts.overrun}`,
+          `- Blocked rows: ${riskBudget.counts.blocked}`,
+          `- Real-run rows: ${riskBudget.counts.realRun}`,
+          riskBudget.rows.length
+            ? riskBudget.rows.map((row) => `- ${row.title}: ${row.status} | risk=${row.risk} | dry-run=${row.canDryRun ? "yes" : "no"} | real=${row.canRealRun ? "yes" : "no"} | ${row.detail}`).join("\n")
+            : "- No selected risk rows."
+        ].join("\n")
+      : "- Not evaluated.",
     "",
     "## User Decision Receipt",
     userDecisionReceipt
@@ -9517,6 +9591,53 @@ function getUserDecisionReceiptSteps(status, { waitingRows = [], unsafeRows = []
   const blockingWaitingRows = waitingRows.filter((row) => row.id !== "active-question");
   if (blockingWaitingRows.length) return blockingWaitingRows.slice(0, 3).map((row) => `${row.label}: ${row.detail}`);
   return ["Keep decisions tied to the current plan.", "Use the operating checklist for the next guarded action.", "Keep real cleanup locked."];
+}
+
+function getRiskBudgetCeiling(mode) {
+  if (mode === "emergency") return { mode, maxRisk: "advanced", maxOrder: riskOrder.advanced, label: "Advanced" };
+  if (mode === "balanced") return { mode, maxRisk: "review", maxOrder: riskOrder.review, label: "Review" };
+  return { mode: "safe", maxRisk: "rebuildable", maxOrder: riskOrder.rebuildable, label: "Rebuildable" };
+}
+
+function buildRiskBudgetRow(action, ceiling) {
+  const order = riskOrder[action.risk] ?? riskOrder.restricted;
+  const policyBlocked = action.gate === "blocked" || action.gate === "advisory" || action.risk === "restricted" || action.risk === "advisory";
+  const overBudget = !policyBlocked && order > ceiling.maxOrder;
+  const status = policyBlocked ? "policy-blocked" : overBudget ? "over-budget" : "within-budget";
+  return {
+    id: action.id,
+    title: action.title,
+    risk: action.risk,
+    gate: action.gate,
+    status,
+    tone: status === "within-budget" ? "safe" : "restricted",
+    bytes: Number(action.bytes || 0),
+    canDryRun: status === "within-budget",
+    canRealRun: false,
+    detail: status === "within-budget"
+      ? `${action.risk} is within ${ceiling.mode} mode.`
+      : status === "policy-blocked"
+        ? "Policy-blocked or advisory rows never enter execution."
+        : `${action.risk} exceeds ${ceiling.mode} mode ceiling of ${ceiling.maxRisk}.`
+  };
+}
+
+function getRiskBudgetPrimary(status, { mode = "safe", ceiling = null, overrunRows = [], blockedRows = [] } = {}) {
+  if (status === "within-risk-budget") return `${mode} mode risk ceiling is satisfied.`;
+  if (status === "risk-overrun") {
+    const first = overrunRows[0] || blockedRows[0];
+    return first ? `${first.title} exceeds the ${mode} risk ceiling.` : "Selected actions exceed the current risk ceiling.";
+  }
+  if (status === "invalid-risk-mode") return "Risk tolerance mode is invalid; reset intake before planning.";
+  return `No selected actions are being checked against the ${ceiling?.label || "current"} risk ceiling.`;
+}
+
+function getRiskBudgetSteps(status, { mode = "safe", overrunRows = [], blockedRows = [] } = {}) {
+  if (status === "within-risk-budget") return ["Continue through approval gates.", "Keep protected paths and real-run locks active.", "Re-evaluate risk after any selection change."];
+  const blocked = [...overrunRows, ...blockedRows].slice(0, 3);
+  if (blocked.length) return blocked.map((row) => `${row.title}: ${row.detail}`);
+  if (status === "invalid-risk-mode") return ["Choose Safe, Balanced, or Emergency mode.", "Rebuild the selected plan.", "Keep simulation blocked until risk budget is valid."];
+  return [`Select cleanup actions for ${mode} mode.`, "Resolve risk budget before dry-run consent.", "Keep real cleanup locked."];
 }
 
 function buildDemoRehearsalRow({

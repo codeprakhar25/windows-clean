@@ -89,6 +89,50 @@ const assert = require("assert");
     true,
     "admin allowance should make admin-sensitive dry-run routes selectable again"
   );
+  const reviewSelection = new Set(["downloads-installers"]);
+  const reviewApprovals = makeReviewApprovals(guard.actions);
+  const reviewItems = guard.buildReviewItemsByAction(guard.actions, null, [], reviewApprovals);
+  const safeRiskBudget = guard.buildRiskBudget({
+    mode: "safe",
+    actionList: guard.actions,
+    selectedIds: reviewSelection
+  });
+  assert.strictEqual(safeRiskBudget.schemaVersion, "spaceguard-risk-budget/v1", "risk budget should expose a schema version");
+  assert.strictEqual(safeRiskBudget.status, "risk-overrun", "safe mode should block review-gated selections");
+  assert.strictEqual(safeRiskBudget.realRunAllowed, false, "risk budget must not grant real execution");
+  assert.strictEqual(safeRiskBudget.counts.realRun, 0, "risk budget should keep real-run rows at zero");
+  const safeReviewReadiness = guard.getExecutionReadinessForActions(reviewSelection, reviewApprovals, guard.actions, [], reviewItems, intakeAllowedPolicy);
+  assert.strictEqual(safeReviewReadiness.ready, true, "review selection fixture should have approval gates resolved");
+  const safeReviewPreflight = guard.buildExecutionPreflight({
+    scanned: true,
+    scanning: false,
+    selectedIds: reviewSelection,
+    actionList: guard.actions,
+    readiness: safeReviewReadiness,
+    protectedPaths: [],
+    ledger: [],
+    riskBudget: safeRiskBudget
+  });
+  assert.strictEqual(safeReviewPreflight.ready, false, "risk budget overrun should block execution preflight");
+  assert(safeReviewPreflight.items.some((item) => item.id === "risk-budget" && !item.passed), "preflight should expose risk-budget blocker");
+  const balancedRiskBudget = guard.buildRiskBudget({
+    mode: "balanced",
+    actionList: guard.actions,
+    selectedIds: reviewSelection
+  });
+  assert.strictEqual(balancedRiskBudget.status, "within-risk-budget", "balanced mode should allow review-gated selections");
+  const advancedRiskBudget = guard.buildRiskBudget({
+    mode: "balanced",
+    actionList: guard.actions,
+    selectedIds: new Set(["hibernation"])
+  });
+  assert.strictEqual(advancedRiskBudget.status, "risk-overrun", "balanced mode should block advanced system selections");
+  const emergencyRiskBudget = guard.buildRiskBudget({
+    mode: "emergency",
+    actionList: guard.actions,
+    selectedIds: new Set(["hibernation"])
+  });
+  assert.strictEqual(emergencyRiskBudget.status, "within-risk-budget", "emergency mode should allow advanced routes at the risk ceiling");
   const lockedPowerCatalog = guard.buildTaskPowerCatalog({
     actionList: guard.actions,
     selectedIds: new Set(["windows-old"]),
