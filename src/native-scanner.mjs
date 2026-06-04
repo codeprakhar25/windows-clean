@@ -21,6 +21,7 @@ export async function runNativeReadonlyScan(request = {}, host = globalThis) {
       mode: capability.mode,
       platform: "browser",
       windows: false,
+      targetDrive: normalizeTargetDriveRequest(request.targetDrive),
       volume: null,
       totalBytes: 0,
       findings: [],
@@ -36,11 +37,19 @@ export async function runNativeReadonlyScan(request = {}, host = globalThis) {
       includeProjectArtifacts: Boolean(request.includeProjectArtifacts),
       maxDepth: request.maxDepth || 8,
       maxEntriesPerRoot: request.maxEntriesPerRoot || 25000,
+      targetDrive: normalizeTargetDriveRequest(request.targetDrive),
       customRoots: normalizeCustomRootRequest(request.customRoots)
     }
   });
 
   return normalizeNativeScan(result);
+}
+
+function normalizeTargetDriveRequest(value = "C:") {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^([a-zA-Z])(?::)?(?:\\)?$/);
+  if (!match) return "C:";
+  return `${match[1].toUpperCase()}:`;
 }
 
 function normalizeCustomRootRequest(customRoots = []) {
@@ -214,6 +223,7 @@ export function normalizeNativeScan(scanResult = {}) {
     mode: scanResult.mode || NATIVE_SCAN_MODE,
     platform: scanResult.platform || "unknown",
     windows: Boolean(scanResult.windows),
+    targetDrive: normalizeTargetDriveRequest(scanResult.targetDrive || scanResult.target_drive || scanResult.volume?.drive || "C:"),
     generatedAt: scanResult.generatedAt || scanResult.generated_at || "",
     volume: normalizeNativeVolume(scanResult.volume),
     totalBytes: Number(scanResult.totalBytes || scanResult.total_bytes || findings.reduce((sum, finding) => sum + finding.bytes, 0)),

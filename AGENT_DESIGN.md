@@ -400,6 +400,7 @@ Request shape:
 ```json
 {
   "protectedPaths": ["C:\\Users\\me\\ClientWork"],
+  "targetDrive": "C:",
   "includeProjectArtifacts": true,
   "maxDepth": 8,
   "maxEntriesPerRoot": 25000,

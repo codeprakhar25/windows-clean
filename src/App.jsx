@@ -86,6 +86,7 @@ import {
   getScenario,
   isActionProtected,
   makeExecutionLedgerForActions,
+  normalizeTargetDrive,
   scenarios,
   selectableAction,
   selectedByDefault
@@ -136,6 +137,7 @@ export default function App() {
   const [focusedReviewId, setFocusedReviewId] = useState("downloads-installers");
   const [nativeScan, setNativeScan] = useState({ status: "idle", result: null, error: "" });
   const [scanSettings, setScanSettings] = useState({
+    targetDrive: "C:",
     includeProjectArtifacts: true,
     maxDepth: 8,
     maxEntriesPerRoot: 25000,
@@ -219,14 +221,20 @@ export default function App() {
   }, [rollbackEvidence]);
 
   const dataMode = nativeScan.result?.available ? "native-readonly" : "demo";
+  const targetDrive = useMemo(() => normalizeTargetDrive(scanSettings.targetDrive), [scanSettings.targetDrive]);
   const profile = useMemo(
     () => {
-      if (!nativeScan.result?.available) return scenario.profile;
+      if (!nativeScan.result?.available) {
+        return {
+          ...scenario.profile,
+          drive: targetDrive
+        };
+      }
       const volume = nativeScan.result.volume;
       return {
         ...scenario.profile,
         machine: "Real read-only scanner",
-        drive: volume?.drive || scenario.profile.drive,
+        drive: volume?.drive || nativeScan.result.targetDrive || targetDrive,
         totalBytes: volume?.totalBytes || scenario.profile.totalBytes,
         usedBytes: volume?.usedBytes || scenario.profile.usedBytes,
         freeBytes: volume?.freeBytes || scenario.profile.freeBytes,
@@ -237,7 +245,7 @@ export default function App() {
           : "Known roots were measured locally. Drive totals are demo until Windows volume evidence is available."
       };
     },
-    [scenario, nativeScan.result]
+    [scenario, nativeScan.result, targetDrive]
   );
   const intakePolicy = useMemo(
     () =>
@@ -635,7 +643,8 @@ export default function App() {
   }
 
   function updateScanSetting(key, value) {
-    setScanSettings((current) => ({ ...current, [key]: value }));
+    const nextValue = key === "targetDrive" && typeof value === "string" ? value.toUpperCase().slice(0, 3) : value;
+    setScanSettings((current) => ({ ...current, [key]: nextValue }));
     if (nativeScan.result) {
       setNativeScan({ status: "idle", result: null, error: "" });
       setScanned(false);
@@ -716,7 +725,8 @@ export default function App() {
     try {
       const result = await runNativeReadonlyScan({
         protectedPaths,
-        ...scanSettings
+        ...scanSettings,
+        targetDrive
       });
 
       if (!result.available) {
@@ -1884,6 +1894,28 @@ function NativeScanSettingsPanel({
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium">Target drive scope</div>
+              <p className="text-xs text-muted-foreground">Volume totals and system roots use this drive. User-profile cache roots remain tied to the current Windows profile.</p>
+            </div>
+            <Badge variant="outline">{normalizeTargetDrive(settings.targetDrive)}</Badge>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
+            <Input
+              value={settings.targetDrive}
+              placeholder="C:"
+              aria-label="target drive"
+              onChange={(event) => onChange("targetDrive", event.target.value)}
+              onBlur={() => onChange("targetDrive", normalizeTargetDrive(settings.targetDrive))}
+            />
+            <div className="rounded-md border bg-card px-3 py-2 text-sm text-muted-foreground">
+              System roots resolve to {normalizeTargetDrive(settings.targetDrive)}; arbitrary paths must be added as custom read-only roots.
+            </div>
+          </div>
+        </div>
+
         <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-3">
           <Checkbox
             className="mt-0.5"
@@ -1966,7 +1998,8 @@ function NativeScanSettingsPanel({
           </div>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-5">
+          <QueueStat label="Drive" value={normalizeTargetDrive(settings.targetDrive)} tone="review" />
           <QueueStat label="Depth" value={settings.maxDepth} tone="review" />
           <QueueStat label="Cap" value={`${settings.maxEntriesPerRoot / 1000}k`} tone="review" />
           <QueueStat label="Projects" value={settings.includeProjectArtifacts ? "on" : "off"} tone={settings.includeProjectArtifacts ? "safe" : "advisory"} />

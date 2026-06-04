@@ -109,11 +109,12 @@ The scan coverage panel turns those statuses into a confidence score. Demo-estim
 
 The real scan settings panel controls the next native read-only scan:
 
+- Target drive for volume totals and Windows system roots.
 - Project artifact inclusion for old `node_modules` discovery.
 - Traversal depth.
 - Per-root entry cap.
 
-Changing these settings clears previous native scan evidence and dry-run state so reports do not mix old measurements with new scanner limits.
+Changing these settings clears previous native scan evidence and dry-run state so reports do not mix old measurements with new scanner limits. Target drive accepts a Windows drive letter such as `C:` or `D:`; native volume totals and system roots follow that drive, while user-profile cache roots remain tied to the current Windows profile.
 
 For review-gated roots, the scanner can also return item-level candidates:
 
@@ -141,10 +142,10 @@ The demo also includes:
 
 - Scenario presets for developer, gaming, and family laptops.
 - Real data readiness panel for the Tauri read-only scanner.
-- Native Windows volume evidence for C: total, used, and free bytes when the desktop scanner can read it.
+- Native Windows volume evidence for target-drive total, used, and free bytes when the desktop scanner can read it.
 - Intake constraints for target drive, goal, risk tolerance, protected paths, and whether admin/system routes can enter dry-run planning.
 - Task powers panel that maps selected cleanup actions to scoped capabilities such as safe cleanup, rebuildable cache cleanup, reviewed item cleanup, admin cleanup, advanced system strategy, manual storage strategy, and restricted zones.
-- Real scan settings for project artifact inclusion, traversal depth, per-root entry caps, and custom read-only roots.
+- Real scan settings for target drive, project artifact inclusion, traversal depth, per-root entry caps, and custom read-only roots.
 - Scan coverage confidence showing measured, limited, unsupported, missing, custom-root, and demo-estimated cleanup roots.
 - Custom root discovery that measures user-entered folders read-only for manual review and never creates executor routes.
 - Runtime privilege boundary that shows whether the desktop shell is elevated and which selected routes would need admin validation later.

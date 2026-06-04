@@ -35,6 +35,7 @@ const assert = require("assert");
       includeProjectArtifacts: false,
       maxDepth: 4,
       maxEntriesPerRoot: 5000,
+      targetDrive: "d",
       customRoots: ["C:\\Users\\demo\\Archives", "C:\\Users\\demo\\Archives", " "]
     },
     {
@@ -53,6 +54,7 @@ const assert = require("assert");
   assert.strictEqual(scanInvocation.payload.request.includeProjectArtifacts, false, "native scan should pass project artifact setting");
   assert.strictEqual(scanInvocation.payload.request.maxDepth, 4, "native scan should pass max depth setting");
   assert.strictEqual(scanInvocation.payload.request.maxEntriesPerRoot, 5000, "native scan should pass entry cap setting");
+  assert.strictEqual(scanInvocation.payload.request.targetDrive, "D:", "native scan should pass normalized target drive");
   assert.deepStrictEqual(scanInvocation.payload.request.customRoots, ["C:\\Users\\demo\\Archives"], "native scan should pass deduped custom roots");
 
   const actionList = guard.buildScenarioActions("developer");
@@ -60,6 +62,7 @@ const assert = require("assert");
     mode: "native-readonly",
     platform: "windows",
     windows: true,
+    target_drive: "C:",
     volume: {
       drive: "C:",
       total_bytes: 512 * guard.GB,
@@ -116,6 +119,7 @@ const assert = require("assert");
     writeCapability: false,
     destructiveCommands: false
   });
+  assert.strictEqual(scan.targetDrive, "C:", "native scan should normalize target drive");
   assert.strictEqual(scan.volume.drive, "C:", "native scan should normalize volume drive");
   assert.strictEqual(scan.volume.freeBytes, 64 * guard.GB, "native scan should normalize volume free bytes");
   assert.strictEqual(scan.volume.usedBytes, 448 * guard.GB, "native scan should normalize volume used bytes");

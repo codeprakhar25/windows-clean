@@ -60,13 +60,17 @@ const assert = require("assert");
     "Recycle Bin emptying should unlock only after permanent-removal confirmation"
   );
   const intakeBlockedPolicy = guard.buildIntakePolicy({
-    targetDrive: "C:",
+    targetDrive: "c",
     goalBytes: 120 * guard.GB,
     mode: "emergency",
     protectedPaths: [],
     adminAllowed: false
   });
   assert.strictEqual(intakeBlockedPolicy.schemaVersion, "spaceguard-intake-policy/v1", "intake policy should expose a schema version");
+  assert.strictEqual(intakeBlockedPolicy.targetDrive, "C:", "intake policy should normalize target drive");
+  assert.strictEqual(guard.normalizeTargetDrive("d"), "D:", "target drive normalizer should accept drive letters");
+  assert.strictEqual(guard.normalizeTargetDrive("E:\\"), "E:", "target drive normalizer should accept root drive syntax");
+  assert.strictEqual(guard.normalizeTargetDrive("D:\\Users\\demo"), "C:", "target drive normalizer should reject path-like scan scope");
   assert.strictEqual(intakeBlockedPolicy.adminSensitiveBlocked, true, "admin-sensitive routes should default to blocked by intake");
   assert.strictEqual(guard.actionRequiresAdminConsent(guard.actions.find((action) => action.id === "windows-old")), true, "Windows.old should require admin consent");
   assert.strictEqual(guard.actionRequiresAdminConsent(guard.actions.find((action) => action.id === "hibernation")), true, "hibernation should require admin consent");

@@ -19,6 +19,7 @@ struct ScanRequest {
     include_project_artifacts: bool,
     max_depth: Option<usize>,
     max_entries_per_root: Option<usize>,
+    target_drive: Option<String>,
     custom_roots: Vec<String>,
 }
 
@@ -29,6 +30,7 @@ impl Default for ScanRequest {
             include_project_artifacts: true,
             max_depth: Some(8),
             max_entries_per_root: Some(25_000),
+            target_drive: Some("C:".to_string()),
             custom_roots: Vec::new(),
         }
     }
@@ -41,6 +43,7 @@ struct ScanResponse {
     mode: &'static str,
     platform: String,
     windows: bool,
+    target_drive: String,
     generated_at: String,
     volume: Option<VolumeInfo>,
     total_bytes: u64,
@@ -220,6 +223,7 @@ fn main() {
 fn scan_known_roots(request: Option<ScanRequest>) -> ScanResponse {
     let request = request.unwrap_or_default();
     let mut warnings = Vec::new();
+    let target_drive = resolve_target_drive(&request, &mut warnings);
 
     if !cfg!(target_os = "windows") {
         warnings.push(
@@ -230,7 +234,7 @@ fn scan_known_roots(request: Option<ScanRequest>) -> ScanResponse {
 
     let mut findings = Vec::new();
 
-    for spec in exact_specs() {
+    for spec in exact_specs(&target_drive) {
         findings.push(measure_path(
             spec.recipe_id,
             spec.title,
@@ -292,8 +296,9 @@ fn scan_known_roots(request: Option<ScanRequest>) -> ScanResponse {
         mode: "native-readonly",
         platform: env::consts::OS.to_string(),
         windows: cfg!(target_os = "windows"),
+        target_drive: target_drive.clone(),
         generated_at: generated_at(),
-        volume: primary_volume_info(),
+        volume: primary_volume_info(&target_drive),
         total_bytes,
         findings,
         warnings,
@@ -428,9 +433,57 @@ extern "system" {
     ) -> i32;
 }
 
+fn resolve_target_drive(request: &ScanRequest, warnings: &mut Vec<String>) -> String {
+    if let Some(target_drive) = request
+        .target_drive
+        .as_deref()
+        .and_then(normalize_drive_value)
+    {
+        return target_drive;
+    }
+
+    if request
+        .target_drive
+        .as_deref()
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+    {
+        warnings.push("Invalid target drive ignored; using the system drive.".to_string());
+    }
+
+    system_drive_fallback()
+}
+
+fn system_drive_fallback() -> String {
+    env::var("SystemDrive")
+        .ok()
+        .and_then(|value| normalize_drive_value(&value))
+        .unwrap_or_else(|| "C:".to_string())
+}
+
+fn normalize_drive_value(value: &str) -> Option<String> {
+    let trimmed = value.trim().trim_end_matches('\\');
+    let mut chars = trimmed.chars();
+    let letter = chars.next()?;
+    if !letter.is_ascii_alphabetic() {
+        return None;
+    }
+    let rest = chars.collect::<String>();
+    if !rest.is_empty() && rest != ":" {
+        return None;
+    }
+    Some(format!("{}:", letter.to_ascii_uppercase()))
+}
+
+fn target_drive_path(target_drive: &str, suffix: &str) -> PathBuf {
+    let drive = normalize_drive_value(target_drive).unwrap_or_else(system_drive_fallback);
+    let suffix = suffix.trim_start_matches('\\');
+    PathBuf::from(format!("{drive}\\{suffix}"))
+}
+
 #[cfg(target_os = "windows")]
-fn primary_volume_info() -> Option<VolumeInfo> {
-    let drive = env::var("SystemDrive").unwrap_or_else(|_| "C:".to_string());
+fn primary_volume_info(target_drive: &str) -> Option<VolumeInfo> {
+    let drive = normalize_drive_value(target_drive).unwrap_or_else(system_drive_fallback);
     let root = if drive.ends_with('\\') {
         drive.clone()
     } else {
@@ -467,11 +520,11 @@ fn primary_volume_info() -> Option<VolumeInfo> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn primary_volume_info() -> Option<VolumeInfo> {
+fn primary_volume_info(_target_drive: &str) -> Option<VolumeInfo> {
     None
 }
 
-fn exact_specs() -> Vec<ExactSpec> {
+fn exact_specs(target_drive: &str) -> Vec<ExactSpec> {
     let mut specs = Vec::new();
     let user_profile = env_path("USERPROFILE").or_else(|| env_path("HOME"));
     let local_app_data = env_path("LOCALAPPDATA").or_else(|| {
@@ -494,25 +547,33 @@ fn exact_specs() -> Vec<ExactSpec> {
             (
                 "windows-temp",
                 "Windows temporary files",
-                "C:\\Windows\\Temp",
+                target_drive_path(target_drive, "Windows\\Temp"),
             ),
-            ("recycle-bin", "Recycle Bin", "C:\\$Recycle.Bin"),
+            (
+                "recycle-bin",
+                "Recycle Bin",
+                target_drive_path(target_drive, "$Recycle.Bin"),
+            ),
             (
                 "windows-old",
                 "Previous Windows installation",
-                "C:\\Windows.old",
+                target_drive_path(target_drive, "Windows.old"),
             ),
             (
                 "hibernation",
                 "Disable hibernation file",
-                "C:\\hiberfil.sys",
+                target_drive_path(target_drive, "hiberfil.sys"),
             ),
-            ("pagefile", "Pagefile size changes", "C:\\pagefile.sys"),
+            (
+                "pagefile",
+                "Pagefile size changes",
+                target_drive_path(target_drive, "pagefile.sys"),
+            ),
         ] {
             specs.push(ExactSpec {
                 recipe_id,
                 title,
-                path: PathBuf::from(path),
+                path,
                 kind: MeasureKind::FullTree,
             });
         }

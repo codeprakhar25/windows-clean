@@ -40,9 +40,9 @@ npm run native:dev
 
 In the app:
 
-1. Set **Real scan settings** for project artifact inclusion, traversal depth, per-root entry cap, and optional custom read-only roots.
+1. Set **Real scan settings** for target drive, project artifact inclusion, traversal depth, per-root entry cap, and optional custom read-only roots.
 2. Click **Run real scan**.
-3. Check **Real data readiness** for native availability, write capability, destructive command state, and C: volume evidence.
+3. Check **Real data readiness** for native availability, write capability, destructive command state, and target-drive volume evidence.
 4. Review **Intake constraints**. Leave admin/system actions off unless this validation run intentionally includes Windows.old, hibernation, WSL compaction, or another admin-sensitive dry-run route.
 5. Check **Task powers** to confirm selected routes activate only scoped powers and that admin, advanced, manual, or restricted powers stay locked or advisory as expected.
 6. Add protected paths before planning any review-heavy route.
@@ -97,7 +97,7 @@ For each Windows validation run, capture:
 - `npm run build` output.
 - `npm run native:dev` smoke result.
 - Runtime capability panel state.
-- Real scan settings used for the native scan.
+- Real scan settings used for the native scan, including target drive.
 - Intake constraints, including admin/system action allowance.
 - Task powers state, including active, waiting, locked, advisory, blocked, and real-run-disabled rows.
 - Custom root discovery rows, if any; these are manual-review evidence and not executor routes.

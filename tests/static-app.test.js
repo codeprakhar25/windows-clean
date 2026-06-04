@@ -39,6 +39,8 @@ const requiredAppMarkers = [
   "Run real scan",
   "Native app required",
   "Real scan settings",
+  "Target drive scope",
+  "System roots resolve to",
   "Custom read-only roots",
   "Add root",
   "Custom root discovery",
@@ -143,6 +145,7 @@ assert(app.includes("buildExecutionConsentReceipt"), "execution consent receipt 
 assert(app.includes("buildTaskPowerCatalog"), "task power catalog should be wired");
 assert(app.includes("runNativeReadonlyScan"), "real read-only scan workflow should be wired");
 assert(app.includes("scanSettings"), "native scan settings should be wired");
+assert(app.includes("targetDrive"), "native scan settings should include target drive");
 assert(app.includes("updateScanSetting"), "native scan settings should invalidate stale evidence");
 assert(app.includes("customRoots"), "native scan settings should include custom read-only roots");
 assert(app.includes("addCustomScanRoot"), "custom scan roots should be editable");
@@ -214,6 +217,7 @@ assert(model.includes("spaceguard-storage-strategy/v1"), "model should expose st
 assert(model.includes("spaceguard-manual-strategy-checklist/v1"), "model should expose manual strategy checklist schema");
 assert(model.includes("spaceguard-question-queue/v1"), "model should expose agent question queue schema");
 assert(model.includes("spaceguard-intake-policy/v1"), "model should expose intake policy schema");
+assert(model.includes("normalizeTargetDrive"), "model should normalize target drives");
 assert(model.includes("spaceguard-task-powers/v1"), "model should expose task power schema");
 assert(model.includes("taskPowerDefinitions"), "model should define scoped task powers");
 assert(model.includes("admin-cleanup"), "model should classify admin cleanup as a scoped power");
@@ -264,6 +268,7 @@ assert(model.includes("review-custom-roots"), "model should include manual custo
 assert(model.includes("No executor route"), "custom root strategy should keep automation blocked");
 assert(model.includes("No automated partition writes"), "model should keep partition strategy advisory");
 assert(nativeAdapter.includes("scan_known_roots"), "native adapter should invoke the read-only scanner command");
+assert(nativeAdapter.includes("targetDrive"), "native adapter should pass target drive scope");
 assert(nativeAdapter.includes("customRoots"), "native adapter should pass custom read-only roots");
 assert(nativeAdapter.includes("simulate_cleanup_plan"), "native adapter should invoke the dry-run executor command");
 assert(nativeAdapter.includes("execute_cleanup_plan"), "native adapter should invoke the rejecting write boundary command");
@@ -271,6 +276,8 @@ assert(nativeAdapter.includes("runtime_capabilities"), "native adapter should in
 assert(nativeAdapter.includes("items.map"), "native adapter should preserve item-level review candidates");
 assert(tauriConfig.includes('"withGlobalTauri": true'), "Tauri config should expose the global bridge used by the adapter");
 assert(rustScanner.includes("scan_known_roots"), "Rust scanner command should exist");
+assert(rustScanner.includes("target_drive"), "Rust scanner should accept target drive scope");
+assert(rustScanner.includes("target_drive_path"), "Rust scanner should scope system roots to the target drive");
 assert(rustScanner.includes("custom_roots"), "Rust scanner should accept custom read-only roots");
 assert(rustScanner.includes("measure_custom_roots"), "Rust scanner should measure custom roots read-only");
 assert(rustScanner.includes("simulate_cleanup_plan"), "Rust native dry-run command should exist");

@@ -1243,6 +1243,13 @@ export function formatBytes(bytes) {
   return `${Math.round(bytes / MB)} MB`;
 }
 
+export function normalizeTargetDrive(value = "C:") {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^([a-zA-Z])(?::)?(?:\\)?$/);
+  if (!match) return "C:";
+  return `${match[1].toUpperCase()}:`;
+}
+
 export function buildIntakePolicy({
   targetDrive = "C:",
   goalBytes = 0,
@@ -1250,7 +1257,7 @@ export function buildIntakePolicy({
   protectedPaths = [],
   adminAllowed = false
 } = {}) {
-  const cleanDrive = String(targetDrive || "C:").trim() || "C:";
+  const cleanDrive = normalizeTargetDrive(targetDrive);
   const protectedCount = Array.isArray(protectedPaths) ? protectedPaths.filter(Boolean).length : 0;
   const modeLabel = mode === "emergency" ? "Emergency" : mode === "balanced" ? "Balanced" : "Safe";
   const adminSensitiveBlocked = !adminAllowed;
@@ -4225,6 +4232,7 @@ export function buildSupportBundle({
     scan: {
       settings: scanSettings
         ? {
+            targetDrive: normalizeTargetDrive(scanSettings.targetDrive || supportProfile?.drive || "C:"),
             includeProjectArtifacts: Boolean(scanSettings.includeProjectArtifacts),
             maxDepth: Number(scanSettings.maxDepth || 0),
             maxEntriesPerRoot: Number(scanSettings.maxEntriesPerRoot || 0)
@@ -5135,6 +5143,7 @@ export function buildReport({
     "## Scan Settings",
     scanSettings
       ? [
+          `- Target drive: ${normalizeTargetDrive(scanSettings.targetDrive || reportProfile.drive || "C:")}`,
           `- Project artifacts: ${scanSettings.includeProjectArtifacts ? "included" : "excluded"}`,
           `- Max depth: ${scanSettings.maxDepth}`,
           `- Max entries per root: ${scanSettings.maxEntriesPerRoot}`,
