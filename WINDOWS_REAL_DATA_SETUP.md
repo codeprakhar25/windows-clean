@@ -40,7 +40,7 @@ npm run native:dev
 
 In the app:
 
-1. Set **Real scan settings** for project artifact inclusion, traversal depth, and per-root entry cap.
+1. Set **Real scan settings** for project artifact inclusion, traversal depth, per-root entry cap, and optional custom read-only roots.
 2. Click **Run real scan**.
 3. Check **Real data readiness** for native availability, write capability, destructive command state, and C: volume evidence.
 4. Add protected paths before planning any review-heavy route.
@@ -96,6 +96,7 @@ For each Windows validation run, capture:
 - `npm run native:dev` smoke result.
 - Runtime capability panel state.
 - Real scan settings used for the native scan.
+- Custom root discovery rows, if any; these are manual-review evidence and not executor routes.
 - Native scan volume totals.
 - Active agent question and question queue state.
 - Per-check validation evidence records with reviewer, timestamp, artifact path, and notes.

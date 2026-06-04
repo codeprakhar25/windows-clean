@@ -34,7 +34,8 @@ const assert = require("assert");
       protectedPaths: ["C:\\Users\\demo\\ClientWork"],
       includeProjectArtifacts: false,
       maxDepth: 4,
-      maxEntriesPerRoot: 5000
+      maxEntriesPerRoot: 5000,
+      customRoots: ["C:\\Users\\demo\\Archives", "C:\\Users\\demo\\Archives", " "]
     },
     {
       __TAURI__: {
@@ -52,6 +53,7 @@ const assert = require("assert");
   assert.strictEqual(scanInvocation.payload.request.includeProjectArtifacts, false, "native scan should pass project artifact setting");
   assert.strictEqual(scanInvocation.payload.request.maxDepth, 4, "native scan should pass max depth setting");
   assert.strictEqual(scanInvocation.payload.request.maxEntriesPerRoot, 5000, "native scan should pass entry cap setting");
+  assert.deepStrictEqual(scanInvocation.payload.request.customRoots, ["C:\\Users\\demo\\Archives"], "native scan should pass deduped custom roots");
 
   const actionList = guard.buildScenarioActions("developer");
   const scan = native.normalizeNativeScan({
@@ -99,6 +101,16 @@ const assert = require("assert");
             reason: "Large native candidate"
           }
         ]
+      },
+      {
+        recipe_id: "custom-root-1",
+        title: "Custom folder: Archives",
+        path: "C:\\Users\\real\\Archives",
+        bytes: 7 * guard.GB,
+        status: "measured",
+        files: 12,
+        dirs: 2,
+        note: "Advisory read-only custom root measurement; no executor route is created."
       }
     ],
     writeCapability: false,
@@ -128,6 +140,9 @@ const assert = require("assert");
   assert.strictEqual(scanCoverage.schemaVersion, "spaceguard-scan-coverage/v1", "scan coverage should expose a schema version");
   assert.strictEqual(scanCoverage.status, "partial-native", "mixed native evidence should be marked partial");
   assert(scanCoverage.confidenceScore > 0, "measured native roots should increase scan confidence");
+  assert.strictEqual(scanCoverage.customRootRows.length, 1, "scan coverage should expose custom root discovery rows");
+  assert.strictEqual(scanCoverage.customRootBytes, 7 * guard.GB, "scan coverage should total custom root bytes separately");
+  assert.strictEqual(scanCoverage.customRootRows[0].nextStep.includes("never create executor routes"), true, "custom roots should stay advisory");
   assert(scanCoverage.unverifiedRows.some((row) => row.id === "docker-build-cache" && row.evidence === "unsupported"), "unsupported native roots should stay visible in coverage gaps");
   assert(scanCoverage.unverifiedRows.some((row) => row.evidence === "demo-estimate"), "demo-estimated roots should remain visible after partial native scan");
 

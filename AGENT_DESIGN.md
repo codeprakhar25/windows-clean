@@ -388,7 +388,8 @@ Request shape:
   "protectedPaths": ["C:\\Users\\me\\ClientWork"],
   "includeProjectArtifacts": true,
   "maxDepth": 8,
-  "maxEntriesPerRoot": 25000
+  "maxEntriesPerRoot": 25000,
+  "customRoots": ["C:\\Users\\me\\Archives"]
 }
 ```
 
@@ -405,6 +406,8 @@ Response guarantees:
 - Unsupported roots return zero bytes instead of guessed data.
 
 The frontend must treat native findings as measurement evidence only. It can update plan sizes, reports, and review queues, but it still cannot execute cleanup.
+
+Custom scan roots are advisory native findings. They can show folder size and scanner limits, but they cannot map into cleanup actions, executor plans, release gates, or reclaimed-space claims.
 
 Coverage confidence is not an execution gate by itself. It is evidence quality: unsupported, missing, protected, and demo-estimated roots must remain visible until a dedicated detector or native scan proves them.
 

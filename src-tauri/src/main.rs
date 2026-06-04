@@ -19,6 +19,7 @@ struct ScanRequest {
     include_project_artifacts: bool,
     max_depth: Option<usize>,
     max_entries_per_root: Option<usize>,
+    custom_roots: Vec<String>,
 }
 
 impl Default for ScanRequest {
@@ -28,6 +29,7 @@ impl Default for ScanRequest {
             include_project_artifacts: true,
             max_depth: Some(8),
             max_entries_per_root: Some(25_000),
+            custom_roots: Vec::new(),
         }
     }
 }
@@ -245,6 +247,8 @@ fn scan_known_roots(request: Option<ScanRequest>) -> ScanResponse {
     if request.include_project_artifacts {
         findings.extend(measure_node_modules_roots(&request, &mut warnings));
     }
+
+    findings.extend(measure_custom_roots(&request, &mut warnings));
 
     findings.push(unsupported_finding(
         "docker-build-cache",
@@ -559,6 +563,46 @@ fn exact_specs() -> Vec<ExactSpec> {
     specs
 }
 
+fn measure_custom_roots(request: &ScanRequest, warnings: &mut Vec<String>) -> Vec<ScanFinding> {
+    let mut findings = Vec::new();
+    let mut seen = Vec::new();
+
+    for raw_root in request.custom_roots.iter() {
+        let clean = raw_root.trim();
+        if clean.is_empty() {
+            continue;
+        }
+
+        let normalized = normalize_path(clean);
+        if seen.iter().any(|item: &String| item == &normalized) {
+            warnings.push(format!("Duplicate custom root ignored: {clean}"));
+            continue;
+        }
+        if findings.len() >= 8 {
+            warnings.push("Custom root scan is capped at 8 roots per run.".to_string());
+            break;
+        }
+        seen.push(normalized);
+
+        let path = PathBuf::from(clean);
+        let title = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .filter(|name| !name.trim().is_empty())
+            .map(|name| format!("Custom folder: {name}"))
+            .unwrap_or_else(|| "Custom folder".to_string());
+        let recipe_id = format!("custom-root-{}", findings.len() + 1);
+        let mut finding = measure_path(&recipe_id, &title, &path, MeasureKind::FullTree, request);
+        finding.note = format!(
+            "{} Advisory read-only custom root measurement; no executor route is created.",
+            finding.note
+        );
+        findings.push(finding);
+    }
+
+    findings
+}
+
 fn measure_android_studio_roots(request: &ScanRequest) -> Vec<ScanFinding> {
     let Some(local) = env_path("LOCALAPPDATA") else {
         return Vec::new();
@@ -815,8 +859,8 @@ fn find_named_dirs(root: &Path, target_name: &str, request: &ScanRequest) -> (Ve
 }
 
 fn measure_path(
-    recipe_id: &'static str,
-    title: &'static str,
+    recipe_id: &str,
+    title: &str,
     path: &Path,
     kind: MeasureKind,
     request: &ScanRequest,

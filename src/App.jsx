@@ -133,8 +133,10 @@ export default function App() {
   const [scanSettings, setScanSettings] = useState({
     includeProjectArtifacts: true,
     maxDepth: 8,
-    maxEntriesPerRoot: 25000
+    maxEntriesPerRoot: 25000,
+    customRoots: []
   });
+  const [customRootInput, setCustomRootInput] = useState("");
   const [nativeExecutorDryRun, setNativeExecutorDryRun] = useState({ status: "idle", result: null, error: "" });
   const [nativeWriteBoundary, setNativeWriteBoundary] = useState({ status: "idle", result: null, error: "" });
   const [runtimeCapabilities, setRuntimeCapabilities] = useState({
@@ -603,6 +605,26 @@ export default function App() {
       setScanLabel("Scan settings changed");
     }
     clearExecutionState();
+  }
+
+  function addCustomScanRoot() {
+    const cleanRoot = customRootInput.trim();
+    if (!cleanRoot) return;
+    const currentRoots = scanSettings.customRoots || [];
+    const exists = currentRoots.some((root) => root.toLowerCase() === cleanRoot.toLowerCase());
+    if (exists || currentRoots.length >= 8) {
+      setCustomRootInput("");
+      return;
+    }
+    updateScanSetting("customRoots", [...currentRoots, cleanRoot]);
+    setCustomRootInput("");
+  }
+
+  function removeCustomScanRoot(root) {
+    updateScanSetting(
+      "customRoots",
+      (scanSettings.customRoots || []).filter((item) => item !== root)
+    );
   }
 
   function runScan() {
@@ -1280,7 +1302,15 @@ export default function App() {
           <div className="space-y-3">
             <NativeScannerPanel capability={nativeCapability} nativeScan={nativeScan} />
 
-            <NativeScanSettingsPanel settings={scanSettings} onChange={updateScanSetting} nativeScan={nativeScan} />
+            <NativeScanSettingsPanel
+              settings={scanSettings}
+              customRootInput={customRootInput}
+              onCustomRootInput={setCustomRootInput}
+              onAddCustomRoot={addCustomScanRoot}
+              onRemoveCustomRoot={removeCustomScanRoot}
+              onChange={updateScanSetting}
+              nativeScan={nativeScan}
+            />
 
             <ScanCoveragePanel coverage={scanCoverage} />
 
@@ -1628,10 +1658,19 @@ function NativeScannerPanel({ capability, nativeScan }) {
   );
 }
 
-function NativeScanSettingsPanel({ settings, onChange, nativeScan }) {
+function NativeScanSettingsPanel({
+  settings,
+  customRootInput,
+  onCustomRootInput,
+  onAddCustomRoot,
+  onRemoveCustomRoot,
+  onChange,
+  nativeScan
+}) {
   const depthOptions = [4, 6, 8, 10];
   const entryOptions = [5000, 10000, 25000, 50000];
   const hasNativeEvidence = Boolean(nativeScan.result);
+  const customRoots = settings.customRoots || [];
 
   return (
     <Card>
@@ -1660,6 +1699,41 @@ function NativeScanSettingsPanel({ settings, onChange, nativeScan }) {
             <div className="text-sm font-medium">Project artifacts</div>
             <p className="text-xs text-muted-foreground">Include old `node_modules` roots under common project folders.</p>
           </div>
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium">Custom read-only roots</div>
+              <p className="text-xs text-muted-foreground">Measure extra folders for manual review. These never create executor routes.</p>
+            </div>
+            <Badge variant="outline">{customRoots.length}/8</Badge>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <Input
+              value={customRootInput}
+              placeholder="C:\\Users\\you\\Downloads\\archives"
+              aria-label="custom read-only scan root"
+              onChange={(event) => onCustomRootInput(event.target.value)}
+            />
+            <Button type="button" variant="outline" size="sm" onClick={onAddCustomRoot} disabled={!customRootInput.trim() || customRoots.length >= 8}>
+              <Plus className="h-4 w-4" />
+              Add root
+            </Button>
+          </div>
+          {customRoots.length ? (
+            <div className="mt-2 flex flex-col gap-2">
+              {customRoots.map((root) => (
+                <div key={root} className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-md border bg-card px-2 py-1.5 text-xs">
+                  <span className="min-w-0 truncate font-mono text-muted-foreground">{root}</span>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => onRemoveCustomRoot(root)}>
+                    <X className="h-4 w-4" />
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
@@ -1697,10 +1771,11 @@ function NativeScanSettingsPanel({ settings, onChange, nativeScan }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid gap-2 sm:grid-cols-4">
           <QueueStat label="Depth" value={settings.maxDepth} tone="review" />
           <QueueStat label="Cap" value={`${settings.maxEntriesPerRoot / 1000}k`} tone="review" />
           <QueueStat label="Projects" value={settings.includeProjectArtifacts ? "on" : "off"} tone={settings.includeProjectArtifacts ? "safe" : "advisory"} />
+          <QueueStat label="Custom" value={customRoots.length} tone={customRoots.length ? "review" : "safe"} />
         </div>
       </CardContent>
     </Card>
@@ -1709,6 +1784,7 @@ function NativeScanSettingsPanel({ settings, onChange, nativeScan }) {
 
 function ScanCoveragePanel({ coverage }) {
   const previewRows = coverage.unverifiedRows.slice(0, 4);
+  const customRows = coverage.customRootRows || [];
 
   return (
     <Card>
@@ -1725,11 +1801,12 @@ function ScanCoveragePanel({ coverage }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid gap-2 sm:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-5">
           <QueueStat label="Confidence" value={`${coverage.confidenceScore}%`} tone={coverage.confidenceScore >= 80 ? "safe" : "review"} />
           <QueueStat label="Measured" value={formatBytes(coverage.measuredBytes)} tone="safe" />
           <QueueStat label="Estimates" value={formatBytes(coverage.estimatedBytes)} tone="review" />
           <QueueStat label="Unverified" value={coverage.counts.unverified} tone="restricted" />
+          <QueueStat label="Custom" value={customRows.length} tone={customRows.length ? "review" : "safe"} />
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
@@ -1739,6 +1816,28 @@ function ScanCoveragePanel({ coverage }) {
             Confidence is the share of visible cleanup bytes backed by native measured or limited findings.
           </p>
         </div>
+
+        {customRows.length ? (
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+              <span className="font-medium">Custom root discovery</span>
+              <Badge variant="outline">{formatBytes(coverage.customRootBytes || 0)}</Badge>
+            </div>
+            <div className="flex flex-col gap-2">
+              {customRows.slice(0, 4).map((row) => (
+                <div key={row.id} className="rounded-md border bg-card p-2">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="mr-auto min-w-0 truncate font-medium">{row.title}</span>
+                    <Badge variant={row.evidence === "protected" ? "restricted" : row.verified ? "safe" : "review"}>{row.evidence}</Badge>
+                    <Badge variant="outline">{formatBytes(row.bytes)}</Badge>
+                  </div>
+                  <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{row.path}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{row.nextStep}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="space-y-2">
           {previewRows.length ? (

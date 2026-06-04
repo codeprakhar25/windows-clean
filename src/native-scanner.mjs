@@ -35,11 +35,27 @@ export async function runNativeReadonlyScan(request = {}, host = globalThis) {
       protectedPaths: request.protectedPaths || [],
       includeProjectArtifacts: Boolean(request.includeProjectArtifacts),
       maxDepth: request.maxDepth || 8,
-      maxEntriesPerRoot: request.maxEntriesPerRoot || 25000
+      maxEntriesPerRoot: request.maxEntriesPerRoot || 25000,
+      customRoots: normalizeCustomRootRequest(request.customRoots)
     }
   });
 
   return normalizeNativeScan(result);
+}
+
+function normalizeCustomRootRequest(customRoots = []) {
+  if (!Array.isArray(customRoots)) return [];
+  const seen = new Set();
+  const roots = [];
+  for (const value of customRoots) {
+    const root = String(value || "").trim();
+    const key = root.toLowerCase();
+    if (!root || seen.has(key)) continue;
+    seen.add(key);
+    roots.push(root);
+    if (roots.length >= 8) break;
+  }
+  return roots;
 }
 
 export async function runNativeExecutorDryRun(executorPlan, host = globalThis) {

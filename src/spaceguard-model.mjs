@@ -1471,6 +1471,7 @@ export function buildScanCoverageSummary({
   scanMode = "demo",
   nativeScan = null
 } = {}) {
+  const customRootRows = buildCustomRootCoverageRows(nativeScan);
   const rows = actionList.map((action) => {
     const evidence = action.scanSource ? action.scanStatus || "measured" : "demo-estimate";
     const verified = evidence === "measured" || evidence === "limited";
@@ -1502,6 +1503,7 @@ export function buildScanCoverageSummary({
   const measuredBytes = rows.filter((row) => row.verified).reduce((sum, row) => sum + row.bytes, 0);
   const estimatedBytes = rows.filter((row) => row.evidence === "demo-estimate").reduce((sum, row) => sum + row.bytes, 0);
   const visibleBytes = rows.reduce((sum, row) => sum + row.bytes, 0);
+  const customRootBytes = customRootRows.filter((row) => row.verified).reduce((sum, row) => sum + row.bytes, 0);
   const confidenceScore = visibleBytes > 0 ? Math.round((measuredBytes / visibleBytes) * 100) : 0;
   const unverifiedRows = rows
     .filter((row) => row.issue || row.evidence === "limited")
@@ -1528,7 +1530,9 @@ export function buildScanCoverageSummary({
     measuredBytes,
     estimatedBytes,
     visibleBytes,
+    customRootBytes,
     counts,
+    customRootRows,
     rows,
     unverifiedRows,
     warnings: nativeScan?.warnings || [],
@@ -1542,6 +1546,29 @@ export function buildScanCoverageSummary({
             : "Native scan did not produce enough measured coverage.",
     steps
   };
+}
+
+function buildCustomRootCoverageRows(nativeScan = null) {
+  return (nativeScan?.findings || [])
+    .filter((finding) => String(finding.recipeId || finding.recipe_id || "").startsWith("custom-root-"))
+    .map((finding) => {
+      const evidence = finding.status || "unknown";
+      const verified = evidence === "measured" || evidence === "limited";
+      return {
+        id: finding.recipeId || finding.recipe_id || "",
+        title: finding.title || "Custom folder",
+        path: finding.path || "",
+        bytes: Number(finding.bytes || 0),
+        evidence,
+        verified,
+        files: Number(finding.files || 0),
+        dirs: Number(finding.dirs || 0),
+        errors: Number(finding.errors || 0),
+        note: finding.note || "",
+        nextStep: "Review manually. Custom roots are read-only discovery and never create executor routes."
+      };
+    })
+    .sort((a, b) => b.bytes - a.bytes || a.title.localeCompare(b.title));
 }
 
 export function buildPrivacyBoundary({
@@ -4753,7 +4780,8 @@ export function buildReport({
       ? [
           `- Project artifacts: ${scanSettings.includeProjectArtifacts ? "included" : "excluded"}`,
           `- Max depth: ${scanSettings.maxDepth}`,
-          `- Max entries per root: ${scanSettings.maxEntriesPerRoot}`
+          `- Max entries per root: ${scanSettings.maxEntriesPerRoot}`,
+          `- Custom roots: ${scanSettings.customRoots?.length || 0}`
         ].join("\n")
       : "- Default scanner settings.",
     "",
@@ -4764,6 +4792,8 @@ export function buildReport({
           `- Confidence: ${scanCoverage.confidenceScore}%`,
           `- Measured bytes: ${formatBytes(scanCoverage.measuredBytes || 0)}`,
           `- Demo-estimated bytes: ${formatBytes(scanCoverage.estimatedBytes || 0)}`,
+          `- Custom roots: ${scanCoverage.customRootRows?.length || 0}`,
+          `- Custom root bytes: ${formatBytes(scanCoverage.customRootBytes || 0)}`,
           `- Unverified rows: ${scanCoverage.counts?.unverified || 0}`,
           scanCoverage.unverifiedRows?.length
             ? scanCoverage.unverifiedRows.slice(0, 8).map((row) => `- ${row.title}: ${row.evidence} | ${row.nextStep}`).join("\n")

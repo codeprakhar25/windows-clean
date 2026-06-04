@@ -31,6 +31,9 @@ const requiredAppMarkers = [
   "Run real scan",
   "Native app required",
   "Real scan settings",
+  "Custom read-only roots",
+  "Add root",
+  "Custom root discovery",
   "Project artifacts",
   "Traversal depth",
   "Entry cap",
@@ -132,6 +135,8 @@ assert(app.includes("buildExecutionConsentReceipt"), "execution consent receipt 
 assert(app.includes("runNativeReadonlyScan"), "real read-only scan workflow should be wired");
 assert(app.includes("scanSettings"), "native scan settings should be wired");
 assert(app.includes("updateScanSetting"), "native scan settings should invalidate stale evidence");
+assert(app.includes("customRoots"), "native scan settings should include custom read-only roots");
+assert(app.includes("addCustomScanRoot"), "custom scan roots should be editable");
 assert(app.includes("buildScanCoverageSummary"), "scan coverage summary should be wired");
 assert(app.includes("buildRecoveryAdvisor"), "recovery advisor should be wired");
 assert(app.includes("buildAgentQuestionQueue"), "agent question queue should be wired");
@@ -237,12 +242,15 @@ assert(model.includes("demo-estimate"), "model should keep demo-estimated roots 
 assert(model.includes("uninstall-apps-manually"), "model should include manual installed-app strategy");
 assert(model.includes("No automated partition writes"), "model should keep partition strategy advisory");
 assert(nativeAdapter.includes("scan_known_roots"), "native adapter should invoke the read-only scanner command");
+assert(nativeAdapter.includes("customRoots"), "native adapter should pass custom read-only roots");
 assert(nativeAdapter.includes("simulate_cleanup_plan"), "native adapter should invoke the dry-run executor command");
 assert(nativeAdapter.includes("execute_cleanup_plan"), "native adapter should invoke the rejecting write boundary command");
 assert(nativeAdapter.includes("runtime_capabilities"), "native adapter should invoke runtime capability command");
 assert(nativeAdapter.includes("items.map"), "native adapter should preserve item-level review candidates");
 assert(tauriConfig.includes('"withGlobalTauri": true'), "Tauri config should expose the global bridge used by the adapter");
 assert(rustScanner.includes("scan_known_roots"), "Rust scanner command should exist");
+assert(rustScanner.includes("custom_roots"), "Rust scanner should accept custom read-only roots");
+assert(rustScanner.includes("measure_custom_roots"), "Rust scanner should measure custom roots read-only");
 assert(rustScanner.includes("simulate_cleanup_plan"), "Rust native dry-run command should exist");
 assert(rustScanner.includes("execute_cleanup_plan"), "Rust rejecting write boundary command should exist");
 assert(rustScanner.includes("runtime_capabilities"), "Rust runtime capability command should exist");

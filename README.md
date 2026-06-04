@@ -142,8 +142,9 @@ The demo also includes:
 - Scenario presets for developer, gaming, and family laptops.
 - Real data readiness panel for the Tauri read-only scanner.
 - Native Windows volume evidence for C: total, used, and free bytes when the desktop scanner can read it.
-- Real scan settings for project artifact inclusion, traversal depth, and per-root entry caps.
-- Scan coverage confidence showing measured, limited, unsupported, missing, and demo-estimated cleanup roots.
+- Real scan settings for project artifact inclusion, traversal depth, per-root entry caps, and custom read-only roots.
+- Scan coverage confidence showing measured, limited, unsupported, missing, custom-root, and demo-estimated cleanup roots.
+- Custom root discovery that measures user-entered folders read-only for manual review and never creates executor routes.
 - Runtime privilege boundary that shows whether the desktop shell is elevated and which selected routes would need admin validation later.
 - Recovery advisor that explains the next useful move when the target is unmet.
 - Agent questions panel that turns scan state, approvals, review items, consent, validation evidence, and verification into the next user-facing question.
