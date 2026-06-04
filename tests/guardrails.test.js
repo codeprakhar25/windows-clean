@@ -48,6 +48,32 @@ const assert = require("assert");
     !guard.buildSuggestedPlan(90 * guard.GB, new Set()).has("pagefile"),
     "suggested plan must not include pagefile changes"
   );
+  const intakeBlockedPolicy = guard.buildIntakePolicy({
+    targetDrive: "C:",
+    goalBytes: 120 * guard.GB,
+    mode: "emergency",
+    protectedPaths: [],
+    adminAllowed: false
+  });
+  assert.strictEqual(intakeBlockedPolicy.schemaVersion, "spaceguard-intake-policy/v1", "intake policy should expose a schema version");
+  assert.strictEqual(intakeBlockedPolicy.adminSensitiveBlocked, true, "admin-sensitive routes should default to blocked by intake");
+  assert.strictEqual(guard.actionRequiresAdminConsent(guard.actions.find((action) => action.id === "windows-old")), true, "Windows.old should require admin consent");
+  assert.strictEqual(guard.actionRequiresAdminConsent(guard.actions.find((action) => action.id === "hibernation")), true, "hibernation should require admin consent");
+  assert.strictEqual(
+    guard.selectableAction(guard.actions.find((action) => action.id === "windows-old"), [], intakeBlockedPolicy),
+    false,
+    "intake policy should remove admin-sensitive actions from selection"
+  );
+  const intakeBlockedPlan = guard.buildSuggestedPlan(220 * guard.GB, new Set(), guard.actions, [], intakeBlockedPolicy);
+  assert(!intakeBlockedPlan.has("windows-old"), "suggested plan must not include Windows.old when admin allowance is off");
+  assert(!intakeBlockedPlan.has("hibernation"), "suggested plan must not include hibernation when admin allowance is off");
+  assert(!intakeBlockedPlan.has("wsl-vhdx"), "suggested plan must not include WSL compaction when admin allowance is off");
+  const intakeAllowedPolicy = guard.buildIntakePolicy({ targetDrive: "C:", goalBytes: 120 * guard.GB, mode: "emergency", adminAllowed: true });
+  assert.strictEqual(
+    guard.selectableAction(guard.actions.find((action) => action.id === "windows-old"), [], intakeAllowedPolicy),
+    true,
+    "admin allowance should make admin-sensitive dry-run routes selectable again"
+  );
 
   const wslOnly = new Set(["wsl-vhdx"]);
   assert.strictEqual(
@@ -151,6 +177,26 @@ const assert = require("assert");
   );
   assert.strictEqual(protectedReadiness.ready, false, "protected selected action should block readiness");
   assert.strictEqual(protectedReadiness.unresolved[0].gate, "protected", "protected gate should be explicit");
+  const intakeBlockedReadiness = guard.getExecutionReadinessForActions(
+    new Set(["windows-old"]),
+    { groupConfirm: true, reviewed: {}, typed: {} },
+    developerActions,
+    [],
+    null,
+    intakeBlockedPolicy
+  );
+  assert.strictEqual(intakeBlockedReadiness.ready, false, "intake-blocked admin route should block readiness");
+  assert.strictEqual(intakeBlockedReadiness.unresolved[0].gate, "intake", "intake gate should be explicit");
+  const intakeBlockedExecutor = guard.buildExecutorPlan({
+    selectedIds: new Set(["windows-old"]),
+    actionList: developerActions,
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    protectedPaths: [],
+    scanMode: "demo",
+    intakePolicy: intakeBlockedPolicy
+  });
+  assert.strictEqual(intakeBlockedExecutor.blockedCount, 1, "executor plan should block intake-disallowed admin routes");
+  assert(intakeBlockedExecutor.rows[0].blockers.includes("intake admin boundary"), "executor blocker should name the intake admin boundary");
 
   const report = guard.buildReport({
     scenario: guard.getScenario("developer"),
@@ -160,10 +206,13 @@ const assert = require("assert");
     readiness: guard.getExecutionReadinessForActions(new Set(["windows-temp"]), { groupConfirm: true, reviewed: {}, typed: {} }, developerActions, protectedPaths),
     ledger: guard.makeExecutionLedgerForActions(new Set(["windows-temp"]), developerActions, protectedPaths),
     protectedPaths,
-    goalBytes: 10 * guard.GB
+    goalBytes: 10 * guard.GB,
+    intakePolicy: intakeBlockedPolicy
   });
   assert(report.includes("SpaceGuard Dry-Run Report"), "report should have a title");
   assert(report.includes("Protected Paths"), "report should include protected paths");
+  assert(report.includes("## Intake Policy"), "report should include intake policy");
+  assert(report.includes("Admin/system actions: blocked by intake"), "report should capture admin allowance");
 
   const demoCoverage = guard.buildScanCoverageSummary({
     actionList: developerActions,

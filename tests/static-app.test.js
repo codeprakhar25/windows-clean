@@ -28,6 +28,9 @@ const requiredAppMarkers = [
   "Demo scenario",
   "Export report",
   "Real data readiness",
+  "Intake constraints",
+  "Admin/system actions",
+  "intake gated",
   "Run real scan",
   "Native app required",
   "Real scan settings",
@@ -204,6 +207,8 @@ assert(model.includes("item-review-large-files"), "model should route large pers
 assert(model.includes("spaceguard-storage-strategy/v1"), "model should expose storage strategy schema");
 assert(model.includes("spaceguard-manual-strategy-checklist/v1"), "model should expose manual strategy checklist schema");
 assert(model.includes("spaceguard-question-queue/v1"), "model should expose agent question queue schema");
+assert(model.includes("spaceguard-intake-policy/v1"), "model should expose intake policy schema");
+assert(model.includes("intake admin boundary"), "model should name admin intake blockers");
 assert(model.includes("run-first-scan"), "question queue should ask scan-first questions");
 assert(model.includes("approve-rebuildable-caches"), "question queue should ask approval questions");
 assert(model.includes("validation-evidence-detail"), "question queue should ask validation evidence questions");

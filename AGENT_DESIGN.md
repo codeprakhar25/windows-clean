@@ -103,6 +103,7 @@ The UI must expose a review queue before execution:
 The UI must also expose a recovery advisor and decision log:
 
 - `recovery advisor`: the current gap, the reason the goal is or is not reachable, and the next decision branch.
+- `intake constraints`: the target drive, free-space goal, risk tolerance, protected-path count, and whether admin/system routes may enter dry-run planning.
 - `agent questions`: a prioritized queue of the next user-facing questions derived from scan, plan, approval, review, consent, rollback, validation, fixture import, and verification state.
 - `real scan settings`: project artifact inclusion, traversal depth, and per-root entry cap for the next native read-only scan.
 - `scan coverage`: confidence summary for measured, limited, missing, protected, unsupported, and demo-estimated roots; partial native scans must remain visibly partial.
@@ -444,8 +445,10 @@ destructiveCommands = false
 Privilege invariant:
 
 - Standard-user and elevated runtime states are shown separately.
+- Admin/system-sensitive routes are blocked at intake until the user explicitly allows them in dry-run planning.
 - Admin-sensitive routes remain dry-run or checklist-only until validation proves the boundary.
 - The app never starts a UAC prompt or self-elevates.
+- Intake allowance is plan metadata only; it cannot enable real execution, UAC prompts, shell commands, or destructive commands.
 
 ## Release Gate
 

@@ -35,6 +35,7 @@ import {
   buildExecutionPreflight,
   buildExecutionConsentReceipt,
   buildFixtureEvidenceImport,
+  buildIntakePolicy,
   buildPlanReview,
   buildAgentQuestionQueue,
   buildDecisionLog,
@@ -78,6 +79,7 @@ import {
   computeTotals,
   formatBytes,
   gates,
+  actionRequiresAdminConsent,
   getExecutionReadinessForActions,
   getScenario,
   isActionProtected,
@@ -125,6 +127,7 @@ export default function App() {
   const [activeStage, setActiveStage] = useState("intake");
   const [goalGb, setGoalGb] = useState(35);
   const [mode, setMode] = useState("safe");
+  const [adminActionsAllowed, setAdminActionsAllowed] = useState(false);
   const [filter, setFilter] = useState("all");
   const [protectedPaths, setProtectedPaths] = useState([]);
   const [protectedInput, setProtectedInput] = useState("");
@@ -234,6 +237,17 @@ export default function App() {
     },
     [scenario, nativeScan.result]
   );
+  const intakePolicy = useMemo(
+    () =>
+      buildIntakePolicy({
+        targetDrive: profile.drive,
+        goalBytes: goalGb * GB,
+        mode,
+        protectedPaths,
+        adminAllowed: adminActionsAllowed
+      }),
+    [profile.drive, goalGb, mode, protectedPaths, adminActionsAllowed]
+  );
   const baseActions = useMemo(() => buildScenarioActions(scenarioId), [scenarioId]);
   const actionList = useMemo(() => mergeNativeScanIntoActions(baseActions, nativeScan.result), [baseActions, nativeScan.result]);
   const scanCoverage = useMemo(
@@ -264,9 +278,10 @@ export default function App() {
         protectedPaths,
         itemReviewsByAction,
         scanMode: dataMode,
-        goalBytes: goalGb * GB
+        goalBytes: goalGb * GB,
+        intakePolicy
       }),
-    [selectedIds, actionList, approvals, protectedPaths, itemReviewsByAction, dataMode, goalGb]
+    [selectedIds, actionList, approvals, protectedPaths, itemReviewsByAction, dataMode, goalGb, intakePolicy]
   );
   const ledgerHistorySummary = useMemo(
     () => buildLedgerHistorySummary(runHistory, planSnapshot),
@@ -275,12 +290,12 @@ export default function App() {
   const activeLedger = ledger.length ? ledger : ledgerHistorySummary.currentLedger;
   const totals = useMemo(() => computeTotals(selectedIds, actionList, { approvals, itemReviewsByAction }), [selectedIds, actionList, approvals, itemReviewsByAction]);
   const readiness = useMemo(
-    () => getExecutionReadinessForActions(selectedIds, approvals, actionList, protectedPaths, itemReviewsByAction),
-    [selectedIds, approvals, actionList, protectedPaths, itemReviewsByAction]
+    () => getExecutionReadinessForActions(selectedIds, approvals, actionList, protectedPaths, itemReviewsByAction, intakePolicy),
+    [selectedIds, approvals, actionList, protectedPaths, itemReviewsByAction, intakePolicy]
   );
   const planReview = useMemo(
-    () => buildPlanReview(actionList, selectedIds, approvals, protectedPaths, itemReviewsByAction),
-    [actionList, selectedIds, approvals, protectedPaths, itemReviewsByAction]
+    () => buildPlanReview(actionList, selectedIds, approvals, protectedPaths, itemReviewsByAction, intakePolicy),
+    [actionList, selectedIds, approvals, protectedPaths, itemReviewsByAction, intakePolicy]
   );
   const recoveryAdvisor = useMemo(
     () =>
@@ -294,9 +309,10 @@ export default function App() {
         protectedPaths,
         ledger: activeLedger,
         itemReviewsByAction,
-        planSnapshot
+        planSnapshot,
+        intakePolicy
       }),
-    [scanned, dataMode, goalGb, actionList, selectedIds, approvals, protectedPaths, activeLedger, itemReviewsByAction, planSnapshot]
+    [scanned, dataMode, goalGb, actionList, selectedIds, approvals, protectedPaths, activeLedger, itemReviewsByAction, planSnapshot, intakePolicy]
   );
   const storageStrategy = useMemo(
     () =>
@@ -335,13 +351,14 @@ export default function App() {
         protectedPaths,
         ledger: activeLedger,
         goalBytes: goalGb * GB,
-        itemReviewsByAction
+        itemReviewsByAction,
+        intakePolicy
       }),
-    [scanned, scanning, dataMode, actionList, selectedIds, approvals, readiness, protectedPaths, activeLedger, goalGb, itemReviewsByAction]
+    [scanned, scanning, dataMode, actionList, selectedIds, approvals, readiness, protectedPaths, activeLedger, goalGb, itemReviewsByAction, intakePolicy]
   );
   const reviewWorkbench = useMemo(
-    () => buildReviewWorkbench(actionList, selectedIds, approvals, protectedPaths, itemReviewsByAction),
-    [actionList, selectedIds, approvals, protectedPaths, itemReviewsByAction]
+    () => buildReviewWorkbench(actionList, selectedIds, approvals, protectedPaths, itemReviewsByAction, intakePolicy),
+    [actionList, selectedIds, approvals, protectedPaths, itemReviewsByAction, intakePolicy]
   );
   const itemReview = useMemo(
     () => itemReviewsByAction[focusedReviewId] || buildItemReview(focusedReviewId, actionList, nativeScan.result, protectedPaths, approvals),
@@ -360,9 +377,10 @@ export default function App() {
         protectedPaths,
         scanMode: dataMode,
         preflight,
-        itemReviewsByAction
+        itemReviewsByAction,
+        intakePolicy
       }),
-    [selectedIds, actionList, approvals, protectedPaths, dataMode, preflight, itemReviewsByAction]
+    [selectedIds, actionList, approvals, protectedPaths, dataMode, preflight, itemReviewsByAction, intakePolicy]
   );
   const executorReadiness = useMemo(
     () => buildExecutorReadiness(executorPlan, preflight),
@@ -713,18 +731,18 @@ export default function App() {
         new Set(
           planActions
             .filter((action) => action.gate === "auto" || (action.selectedByDefault && action.risk === "rebuildable"))
-            .filter((action) => selectableAction(action, protectedPaths))
+            .filter((action) => selectableAction(action, protectedPaths, intakePolicy))
             .map((action) => action.id)
         )
       );
     }
 
     if (nextMode === "balanced") {
-      setSelectedIds(buildSuggestedPlan(goalGb * GB, new Set(planActions.filter((action) => selectedByDefault(action, protectedPaths)).map((action) => action.id)), planActions, protectedPaths));
+      setSelectedIds(buildSuggestedPlan(goalGb * GB, new Set(planActions.filter((action) => selectedByDefault(action, protectedPaths, intakePolicy)).map((action) => action.id)), planActions, protectedPaths, intakePolicy));
     }
 
     if (nextMode === "emergency") {
-      setSelectedIds(new Set(planActions.filter((action) => selectableAction(action, protectedPaths) && action.risk !== "advisory").map((action) => action.id)));
+      setSelectedIds(new Set(planActions.filter((action) => selectableAction(action, protectedPaths, intakePolicy) && action.risk !== "advisory").map((action) => action.id)));
     }
 
     clearExecutionState();
@@ -734,6 +752,21 @@ export default function App() {
   function setModeAndPlan(nextMode) {
     setMode(nextMode);
     applyModeDefaults(nextMode);
+  }
+
+  function setAdminAllowance(nextAllowed) {
+    setAdminActionsAllowed(nextAllowed);
+    if (!nextAllowed) {
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        for (const action of actionList) {
+          if (actionRequiresAdminConsent(action)) next.delete(action.id);
+        }
+        return next;
+      });
+    }
+    clearExecutionState();
+    setActiveStage("intake");
   }
 
   function approveRebuildableCaches() {
@@ -747,13 +780,13 @@ export default function App() {
       runScan();
       return;
     }
-    setSelectedIds(buildSuggestedPlan(goalGb * GB, new Set(), actionList, protectedPaths));
+    setSelectedIds(buildSuggestedPlan(goalGb * GB, new Set(), actionList, protectedPaths, intakePolicy));
     clearExecutionState();
     setActiveStage("gate");
   }
 
   function toggleAction(action) {
-    if (!scanned || !selectableAction(action, protectedPaths)) return;
+    if (!scanned || !selectableAction(action, protectedPaths, intakePolicy)) return;
     const willSelect = !selectedIds.has(action.id);
     setSelectedIds((current) => {
       const next = new Set(current);
@@ -985,7 +1018,7 @@ export default function App() {
     setActiveStage("intake");
     clearExecutionState();
     setApprovals({ groupConfirm: false, reviewed: {}, reviewItems: {}, typed: {} });
-    setSelectedIds(new Set(nextActions.filter((action) => selectedByDefault(action, protectedPaths)).map((action) => action.id)));
+    setSelectedIds(new Set(nextActions.filter((action) => selectedByDefault(action, protectedPaths, intakePolicy)).map((action) => action.id)));
   }
 
   function addProtectedPath(path) {
@@ -1041,6 +1074,8 @@ export default function App() {
   }
 
   function selectReviewAction(actionId) {
+    const action = actionList.find((item) => item.id === actionId);
+    if (action && !selectableAction(action, protectedPaths, intakePolicy)) return;
     setSelectedIds((current) => new Set([...current, actionId]));
     setFocusedReviewId(actionId);
     clearExecutionState();
@@ -1085,7 +1120,8 @@ export default function App() {
       ledgerHistorySummary,
       storageStrategy,
       manualStrategyChecklist,
-      scanCoverage
+      scanCoverage,
+      intakePolicy
     });
     downloadTextFile("spaceguard-dry-run-report.md", report, "text/markdown;charset=utf-8");
   }
@@ -1303,6 +1339,12 @@ export default function App() {
           <div className="space-y-3">
             <NativeScannerPanel capability={nativeCapability} nativeScan={nativeScan} />
 
+            <IntakePolicyPanel
+              policy={intakePolicy}
+              adminAllowed={adminActionsAllowed}
+              onAdminAllowed={setAdminAllowance}
+            />
+
             <NativeScanSettingsPanel
               settings={scanSettings}
               customRootInput={customRootInput}
@@ -1405,6 +1447,7 @@ export default function App() {
                     scanned={scanned}
                     selected={selectedIds.has(action.id)}
                     protectedByUser={isActionProtected(action, protectedPaths)}
+                    intakePolicy={intakePolicy}
                     onToggle={() => toggleAction(action)}
                     onProtect={() => addProtectedPath(action.path)}
                   />
@@ -1425,6 +1468,7 @@ export default function App() {
               readiness={readiness}
               protectedPaths={protectedPaths}
               itemReviewsByAction={itemReviewsByAction}
+              intakePolicy={intakePolicy}
             />
             <TracePanel activeStage={activeStage} />
             <ExecutorPolicyPanel executorPlan={executorPlan} executorReadiness={executorReadiness} nativeExecutorDryRun={nativeExecutorDryRun} />
@@ -1654,6 +1698,50 @@ function NativeScannerPanel({ capability, nativeScan }) {
             The browser demo cannot inspect local folders. Start the desktop shell to populate this panel with real path sizes.
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function IntakePolicyPanel({ policy, adminAllowed, onAdminAllowed }) {
+  const adminBlocked = policy.adminSensitiveBlocked;
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Intake constraints
+            </CardTitle>
+            <CardDescription>{formatBytes(policy.goalBytes)} target on {policy.targetDrive}, {policy.mode} tolerance</CardDescription>
+          </div>
+          <Badge variant={adminBlocked ? "review" : "safe"}>{adminBlocked ? "admin gated" : "admin allowed"}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border bg-muted/30 p-3">
+          <Checkbox checked={adminAllowed} onClick={() => onAdminAllowed(!adminAllowed)} className="mt-0.5" />
+          <span className="grid gap-1 text-sm">
+            <span className="font-medium">Admin/system actions in dry-run planning</span>
+            <span className="text-muted-foreground">
+              {adminBlocked
+                ? "Windows.old, hibernation, and WSL compaction stay out of suggestions."
+                : "Admin-sensitive routes can be selected, but real execution remains locked."}
+            </span>
+          </span>
+        </label>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {policy.items.map((item) => (
+            <div key={item.id} className="flex items-start gap-2 rounded-md border bg-card p-3 text-sm">
+              {item.passed ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" /> : <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />}
+              <div className="min-w-0">
+                <div className="font-medium">{item.label}</div>
+                <div className="text-xs text-muted-foreground">{item.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       </CardContent>
     </Card>
   );
@@ -2440,8 +2528,9 @@ function ProtectedPathsPanel({ protectedPaths, protectedInput, setProtectedInput
   );
 }
 
-function ActionRow({ action, selected, scanned, protectedByUser, onToggle, onProtect }) {
-  const selectable = selectableAction(action, protectedByUser ? [action.path] : []);
+function ActionRow({ action, selected, scanned, protectedByUser, intakePolicy, onToggle, onProtect }) {
+  const intakeBlocked = actionRequiresAdminConsent(action) && intakePolicy?.adminSensitiveBlocked;
+  const selectable = selectableAction(action, protectedByUser ? [action.path] : [], intakePolicy);
   const disabled = !scanned || !selectable;
   return (
     <div
@@ -2457,6 +2546,7 @@ function ActionRow({ action, selected, scanned, protectedByUser, onToggle, onPro
           <Badge variant={action.risk}>{gates[action.gate].label}</Badge>
           {action.scanSource ? <Badge variant={action.scanStatus === "missing" ? "outline" : "safe"}>{action.scanStatus}</Badge> : null}
           {protectedByUser ? <Badge variant="restricted">protected</Badge> : null}
+          {intakeBlocked ? <Badge variant="review">intake gated</Badge> : null}
         </div>
         <p className="mb-3 truncate font-mono text-xs text-muted-foreground">{action.path}</p>
         <div className="grid gap-1 text-sm text-muted-foreground">
@@ -2467,7 +2557,7 @@ function ActionRow({ action, selected, scanned, protectedByUser, onToggle, onPro
       <div className="text-left lg:text-right">
         <div className="text-xl font-semibold">{formatBytes(action.bytes)}</div>
         <div className="mb-2 text-xs text-muted-foreground">
-          {protectedByUser ? "protected" : action.scanSource ? "real data" : selectable ? (selected ? "planned" : "available") : "locked"}
+          {protectedByUser ? "protected" : intakeBlocked ? "intake gated" : action.scanSource ? "real data" : selectable ? (selected ? "planned" : "available") : "locked"}
         </div>
         {!protectedByUser && action.gate !== "blocked" && action.gate !== "advisory" ? (
           <Button type="button" variant="outline" size="sm" onClick={onProtect}>
@@ -2479,13 +2569,14 @@ function ActionRow({ action, selected, scanned, protectedByUser, onToggle, onPro
   );
 }
 
-function GatePanel({ actionList, selectedIds, approvals, setApprovals, scanned, readiness, protectedPaths, itemReviewsByAction }) {
+function GatePanel({ actionList, selectedIds, approvals, setApprovals, scanned, readiness, protectedPaths, itemReviewsByAction, intakePolicy }) {
   const selected = actionList.filter((action) => selectedIds.has(action.id));
   const selectedReview = selected.filter((action) => action.gate === "review");
   const selectedTyped = selected.filter((action) => action.gate === "typed");
   const hasGroupConfirm = selected.some((action) => action.gate === "groupConfirm");
   const blockedCount = actionList.filter((action) => action.gate === "blocked").length;
   const protectedCount = actionList.filter((action) => isActionProtected(action, protectedPaths)).length;
+  const intakeBlockedCount = actionList.filter((action) => actionRequiresAdminConsent(action) && intakePolicy?.adminSensitiveBlocked).length;
 
   return (
     <Card>
@@ -2542,6 +2633,7 @@ function GatePanel({ actionList, selectedIds, approvals, setApprovals, scanned, 
         ))}
 
         {protectedCount > 0 ? <GateNote title="Protected by user" detail={`${protectedCount} action(s) match protected paths and have been removed from executable plans.`} /> : null}
+        {intakeBlockedCount > 0 ? <GateNote title="Intake admin boundary" detail={`${intakeBlockedCount} admin/system route(s) stay out of selected plans until the user allows them.`} /> : null}
         <GateNote title="Locked by policy" detail={`${blockedCount} zones are visible but cannot execute: Docker volumes, browser identity data, pagefile changes, and destructive system areas.`} />
       </CardContent>
     </Card>

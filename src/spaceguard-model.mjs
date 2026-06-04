@@ -1187,14 +1187,93 @@ export function formatBytes(bytes) {
   return `${Math.round(bytes / MB)} MB`;
 }
 
-export function selectableAction(action, protectedPaths = []) {
-  protectedPaths = Array.isArray(protectedPaths) ? protectedPaths : [];
-  return action.gate !== "blocked" && action.gate !== "advisory" && !isActionProtected(action, protectedPaths);
+export function buildIntakePolicy({
+  targetDrive = "C:",
+  goalBytes = 0,
+  mode = "safe",
+  protectedPaths = [],
+  adminAllowed = false
+} = {}) {
+  const cleanDrive = String(targetDrive || "C:").trim() || "C:";
+  const protectedCount = Array.isArray(protectedPaths) ? protectedPaths.filter(Boolean).length : 0;
+  const modeLabel = mode === "emergency" ? "Emergency" : mode === "balanced" ? "Balanced" : "Safe";
+  const adminSensitiveBlocked = !adminAllowed;
+  const items = [
+    {
+      id: "target-drive",
+      label: "Target drive",
+      detail: `${cleanDrive} is the only drive considered for cleanup planning.`,
+      passed: Boolean(cleanDrive)
+    },
+    {
+      id: "risk-tolerance",
+      label: "Risk tolerance",
+      detail: `${modeLabel} mode controls how aggressively the planner suggests guarded recovery.`,
+      passed: ["safe", "balanced", "emergency"].includes(mode)
+    },
+    {
+      id: "admin-allowance",
+      label: "Admin/system actions",
+      detail: adminAllowed
+        ? "User allowed admin-sensitive routes to appear in dry-run planning."
+        : "Admin-sensitive routes stay out of suggested and selectable plans.",
+      passed: adminAllowed
+    },
+    {
+      id: "protected-paths",
+      label: "Protected paths",
+      detail: protectedCount ? `${protectedCount} protected path(s) constrain planning.` : "No user-protected paths have been added yet.",
+      passed: true
+    }
+  ];
+
+  return {
+    schemaVersion: "spaceguard-intake-policy/v1",
+    targetDrive: cleanDrive,
+    goalBytes,
+    mode,
+    adminAllowed,
+    adminSensitiveBlocked,
+    protectedCount,
+    status: adminSensitiveBlocked ? "admin-sensitive-blocked" : "admin-sensitive-allowed",
+    automationBlockedReason: adminSensitiveBlocked
+      ? "Admin-sensitive cleanup routes require explicit user allowance before they can enter a dry-run plan."
+      : "Admin-sensitive routes may appear in dry-run planning, but real execution remains locked.",
+    items
+  };
 }
 
-export function selectedByDefault(action, protectedPaths = []) {
+export function actionRequiresAdminConsent(action) {
+  if (!action) return false;
+  const policy = getExecutorPolicy(action);
+  return (
+    policy.lane === "admin-rebuildable" ||
+    policy.lane === "advanced" ||
+    policy.route === "windows-cleanup-api" ||
+    policy.route === "advanced-checklist" ||
+    policy.route === "advanced-system-toggle"
+  );
+}
+
+export function actionAllowedByIntake(action, intakePolicy = null) {
+  if (!intakePolicy) return true;
+  if (intakePolicy.adminSensitiveBlocked && actionRequiresAdminConsent(action)) return false;
+  return true;
+}
+
+export function getIntakeBlocker(action, intakePolicy = null) {
+  if (!actionAllowedByIntake(action, intakePolicy)) return "intake admin boundary";
+  return "";
+}
+
+export function selectableAction(action, protectedPaths = [], intakePolicy = null) {
   protectedPaths = Array.isArray(protectedPaths) ? protectedPaths : [];
-  return action.selectedByDefault && selectableAction(action, protectedPaths);
+  return action.gate !== "blocked" && action.gate !== "advisory" && !isActionProtected(action, protectedPaths) && actionAllowedByIntake(action, intakePolicy);
+}
+
+export function selectedByDefault(action, protectedPaths = [], intakePolicy = null) {
+  protectedPaths = Array.isArray(protectedPaths) ? protectedPaths : [];
+  return action.selectedByDefault && selectableAction(action, protectedPaths, intakePolicy);
 }
 
 export function computeTotals(selectedIds, actionList = actions, options = {}) {
@@ -1208,9 +1287,9 @@ export function computeTotals(selectedIds, actionList = actions, options = {}) {
   };
 }
 
-export function buildSuggestedPlan(goalBytes, selectedIds = new Set(), actionList = actions, protectedPaths = []) {
+export function buildSuggestedPlan(goalBytes, selectedIds = new Set(), actionList = actions, protectedPaths = [], intakePolicy = null) {
   const ordered = actionList
-    .filter((action) => selectableAction(action, protectedPaths))
+    .filter((action) => selectableAction(action, protectedPaths, intakePolicy))
     .slice()
     .sort((a, b) => {
       const riskDelta = riskOrder[a.risk] - riskOrder[b.risk];
@@ -1233,11 +1312,11 @@ export function getExecutionReadiness(selectedIds, approvals) {
   return getExecutionReadinessForActions(selectedIds, approvals, actions);
 }
 
-export function getExecutionReadinessForActions(selectedIds, approvals, actionList = actions, protectedPaths = [], itemReviewsByAction = null) {
+export function getExecutionReadinessForActions(selectedIds, approvals, actionList = actions, protectedPaths = [], itemReviewsByAction = null, intakePolicy = null) {
   const selected = actionList.filter((action) => selectedIds.has(action.id));
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, approvals);
   const unresolved = selected
-    .map((action) => ({ action, gate: unresolvedGate(action, approvals, protectedPaths, getItemReviewForAction(action, reviewsByAction)) }))
+    .map((action) => ({ action, gate: unresolvedGate(action, approvals, protectedPaths, getItemReviewForAction(action, reviewsByAction), intakePolicy) }))
     .filter((entry) => entry.gate);
 
   return {
@@ -1401,7 +1480,8 @@ export function buildPlanSnapshot({
   protectedPaths = [],
   itemReviewsByAction = null,
   scanMode = "demo",
-  goalBytes = 0
+  goalBytes = 0,
+  intakePolicy = null
 } = {}) {
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, approvals);
   const selected = actionList.filter((action) => selectedIds.has(action.id));
@@ -1429,6 +1509,14 @@ export function buildPlanSnapshot({
   const payload = {
     scanMode,
     goalBytes,
+    intake: intakePolicy
+      ? {
+          targetDrive: intakePolicy.targetDrive,
+          mode: intakePolicy.mode,
+          adminAllowed: Boolean(intakePolicy.adminAllowed),
+          adminSensitiveBlocked: Boolean(intakePolicy.adminSensitiveBlocked)
+        }
+      : null,
     protectedPaths: [...protectedPaths].sort(),
     groupConfirm: Boolean(approvals.groupConfirm),
     rows
@@ -1676,18 +1764,20 @@ export function buildPrivacyBoundary({
   };
 }
 
-export function buildPlanReview(actionList = actions, selectedIds = new Set(), approvals = {}, protectedPaths = [], itemReviewsByAction = null) {
+export function buildPlanReview(actionList = actions, selectedIds = new Set(), approvals = {}, protectedPaths = [], itemReviewsByAction = null, intakePolicy = null) {
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, approvals);
   const rows = actionList
     .map((action) => {
       const selected = selectedIds.has(action.id);
       const protectedByUser = isActionProtected(action, protectedPaths);
+      const intakeBlocked = !actionAllowedByIntake(action, intakePolicy);
       const itemReview = getItemReviewForAction(action, reviewsByAction);
-      const gate = selected ? unresolvedGate(action, approvals, protectedPaths, itemReview) : null;
+      const gate = selected ? unresolvedGate(action, approvals, protectedPaths, itemReview, intakePolicy) : null;
       const plannedBytes = getPlannedActionBytes(action, approvals, reviewsByAction);
       let status = "available";
 
       if (protectedByUser) status = "protected";
+      else if (intakeBlocked) status = "intake-blocked";
       else if (action.gate === "blocked" || action.gate === "advisory") status = "blocked";
       else if (selected && gate) status = "pending";
       else if (selected) status = "approved";
@@ -1705,7 +1795,7 @@ export function buildPlanReview(actionList = actions, selectedIds = new Set(), a
       };
     })
     .sort((a, b) => {
-      const statusRank = { pending: 0, protected: 1, blocked: 2, approved: 3, available: 4 };
+      const statusRank = { pending: 0, protected: 1, "intake-blocked": 2, blocked: 3, approved: 4, available: 5 };
       return statusRank[a.status] - statusRank[b.status] || b.bytes - a.bytes;
     });
 
@@ -1714,7 +1804,7 @@ export function buildPlanReview(actionList = actions, selectedIds = new Set(), a
     approved: rows.filter((row) => row.status === "approved"),
     pending: rows.filter((row) => row.status === "pending"),
     protected: rows.filter((row) => row.status === "protected"),
-    blocked: rows.filter((row) => row.status === "blocked")
+    blocked: rows.filter((row) => row.status === "blocked" || row.status === "intake-blocked")
   };
 }
 
@@ -1728,22 +1818,23 @@ export function buildRecoveryAdvisor({
   protectedPaths = [],
   ledger = [],
   itemReviewsByAction = null,
-  planSnapshot = null
+  planSnapshot = null,
+  intakePolicy = null
 } = {}) {
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, approvals);
   const totals = computeTotals(selectedIds, actionList, { approvals, itemReviewsByAction: reviewsByAction });
-  const readiness = getExecutionReadinessForActions(selectedIds, approvals, actionList, protectedPaths, reviewsByAction);
+  const readiness = getExecutionReadinessForActions(selectedIds, approvals, actionList, protectedPaths, reviewsByAction, intakePolicy);
   const gapBytes = Math.max(0, goalBytes - totals.selectedBytes);
   const selectedPendingBytes = readiness.unresolved.reduce((sum, entry) => sum + getPendingActionBytes(entry.action, approvals, reviewsByAction), 0);
   const available = actionList
-    .filter((action) => selectableAction(action, protectedPaths) && !selectedIds.has(action.id))
+    .filter((action) => selectableAction(action, protectedPaths, intakePolicy) && !selectedIds.has(action.id))
     .slice()
     .sort((a, b) => riskOrder[a.risk] - riskOrder[b.risk] || b.bytes - a.bytes);
   const quickWins = available.filter((action) => action.gate === "auto" || action.risk === "safe");
   const rebuildable = available.filter((action) => action.gate === "groupConfirm");
   const reviewCandidates = available.filter((action) => action.gate === "review");
   const advancedCandidates = available.filter((action) => action.gate === "typed");
-  const blockedVisible = actionList.filter((action) => action.gate === "blocked" || action.gate === "advisory" || isActionProtected(action, protectedPaths));
+  const blockedVisible = actionList.filter((action) => action.gate === "blocked" || action.gate === "advisory" || isActionProtected(action, protectedPaths) || !actionAllowedByIntake(action, intakePolicy));
   const normalCandidates = [...quickWins, ...rebuildable, ...reviewCandidates];
   const normalSelectableBytes = normalCandidates.reduce((sum, action) => sum + action.bytes, 0);
 
@@ -2053,13 +2144,15 @@ export function buildDecisionLog({
   protectedPaths = [],
   ledger = [],
   goalBytes = 0,
-  itemReviewsByAction = null
+  itemReviewsByAction = null,
+  intakePolicy = null
 } = {}) {
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, approvals);
   const totals = computeTotals(selectedIds, actionList, { approvals, itemReviewsByAction: reviewsByAction });
-  const gateState = readiness || getExecutionReadinessForActions(selectedIds, approvals, actionList, protectedPaths, reviewsByAction);
+  const gateState = readiness || getExecutionReadinessForActions(selectedIds, approvals, actionList, protectedPaths, reviewsByAction, intakePolicy);
   const selected = actionList.filter((action) => selectedIds.has(action.id));
   const protectedCount = actionList.filter((action) => isActionProtected(action, protectedPaths)).length;
+  const intakeBlockedCount = actionList.filter((action) => !actionAllowedByIntake(action, intakePolicy)).length;
   const blockedCount = actionList.filter((action) => action.gate === "blocked" || action.gate === "advisory").length;
   const goalMet = totals.selectedBytes >= goalBytes;
 
@@ -2095,9 +2188,9 @@ export function buildDecisionLog({
     {
       id: "policy",
       title: "Policy boundary",
-      status: protectedCount > 0 ? "protected" : "locked-visible",
-      tone: protectedCount > 0 ? "restricted" : "review",
-      detail: `${protectedCount} protected match(es), ${blockedCount} blocked or advisory zone(s) visible.`
+      status: protectedCount > 0 ? "protected" : intakeBlockedCount > 0 ? "intake-blocked" : "locked-visible",
+      tone: protectedCount > 0 || intakeBlockedCount > 0 ? "restricted" : "review",
+      detail: `${protectedCount} protected match(es), ${intakeBlockedCount} intake-blocked route(s), ${blockedCount} blocked or advisory zone(s) visible.`
     },
     {
       id: "execution",
@@ -2397,19 +2490,20 @@ export function buildAgentQuestionQueue({
   };
 }
 
-export function buildReviewWorkbench(actionList = actions, selectedIds = new Set(), approvals = {}, protectedPaths = [], itemReviewsByAction = null) {
+export function buildReviewWorkbench(actionList = actions, selectedIds = new Set(), approvals = {}, protectedPaths = [], itemReviewsByAction = null, intakePolicy = null) {
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, approvals);
   const rows = actionList
     .map((action) => {
       const protectedByUser = isActionProtected(action, protectedPaths);
+      const intakeBlocked = !actionAllowedByIntake(action, intakePolicy);
       const selected = selectedIds.has(action.id);
       const itemReview = getItemReviewForAction(action, reviewsByAction);
-      const gate = unresolvedGate(action, approvals, protectedPaths, itemReview);
+      const gate = unresolvedGate(action, approvals, protectedPaths, itemReview, intakePolicy);
       const evidence = action.scanSource ? action.scanStatus || "measured" : "demo-estimate";
       const reviewSummary = getReviewDecisionSummary(action, approvals, itemReview);
       const status = protectedByUser
         ? "protected"
-        : action.gate === "blocked" || action.gate === "advisory"
+        : intakeBlocked || action.gate === "blocked" || action.gate === "advisory"
           ? "locked"
           : gate
             ? "needs-decision"
@@ -2531,20 +2625,23 @@ export function buildExecutorPlan({
   protectedPaths = [],
   scanMode = "demo",
   preflight = null,
-  itemReviewsByAction = null
+  itemReviewsByAction = null,
+  intakePolicy = null
 } = {}) {
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, approvals);
   const selected = actionList.filter((action) => selectedIds.has(action.id));
   const rows = selected.map((action) => {
     const policy = getExecutorPolicy(action);
     const protectedByUser = isActionProtected(action, protectedPaths);
+    const intakeBlocker = getIntakeBlocker(action, intakePolicy);
     const itemReview = getItemReviewForAction(action, reviewsByAction);
-    const gate = unresolvedGate(action, approvals, protectedPaths, itemReview);
+    const gate = unresolvedGate(action, approvals, protectedPaths, itemReview, intakePolicy);
     const policyBlocked = action.gate === "blocked" || action.gate === "advisory" || policy.lane === "blocked" || policy.lane === "advisory";
     const realBlockedReason = getRealExecutionBlocker(action, policy, scanMode);
     const plannedBytes = getPlannedActionBytes(action, approvals, reviewsByAction);
     const blockers = [
       protectedByUser ? "protected path" : null,
+      intakeBlocker || null,
       gate ? gates[gate]?.label || gate : null,
       policyBlocked ? policy.label : null
     ].filter(Boolean);
@@ -4744,13 +4841,14 @@ export function buildReport({
   ledgerHistorySummary = null,
   storageStrategy = null,
   manualStrategyChecklist = null,
-  scanCoverage = null
+  scanCoverage = null,
+  intakePolicy = null
 }) {
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, nativeScan, protectedPaths, {});
   const totals = computeTotals(selectedIds, actionList, { itemReviewsByAction: reviewsByAction });
   const reclaimed = ledger.reduce((sum, entry) => sum + entry.bytes, 0);
   const selected = actionList.filter((action) => selectedIds.has(action.id));
-  const locked = actionList.filter((action) => action.gate === "blocked" || isActionProtected(action, protectedPaths));
+  const locked = actionList.filter((action) => action.gate === "blocked" || isActionProtected(action, protectedPaths) || !actionAllowedByIntake(action, intakePolicy));
   const measuredFindings = nativeScan?.findings?.filter((finding) => finding.status === "measured" || finding.status === "limited") || [];
 
   return [
@@ -4764,6 +4862,19 @@ export function buildReport({
     `Selected recovery: ${formatBytes(totals.selectedBytes)}`,
     `Simulated reclaimed: ${formatBytes(reclaimed)}`,
     `Pending gates: ${readiness.unresolved.length}`,
+    `Admin/system actions: ${intakePolicy?.adminAllowed ? "allowed for dry-run planning" : "blocked by intake"}`,
+    "",
+    "## Intake Policy",
+    intakePolicy
+      ? [
+          `- Target drive: ${intakePolicy.targetDrive}`,
+          `- Goal: ${formatBytes(intakePolicy.goalBytes || goalBytes)}`,
+          `- Tolerance: ${intakePolicy.mode}`,
+          `- Admin allowed: ${intakePolicy.adminAllowed ? "yes" : "no"}`,
+          `- Status: ${intakePolicy.status}`,
+          `- Boundary: ${intakePolicy.automationBlockedReason}`
+        ].join("\n")
+      : "- Not captured.",
     "",
     "## Protected Paths",
     protectedPaths.length ? protectedPaths.map((path) => `- ${path}`).join("\n") : "- None",
@@ -5210,9 +5321,10 @@ export function buildReport({
   ].join("\n");
 }
 
-function unresolvedGate(action, approvals = {}, protectedPaths = [], itemReview = null) {
+function unresolvedGate(action, approvals = {}, protectedPaths = [], itemReview = null, intakePolicy = null) {
   if (isActionProtected(action, protectedPaths)) return "protected";
-  if (!selectableAction(action, protectedPaths) || action.gate === "auto") return null;
+  if (!actionAllowedByIntake(action, intakePolicy)) return "intake";
+  if (!selectableAction(action, protectedPaths, intakePolicy) || action.gate === "auto") return null;
   if (action.gate === "groupConfirm") return approvals.groupConfirm ? null : "groupConfirm";
   if (action.gate === "review") return isReviewGateResolved(action, approvals, itemReview) ? null : "review";
   if (action.gate === "typed") return approvals.typed?.[action.id] === action.typedPhrase ? null : "typed";
@@ -5228,8 +5340,10 @@ function isReviewGateResolved(action, approvals = {}, itemReview = null) {
 
 function getReviewReason(action, status, gate, itemReview = null) {
   if (status === "protected") return "Matches a user-protected path.";
+  if (status === "intake-blocked") return "Blocked by intake policy until admin/system actions are allowed.";
   if (status === "blocked") return action.gate === "advisory" ? "Advisory only." : "Blocked by product policy.";
   if (status === "pending") {
+    if (gate === "intake") return "Needs intake consent for admin-sensitive cleanup.";
     if (gate === "groupConfirm") return "Needs rebuildable-cache approval.";
     if (gate === "typed") return "Needs typed acknowledgement.";
     if (itemReview?.items?.length) {
@@ -6147,6 +6261,7 @@ function buildVmChecklist(vmScenario, checkRows) {
 
 function reviewNextStep(action, status, gate, evidence, reviewSummary = null) {
   if (status === "protected") return "Protected by user; never include until the protected path is removed.";
+  if (gate === "intake") return "Allow admin/system actions in intake before this route can enter the dry-run plan.";
   if (status === "locked") return action.gate === "advisory" ? "Explain manually; do not automate." : "Policy-blocked; keep visible but non-executable.";
   if (evidence === "missing") return "No matching root was measured in the current scan.";
   if (evidence === "unsupported") return "Needs a dedicated detector before the app can size it.";

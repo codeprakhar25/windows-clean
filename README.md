@@ -142,6 +142,7 @@ The demo also includes:
 - Scenario presets for developer, gaming, and family laptops.
 - Real data readiness panel for the Tauri read-only scanner.
 - Native Windows volume evidence for C: total, used, and free bytes when the desktop scanner can read it.
+- Intake constraints for target drive, goal, risk tolerance, protected paths, and whether admin/system routes can enter dry-run planning.
 - Real scan settings for project artifact inclusion, traversal depth, per-root entry caps, and custom read-only roots.
 - Scan coverage confidence showing measured, limited, unsupported, missing, custom-root, and demo-estimated cleanup roots.
 - Custom root discovery that measures user-entered folders read-only for manual review and never creates executor routes.
@@ -219,6 +220,8 @@ Manual strategy guidance has its own checklist. The user can mark evidence such 
 
 User-protected paths are treated as a runtime block even if the matching recipe would normally be selectable.
 
+Admin/system-sensitive routes are also intake-gated. Windows.old, hibernation changes, WSL compaction, and other admin-sensitive routes stay out of suggested and selectable dry-run plans until the user explicitly allows admin/system actions. Allowing them only affects dry-run planning; it does not enable real execution, self-elevation, UAC prompts, or destructive commands.
+
 Execution is blocked until the preflight passes:
 
 - Scan complete.
@@ -232,7 +235,7 @@ Execution is blocked until the preflight passes:
 - Real deletion is still disabled.
 - The current plan snapshot has been armed through the final dry-run consent receipt.
 
-Every simulation is tagged with a plan id. If the user changes selected actions, approvals, protected paths, item decisions, scan mode, or goal, the old ledger becomes stale and the current plan can be simulated again. The verification panel and exported report show whether the ledger is current, stale, missing, or needs rescan.
+Every simulation is tagged with a plan id. If the user changes selected actions, approvals, protected paths, item decisions, scan mode, goal, or admin/system intake allowance, the old ledger becomes stale and the current plan can be simulated again. The verification panel and exported report show whether the ledger is current, stale, missing, or needs rescan.
 
 Final consent is also plan-specific. A user can arm only the current plan after run readiness passes. Changing selection, approvals, protected paths, review item decisions, scan mode, or goal clears the receipt and disables simulation again.
 
