@@ -85,6 +85,46 @@ const assert = require("assert");
     true,
     "admin allowance should make admin-sensitive dry-run routes selectable again"
   );
+  const lockedPowerCatalog = guard.buildTaskPowerCatalog({
+    actionList: guard.actions,
+    selectedIds: new Set(["windows-old"]),
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    intakePolicy: intakeBlockedPolicy
+  });
+  assert.strictEqual(lockedPowerCatalog.schemaVersion, "spaceguard-task-powers/v1", "task power catalog should expose a schema version");
+  assert.strictEqual(lockedPowerCatalog.realRunEnabled, false, "task powers must not enable real execution");
+  assert.strictEqual(
+    lockedPowerCatalog.rows.find((row) => row.id === "admin-cleanup").status,
+    "locked",
+    "admin cleanup power should lock behind intake"
+  );
+  const cachePowerCatalog = guard.buildTaskPowerCatalog({
+    actionList: guard.actions,
+    selectedIds: new Set(["gradle-cache"]),
+    approvals: { groupConfirm: false, reviewed: {}, typed: {} },
+    intakePolicy: intakeAllowedPolicy
+  });
+  assert.strictEqual(
+    cachePowerCatalog.rows.find((row) => row.id === "rebuildable-cache-cleanup").status,
+    "needs-approval",
+    "rebuildable cache power should wait for approval"
+  );
+  const activeCachePowerCatalog = guard.buildTaskPowerCatalog({
+    actionList: guard.actions,
+    selectedIds: new Set(["gradle-cache"]),
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    intakePolicy: intakeAllowedPolicy
+  });
+  assert.strictEqual(
+    activeCachePowerCatalog.rows.find((row) => row.id === "rebuildable-cache-cleanup").status,
+    "active",
+    "rebuildable cache power should activate after approval"
+  );
+  assert.strictEqual(
+    guard.buildTaskPowerCatalog({ actionList: guard.actions }).rows.find((row) => row.id === "restricted-zones").status,
+    "blocked",
+    "restricted-zone power should always remain blocked"
+  );
 
   const wslOnly = new Set(["wsl-vhdx"]);
   assert.strictEqual(

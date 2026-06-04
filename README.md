@@ -143,6 +143,7 @@ The demo also includes:
 - Real data readiness panel for the Tauri read-only scanner.
 - Native Windows volume evidence for C: total, used, and free bytes when the desktop scanner can read it.
 - Intake constraints for target drive, goal, risk tolerance, protected paths, and whether admin/system routes can enter dry-run planning.
+- Task powers panel that maps selected cleanup actions to scoped capabilities such as safe cleanup, rebuildable cache cleanup, reviewed item cleanup, admin cleanup, advanced system strategy, manual storage strategy, and restricted zones.
 - Real scan settings for project artifact inclusion, traversal depth, per-root entry caps, and custom read-only roots.
 - Scan coverage confidence showing measured, limited, unsupported, missing, custom-root, and demo-estimated cleanup roots.
 - Custom root discovery that measures user-entered folders read-only for manual review and never creates executor routes.
@@ -155,6 +156,7 @@ The demo also includes:
 - Review workbench that separates measured evidence, unresolved decisions, protected paths, and unsupported roots.
 - Item review panel for Downloads, large files, old project dependencies, and Android Studio roots, with per-item Remove, Move, Archive, or Keep decisions.
 - Decision log for source, scan, plan, gates, policy, and execution state.
+- Decision log and dry-run reports include the selected task powers, waiting power gates, locked admin powers, and real-run-disabled boundary.
 - Executor policy panel that classifies selected routes before simulation.
 - Executor manifest panel that shows every route family, first-safe lanes, required validation checks, fixtures, preconditions, rollback notes, and next implementation steps.
 - Tool command inventory panel that lists official inspect/prune command shapes for npm, pnpm, Docker, Gradle, and Windows cleanup without executing shell commands.

@@ -33,6 +33,9 @@ const requiredAppMarkers = [
   "Admin/system actions",
   "intake gated",
   "Allow admin routes",
+  "Task powers",
+  "Scoped powers",
+  "real run disabled",
   "Run real scan",
   "Native app required",
   "Real scan settings",
@@ -137,6 +140,7 @@ assert(app.includes("runScan"), "demo scan workflow should exist");
 assert(app.includes("simulateCleanup"), "execution should be simulated");
 assert(app.includes("getExecutionReadiness"), "execution gate checks should be wired");
 assert(app.includes("buildExecutionConsentReceipt"), "execution consent receipt should be wired");
+assert(app.includes("buildTaskPowerCatalog"), "task power catalog should be wired");
 assert(app.includes("runNativeReadonlyScan"), "real read-only scan workflow should be wired");
 assert(app.includes("scanSettings"), "native scan settings should be wired");
 assert(app.includes("updateScanSetting"), "native scan settings should invalidate stale evidence");
@@ -210,6 +214,10 @@ assert(model.includes("spaceguard-storage-strategy/v1"), "model should expose st
 assert(model.includes("spaceguard-manual-strategy-checklist/v1"), "model should expose manual strategy checklist schema");
 assert(model.includes("spaceguard-question-queue/v1"), "model should expose agent question queue schema");
 assert(model.includes("spaceguard-intake-policy/v1"), "model should expose intake policy schema");
+assert(model.includes("spaceguard-task-powers/v1"), "model should expose task power schema");
+assert(model.includes("taskPowerDefinitions"), "model should define scoped task powers");
+assert(model.includes("admin-cleanup"), "model should classify admin cleanup as a scoped power");
+assert(model.includes("reviewed-item-cleanup"), "model should classify reviewed item cleanup as a scoped power");
 assert(model.includes("permanentConfirm"), "model should expose permanent-removal confirmation gate");
 assert(model.includes("confirm-permanent-removal"), "question queue should ask permanent-removal questions");
 assert(model.includes("intake admin boundary"), "model should name admin intake blockers");
@@ -246,6 +254,7 @@ assert(model.includes("needs-evidence-detail"), "marked validation evidence shou
 assert(model.includes("destructiveActionAvailable"), "real executor capsule should keep destructive availability explicit");
 assert(model.includes("toolNativeCommandSpecs"), "model should declare tool-native command specs");
 assert(model.includes("commandExecutionEnabled: false"), "tool command inventory should keep command execution disabled");
+assert(model.includes("realRunAvailable: false"), "task powers should keep real run unavailable");
 assert(model.includes("This bundle intentionally excludes local paths"), "support bundle should state redaction boundary");
 assert(model.includes("permanent-removal acknowledgement"), "model should disclose permanent-removal rollback boundary");
 assert(model.includes("No cloud telemetry"), "model should keep cloud telemetry disabled");

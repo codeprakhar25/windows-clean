@@ -112,6 +112,7 @@ The UI must also expose a recovery advisor and decision log:
 - `review workbench`: evidence status, gate, path, and next step for non-trivial findings.
 - `item review`: candidate files or folders under review-gated roots, including size, age, recommendation, reason, and protected-path state.
 - `decision log`: data source, scan state, plan coverage, gate state, policy boundary, and execution state.
+- `task powers`: scoped per-task capabilities that show whether safe cleanup, rebuildable cache cleanup, reviewed item cleanup, admin cleanup, advanced system strategy, manual storage strategy, or restricted zones are active, locked, advisory, or blocked.
 - `executor policy`: dry-run route, future executor lane, blocked reason, guardrails, and verification requirement.
 - `release gate`: feature flags, runtime capability, validation evidence, and disposable VM coverage before real execution.
 - `write readiness`: final real-execution gate combining implementation, runtime write capability, validation, rollback, rescan parity, privilege, privacy, and consent.
@@ -152,6 +153,16 @@ Gate types:
 - `protected`: matched a user-protected path and is removed from executable plans.
 
 Blocked gates remain visible so the user understands where space exists and why the app refuses to touch it.
+
+Task power invariant:
+
+- Task powers are narrow route capabilities, not a global admin mode.
+- A selected action can activate only the matching scoped power.
+- A power cannot bypass scan, intake, protected-path, approval, item-review, typed, rollback, release, or write-readiness gates.
+- `admin-cleanup` and `advanced-system-strategy` stay locked until the user allows admin/system dry-run routes at intake.
+- `restricted-zones` stays blocked even when selected data has visible size.
+- `manual-storage-strategy` can track evidence and next steps but cannot create executor rows.
+- Every power reports real execution unavailable until a future native executor, validation evidence, rollback proof, privilege boundary, privacy boundary, and consent path all pass.
 
 Review gate invariant:
 

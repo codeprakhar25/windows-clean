@@ -449,6 +449,58 @@ export const executorPolicies = {
   }
 };
 
+export const taskPowerDefinitions = [
+  {
+    id: "safe-cleanup",
+    label: "Safe cleanup",
+    description: "Known disposable roots such as temp files, browser caches, and Recycle Bin with its separate permanent-removal gate.",
+    scope: "Exact allowlisted roots only.",
+    guardrails: ["No arbitrary folder deletion", "Skip identity stores", "Recycle Bin needs permanent confirmation"]
+  },
+  {
+    id: "rebuildable-cache-cleanup",
+    label: "Rebuildable cache cleanup",
+    description: "Tool and launcher caches that can be recreated but may cost time or downloads later.",
+    scope: "Bounded cache roots and tool-native inventory routes.",
+    guardrails: ["User confirmation required", "No project source folders", "Prefer official tool commands"]
+  },
+  {
+    id: "reviewed-item-cleanup",
+    label: "Reviewed item cleanup",
+    description: "Downloads, large personal files, project artifacts, and Android tooling entries that require per-item decisions.",
+    scope: "Only items explicitly marked Remove enter executor preview.",
+    guardrails: ["Item-by-item review", "Move/archive remains manual", "Protected paths stay excluded"]
+  },
+  {
+    id: "admin-cleanup",
+    label: "Admin cleanup",
+    description: "System-owned cleanup surfaces such as Windows.old that must be allowed at intake before planning.",
+    scope: "Supported Windows cleanup surfaces only.",
+    guardrails: ["Dry-run planning consent first", "No direct system-directory delete", "Real execution locked"]
+  },
+  {
+    id: "advanced-system-strategy",
+    label: "Advanced system strategy",
+    description: "WSL compaction and system toggles that require typed acknowledgement and backup or rollback context.",
+    scope: "Guided advanced workflows; no self-elevation.",
+    guardrails: ["Typed acknowledgement", "Backup or restore path", "No pagefile tuning"]
+  },
+  {
+    id: "manual-storage-strategy",
+    label: "Manual storage strategy",
+    description: "Drive migration, uninstall, archive, and partition planning when cleanup alone cannot hit the goal.",
+    scope: "Advice and evidence tracking only.",
+    guardrails: ["No automated partition writes", "No automated uninstall", "Backup-first"]
+  },
+  {
+    id: "restricted-zones",
+    label: "Restricted zones",
+    description: "Data classes the agent can explain but will not clean automatically.",
+    scope: "Visible for education and reporting only.",
+    guardrails: ["No browser identity cleanup", "No Docker volume cleanup", "No registry or pagefile automation"]
+  }
+];
+
 export const releaseFeatureFlags = {
   realExecutors: false,
   tempCleanupExecutor: false,
@@ -1498,6 +1550,7 @@ export function buildPlanSnapshot({
         path: action.path,
         risk: action.risk,
         gate: action.gate,
+        powerId: getActionTaskPowerId(action),
         bytes: getPlannedActionBytes(action, approvals, reviewsByAction),
         visibleBytes: action.bytes,
         permanentConfirm: Boolean(approvals.permanentConfirm),
@@ -2151,7 +2204,8 @@ export function buildDecisionLog({
   ledger = [],
   goalBytes = 0,
   itemReviewsByAction = null,
-  intakePolicy = null
+  intakePolicy = null,
+  taskPowerCatalog = null
 } = {}) {
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, approvals);
   const totals = computeTotals(selectedIds, actionList, { approvals, itemReviewsByAction: reviewsByAction });
@@ -2197,6 +2251,15 @@ export function buildDecisionLog({
       status: protectedCount > 0 ? "protected" : intakeBlockedCount > 0 ? "intake-blocked" : "locked-visible",
       tone: protectedCount > 0 || intakeBlockedCount > 0 ? "restricted" : "review",
       detail: `${protectedCount} protected match(es), ${intakeBlockedCount} intake-blocked route(s), ${blockedCount} blocked or advisory zone(s) visible.`
+    },
+    {
+      id: "task-powers",
+      title: "Task powers",
+      status: taskPowerCatalog?.status || "not-evaluated",
+      tone: taskPowerCatalog?.tone || "review",
+      detail: taskPowerCatalog
+        ? `${taskPowerCatalog.counts.selected} selected power(s), ${taskPowerCatalog.counts.needsApproval} waiting, ${taskPowerCatalog.counts.locked} locked, real execution disabled.`
+        : "Scoped powers have not been evaluated yet."
     },
     {
       id: "execution",
@@ -2665,6 +2728,108 @@ export function getExecutorPolicy(action) {
   };
 }
 
+export function getActionTaskPower(action) {
+  const policy = getExecutorPolicy(action);
+  const powerId = getActionTaskPowerId(action, policy);
+  return getTaskPowerDefinition(powerId);
+}
+
+export function buildTaskPowerCatalog({
+  actionList = actions,
+  selectedIds = new Set(),
+  approvals = { groupConfirm: false, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
+  protectedPaths = [],
+  itemReviewsByAction = null,
+  intakePolicy = null,
+  runtimeCapabilities = {},
+  scanMode = "demo"
+} = {}) {
+  const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, approvals);
+  const rows = taskPowerDefinitions.map((definition) => {
+    const availableActions = actionList.filter((action) => getActionTaskPowerId(action) === definition.id);
+    const selectedActions = availableActions.filter((action) => selectedIds.has(action.id));
+    const unresolved = selectedActions
+      .map((action) => ({
+        action,
+        gate: unresolvedGate(action, approvals, protectedPaths, getItemReviewForAction(action, reviewsByAction), intakePolicy)
+      }))
+      .filter((entry) => entry.gate);
+    const blockers = buildTaskPowerBlockers(definition, availableActions, selectedActions, unresolved, intakePolicy);
+    const plannedBytes = selectedActions.reduce((sum, action) => sum + getPlannedActionBytes(action, approvals, reviewsByAction), 0);
+    const visibleBytes = availableActions.reduce((sum, action) => sum + Number(action.bytes || 0), 0);
+    const dryRunActions = selectedActions.filter((action) => {
+      const policy = getExecutorPolicy(action);
+      const plannedActionBytes = getPlannedActionBytes(action, approvals, reviewsByAction);
+      return action.executableInDemo && policy.dryRunSupported && !blockers.length && plannedActionBytes > 0;
+    });
+    const status = getTaskPowerStatus(definition, availableActions, selectedActions, blockers, intakePolicy);
+    const tone = getTaskPowerTone(status);
+
+    return {
+      id: definition.id,
+      label: definition.label,
+      description: definition.description,
+      scope: definition.scope,
+      status,
+      tone,
+      selected: selectedActions.length > 0,
+      availableCount: availableActions.length,
+      selectedCount: selectedActions.length,
+      plannedBytes,
+      visibleBytes,
+      dryRunAvailable: dryRunActions.length > 0,
+      dryRunCount: dryRunActions.length,
+      realRunAvailable: false,
+      scanMode,
+      runtimeRealRunEnabled: Boolean(runtimeCapabilities?.realRunEnabled),
+      actions: availableActions.map((action) => ({
+        id: action.id,
+        title: action.title,
+        gate: action.gate,
+        risk: action.risk,
+        selected: selectedIds.has(action.id),
+        bytes: selectedIds.has(action.id) ? getPlannedActionBytes(action, approvals, reviewsByAction) : Number(action.bytes || 0),
+        route: getExecutorPolicy(action).route
+      })),
+      blockers,
+      guardrails: definition.guardrails,
+      nextStep: getTaskPowerNextStep(definition, status, blockers, selectedActions)
+    };
+  });
+  const selectedRows = rows.filter((row) => row.selected);
+  const blockedRows = selectedRows.filter((row) => row.status === "blocked" || row.status === "locked" || row.status === "needs-approval");
+  const status = !selectedRows.length
+    ? "no-power-selected"
+    : blockedRows.length
+      ? "powers-need-decision"
+      : "powers-scoped";
+
+  return {
+    schemaVersion: "spaceguard-task-powers/v1",
+    status,
+    tone: status === "powers-scoped" ? "safe" : status === "no-power-selected" ? "review" : "restricted",
+    scanMode,
+    realRunEnabled: false,
+    destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
+    rows,
+    selectedRows,
+    blockedRows,
+    counts: {
+      total: rows.length,
+      selected: selectedRows.length,
+      active: rows.filter((row) => row.status === "active").length,
+      available: rows.filter((row) => row.status === "available").length,
+      needsApproval: rows.filter((row) => row.status === "needs-approval").length,
+      locked: rows.filter((row) => row.status === "locked").length,
+      blocked: rows.filter((row) => row.status === "blocked").length,
+      advisory: rows.filter((row) => row.status === "advisory").length,
+      dryRun: rows.reduce((sum, row) => sum + row.dryRunCount, 0)
+    },
+    primary: getTaskPowerPrimary(status, blockedRows, selectedRows),
+    steps: getTaskPowerSteps(status, blockedRows, selectedRows)
+  };
+}
+
 export function buildExecutorPlan({
   selectedIds = new Set(),
   actionList = actions,
@@ -2706,6 +2871,8 @@ export function buildExecutorPlan({
       path: action.path,
       risk: action.risk,
       gate: gate || action.gate,
+      powerId: getActionTaskPowerId(action, policy),
+      powerLabel: getTaskPowerDefinition(getActionTaskPowerId(action, policy)).label,
       lane: policy.lane,
       route: policy.route,
       label: policy.label,
@@ -4889,7 +5056,8 @@ export function buildReport({
   storageStrategy = null,
   manualStrategyChecklist = null,
   scanCoverage = null,
-  intakePolicy = null
+  intakePolicy = null,
+  taskPowerCatalog = null
 }) {
   const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, nativeScan, protectedPaths, {});
   const totals = computeTotals(selectedIds, actionList, { itemReviewsByAction: reviewsByAction });
@@ -4922,6 +5090,22 @@ export function buildReport({
           `- Boundary: ${intakePolicy.automationBlockedReason}`
         ].join("\n")
       : "- Not captured.",
+    "",
+    "## Task Powers",
+    taskPowerCatalog
+      ? [
+          `- Status: ${taskPowerCatalog.status}`,
+          `- Real run enabled: ${taskPowerCatalog.realRunEnabled ? "yes" : "no"}`,
+          `- Selected powers: ${taskPowerCatalog.counts.selected}`,
+          `- Active powers: ${taskPowerCatalog.counts.active}`,
+          `- Powers needing approval: ${taskPowerCatalog.counts.needsApproval}`,
+          `- Locked powers: ${taskPowerCatalog.counts.locked}`,
+          `- Blocked powers: ${taskPowerCatalog.counts.blocked}`,
+          taskPowerCatalog.rows
+            .map((row) => `- ${row.label}: ${row.status} | selected=${row.selectedCount}/${row.availableCount} | dry-run=${row.dryRunCount} | ${row.nextStep}`)
+            .join("\n")
+        ].join("\n")
+      : "- Not evaluated.",
     "",
     "## Protected Paths",
     protectedPaths.length ? protectedPaths.map((path) => `- ${path}`).join("\n") : "- None",
@@ -5192,7 +5376,7 @@ export function buildReport({
           `- Real run enabled: ${executorPlan.realRunEnabled ? "yes" : "no"}`,
           executorPlan.rows.length
             ? executorPlan.rows
-                .map((row) => `- ${row.title}: ${row.status} | ${row.lane} | ${row.route} | ${row.realBlockedReason || row.verification}`)
+                .map((row) => `- ${row.title}: ${row.status} | power=${row.powerLabel} | ${row.lane} | ${row.route} | ${row.realBlockedReason || row.verification}`)
                 .join("\n")
             : "- No selected executor routes."
         ].join("\n")
@@ -5366,6 +5550,118 @@ export function buildReport({
       ? "This report may include locally measured path sizes from a native read-only scan. No cleanup was performed."
       : "This report was generated from demo data only. No local filesystem scan or cleanup was performed."
   ].join("\n");
+}
+
+function getActionTaskPowerId(action, policy = null) {
+  const resolvedPolicy = policy || getExecutorPolicy(action);
+  if (!action || action.gate === "blocked" || resolvedPolicy.lane === "blocked" || resolvedPolicy.route === "blocked") return "restricted-zones";
+  if (action.gate === "advisory" || resolvedPolicy.lane === "advisory" || resolvedPolicy.route === "advisory") return "manual-storage-strategy";
+  if (resolvedPolicy.lane === "admin-rebuildable" || resolvedPolicy.route === "windows-cleanup-api") return "admin-cleanup";
+  if (resolvedPolicy.lane === "advanced" || resolvedPolicy.route === "advanced-checklist" || resolvedPolicy.route === "advanced-system-toggle") return "advanced-system-strategy";
+  if (action.gate === "review" || resolvedPolicy.lane === "review") return "reviewed-item-cleanup";
+  if (resolvedPolicy.lane === "tool-native" || resolvedPolicy.lane === "rebuildable" || action.gate === "groupConfirm") return "rebuildable-cache-cleanup";
+  return "safe-cleanup";
+}
+
+function getTaskPowerDefinition(powerId) {
+  return taskPowerDefinitions.find((power) => power.id === powerId) || taskPowerDefinitions[taskPowerDefinitions.length - 1];
+}
+
+function buildTaskPowerBlockers(definition, availableActions = [], selectedActions = [], unresolved = [], intakePolicy = null) {
+  const blockers = [];
+  const addBlocker = (id, label, detail, gate = "") => {
+    if (blockers.some((blocker) => blocker.id === id && blocker.detail === detail)) return;
+    blockers.push({ id, label, detail, gate });
+  };
+
+  if (definition.id === "restricted-zones" && availableActions.length) {
+    addBlocker("policy-blocked", "Policy blocked", "This power is intentionally unavailable for automatic cleanup.", "blocked");
+  }
+
+  if (definition.id === "manual-storage-strategy" && availableActions.length) {
+    addBlocker("manual-only", "Manual only", "This power tracks backup-first strategy but never creates executor routes.", "advisory");
+  }
+
+  if ((definition.id === "admin-cleanup" || definition.id === "advanced-system-strategy") && intakePolicy?.adminSensitiveBlocked) {
+    addBlocker("intake-admin-boundary", "Intake admin boundary", "Allow admin/system routes before this power can enter dry-run planning.", "intake");
+  }
+
+  for (const entry of unresolved) {
+    if (entry.gate === "intake") {
+      addBlocker(`intake-${entry.action.id}`, "Intake locked", `${entry.action.title} is blocked by the admin/system intake boundary.`, "intake");
+    } else if (entry.gate === "protected") {
+      addBlocker(`protected-${entry.action.id}`, "Protected path", `${entry.action.title} matches a user-protected path.`, "protected");
+    } else if (entry.gate === "groupConfirm") {
+      addBlocker("rebuildable-approval", "Approval needed", "Approve selected rebuildable cache cleanup before dry-run simulation.", "groupConfirm");
+    } else if (entry.gate === "permanentConfirm") {
+      addBlocker("permanent-confirm", "Permanent confirmation", "Confirm Recycle Bin permanent-removal consequence before dry-run simulation.", "permanentConfirm");
+    } else if (entry.gate === "review") {
+      addBlocker(`review-${entry.action.id}`, "Item review needed", `${entry.action.title} needs explicit item decisions.`, "review");
+    } else if (entry.gate === "typed") {
+      addBlocker(`typed-${entry.action.id}`, "Typed acknowledgement", `${entry.action.title} needs its exact typed phrase.`, "typed");
+    } else if (entry.gate) {
+      addBlocker(`gate-${entry.action.id}`, "Gate needed", `${entry.action.title} is waiting on ${entry.gate}.`, entry.gate);
+    }
+  }
+
+  return blockers;
+}
+
+function getTaskPowerStatus(definition, availableActions = [], selectedActions = [], blockers = [], intakePolicy = null) {
+  if (!availableActions.length) return "empty";
+  if (definition.id === "restricted-zones") return "blocked";
+  if (definition.id === "manual-storage-strategy") return "advisory";
+  if ((definition.id === "admin-cleanup" || definition.id === "advanced-system-strategy") && intakePolicy?.adminSensitiveBlocked) return "locked";
+  if (!selectedActions.length) return "available";
+  if (blockers.length) return "needs-approval";
+  return "active";
+}
+
+function getTaskPowerTone(status) {
+  if (status === "active") return "safe";
+  if (status === "available" || status === "needs-approval") return "review";
+  if (status === "advisory") return "advisory";
+  if (status === "blocked" || status === "locked") return "restricted";
+  return "outline";
+}
+
+function getTaskPowerNextStep(definition, status, blockers = [], selectedActions = []) {
+  if (status === "active") return `${definition.label} is scoped and ready for dry-run simulation.`;
+  if (status === "available") return `Select a matching cleanup action to use ${definition.label}.`;
+  if (status === "locked") return "Use the intake control to allow admin/system dry-run routes, then review the specific action gate.";
+  if (status === "blocked") return "Keep this visible for education and manual inspection only; no executor route is available.";
+  if (status === "advisory") return "Track evidence manually. The app will not automate this storage strategy.";
+  if (status === "needs-approval") {
+    const first = blockers[0];
+    return first?.detail || `Resolve gates for ${selectedActions.length} selected action(s).`;
+  }
+  return "No matching cleanup actions are present in this scenario.";
+}
+
+function getTaskPowerPrimary(status, blockedRows = [], selectedRows = []) {
+  if (status === "powers-scoped") return "Selected task powers are scoped for dry-run only.";
+  if (status === "powers-need-decision") return `${blockedRows.length} selected task power(s) need approval, review, or intake changes.`;
+  return "Select cleanup actions to activate scoped task powers.";
+}
+
+function getTaskPowerSteps(status, blockedRows = [], selectedRows = []) {
+  if (status === "powers-scoped") {
+    return [
+      "Keep real execution disabled until validation evidence exists.",
+      "Arm dry-run consent for the current plan snapshot.",
+      "Simulate and rescan affected roots."
+    ];
+  }
+  if (status === "powers-need-decision") {
+    return blockedRows.slice(0, 3).map((row) => row.nextStep);
+  }
+  const availableSelected = selectedRows.length ? selectedRows : [];
+  if (availableSelected.length) return availableSelected.slice(0, 3).map((row) => row.nextStep);
+  return [
+    "Run a scan.",
+    "Select a cleanup action.",
+    "Resolve the power-specific gate before dry-run simulation."
+  ];
 }
 
 function unresolvedGate(action, approvals = {}, protectedPaths = [], itemReview = null, intakePolicy = null) {

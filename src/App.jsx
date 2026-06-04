@@ -70,6 +70,7 @@ import {
   buildStorageStrategyPlan,
   buildSupportBundle,
   buildSupportBundleMarkdown,
+  buildTaskPowerCatalog,
   buildToolCommandInventory,
   buildValidationEvidencePack,
   buildValidationPackMarkdown,
@@ -80,6 +81,7 @@ import {
   formatBytes,
   gates,
   actionRequiresAdminConsent,
+  getActionTaskPower,
   getExecutionReadinessForActions,
   getScenario,
   isActionProtected,
@@ -269,6 +271,20 @@ export default function App() {
     () => buildReviewItemsByAction(actionList, nativeScan.result, protectedPaths, approvals),
     [actionList, nativeScan.result, protectedPaths, approvals]
   );
+  const taskPowerCatalog = useMemo(
+    () =>
+      buildTaskPowerCatalog({
+        actionList,
+        selectedIds,
+        approvals,
+        protectedPaths,
+        itemReviewsByAction,
+        intakePolicy,
+        runtimeCapabilities: runtimeCapabilities.result,
+        scanMode: dataMode
+      }),
+    [actionList, selectedIds, approvals, protectedPaths, itemReviewsByAction, intakePolicy, runtimeCapabilities.result, dataMode]
+  );
   const planSnapshot = useMemo(
     () =>
       buildPlanSnapshot({
@@ -352,9 +368,10 @@ export default function App() {
         ledger: activeLedger,
         goalBytes: goalGb * GB,
         itemReviewsByAction,
-        intakePolicy
+        intakePolicy,
+        taskPowerCatalog
       }),
-    [scanned, scanning, dataMode, actionList, selectedIds, approvals, readiness, protectedPaths, activeLedger, goalGb, itemReviewsByAction, intakePolicy]
+    [scanned, scanning, dataMode, actionList, selectedIds, approvals, readiness, protectedPaths, activeLedger, goalGb, itemReviewsByAction, intakePolicy, taskPowerCatalog]
   );
   const reviewWorkbench = useMemo(
     () => buildReviewWorkbench(actionList, selectedIds, approvals, protectedPaths, itemReviewsByAction, intakePolicy),
@@ -1129,7 +1146,8 @@ export default function App() {
       storageStrategy,
       manualStrategyChecklist,
       scanCoverage,
-      intakePolicy
+      intakePolicy,
+      taskPowerCatalog
     });
     downloadTextFile("spaceguard-dry-run-report.md", report, "text/markdown;charset=utf-8");
   }
@@ -1352,6 +1370,8 @@ export default function App() {
               adminAllowed={adminActionsAllowed}
               onAdminAllowed={setAdminAllowance}
             />
+
+            <TaskPowerPanel catalog={taskPowerCatalog} />
 
             <NativeScanSettingsPanel
               settings={scanSettings}
@@ -1749,6 +1769,82 @@ function IntakePolicyPanel({ policy, adminAllowed, onAdminAllowed }) {
                 <div className="font-medium">{item.label}</div>
                 <div className="text-xs text-muted-foreground">{item.detail}</div>
               </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TaskPowerPanel({ catalog }) {
+  const previewRows = catalog.selectedRows.length
+    ? catalog.selectedRows
+    : catalog.rows.filter((row) => row.status !== "empty").slice(0, 7);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Task powers
+            </CardTitle>
+            <CardDescription>{catalog.primary}</CardDescription>
+          </div>
+          <Badge variant={catalog.tone}>{catalog.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Selected" value={catalog.counts.selected} tone={catalog.counts.selected ? "review" : "safe"} />
+          <QueueStat label="Active" value={catalog.counts.active} tone={catalog.counts.active ? "safe" : "review"} />
+          <QueueStat label="Locked" value={catalog.counts.locked + catalog.counts.needsApproval} tone={catalog.counts.locked || catalog.counts.needsApproval ? "restricted" : "safe"} />
+          <QueueStat label="Dry-run" value={catalog.counts.dryRun} tone={catalog.counts.dryRun ? "safe" : "review"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">Scoped powers</span>
+            <Badge variant={catalog.realRunEnabled ? "restricted" : "safe"}>
+              {catalog.realRunEnabled ? "real run visible" : "real run disabled"}
+            </Badge>
+          </div>
+          <div className="flex flex-col gap-2">
+            {catalog.steps.slice(0, 3).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <Lock className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {previewRows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="mr-auto min-w-0 text-sm font-medium">{row.label}</div>
+                <Badge variant={row.tone}>{row.status}</Badge>
+                <Badge variant="outline">{row.selectedCount}/{row.availableCount}</Badge>
+                <Badge variant="outline">{formatBytes(row.selected ? row.plannedBytes : row.visibleBytes)}</Badge>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">{row.scope}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{row.nextStep}</p>
+              {row.blockers.length ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {row.blockers.slice(0, 2).map((blocker) => (
+                    <Badge key={`${row.id}-${blocker.id}`} variant="restricted">{blocker.label}</Badge>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {row.guardrails.slice(0, 2).map((guardrail) => (
+                    <Badge key={`${row.id}-${guardrail}`} variant="outline">{guardrail}</Badge>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -2548,6 +2644,7 @@ function ActionRow({ action, selected, scanned, protectedByUser, intakePolicy, o
   const intakeBlocked = actionRequiresAdminConsent(action) && intakePolicy?.adminSensitiveBlocked;
   const selectable = selectableAction(action, protectedByUser ? [action.path] : [], intakePolicy);
   const disabled = !scanned || !selectable;
+  const power = getActionTaskPower(action);
   return (
     <div
       className={`grid gap-3 rounded-lg border bg-card p-4 shadow-sm transition-colors lg:grid-cols-[24px_minmax(0,1fr)_96px] ${
@@ -2560,6 +2657,7 @@ function ActionRow({ action, selected, scanned, protectedByUser, intakePolicy, o
           <h3 className="mr-auto text-sm font-semibold">{action.title}</h3>
           <Badge variant={action.risk}>{action.risk}</Badge>
           <Badge variant={action.risk}>{gates[action.gate].label}</Badge>
+          <Badge variant="outline">{power.label}</Badge>
           {action.scanSource ? <Badge variant={action.scanStatus === "missing" ? "outline" : "safe"}>{action.scanStatus}</Badge> : null}
           {protectedByUser ? <Badge variant="restricted">protected</Badge> : null}
           {intakeBlocked ? <Badge variant="review">intake gated</Badge> : null}
