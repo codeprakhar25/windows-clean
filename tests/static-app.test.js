@@ -175,6 +175,8 @@ assert(app.includes("buildPrivilegeBoundary"), "privilege boundary should be wir
 assert(app.includes("buildPrivacyBoundary"), "privacy boundary should be wired");
 assert(app.includes("buildPublicBetaReadiness"), "public beta readiness should be wired");
 assert(app.includes("buildReleaseGate"), "release gate should be wired");
+assert(app.includes("buildReleaseReviewPacket"), "release review packet should be wired");
+assert(app.includes("buildReleaseReviewPacketMarkdown"), "release review packet export should be wired");
 assert(app.includes("buildWriteReadiness"), "write readiness should be wired");
 assert(app.includes("buildRealExecutorCapsule"), "real executor capsule should be wired");
 assert(app.includes("buildFirstSafeExecutorContract"), "first-safe executor contract should be wired");
@@ -218,6 +220,8 @@ assert(app.includes("runNativeWriteBoundary"), "native write boundary probe shou
 assert(app.includes("getNativeRuntimeCapabilities"), "native runtime capability should be wired");
 assert(app.includes("executeCleanupPlan"), "runtime UI should expose rejecting write command capability");
 assert(app.includes("Write boundary probe"), "write boundary probe panel should be rendered");
+assert(app.includes("Release review packet"), "release review packet panel should be rendered");
+assert(app.includes("Export review packet"), "release review packet export action should be visible");
 assert(app.includes("Probe write boundary"), "write boundary probe action should be visible");
 assert(app.includes("rejection evidence"), "write boundary probe should frame evidence as rejection evidence");
 assert(app.includes("zero bytes"), "write boundary probe should make zero-byte outcome visible");
@@ -259,6 +263,9 @@ assert(model.includes("spaceguard-rescan-comparison/v1"), "model should expose r
 assert(model.includes("executedAt"), "ledger entries should carry absolute execution timestamps");
 assert(model.includes("spaceguard-public-beta-readiness/v1"), "model should expose public beta readiness schema");
 assert(model.includes("spaceguard-support-bundle/v1"), "model should expose support bundle schema");
+assert(model.includes("spaceguard-release-review-packet/v1"), "model should expose release review packet schema");
+assert(model.includes("unsafe-stop"), "release review packet should stop on unsafe signals");
+assert(model.includes("This packet is release review evidence only"), "release packet export should not enable cleanup");
 assert(model.includes("spaceguard-tool-command-inventory/v1"), "model should expose tool command inventory schema");
 assert(model.includes("spaceguard-write-readiness/v1"), "model should expose write readiness schema");
 assert(model.includes("Real executor implementation"), "write readiness should require real executor implementation");

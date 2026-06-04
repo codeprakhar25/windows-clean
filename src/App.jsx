@@ -57,6 +57,8 @@ import {
   buildRescanComparisonMarkdown,
   buildManualStrategyChecklist,
   buildReleaseGate,
+  buildReleaseReviewPacket,
+  buildReleaseReviewPacketMarkdown,
   buildRecoveryAdvisor,
   buildRealExecutorCapsule,
   buildRollbackPlan,
@@ -676,6 +678,49 @@ export default function App() {
       }),
     [profile, dataMode, scanSettings, scanSession, nativeScan.result, scanCoverage, privacyBoundary, publicBetaReadiness, releaseGate, runtimeCapabilities.result, executorPlan, rollbackPlan, ledgerHistorySummary]
   );
+  const releaseReviewPacket = useMemo(
+    () =>
+      buildReleaseReviewPacket({
+        planSnapshot,
+        scanSession,
+        taskCapabilityGrants,
+        firstSafeExecutorContract,
+        writeBoundaryProbe,
+        validationPack,
+        rollbackPlan,
+        rescanComparison,
+        privilegeBoundary,
+        privacyBoundary,
+        publicBetaReadiness,
+        supportBundle,
+        releaseGate,
+        writeReadiness,
+        realExecutorCapsule,
+        executorPlan,
+        runtimeCapabilities: runtimeCapabilities.result,
+        consentReceipt
+      }),
+    [
+      planSnapshot,
+      scanSession,
+      taskCapabilityGrants,
+      firstSafeExecutorContract,
+      writeBoundaryProbe,
+      validationPack,
+      rollbackPlan,
+      rescanComparison,
+      privilegeBoundary,
+      privacyBoundary,
+      publicBetaReadiness,
+      supportBundle,
+      releaseGate,
+      writeReadiness,
+      realExecutorCapsule,
+      executorPlan,
+      runtimeCapabilities.result,
+      consentReceipt
+    ]
+  );
   const families = useMemo(() => buildFamilyGroups(selectedIds, actionList, { approvals, itemReviewsByAction }), [selectedIds, actionList, approvals, itemReviewsByAction]);
   const usedPercent = Math.round((profile.usedBytes / profile.totalBytes) * 100);
   const selectedPercent = Math.min(100, Math.round((totals.selectedBytes / (goalGb * GB)) * 100));
@@ -1202,6 +1247,7 @@ export default function App() {
       privacyBoundary,
       rollbackPlan,
       publicBetaReadiness,
+      releaseReviewPacket,
       executorManifest,
       toolCommandInventory,
       writeReadiness,
@@ -1263,6 +1309,23 @@ export default function App() {
       "```"
     ].join("\n");
     downloadTextFile("spaceguard-support-bundle.md", body, "text/markdown;charset=utf-8");
+  }
+
+  function exportReleaseReviewPacket() {
+    const exportedPacket = { ...releaseReviewPacket, generatedAt: new Date().toISOString() };
+    const markdown = buildReleaseReviewPacketMarkdown(exportedPacket);
+    const body = [
+      markdown,
+      "",
+      "---",
+      "",
+      "## Structured Packet JSON",
+      "",
+      "```json",
+      JSON.stringify(exportedPacket, null, 2),
+      "```"
+    ].join("\n");
+    downloadTextFile("spaceguard-release-review-packet.md", body, "text/markdown;charset=utf-8");
   }
 
   function downloadTextFile(fileName, content, type) {
@@ -1589,6 +1652,7 @@ export default function App() {
             <PrivacyBoundaryPanel boundary={privacyBoundary} />
             <PublicBetaReadinessPanel readiness={publicBetaReadiness} />
             <SupportBundlePanel bundle={supportBundle} onExport={exportSupportBundle} />
+            <ReleaseReviewPacketPanel packet={releaseReviewPacket} onExport={exportReleaseReviewPacket} />
             <ReleaseGatePanel releaseGate={releaseGate} runtimeCapabilities={runtimeCapabilities} />
             <WriteReadinessPanel readiness={writeReadiness} />
             <RealExecutorCapsulePanel capsule={realExecutorCapsule} />
@@ -4159,6 +4223,72 @@ function SupportBundlePanel({ bundle, onExport }) {
         <Button variant="outline" className="w-full" onClick={onExport}>
           <Download className="h-4 w-4" />
           Export support bundle
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReleaseReviewPacketPanel({ packet, onExport }) {
+  const reviewRows = packet.unsafeRows.length
+    ? packet.unsafeRows
+    : packet.blockedRows.length
+      ? packet.blockedRows
+      : packet.waitingRows.length
+        ? packet.waitingRows
+        : packet.rows.slice(0, 4);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Release review packet
+          <Badge variant={packet.tone}>{packet.status}</Badge>
+        </CardTitle>
+        <CardDescription>{packet.primary}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Passed" value={`${packet.counts.passed}/${packet.counts.total}`} tone={packet.status === "review-packet-ready" ? "safe" : "review"} />
+          <QueueStat label="Waiting" value={packet.counts.waiting} tone={packet.counts.waiting ? "review" : "safe"} />
+          <QueueStat label="Blocked" value={packet.counts.blocked} tone={packet.counts.blocked ? "restricted" : "safe"} />
+          <QueueStat label="Unsafe" value={packet.counts.unsafe} tone={packet.counts.unsafe ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Review envelope</span>
+            <Badge variant={packet.writeSignalVisible ? "restricted" : "safe"}>
+              {packet.writeSignalVisible ? "write visible" : "write locked"}
+            </Badge>
+            <Badge variant={packet.readyForRealExecution ? "restricted" : "outline"}>
+              {packet.readyForRealExecution ? "real-ready" : "review only"}
+            </Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+            <div className="truncate">Plan {packet.planId || "missing"}</div>
+            <div className="truncate">Scan {packet.scanFingerprint || "missing"}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {reviewRows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="mr-auto min-w-0 text-sm font-medium">{row.label}</div>
+                <Badge variant={row.status === "passed" ? "safe" : row.status === "unsafe" || row.status === "blocked" ? "restricted" : "review"}>
+                  {row.status}
+                </Badge>
+                <Badge variant="outline">{row.lane}</Badge>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">{row.detail}</p>
+            </div>
+          ))}
+        </div>
+
+        <Button variant="outline" className="w-full" onClick={onExport}>
+          <Download className="h-4 w-4" />
+          Export review packet
         </Button>
       </CardContent>
     </Card>

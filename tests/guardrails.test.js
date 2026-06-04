@@ -1869,6 +1869,115 @@ const assert = require("assert");
     runtimeCapabilities: { available: true, executeCleanupPlan: true, realRunEnabled: false, destructiveCommands: false }
   });
   assert.strictEqual(destructiveWriteBoundaryProbe.status, "unsafe-signal", "destructive command signal must be unsafe");
+  const releasePacketRuntime = { available: true, realRunEnabled: false, destructiveCommands: false, executeCleanupPlan: true };
+  const releasePacketGate = guard.buildReleaseGate({
+    scanMode: "native-readonly",
+    nativeCapability: { available: true },
+    executorPlan: cleanRunExecutorPlan
+  });
+  const releasePacketPrivilege = guard.buildPrivilegeBoundary({
+    runtimeCapabilities: { available: true, elevated: true, realRunEnabled: false },
+    executorPlan: cleanRunExecutorPlan
+  });
+  const releasePacketPrivacy = guard.buildPrivacyBoundary({
+    scanMode: "native-readonly",
+    runtimeCapabilities: releasePacketRuntime
+  });
+  const releasePacketWriteReadiness = guard.buildWriteReadiness({
+    releaseGate: releasePacketGate,
+    runtimeCapabilities: releasePacketRuntime,
+    executorPlan: cleanRunExecutorPlan,
+    rollbackPlan: tempRollbackPlan,
+    rescanComparison: matchedComparison,
+    privilegeBoundary: releasePacketPrivilege,
+    privacyBoundary: releasePacketPrivacy,
+    consentReceipt: armedConsent,
+    runReadiness: runReady
+  });
+  const releasePacketPowerCatalog = guard.buildTaskPowerCatalog({
+    actionList: developerActions,
+    selectedIds: new Set(["windows-temp"]),
+    approvals: { groupConfirm: true, reviewed: {}, reviewItems: {}, typed: {} },
+    scanMode: "native-readonly",
+    runtimeCapabilities: releasePacketRuntime
+  });
+  const releasePacketTaskGrants = guard.buildTaskCapabilityGrants({
+    executorPlan: cleanRunExecutorPlan,
+    taskPowerCatalog: releasePacketPowerCatalog,
+    planSnapshot: cleanRunSnapshot,
+    scanSession: currentScanSession,
+    consentReceipt: armedConsent,
+    firstSafeExecutorContract: firstSafeContract,
+    writeBoundaryProbe: rejectedWriteBoundaryProbe,
+    runtimeCapabilities: releasePacketRuntime
+  });
+  const releasePacketPublicReadiness = guard.buildPublicBetaReadiness({
+    scanMode: "native-readonly",
+    nativeCapability: { available: true },
+    runtimeCapabilities: releasePacketRuntime,
+    releaseGate: releasePacketGate,
+    privacyBoundary: releasePacketPrivacy,
+    validationEvidence: {},
+    documentationEvidence: { publicReleaseResearch: true, windowsRealDataSetup: true }
+  });
+  const releasePacketValidationPack = guard.buildValidationEvidencePack({
+    releaseGate: releasePacketGate,
+    executorPlan: cleanRunExecutorPlan,
+    executorManifest,
+    scanMode: "native-readonly",
+    runtimeCapabilities: releasePacketRuntime
+  });
+  const releasePacketSupportBundle = guard.buildSupportBundle({
+    profile: guard.getScenario("developer").profile,
+    scanMode: "native-readonly",
+    scanSession: currentScanSession,
+    nativeScan: capturedNativeScan,
+    privacyBoundary: releasePacketPrivacy,
+    publicBetaReadiness: releasePacketPublicReadiness,
+    releaseGate: releasePacketGate,
+    runtimeCapabilities: releasePacketRuntime,
+    executorPlan: cleanRunExecutorPlan,
+    rollbackPlan: tempRollbackPlan,
+    ledgerHistorySummary: guard.buildLedgerHistorySummary([], cleanRunSnapshot)
+  });
+  const releaseReviewPacket = guard.buildReleaseReviewPacket({
+    planSnapshot: cleanRunSnapshot,
+    scanSession: currentScanSession,
+    taskCapabilityGrants: releasePacketTaskGrants,
+    firstSafeExecutorContract: firstSafeContract,
+    writeBoundaryProbe: rejectedWriteBoundaryProbe,
+    validationPack: releasePacketValidationPack,
+    rollbackPlan: tempRollbackPlan,
+    rescanComparison: matchedComparison,
+    privilegeBoundary: releasePacketPrivilege,
+    privacyBoundary: releasePacketPrivacy,
+    publicBetaReadiness: releasePacketPublicReadiness,
+    supportBundle: releasePacketSupportBundle,
+    releaseGate: releasePacketGate,
+    writeReadiness: releasePacketWriteReadiness,
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    executorPlan: cleanRunExecutorPlan,
+    runtimeCapabilities: releasePacketRuntime,
+    consentReceipt: armedConsent
+  });
+  assert.strictEqual(releaseReviewPacket.schemaVersion, "spaceguard-release-review-packet/v1", "release review packet should expose a schema version");
+  assert.strictEqual(releaseReviewPacket.status, "review-waiting", "release packet should wait on validation evidence rather than opening real execution");
+  assert.strictEqual(releaseReviewPacket.readyForRealExecution, false, "release packet must not make real execution ready");
+  assert.strictEqual(releaseReviewPacket.rows.find((row) => row.id === "write-boundary-rejection").status, "passed", "release packet should include write-boundary rejection proof");
+  assert.strictEqual(releaseReviewPacket.rows.find((row) => row.id === "real-cleanup-locked").status, "passed", "release packet should prove real cleanup remains locked");
+  assert.strictEqual(releaseReviewPacket.rows.find((row) => row.id === "validation-pack").status, "waiting", "release packet should keep incomplete validation visible");
+  const releasePacketMarkdown = guard.buildReleaseReviewPacketMarkdown(releaseReviewPacket);
+  assert(releasePacketMarkdown.includes("SpaceGuard Release Review Packet"), "release packet markdown should have a title");
+  assert(releasePacketMarkdown.includes("Ready for real execution: no"), "release packet markdown should keep real execution blocked");
+  const unsafeReleaseReviewPacket = guard.buildReleaseReviewPacket({
+    ...releaseReviewPacket,
+    writeBoundaryProbe: destructiveWriteBoundaryProbe,
+    runtimeCapabilities: { available: true, realRunEnabled: true, destructiveCommands: true },
+    writeReadiness: { readyForRealExecution: true, status: "ready-for-real-execution" }
+  });
+  assert.strictEqual(unsafeReleaseReviewPacket.status, "unsafe-stop", "release packet should stop review when destructive capability appears");
+  assert.strictEqual(unsafeReleaseReviewPacket.writeSignalVisible, true, "unsafe release packet should expose visible write signals");
+  assert(unsafeReleaseReviewPacket.unsafeRows.some((row) => row.id === "real-cleanup-locked"), "unsafe packet should identify the real-cleanup lock violation");
   const writeReadinessReport = guard.buildReport({
     scenario: guard.getScenario("developer"),
     profile: guard.getScenario("developer").profile,

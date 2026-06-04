@@ -4771,6 +4771,142 @@ export function buildSupportBundleMarkdown(bundle) {
   ].join("\n");
 }
 
+export function buildReleaseReviewPacket({
+  planSnapshot = null,
+  scanSession = null,
+  taskCapabilityGrants = null,
+  firstSafeExecutorContract = null,
+  writeBoundaryProbe = null,
+  validationPack = null,
+  rollbackPlan = null,
+  rescanComparison = null,
+  privilegeBoundary = null,
+  privacyBoundary = null,
+  publicBetaReadiness = null,
+  supportBundle = null,
+  releaseGate = null,
+  writeReadiness = null,
+  realExecutorCapsule = null,
+  executorPlan = null,
+  runtimeCapabilities = {},
+  consentReceipt = null,
+  generatedAt = "set-on-export"
+} = {}) {
+  const rows = buildReleaseReviewRows({
+    planSnapshot,
+    scanSession,
+    taskCapabilityGrants,
+    firstSafeExecutorContract,
+    writeBoundaryProbe,
+    validationPack,
+    rollbackPlan,
+    rescanComparison,
+    privilegeBoundary,
+    privacyBoundary,
+    publicBetaReadiness,
+    supportBundle,
+    releaseGate,
+    writeReadiness,
+    realExecutorCapsule,
+    executorPlan,
+    runtimeCapabilities,
+    consentReceipt
+  });
+  const unsafeRows = rows.filter((row) => row.status === "unsafe");
+  const blockedRows = rows.filter((row) => row.status === "blocked");
+  const waitingRows = rows.filter((row) => row.status === "waiting");
+  const passedRows = rows.filter((row) => row.status === "passed");
+  const runtimeRealRunEnabled = Boolean(runtimeCapabilities?.realRunEnabled);
+  const destructiveCommands = Boolean(runtimeCapabilities?.destructiveCommands);
+  const status = unsafeRows.length
+    ? "unsafe-stop"
+    : !planSnapshot?.selectedCount
+      ? "no-plan"
+      : blockedRows.length
+        ? "review-blocked"
+        : waitingRows.length
+          ? "review-waiting"
+          : "review-packet-ready";
+
+  return {
+    schemaVersion: "spaceguard-release-review-packet/v1",
+    product: "SpaceGuard",
+    generatedAt,
+    status,
+    tone: status === "review-packet-ready" ? "safe" : status === "unsafe-stop" || status === "review-blocked" ? "restricted" : "review",
+    realRunEnabled: false,
+    runtimeRealRunEnabled,
+    destructiveCommands,
+    writeSignalVisible: Boolean(runtimeRealRunEnabled || destructiveCommands || unsafeRows.length),
+    readyForRealExecution: false,
+    planId: planSnapshot?.id || "",
+    scanFingerprint: scanSession?.currentFingerprint || "",
+    consentPlanId: consentReceipt?.planId || "",
+    selectedCount: planSnapshot?.selectedCount || 0,
+    selectedBytes: planSnapshot?.selectedBytes || 0,
+    rows,
+    passedRows,
+    waitingRows,
+    blockedRows,
+    unsafeRows,
+    counts: {
+      total: rows.length,
+      passed: passedRows.length,
+      waiting: waitingRows.length,
+      blocked: blockedRows.length,
+      unsafe: unsafeRows.length,
+      selected: planSnapshot?.selectedCount || 0,
+      grants: taskCapabilityGrants?.counts?.issued || 0
+    },
+    primary: getReleaseReviewPacketPrimary(status, { waitingRows, blockedRows, unsafeRows }),
+    steps: getReleaseReviewPacketSteps(status, { waitingRows, blockedRows, unsafeRows })
+  };
+}
+
+export function buildReleaseReviewPacketMarkdown(packet) {
+  const rows = packet?.rows?.length
+    ? packet.rows
+        .map((row) => [
+          `- ${row.label}: ${row.status}`,
+          `  - Lane: ${row.lane}`,
+          `  - Detail: ${row.detail}`,
+          `  - Evidence: ${row.evidence || "not captured"}`
+        ].join("\n"))
+        .join("\n")
+    : "- No release review rows.";
+  const steps = packet?.steps?.length ? packet.steps.map((step) => `- ${step}`).join("\n") : "- No next steps.";
+
+  return [
+    "# SpaceGuard Release Review Packet",
+    "",
+    `Generated: ${packet?.generatedAt || "set-on-export"}`,
+    `Schema: ${packet?.schemaVersion || "spaceguard-release-review-packet/v1"}`,
+    `Status: ${packet?.status || "not-built"}`,
+    `Plan: ${packet?.planId || "missing"}`,
+    `Scan fingerprint: ${packet?.scanFingerprint || "missing"}`,
+    `Selected recovery: ${formatBytes(packet?.selectedBytes || 0)}`,
+    `Real run enabled: ${packet?.realRunEnabled ? "yes" : "no"}`,
+    `Runtime real run visible: ${packet?.runtimeRealRunEnabled ? "yes" : "no"}`,
+    `Destructive commands visible: ${packet?.destructiveCommands ? "yes" : "no"}`,
+    `Write signal visible: ${packet?.writeSignalVisible ? "yes" : "no"}`,
+    `Ready for real execution: ${packet?.readyForRealExecution ? "yes" : "no"}`,
+    "",
+    "## Counts",
+    `Passed: ${packet?.counts?.passed || 0}/${packet?.counts?.total || 0}`,
+    `Waiting: ${packet?.counts?.waiting || 0}`,
+    `Blocked: ${packet?.counts?.blocked || 0}`,
+    `Unsafe: ${packet?.counts?.unsafe || 0}`,
+    "",
+    "## Next Steps",
+    steps,
+    "",
+    "## Review Rows",
+    rows,
+    "",
+    "This packet is release review evidence only. It does not enable real cleanup."
+  ].join("\n");
+}
+
 export function buildValidationEvidencePack({
   releaseGate = null,
   executorPlan = null,
@@ -5494,6 +5630,7 @@ export function buildReport({
   privacyBoundary = null,
   rollbackPlan = null,
   publicBetaReadiness = null,
+  releaseReviewPacket = null,
   executorManifest = null,
   toolCommandInventory = null,
   writeReadiness = null,
@@ -5895,6 +6032,21 @@ export function buildReport({
         ].join("\n")
       : "- Not evaluated.",
     "",
+    "## Release Review Packet",
+    releaseReviewPacket
+      ? [
+          `- Status: ${releaseReviewPacket.status}`,
+          `- Real run enabled: ${releaseReviewPacket.realRunEnabled ? "yes" : "no"}`,
+          `- Ready for real execution: ${releaseReviewPacket.readyForRealExecution ? "yes" : "no"}`,
+          `- Passed rows: ${releaseReviewPacket.counts.passed}/${releaseReviewPacket.counts.total}`,
+          `- Waiting rows: ${releaseReviewPacket.counts.waiting}`,
+          `- Blocked rows: ${releaseReviewPacket.counts.blocked}`,
+          `- Unsafe rows: ${releaseReviewPacket.counts.unsafe}`,
+          `- Primary: ${releaseReviewPacket.primary}`,
+          releaseReviewPacket.rows.map((row) => `- ${row.label}: ${row.status} | ${row.detail}`).join("\n")
+        ].join("\n")
+      : "- Not generated.",
+    "",
     "## Tool Command Inventory",
     toolCommandInventory
       ? [
@@ -6077,6 +6229,201 @@ function getTaskPowerDefinition(powerId) {
   return taskPowerDefinitions.find((power) => power.id === powerId) || taskPowerDefinitions[taskPowerDefinitions.length - 1];
 }
 
+function buildReleaseReviewRows({
+  planSnapshot = null,
+  scanSession = null,
+  taskCapabilityGrants = null,
+  firstSafeExecutorContract = null,
+  writeBoundaryProbe = null,
+  validationPack = null,
+  rollbackPlan = null,
+  rescanComparison = null,
+  privilegeBoundary = null,
+  privacyBoundary = null,
+  publicBetaReadiness = null,
+  supportBundle = null,
+  releaseGate = null,
+  writeReadiness = null,
+  realExecutorCapsule = null,
+  executorPlan = null,
+  runtimeCapabilities = {},
+  consentReceipt = null
+} = {}) {
+  const runtimeWriteVisible = Boolean(runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands);
+  const probeUnsafe = writeBoundaryProbe?.status === "unsafe-signal" || writeBoundaryProbe?.status === "contract-mismatch" || writeBoundaryProbe?.accepted || Number(writeBoundaryProbe?.counts?.bytes || 0) > 0;
+  const realActionVisible = Boolean(
+    executorPlan?.realRunEnabled ||
+      writeReadiness?.readyForRealExecution ||
+      realExecutorCapsule?.destructiveActionAvailable ||
+      firstSafeExecutorContract?.realRunEnabled ||
+      firstSafeExecutorContract?.destructiveActionAvailable
+  );
+  const realCleanupLocked = !runtimeWriteVisible && !probeUnsafe && !realActionVisible;
+
+  return [
+    {
+      id: "plan-snapshot",
+      lane: "scope",
+      label: "Plan snapshot captured",
+      status: planSnapshot?.id && planSnapshot?.selectedCount > 0 ? "passed" : "waiting",
+      detail: planSnapshot?.id
+        ? `${planSnapshot.selectedCount || 0} selected action(s), ${formatBytes(planSnapshot.selectedBytes || 0)} planned.`
+        : "Create a stable plan snapshot before release review.",
+      evidence: planSnapshot?.id || ""
+    },
+    {
+      id: "scan-session-current",
+      lane: "scan",
+      label: "Scan session current",
+      status: scanSession?.readyForPlanning ? "passed" : scanSession?.status === "native-stale" ? "blocked" : "waiting",
+      detail: scanSession?.primary || "Run discovery and keep scanner settings unchanged.",
+      evidence: scanSession?.currentFingerprint || ""
+    },
+    {
+      id: "task-grants-issued",
+      lane: "authority",
+      label: "Task grants dry-run only",
+      status: taskCapabilityGrants?.status === "dry-run-grants-issued"
+        ? "passed"
+        : taskCapabilityGrants?.status === "unsafe-runtime"
+          ? "unsafe"
+          : taskCapabilityGrants?.status === "grants-blocked"
+            ? "blocked"
+            : "waiting",
+      detail: taskCapabilityGrants
+        ? `${taskCapabilityGrants.counts.issued} issued, ${taskCapabilityGrants.counts.waiting} waiting, ${taskCapabilityGrants.counts.blocked} blocked.`
+        : "Build task-specific grant receipts for the selected plan.",
+      evidence: taskCapabilityGrants?.schemaVersion || ""
+    },
+    {
+      id: "first-safe-contract",
+      lane: "write-boundary",
+      label: "First-safe contract ready",
+      status: firstSafeExecutorContract?.status === "disabled-contract-ready"
+        ? "passed"
+        : firstSafeExecutorContract?.status === "disabled-contract-violated"
+          ? "unsafe"
+          : "waiting",
+      detail: firstSafeExecutorContract?.primary || "Select a first-safe route and build its rejecting request contract.",
+      evidence: firstSafeExecutorContract?.requestPreview?.route || firstSafeExecutorContract?.status || ""
+    },
+    {
+      id: "write-boundary-rejection",
+      lane: "write-boundary",
+      label: "Write boundary rejection evidence",
+      status: writeBoundaryProbe?.status === "rejected"
+        ? "passed"
+        : probeUnsafe
+          ? "unsafe"
+          : writeBoundaryProbe?.status === "error"
+            ? "blocked"
+            : "waiting",
+      detail: writeBoundaryProbe
+        ? `${writeBoundaryProbe.primary} Contract match: ${writeBoundaryProbe.contractMatch ? "yes" : "no"}. Bytes: ${formatBytes(writeBoundaryProbe.counts?.bytes || 0)}.`
+        : "Probe the native rejecting write boundary.",
+      evidence: writeBoundaryProbe?.status || ""
+    },
+    {
+      id: "validation-pack",
+      lane: "windows-validation",
+      label: "Windows validation pack generated",
+      status: validationPack?.safetyInvariants?.some((item) => !item.passed && item.id === "no-destructive-commands")
+        ? "unsafe"
+        : validationPack?.readyForRealRun
+          ? "passed"
+          : validationPack
+            ? "waiting"
+            : "waiting",
+      detail: validationPack
+        ? `${validationPack.validationChecks?.filter((check) => check.evidenceComplete).length || 0} complete evidence record(s), ${validationPack.missingCheckIds?.length || 0} missing check(s).`
+        : "Generate a validation pack before release review.",
+      evidence: validationPack?.schemaVersion || ""
+    },
+    {
+      id: "rollback-proof",
+      lane: "recovery",
+      label: "Rollback posture clean",
+      status: rollbackPlan?.status === "rebuildable-routes" && rollbackPlan?.counts?.needsProof === 0 && rollbackPlan?.counts?.blocked === 0
+        ? "passed"
+        : rollbackPlan?.status === "no-executable-routes"
+          ? "blocked"
+          : "waiting",
+      detail: rollbackPlan?.detail || "Evaluate restore, rebuild, backup, and permanent-removal posture.",
+      evidence: rollbackPlan?.status || ""
+    },
+    {
+      id: "rescan-parity",
+      lane: "verification",
+      label: "Rescan parity matched",
+      status: rescanComparison?.status === "matched"
+        ? "passed"
+        : rescanComparison?.status === "mismatch"
+          ? "blocked"
+          : "waiting",
+      detail: rescanComparison?.detail || "Run post-ledger native rescan comparison.",
+      evidence: rescanComparison?.status || ""
+    },
+    {
+      id: "privilege-boundary",
+      lane: "runtime",
+      label: "Privilege boundary captured",
+      status: privilegeBoundary?.nativeAvailable && privilegeBoundary?.readyForAdminRoutes
+        ? "passed"
+        : privilegeBoundary?.nativeAvailable
+          ? "blocked"
+          : "waiting",
+      detail: privilegeBoundary
+        ? `${privilegeBoundary.adminCount || 0} admin-sensitive selected route(s); status ${privilegeBoundary.status}.`
+        : "Capture native runtime privilege evidence.",
+      evidence: privilegeBoundary?.schemaVersion || ""
+    },
+    {
+      id: "privacy-boundary",
+      lane: "privacy",
+      label: "Privacy boundary local only",
+      status: privacyBoundary?.cloudDisabled && privacyBoundary?.telemetryDisabled && privacyBoundary?.exportOnly
+        ? runtimeWriteVisible
+          ? "unsafe"
+          : "passed"
+        : "blocked",
+      detail: privacyBoundary?.primary || "Prove local-only scan handling and explicit exports.",
+      evidence: privacyBoundary?.schemaVersion || ""
+    },
+    {
+      id: "support-redaction",
+      lane: "support",
+      label: "Support packet redacted",
+      status: supportBundle?.redactedPaths ? "passed" : "waiting",
+      detail: supportBundle?.redactedPaths
+        ? "Default support export excludes local paths and filenames."
+        : "Generate the redacted support bundle.",
+      evidence: supportBundle?.schemaVersion || ""
+    },
+    {
+      id: "public-claim-boundary",
+      lane: "distribution",
+      label: "Public claim boundary",
+      status: publicBetaReadiness?.realRunEnabled
+        ? "blocked"
+        : publicBetaReadiness?.readyForNativeBeta || publicBetaReadiness?.readyForWebDemo
+          ? "passed"
+          : "waiting",
+      detail: publicBetaReadiness?.primary || "Keep public claims to demo or read-only scanner until distribution evidence passes.",
+      evidence: publicBetaReadiness?.status || ""
+    },
+    {
+      id: "real-cleanup-locked",
+      lane: "safety",
+      label: "Real cleanup remains locked",
+      status: realCleanupLocked ? "passed" : "unsafe",
+      detail: realCleanupLocked
+        ? "Runtime, executor plan, capsule, contract, and write probe expose no real cleanup path."
+        : "A write-capable or mutation-like signal is visible and must stop release review.",
+      evidence: writeReadiness?.status || releaseGate?.blockedReason || ""
+    }
+  ];
+}
+
 function buildTaskCapabilityGrantRow({
   row,
   taskPowerCatalog = null,
@@ -6159,6 +6506,34 @@ function buildTaskCapabilityGrantRow({
     blockers,
     nextStep: getTaskCapabilityGrantNextStep(status, blockers, row)
   };
+}
+
+function getReleaseReviewPacketPrimary(status, { waitingRows = [], blockedRows = [], unsafeRows = [] } = {}) {
+  if (status === "review-packet-ready") return "Release review evidence is assembled while real cleanup remains locked.";
+  if (status === "unsafe-stop") return `${unsafeRows.length} unsafe signal(s) require stopping release review.`;
+  if (status === "review-blocked") return `${blockedRows.length} review gate(s) are blocked and need investigation.`;
+  if (status === "review-waiting") return `${waitingRows.length} review evidence row(s) are still waiting.`;
+  return "Select and arm a cleanup plan before building the release review packet.";
+}
+
+function getReleaseReviewPacketSteps(status, { waitingRows = [], blockedRows = [], unsafeRows = [] } = {}) {
+  if (status === "review-packet-ready") {
+    return [
+      "Export the release review packet.",
+      "Attach validation, support, and dry-run report artifacts.",
+      "Keep real cleanup disabled until implementation-specific release gates are reviewed separately."
+    ];
+  }
+  if (status === "unsafe-stop") {
+    return unsafeRows.slice(0, 4).map((row) => `${row.label}: ${row.detail}`);
+  }
+  if (status === "review-blocked") {
+    return blockedRows.slice(0, 4).map((row) => `${row.label}: ${row.detail}`);
+  }
+  const nextRows = waitingRows.slice(0, 4).map((row) => `${row.label}: ${row.detail}`);
+  return nextRows.length
+    ? nextRows
+    : ["Run a scan.", "Resolve plan gates and dry-run consent.", "Probe the rejecting write boundary and export evidence."];
 }
 
 function buildTaskCapabilityGrantBlockers({

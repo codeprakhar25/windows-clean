@@ -122,6 +122,7 @@ The UI must also expose a recovery advisor and decision log:
 - `tool command inventory`: declarative official command shapes for package-manager and tool-native validation without shell execution.
 - `privacy boundary`: local-only data handling, explicit export, browser storage audit records, blocked collection classes, and disabled telemetry/cloud upload.
 - `public beta readiness`: web-demo versus native read-only beta status, signing/support/uninstall evidence, privacy posture, and public claim boundary.
+- `release review packet`: one exportable review artifact that combines plan, scan session, task grants, contract, write-boundary rejection, validation, rollback, rescan, privilege, privacy, support redaction, public claims, and real-cleanup lock evidence.
 - `support bundle`: redacted diagnostics for support triage that exclude local paths and filenames by default.
 - `validation evidence`: disposable VM checklists, seeded fixture roots, required commands, selected executor routes, reviewer/artifact records, and signoff fields.
 - `validation evidence ledger`: local operator records for completed Windows validation checks; evidence can reduce missing checks only when reviewer and artifact path are present, and it cannot bypass native runtime, feature-flag, route, or safety gates.
