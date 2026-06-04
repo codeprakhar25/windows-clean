@@ -26,9 +26,10 @@ Checks:
 ```bash
 npm run check
 npm test
+npm run demo:rehearsal
 ```
 
-`npm run check` builds the production bundle. `npm test` verifies the cleanup guardrails, native scanner adapter, and shadcn-style React surface.
+`npm run check` builds the production bundle. `npm test` verifies the cleanup guardrails, native scanner adapter, demo rehearsal proof, and shadcn-style React surface. `npm run demo:rehearsal` prints a deterministic no-real-data proof that demo scan, approvals, plan lock, consent, launch guard, simulated ledger, and report-ready rehearsal all pass while real execution stays disabled.
 
 ## Native Read-Only Scanner
 

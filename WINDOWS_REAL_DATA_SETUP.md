@@ -27,6 +27,7 @@ Then install dependencies:
 ```powershell
 npm install
 npm test
+npm run demo:rehearsal
 npm run build
 ```
 

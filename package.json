@@ -11,7 +11,8 @@
     "native:build": "tauri build",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "node tests/guardrails.test.js && node tests/native-scanner.test.js && node tests/static-app.test.js",
+    "demo:rehearsal": "node scripts/run-demo-rehearsal.mjs",
+    "test": "node tests/guardrails.test.js && node tests/native-scanner.test.js && node tests/demo-rehearsal.test.js && node tests/static-app.test.js",
     "check": "npm run build"
   },
   "dependencies": {
