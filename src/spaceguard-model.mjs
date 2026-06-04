@@ -2745,6 +2745,122 @@ export function buildReleaseGate({
   };
 }
 
+export function buildWriteReadiness({
+  releaseGate = null,
+  runtimeCapabilities = {},
+  executorPlan = null,
+  rollbackPlan = null,
+  rescanComparison = null,
+  privilegeBoundary = null,
+  privacyBoundary = null,
+  consentReceipt = null,
+  runReadiness = null
+} = {}) {
+  const rows = executorPlan?.rows || [];
+  const realRouteRows = rows.filter((row) => row.canRealRun);
+  const candidateRoutes = releaseGate?.candidateRoutes || rows.filter((row) => row.status === "dry-run-only" || row.canSimulate);
+  const items = [
+    {
+      id: "real-route-implementation",
+      label: "Real executor implementation",
+      passed: Boolean(executorPlan?.realRunEnabled && realRouteRows.length > 0),
+      detail: executorPlan?.realRunEnabled && realRouteRows.length > 0
+        ? `${realRouteRows.length} route(s) expose real execution.`
+        : "No selected route exposes real execution in this build."
+    },
+    {
+      id: "runtime-write-capability",
+      label: "Runtime write capability",
+      passed: Boolean(runtimeCapabilities?.realRunEnabled && runtimeCapabilities?.destructiveCommands),
+      detail: runtimeCapabilities?.realRunEnabled
+        ? runtimeCapabilities?.destructiveCommands
+          ? "Runtime reports real execution and destructive command capability."
+          : "Runtime reports real execution without destructive command capability evidence."
+        : "Runtime keeps real execution disabled."
+    },
+    {
+      id: "release-gate",
+      label: "Release gate passed",
+      passed: Boolean(releaseGate?.readyForRealRun),
+      detail: releaseGate?.readyForRealRun
+        ? "Feature flag, native evidence, route selection, and validation checks pass."
+        : releaseGate?.blockedReason || "Release gate has not been evaluated."
+    },
+    {
+      id: "rescan-parity",
+      label: "Rescan parity matched",
+      passed: Boolean(rescanComparison?.status === "matched" && rescanComparison?.postRunScanEvidence && rescanComparison?.counts?.matched > 0),
+      detail: rescanComparison?.status === "matched"
+        ? `${rescanComparison.counts.matched} route(s) matched post-run native scan evidence.`
+        : rescanComparison?.detail || "Run a post-ledger native rescan comparison."
+    },
+    {
+      id: "rollback-proof",
+      label: "Rollback proof clean",
+      passed: Boolean(rollbackPlan?.status === "rebuildable-routes" && rollbackPlan?.counts?.needsProof === 0 && rollbackPlan?.counts?.blocked === 0),
+      detail: rollbackPlan?.status === "rebuildable-routes"
+        ? "Selected routes are rebuildable or disposable with rescan proof requirements."
+        : rollbackPlan?.detail || "Rollback posture has not been evaluated."
+    },
+    {
+      id: "privilege-boundary",
+      label: "Privilege boundary ready",
+      passed: Boolean(privilegeBoundary?.nativeAvailable && privilegeBoundary?.readyForAdminRoutes),
+      detail: privilegeBoundary?.nativeAvailable
+        ? privilegeBoundary?.readyForAdminRoutes
+          ? "Native runtime captured privilege state and selected admin routes are allowed by boundary."
+          : "Selected admin-sensitive routes need elevation or manual handling."
+        : "Native runtime evidence is required before real execution."
+    },
+    {
+      id: "privacy-boundary",
+      label: "Privacy boundary local-only",
+      passed: Boolean(privacyBoundary?.cloudDisabled && privacyBoundary?.telemetryDisabled && privacyBoundary?.exportOnly),
+      detail: privacyBoundary?.cloudDisabled && privacyBoundary?.telemetryDisabled && privacyBoundary?.exportOnly
+        ? "Reports and path evidence remain local unless the user exports them."
+        : "Privacy boundary must prove local-only operation before real execution."
+    },
+    {
+      id: "current-plan-consent",
+      label: "Current plan consent",
+      passed: Boolean(runReadiness?.ready && consentReceipt?.ready),
+      detail: consentReceipt?.ready
+        ? `Consent is tied to ${consentReceipt.planId || "the current plan"}.`
+        : "Dry-run consent must be current before any real-execution review."
+    }
+  ];
+  const blockedItems = items.filter((item) => !item.passed);
+  const ready = blockedItems.length === 0;
+  const status = ready
+    ? "ready-for-real-execution"
+    : !executorPlan?.realRunEnabled || !realRouteRows.length
+      ? "implementation-locked"
+      : releaseGate?.realFlagEnabled || runtimeCapabilities?.realRunEnabled
+        ? "blocked-after-flag"
+        : "policy-locked";
+
+  return {
+    schemaVersion: "spaceguard-write-readiness/v1",
+    status,
+    tone: ready ? "safe" : status === "implementation-locked" ? "restricted" : "review",
+    readyForRealExecution: ready,
+    realRunEnabled: Boolean(executorPlan?.realRunEnabled || runtimeCapabilities?.realRunEnabled),
+    candidateRoutes,
+    realRouteRows,
+    items,
+    blockedItems,
+    counts: {
+      total: items.length,
+      passed: items.length - blockedItems.length,
+      blocked: blockedItems.length,
+      candidateRoutes: candidateRoutes.length,
+      realRoutes: realRouteRows.length
+    },
+    primary: getWriteReadinessPrimary(status, blockedItems),
+    steps: buildWriteReadinessSteps(status, blockedItems)
+  };
+}
+
 export function buildPublicBetaReadiness({
   scanMode = "demo",
   nativeCapability = { available: false },
@@ -3720,6 +3836,7 @@ export function buildReport({
   publicBetaReadiness = null,
   executorManifest = null,
   toolCommandInventory = null,
+  writeReadiness = null,
   ledgerHistorySummary = null,
   storageStrategy = null,
   manualStrategyChecklist = null,
@@ -4038,6 +4155,19 @@ export function buildReport({
           toolCommandInventory.rows
             .map((row) => `- ${row.title}: ${row.status} | inspect=${row.inspectCommand} | future=${row.futureCommand} | guardrails=${row.guardrails.join(", ")}`)
             .join("\n")
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Write Readiness",
+    writeReadiness
+      ? [
+          `- Status: ${writeReadiness.status}`,
+          `- Ready for real execution: ${writeReadiness.readyForRealExecution ? "yes" : "no"}`,
+          `- Passed checks: ${writeReadiness.counts.passed}/${writeReadiness.counts.total}`,
+          `- Candidate routes: ${writeReadiness.counts.candidateRoutes}`,
+          `- Real routes: ${writeReadiness.counts.realRoutes}`,
+          `- Primary: ${writeReadiness.primary}`,
+          writeReadiness.items.map((item) => `- ${item.label}: ${item.passed ? "passed" : "blocked"} | ${item.detail}`).join("\n")
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -4642,6 +4772,23 @@ function getReleaseBlockedReason({ realFlagEnabled, nativeReady, missingRows, ca
   if (missingRows.length > 0) return `${missingRows.length} validation check(s) still need evidence.`;
   if (candidateRoutes.length === 0) return "No selected executor route is eligible.";
   return "";
+}
+
+function getWriteReadinessPrimary(status, blockedItems = []) {
+  if (status === "ready-for-real-execution") return "All real-execution gates are satisfied for the current plan.";
+  if (status === "implementation-locked") return "Real cleanup is blocked because no write-capable executor is implemented for the selected route.";
+  const first = blockedItems[0];
+  return first ? `${first.label}: ${first.detail}` : "Real cleanup remains locked by policy.";
+}
+
+function buildWriteReadinessSteps(status, blockedItems = []) {
+  if (status === "ready-for-real-execution") {
+    return ["Show final destructive-action confirmation.", "Run only selected real executor routes.", "Write ledger and immediately require a post-run native rescan."];
+  }
+  if (status === "implementation-locked") {
+    return ["Keep the app in dry-run mode.", "Implement one first-safe real executor behind a feature flag.", "Validate it in disposable Windows fixtures before exposing it."];
+  }
+  return blockedItems.slice(0, 4).map((item) => `${item.label}: ${item.detail}`);
 }
 
 function buildPublicBetaSteps(status, waitingRows = []) {

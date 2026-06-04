@@ -68,6 +68,7 @@ import {
   buildValidationEvidencePack,
   buildValidationPackMarkdown,
   buildVerificationSummary,
+  buildWriteReadiness,
   computeTotals,
   formatBytes,
   gates,
@@ -417,6 +418,21 @@ export default function App() {
   const privilegeBoundary = useMemo(
     () => buildPrivilegeBoundary({ runtimeCapabilities: runtimeCapabilities.result, executorPlan }),
     [runtimeCapabilities.result, executorPlan]
+  );
+  const writeReadiness = useMemo(
+    () =>
+      buildWriteReadiness({
+        releaseGate,
+        runtimeCapabilities: runtimeCapabilities.result,
+        executorPlan,
+        rollbackPlan,
+        rescanComparison,
+        privilegeBoundary,
+        privacyBoundary,
+        consentReceipt,
+        runReadiness
+      }),
+    [releaseGate, runtimeCapabilities.result, executorPlan, rollbackPlan, rescanComparison, privilegeBoundary, privacyBoundary, consentReceipt, runReadiness]
   );
   const executorManifest = useMemo(
     () => buildExecutorManifest({ actionList, executorPlan, releaseGate }),
@@ -819,6 +835,7 @@ export default function App() {
       publicBetaReadiness,
       executorManifest,
       toolCommandInventory,
+      writeReadiness,
       ledgerHistorySummary,
       storageStrategy,
       manualStrategyChecklist,
@@ -1154,6 +1171,7 @@ export default function App() {
             <PublicBetaReadinessPanel readiness={publicBetaReadiness} />
             <SupportBundlePanel bundle={supportBundle} onExport={exportSupportBundle} />
             <ReleaseGatePanel releaseGate={releaseGate} runtimeCapabilities={runtimeCapabilities} />
+            <WriteReadinessPanel readiness={writeReadiness} />
             <ValidationEvidencePanel
               validationPack={validationPack}
               validationEvidence={validationEvidence}
@@ -2371,6 +2389,58 @@ function ReleaseGatePanel({ releaseGate, runtimeCapabilities }) {
               </div>
             ))}
           </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function WriteReadinessPanel({ readiness }) {
+  const previewRows = readiness.blockedItems.length ? readiness.blockedItems.slice(0, 5) : readiness.items.slice(0, 5);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Write readiness
+          <Badge variant={readiness.tone}>{readiness.readyForRealExecution ? "ready" : "locked"}</Badge>
+        </CardTitle>
+        <CardDescription>{readiness.primary}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-3 gap-2">
+          <QueueStat label="Passed" value={`${readiness.counts.passed}/${readiness.counts.total}`} tone={readiness.readyForRealExecution ? "safe" : "review"} />
+          <QueueStat label="Real routes" value={readiness.counts.realRoutes} tone={readiness.counts.realRoutes ? "safe" : "restricted"} />
+          <QueueStat label="Blocked" value={readiness.counts.blocked} tone={readiness.counts.blocked ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">Final write gate</span>
+            <Badge variant={readiness.realRunEnabled ? "review" : "safe"}>
+              {readiness.realRunEnabled ? "write visible" : "write hidden"}
+            </Badge>
+          </div>
+          <div className="flex flex-col gap-2">
+            {readiness.steps.slice(0, 3).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <Lock className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {previewRows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 text-sm font-medium">{row.label}</div>
+                <Badge variant={row.passed ? "safe" : "restricted"}>{row.passed ? "passed" : "blocked"}</Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">{row.detail}</p>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>

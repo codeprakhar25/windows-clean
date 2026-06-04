@@ -88,6 +88,7 @@ The current native shell should be marketed only as a read-only scanner:
 - It has a manual strategy checklist for backup, archive, library move, uninstall review, and partition-prep evidence without automating those actions.
 - It has a tool command inventory for npm, pnpm, Docker, Gradle, and Windows cleanup validation without enabling shell execution.
 - It has rescan comparison evidence that requires a native scan after the current dry-run ledger before any route can count as matched.
+- It has a final write-readiness gate that stays locked until real executor implementation, runtime write capability, release validation, rollback proof, rescan parity, privilege evidence, privacy boundary, and current consent all pass.
 - It still cannot perform real cleanup.
 
 The native app should not be marketed as capable of real cleanup until the scanner, executor, and rollback story are implemented and tested on disposable Windows VMs.

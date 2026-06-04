@@ -1083,6 +1083,88 @@ const assert = require("assert");
     executorPlan
   });
   assert.strictEqual(enabledGate.readyForRealRun, true, "release gate should only open with flag, native evidence, validations, and candidate routes");
+  const currentBuildWriteReadiness = guard.buildWriteReadiness({
+    releaseGate: enabledGate,
+    runtimeCapabilities: { available: true, realRunEnabled: true, destructiveCommands: true },
+    executorPlan,
+    rollbackPlan: tempRollbackPlan,
+    rescanComparison: matchedComparison,
+    privilegeBoundary: guard.buildPrivilegeBoundary({
+      runtimeCapabilities: { available: true, elevated: true, realRunEnabled: true },
+      executorPlan
+    }),
+    privacyBoundary: guard.buildPrivacyBoundary({
+      scanMode: "native-readonly",
+      runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
+    }),
+    consentReceipt: armedConsent,
+    runReadiness: runReady
+  });
+  assert.strictEqual(currentBuildWriteReadiness.schemaVersion, "spaceguard-write-readiness/v1", "write readiness should have a schema version");
+  assert.strictEqual(currentBuildWriteReadiness.readyForRealExecution, false, "write readiness must stay locked when no real executor is implemented");
+  assert.strictEqual(currentBuildWriteReadiness.status, "implementation-locked", "current build should be implementation locked");
+  assert(currentBuildWriteReadiness.items.some((item) => item.id === "real-route-implementation" && !item.passed), "write readiness should require real route implementation");
+  const writeReadinessReport = guard.buildReport({
+    scenario: guard.getScenario("developer"),
+    profile: guard.getScenario("developer").profile,
+    actionList: developerActions,
+    selectedIds: new Set(["windows-temp"]),
+    readiness: guard.getExecutionReadinessForActions(new Set(["windows-temp"]), { groupConfirm: true, reviewed: {}, typed: {} }, developerActions, []),
+    ledger: [],
+    protectedPaths: [],
+    goalBytes: 10 * guard.GB,
+    writeReadiness: currentBuildWriteReadiness
+  });
+  assert(writeReadinessReport.includes("## Write Readiness"), "dry-run report should include write readiness");
+  assert(writeReadinessReport.includes("Ready for real execution: no"), "write readiness report should keep real execution blocked");
+  const hypotheticalRealExecutorPlan = {
+    ...tempExecutorPlan,
+    realRunEnabled: true,
+    rows: tempExecutorPlan.rows.map((row) => ({ ...row, canRealRun: true, status: "real-ready" }))
+  };
+  const hypotheticalReleaseGate = {
+    ...enabledGate,
+    readyForRealRun: true,
+    blockedReason: "",
+    candidateRoutes: hypotheticalRealExecutorPlan.rows
+  };
+  const mismatchWriteReadiness = guard.buildWriteReadiness({
+    releaseGate: hypotheticalReleaseGate,
+    runtimeCapabilities: { available: true, realRunEnabled: true, destructiveCommands: true },
+    executorPlan: hypotheticalRealExecutorPlan,
+    rollbackPlan: tempRollbackPlan,
+    rescanComparison: mismatchComparison,
+    privilegeBoundary: guard.buildPrivilegeBoundary({
+      runtimeCapabilities: { available: true, elevated: true, realRunEnabled: true },
+      executorPlan: hypotheticalRealExecutorPlan
+    }),
+    privacyBoundary: guard.buildPrivacyBoundary({
+      scanMode: "native-readonly",
+      runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
+    }),
+    consentReceipt: { ready: true, planId: tempPlanSnapshot.id },
+    runReadiness: { ready: true }
+  });
+  assert.strictEqual(mismatchWriteReadiness.readyForRealExecution, false, "matched rescan parity should be required even after hypothetical real executors exist");
+  assert(mismatchWriteReadiness.items.some((item) => item.id === "rescan-parity" && !item.passed), "write readiness should block on rescan mismatch");
+  const hypotheticalReadyWriteReadiness = guard.buildWriteReadiness({
+    releaseGate: hypotheticalReleaseGate,
+    runtimeCapabilities: { available: true, realRunEnabled: true, destructiveCommands: true },
+    executorPlan: hypotheticalRealExecutorPlan,
+    rollbackPlan: tempRollbackPlan,
+    rescanComparison: matchedComparison,
+    privilegeBoundary: guard.buildPrivilegeBoundary({
+      runtimeCapabilities: { available: true, elevated: true, realRunEnabled: true },
+      executorPlan: hypotheticalRealExecutorPlan
+    }),
+    privacyBoundary: guard.buildPrivacyBoundary({
+      scanMode: "native-readonly",
+      runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
+    }),
+    consentReceipt: { ready: true, planId: tempPlanSnapshot.id },
+    runReadiness: { ready: true }
+  });
+  assert.strictEqual(hypotheticalReadyWriteReadiness.readyForRealExecution, true, "write readiness should pass only when every final real-execution gate is satisfied");
 
   const readySelection = new Set(["windows-temp"]);
   const readyReadiness = guard.getExecutionReadinessForActions(

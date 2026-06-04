@@ -59,6 +59,9 @@ const requiredAppMarkers = [
   "Export support bundle",
   "Runtime privilege",
   "Release gate",
+  "Write readiness",
+  "Final write gate",
+  "write hidden",
   "Runtime capability",
   "Disposable VM matrix",
   "Validation evidence",
@@ -130,6 +133,7 @@ assert(app.includes("buildPrivilegeBoundary"), "privilege boundary should be wir
 assert(app.includes("buildPrivacyBoundary"), "privacy boundary should be wired");
 assert(app.includes("buildPublicBetaReadiness"), "public beta readiness should be wired");
 assert(app.includes("buildReleaseGate"), "release gate should be wired");
+assert(app.includes("buildWriteReadiness"), "write readiness should be wired");
 assert(app.includes("buildValidationEvidencePack"), "validation evidence pack should be wired");
 assert(app.includes("buildValidationPackMarkdown"), "validation pack markdown export should be wired");
 assert(app.includes("VALIDATION_EVIDENCE_STORAGE_KEY"), "validation evidence should be persisted locally");
@@ -170,6 +174,8 @@ assert(model.includes("executedAt"), "ledger entries should carry absolute execu
 assert(model.includes("spaceguard-public-beta-readiness/v1"), "model should expose public beta readiness schema");
 assert(model.includes("spaceguard-support-bundle/v1"), "model should expose support bundle schema");
 assert(model.includes("spaceguard-tool-command-inventory/v1"), "model should expose tool command inventory schema");
+assert(model.includes("spaceguard-write-readiness/v1"), "model should expose write readiness schema");
+assert(model.includes("Real executor implementation"), "write readiness should require real executor implementation");
 assert(model.includes("toolNativeCommandSpecs"), "model should declare tool-native command specs");
 assert(model.includes("commandExecutionEnabled: false"), "tool command inventory should keep command execution disabled");
 assert(model.includes("This bundle intentionally excludes local paths"), "support bundle should state redaction boundary");

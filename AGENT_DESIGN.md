@@ -200,6 +200,13 @@ Rescan comparison invariant:
 - Missing findings, unsupported findings, stale ledgers, demo mode, and pre-ledger native scans cannot prove parity.
 - Skipped ledger rows stay visible as skipped evidence and never become reclaimed-space proof.
 
+Write-readiness invariant:
+
+- Release validation alone cannot enable real cleanup.
+- A selected route must expose an implemented real executor, and the native runtime must explicitly report write/destructive capability.
+- The current plan must also have matched post-run rescan parity, clean rollback posture, privilege boundary evidence, local-only privacy boundary, and current plan consent.
+- If any selected route only supports dry-run simulation, write readiness remains `implementation-locked`.
+
 Rollback invariant:
 
 - Every selected executor route must have a rollback posture before real implementation work starts.

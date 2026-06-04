@@ -228,6 +228,8 @@ The rescan comparison panel is stricter than the checklist. It requires an absol
 
 The rollback plan is evaluated before dry-run consent. Disposable and rebuildable routes require rescan proof. Reviewed user items require a visible Recycle Bin, quarantine, or archive restore location. Recycle Bin emptying is marked as permanent-removal. Admin and advanced routes require backup or recovery-state evidence. None of these checks unlock real cleanup in the current build.
 
+The write-readiness panel is the final real-execution gate. It combines real executor implementation, runtime write capability, release gate status, post-run rescan parity, rollback proof, privilege boundary, privacy boundary, and current plan consent. In the current build it stays locked because no selected route exposes write-capable execution.
+
 Dry-run records are also saved to local browser storage as an append-only run history. A saved record can block a duplicate simulation for the same plan after reload, but it cannot unlock real execution. The history export is audit evidence only; real cleanup still requires native Windows validation and a post-run rescan.
 
 Real deletion is disabled in the current build. The executor layer classifies selected actions as dry-run routes, future safe-executor candidates, gated routes, or blocked routes. Safe executors should only be enabled after Windows validation and rollback tests exist.
