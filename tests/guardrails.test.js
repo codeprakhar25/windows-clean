@@ -340,6 +340,30 @@ const assert = require("assert");
   assert.strictEqual(unsafeSafetyInterlock.status, "unsafe-stop", "unsafe runtime signals should stop the safety interlock");
   assert.strictEqual(unsafeSafetyInterlock.counts.unsafe > 0, true, "unsafe interlock should count unsafe rows");
   assert.strictEqual(unsafeSafetyInterlock.dryRunAllowed, false, "unsafe interlock should block dry-run");
+  const readyLaunchGuard = guard.buildDryRunLaunchGuard({
+    runReadiness: { ready: true },
+    consentReceipt: grantConsent,
+    safetyInterlock: dryRunSafetyInterlock
+  });
+  assert.strictEqual(readyLaunchGuard.schemaVersion, "spaceguard-dry-run-launch-guard/v1", "dry-run launch guard should expose a schema version");
+  assert.strictEqual(readyLaunchGuard.status, "dry-run-launch-ready", "launch guard should pass when consent and safety interlock are current");
+  assert.strictEqual(readyLaunchGuard.ready, true, "launch guard should allow dry-run launch when all launch checks pass");
+  assert.strictEqual(readyLaunchGuard.realRunAllowed, false, "launch guard must not allow real execution");
+  const staleLaunchGuard = guard.buildDryRunLaunchGuard({
+    runReadiness: { ready: true },
+    consentReceipt: grantConsent,
+    safetyInterlock: staleSafetyInterlock
+  });
+  assert.strictEqual(staleLaunchGuard.status, "dry-run-launch-blocked", "stale interlock should block dry-run launch");
+  assert.strictEqual(staleLaunchGuard.ready, false, "stale launch guard must not allow dry-run");
+  assert(staleLaunchGuard.blockedItems.some((item) => item.id === "safety-interlock"), "stale launch guard should name safety interlock as blocker");
+  const unsafeLaunchGuard = guard.buildDryRunLaunchGuard({
+    runReadiness: { ready: true },
+    consentReceipt: grantConsent,
+    safetyInterlock: unsafeSafetyInterlock
+  });
+  assert.strictEqual(unsafeLaunchGuard.status, "unsafe-stop", "unsafe interlock should stop dry-run launch");
+  assert.strictEqual(unsafeLaunchGuard.ready, false, "unsafe launch guard should block dry-run");
   const unsafePowerBroker = guard.buildTaskPowerBroker({
     taskPowerCatalog: activeCachePowerCatalog,
     taskCapabilityGrants: unsafeTaskGrants,
@@ -390,12 +414,15 @@ const assert = require("assert");
     taskCapabilityGrants: issuedTaskGrants,
     taskPowerLeaseAudit: issuedPowerLeaseAudit,
     safetyInterlock: dryRunSafetyInterlock,
+    dryRunLaunchGuard: readyLaunchGuard,
     taskPowerCatalog: activeCachePowerCatalog
   });
   assert(taskRunbookReport.includes("## Task Power Broker"), "report should include task power broker");
   assert(taskRunbookReport.includes("Standing permission: no"), "task power broker report should preserve no-standing-permission boundary");
   assert(taskRunbookReport.includes("## Safety Interlock"), "report should include safety interlock");
   assert(taskRunbookReport.includes("Dry-run allowed: yes"), "safety interlock report should capture dry-run allowance");
+  assert(taskRunbookReport.includes("## Dry-Run Launch Guard"), "report should include dry-run launch guard");
+  assert(taskRunbookReport.includes("Ready: yes"), "dry-run launch guard report should capture launch readiness");
   assert(taskRunbookReport.includes("## Task Power Lease Audit"), "report should include task power lease audit");
   assert(taskRunbookReport.includes("Current leases: 1"), "task power lease report should capture current lease count");
   assert(taskRunbookReport.includes("## Task Runbook"), "report should include task runbook");
@@ -2343,12 +2370,15 @@ const assert = require("assert");
       destructiveCommands: false
     },
     runReadiness: runReady,
+    dryRunLaunchGuard: { ready: true, dryRunAllowed: true, status: "dry-run-launch-ready" },
     createdAt: "2026-06-03T00:00:00.000Z"
   });
   assert.strictEqual(runRecord.schemaVersion, "spaceguard-ledger-run/v1", "run record should have a schema version");
   assert.strictEqual(runRecord.planId, itemPlanSnapshot.id, "run record should keep the plan id");
   assert.strictEqual(runRecord.reclaimedBytes, taggedItemLedger[0].bytes, "run record should summarize reclaimed bytes");
   assert.strictEqual(runRecord.realRunEnabled, false, "run record must not imply real execution");
+  assert.strictEqual(runRecord.launchGuardReady, true, "run record should capture launch guard readiness");
+  assert.strictEqual(runRecord.safety.dryRunLaunchGuard, "dry-run-launch-ready", "run record should persist launch guard status");
   const appendedHistory = guard.appendLedgerRunRecord([], runRecord);
   const dedupedHistory = guard.appendLedgerRunRecord(appendedHistory, runRecord);
   assert.strictEqual(appendedHistory.length, 1, "run history should append valid records");

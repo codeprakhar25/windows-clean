@@ -1693,6 +1693,7 @@ export function buildLedgerRunRecord({
   nativeScan = null,
   runtimeCapabilities = null,
   runReadiness = null,
+  dryRunLaunchGuard = null,
   createdAt = "set-on-save"
 } = {}) {
   const expectedBytes = executorPlan?.dryRunBytes ?? planSnapshot?.selectedBytes ?? 0;
@@ -1740,9 +1741,12 @@ export function buildLedgerRunRecord({
     realRunEnabled: Boolean(runtimeCapabilities?.realRunEnabled),
     destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
     runReady: Boolean(runReadiness?.ready),
+    launchGuardReady: Boolean(dryRunLaunchGuard?.ready),
     routes,
     safety: {
       dryRunOnly: !runtimeCapabilities?.realRunEnabled,
+      dryRunLaunchGuard: dryRunLaunchGuard?.status || "not-evaluated",
+      dryRunAllowed: Boolean(dryRunLaunchGuard?.dryRunAllowed),
       destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
       nativeWriteCapability: Boolean(nativeScan?.writeCapability)
     }
@@ -3700,6 +3704,66 @@ export function buildSafetyInterlock({
     },
     primary: getSafetyInterlockPrimary(status, { unsafeRows, holdRows, waitingRows }),
     steps: getSafetyInterlockSteps(status, { unsafeRows, holdRows, waitingRows })
+  };
+}
+
+export function buildDryRunLaunchGuard({
+  runReadiness = null,
+  consentReceipt = null,
+  safetyInterlock = null
+} = {}) {
+  const unsafe = safetyInterlock?.status === "unsafe-stop" || Boolean(safetyInterlock?.realRunAllowed || safetyInterlock?.destructiveCommands);
+  const items = [
+    {
+      id: "run-readiness",
+      label: "Run readiness",
+      passed: Boolean(runReadiness?.ready),
+      detail: runReadiness?.ready ? "Workflow preflight and executor policy are ready." : "Resolve run readiness before launching dry-run."
+    },
+    {
+      id: "current-consent",
+      label: "Current dry-run consent",
+      passed: Boolean(consentReceipt?.ready),
+      detail: consentReceipt?.ready ? `Consent is tied to ${consentReceipt.planId || "the current plan"}.` : "Arm dry-run consent for the current plan."
+    },
+    {
+      id: "safety-interlock",
+      label: "Safety interlock",
+      passed: Boolean(safetyInterlock?.dryRunAllowed),
+      detail: safetyInterlock?.dryRunAllowed ? "Safety interlock allows dry-run simulation only." : safetyInterlock?.primary || "Safety interlock has not cleared dry-run."
+    },
+    {
+      id: "real-run-locked",
+      label: "Real execution locked",
+      passed: !unsafe,
+      detail: unsafe ? "Unsafe write/destructive signal is visible; do not launch dry-run." : "Real execution remains locked."
+    }
+  ];
+  const blockedItems = items.filter((item) => !item.passed);
+  const ready = !blockedItems.length;
+  const status = unsafe
+    ? "unsafe-stop"
+    : ready
+      ? "dry-run-launch-ready"
+      : "dry-run-launch-blocked";
+
+  return {
+    schemaVersion: "spaceguard-dry-run-launch-guard/v1",
+    status,
+    tone: ready ? "safe" : unsafe ? "restricted" : "review",
+    ready,
+    dryRunAllowed: ready,
+    realRunAllowed: false,
+    items,
+    blockedItems,
+    counts: {
+      total: items.length,
+      passed: items.length - blockedItems.length,
+      blocked: blockedItems.length,
+      realRun: 0
+    },
+    primary: getDryRunLaunchGuardPrimary(status, blockedItems),
+    steps: getDryRunLaunchGuardSteps(status, blockedItems)
   };
 }
 
@@ -7168,6 +7232,7 @@ export function buildReport({
   scanCoverage = null,
   intakePolicy = null,
   safetyInterlock = null,
+  dryRunLaunchGuard = null,
   taskPowerCatalog = null,
   taskPowerBroker = null,
   taskCapabilityGrants = null,
@@ -7228,6 +7293,20 @@ export function buildReport({
                 .map((row) => `- ${row.label}: ${row.status} | blocksDryRun=${row.blocksDryRun ? "yes" : "no"} | ${row.detail}`)
                 .join("\n")
             : "- No interlock rows."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Dry-Run Launch Guard",
+    dryRunLaunchGuard
+      ? [
+          `- Status: ${dryRunLaunchGuard.status}`,
+          `- Ready: ${dryRunLaunchGuard.ready ? "yes" : "no"}`,
+          `- Dry-run allowed: ${dryRunLaunchGuard.dryRunAllowed ? "yes" : "no"}`,
+          `- Real run allowed: ${dryRunLaunchGuard.realRunAllowed ? "yes" : "no"}`,
+          `- Blocked checks: ${dryRunLaunchGuard.counts.blocked}`,
+          dryRunLaunchGuard.items.length
+            ? dryRunLaunchGuard.items.map((item) => `- ${item.label}: ${item.passed ? "passed" : "blocked"} | ${item.detail}`).join("\n")
+            : "- No launch guard rows."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -8715,6 +8794,18 @@ function getSafetyInterlockRowNextStep(status, label = "", detail = "") {
   if (status === "unsafe") return `Stop and investigate: ${detail}`;
   if (status === "hold") return `Hold simulation until this is resolved: ${detail}`;
   return detail;
+}
+
+function getDryRunLaunchGuardPrimary(status, blockedItems = []) {
+  if (status === "dry-run-launch-ready") return "Dry-run launch is allowed by consent and safety interlock; real execution remains locked.";
+  if (status === "unsafe-stop") return "Dry-run launch is stopped by unsafe write or destructive signals.";
+  return blockedItems[0]?.detail || "Dry-run launch is blocked until consent and safety interlock pass.";
+}
+
+function getDryRunLaunchGuardSteps(status, blockedItems = []) {
+  if (status === "dry-run-launch-ready") return ["Launch dry-run simulation only.", "Record the ledger for the current plan.", "Rebuild consent and interlock evidence after any plan or scan change."];
+  if (status === "unsafe-stop") return ["Stop dry-run launch.", "Inspect runtime and interlock write signals.", "Rebuild evidence after unsafe signals are cleared."];
+  return blockedItems.slice(0, 3).map((item) => `${item.label}: ${item.detail}`);
 }
 
 function buildAgentTaskRunbookRow({

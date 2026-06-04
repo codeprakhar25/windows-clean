@@ -130,6 +130,7 @@ The UI must also expose a recovery advisor and decision log:
 - `public beta readiness`: web-demo versus native read-only beta status, signing/support/uninstall evidence, privacy posture, and public claim boundary.
 - `release review packet`: one exportable review artifact that combines plan, scan session, task grants, contract, write-boundary rejection, validation, rollback, rescan, privilege, privacy, support redaction, public claims, and real-cleanup lock evidence.
 - `safety interlock`: global stop/hold surface derived from runtime write signals, native write signals, scan freshness, dry-run consent, task power leases, broker standing permission, run readiness, write-boundary evidence, release review, and write readiness.
+- `dry-run launch guard`: final execution gate that allows simulation only when run readiness, current consent, and the safety interlock pass while real execution remains locked.
 - `support bundle`: redacted diagnostics for support triage that exclude local paths and filenames by default.
 - `workflow handoff`: redacted resume artifact with active question, next actions, audit status, setup/demo/release state, and real-cleanup lock.
 - `validation evidence`: disposable VM checklists, seeded fixture roots, required commands, selected executor routes, reviewer/artifact records, and signoff fields.
@@ -187,6 +188,7 @@ Safety interlock invariant:
 - Release evidence that is not needed for current dry-run can remain waiting without creating cleanup authority.
 - The interlock can allow dry-run simulation only; it never grants real execution.
 - The interlock must be rebuilt after any plan, scan, approval, protected-path, scanner-setting, consent, runtime, or write-boundary change.
+- The dry-run launch guard is the final authority for simulation. UI buttons and execution handlers must both refuse launch unless the guard is ready.
 
 Review gate invariant:
 

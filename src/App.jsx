@@ -44,6 +44,7 @@ import {
   buildAgentTaskRunbook,
   buildDecisionLog,
   buildDemoRehearsalRunbook,
+  buildDryRunLaunchGuard,
   appendLedgerRunRecord,
   buildExecutorManifest,
   buildExecutorPlan,
@@ -883,6 +884,15 @@ export default function App() {
       writeReadiness
     ]
   );
+  const dryRunLaunchGuard = useMemo(
+    () =>
+      buildDryRunLaunchGuard({
+        runReadiness,
+        consentReceipt,
+        safetyInterlock
+      }),
+    [runReadiness, consentReceipt, safetyInterlock]
+  );
   const productCompletionAudit = useMemo(
     () =>
       buildProductCompletionAudit({
@@ -1191,7 +1201,7 @@ export default function App() {
   }
 
   async function simulateCleanup() {
-    if (!consentReceipt.ready) return;
+    if (!dryRunLaunchGuard.ready) return;
     setActiveStage("execute");
     setNativeExecutorDryRun({ status: "running", result: null, error: "" });
     const executedAt = new Date().toISOString();
@@ -1236,13 +1246,14 @@ export default function App() {
       nativeScan: nativeScan.result,
       runtimeCapabilities: runtimeCapabilities.result,
       runReadiness,
+      dryRunLaunchGuard,
       createdAt: new Date().toISOString()
     });
     setRunHistory((current) => appendLedgerRunRecord(current, record, { limit: RUN_HISTORY_LIMIT }));
   }
 
   function armExecutionConsent() {
-    if (!runReadiness.ready) return;
+    if (!runReadiness.ready || safetyInterlock.status === "unsafe-stop") return;
     setExecutionConsent({
       accepted: true,
       planId: planSnapshot.id,
@@ -1539,6 +1550,7 @@ export default function App() {
       validationPack,
       runtimeCapabilities: runtimeCapabilities.result,
       safetyInterlock,
+      dryRunLaunchGuard,
       itemReviewsByAction,
       planSnapshot,
       verificationSummary,
@@ -2063,8 +2075,8 @@ export default function App() {
               onReset={resetValidationEvidence}
               onExport={exportValidationPack}
             />
-            <ExecutionConsentPanel consentReceipt={consentReceipt} runReadiness={runReadiness} onArm={armExecutionConsent} />
-            <LedgerPanel ledger={activeLedger} selectedBytes={totals.selectedBytes} preflight={preflight} runReadiness={runReadiness} consentReceipt={consentReceipt} onExecute={simulateCleanup} onExport={exportReport} />
+            <ExecutionConsentPanel consentReceipt={consentReceipt} runReadiness={runReadiness} safetyInterlock={safetyInterlock} onArm={armExecutionConsent} />
+            <LedgerPanel ledger={activeLedger} selectedBytes={totals.selectedBytes} preflight={preflight} runReadiness={runReadiness} consentReceipt={consentReceipt} dryRunLaunchGuard={dryRunLaunchGuard} onExecute={simulateCleanup} onExport={exportReport} />
             <RunHistoryPanel historySummary={ledgerHistorySummary} onExport={exportRunHistory} />
           </aside>
         </section>
@@ -5819,8 +5831,10 @@ function ValidationEvidencePanel({
   );
 }
 
-function ExecutionConsentPanel({ consentReceipt, runReadiness, onArm }) {
+function ExecutionConsentPanel({ consentReceipt, runReadiness, safetyInterlock, onArm }) {
   const warningPreview = consentReceipt.warnings.slice(0, 3);
+  const unsafeStop = safetyInterlock?.status === "unsafe-stop";
+  const canArm = runReadiness.ready && !unsafeStop;
 
   return (
     <Card>
@@ -5872,7 +5886,19 @@ function ExecutionConsentPanel({ consentReceipt, runReadiness, onArm }) {
           </div>
         ) : null}
 
-        <Button className="w-full" variant={consentReceipt.ready ? "secondary" : "default"} onClick={onArm} disabled={!runReadiness.ready}>
+        <div className="rounded-md border bg-muted/30 p-3 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">Consent arm gate</span>
+            <Badge variant={canArm ? "safe" : unsafeStop ? "restricted" : "review"}>
+              {canArm ? "armable" : unsafeStop ? "unsafe stop" : "waiting"}
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {unsafeStop ? safetyInterlock.primary : runReadiness.ready ? "Consent can be armed; final launch still requires the safety interlock after consent." : "Resolve run readiness before arming consent."}
+          </p>
+        </div>
+
+        <Button className="w-full" variant={consentReceipt.ready ? "secondary" : "default"} onClick={onArm} disabled={!canArm}>
           <ShieldCheck className="h-4 w-4" />
           {consentReceipt.ready ? "Current plan armed" : "Arm current dry-run"}
         </Button>
@@ -5881,7 +5907,7 @@ function ExecutionConsentPanel({ consentReceipt, runReadiness, onArm }) {
   );
 }
 
-function LedgerPanel({ ledger, selectedBytes, preflight, runReadiness, consentReceipt, onExecute, onExport }) {
+function LedgerPanel({ ledger, selectedBytes, preflight, runReadiness, consentReceipt, dryRunLaunchGuard, onExecute, onExport }) {
   const reclaimed = ledger.reduce((sum, entry) => sum + entry.bytes, 0);
   return (
     <Card>
@@ -5938,6 +5964,25 @@ function LedgerPanel({ ledger, selectedBytes, preflight, runReadiness, consentRe
             </div>
           </div>
 
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+              <span className="font-medium">Dry-run launch guard</span>
+              <Badge variant={dryRunLaunchGuard.ready ? "safe" : dryRunLaunchGuard.status === "unsafe-stop" ? "restricted" : "review"}>
+                {dryRunLaunchGuard.status}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">{dryRunLaunchGuard.primary}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Badge variant={dryRunLaunchGuard.dryRunAllowed ? "safe" : "restricted"}>
+                {dryRunLaunchGuard.dryRunAllowed ? "dry-run allowed" : "dry-run blocked"}
+              </Badge>
+              <Badge variant={dryRunLaunchGuard.realRunAllowed ? "restricted" : "safe"}>
+                {dryRunLaunchGuard.realRunAllowed ? "real run open" : "real run locked"}
+              </Badge>
+              <Badge variant="outline">{dryRunLaunchGuard.counts.blocked} blocker(s)</Badge>
+            </div>
+          </div>
+
           {ledger.length === 0 ? (
             <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">No actions run yet. The ledger records every simulated step.</div>
           ) : (
@@ -5954,7 +5999,7 @@ function LedgerPanel({ ledger, selectedBytes, preflight, runReadiness, consentRe
         </div>
         <Separator />
         <div className="grid gap-2 sm:grid-cols-2">
-          <Button className="w-full" disabled={!consentReceipt.ready} onClick={onExecute}>
+          <Button className="w-full" disabled={!dryRunLaunchGuard.ready} onClick={onExecute}>
             <Play className="h-4 w-4" />
             Simulate
           </Button>
