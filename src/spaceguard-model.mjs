@@ -5045,6 +5045,7 @@ export function buildWriteBoundaryProbe({
         title: entry.title || "",
         route: entry.route || "",
         result: entry.result || "unknown",
+        rejectCode: entry.rejectCode || "",
         bytes: Number(entry.bytes || 0),
         note: entry.note || ""
       }))
@@ -7414,7 +7415,7 @@ export function buildReport({
           `- Bytes reclaimed: ${formatBytes(writeBoundaryProbe.counts.bytes || 0)}`,
           `- Reason: ${writeBoundaryProbe.reason || "None"}`,
           writeBoundaryProbe.entries.length
-            ? writeBoundaryProbe.entries.map((entry) => `- ${entry.title}: ${entry.result} | ${formatBytes(entry.bytes)} | ${entry.note || "no mutation"}`).join("\n")
+            ? writeBoundaryProbe.entries.map((entry) => `- ${entry.title}: ${entry.result} | code=${entry.rejectCode || "none"} | ${formatBytes(entry.bytes)} | ${entry.note || "no mutation"}`).join("\n")
             : "- No write-boundary entries."
         ].join("\n")
       : "- Not evaluated.",

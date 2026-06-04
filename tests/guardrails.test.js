@@ -2323,6 +2323,7 @@ const assert = require("assert");
             title: "Windows temporary files",
             route: "known-temp-delete",
             result: "rejected",
+            rejectCode: "real-executor-disabled",
             bytes: 0,
             note: "blocked by runtime"
           }
@@ -2338,6 +2339,7 @@ const assert = require("assert");
   assert.strictEqual(rejectedWriteBoundaryProbe.rejectionEvidence, true, "rejected native result should be evidence");
   assert.strictEqual(rejectedWriteBoundaryProbe.contractMatch, true, "rejected native result should match the first-safe contract echo");
   assert.strictEqual(rejectedWriteBoundaryProbe.counts.rejected, 1, "rejected probe should count rejected entries");
+  assert.strictEqual(rejectedWriteBoundaryProbe.entries[0].rejectCode, "real-executor-disabled", "rejected probe should preserve native reject codes");
   assert.strictEqual(rejectedWriteBoundaryProbe.counts.bytes, 0, "rejected probe must not reclaim bytes");
   const mismatchedContractProbe = guard.buildWriteBoundaryProbe({
     nativeWriteBoundary: {

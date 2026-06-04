@@ -257,6 +257,7 @@ Write boundary probe invariant:
 
 - The probe can call `execute_cleanup_plan` only to prove the native boundary rejects the current request shape.
 - Passing probe evidence requires `accepted=false`, `realRunEnabled=false`, `destructiveCommands=false`, every entry rejected, zero reclaimed bytes, and a native contract echo matching the current first-safe executor contract.
+- Reject codes such as `real-executor-disabled`, `dry-run-only-required`, `route-not-first-safe`, or `route-mismatch` are diagnostic evidence only; they do not create cleanup authority.
 - Probe entries cannot create ledger records, recovery totals, release-gate credit, or write-readiness credit.
 - Any accepted, destructive, real-run-enabled, non-rejected, non-zero-byte, or contract-mismatched signal is unsafe and blocks release review.
 
@@ -429,7 +430,7 @@ The third native command is:
 execute_cleanup_plan
 ```
 
-It is a rejecting write boundary for future executor request-shape validation. Current builds must return `accepted: false`, `realRunEnabled: false`, `destructiveCommands: false`, and zero reclaimed bytes for every entry.
+It is a rejecting write boundary for future executor request-shape validation. Current builds must validate dry-run-only state, mutation flags, plan/scan/consent evidence, first-safe route membership, and per-action route matches, then return `accepted: false`, `realRunEnabled: false`, `destructiveCommands: false`, native reject codes, and zero reclaimed bytes for every entry.
 
 The fourth native command is:
 

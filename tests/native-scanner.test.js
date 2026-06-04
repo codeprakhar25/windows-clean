@@ -260,7 +260,7 @@ const assert = require("assert");
                 mutation_attempted: payload.request.mutationAttempted,
                 action_count: payload.request.actions.length
               },
-              entries: [{ id: "windows-temp", title: "Windows temporary files", route: "known-temp-delete", result: "rejected", bytes: 0, note: "blocked" }],
+              entries: [{ id: "windows-temp", title: "Windows temporary files", route: "known-temp-delete", result: "rejected", reject_code: "real-executor-disabled", bytes: 0, note: "blocked" }],
               warnings: ["no mutation"]
             });
           }
@@ -282,6 +282,7 @@ const assert = require("assert");
   assert.strictEqual(rejectedWrite.contractEcho.requestMode, "reject-only-preview", "native write boundary should normalize contract echo");
   assert.strictEqual(rejectedWrite.contractEcho.scanFingerprint, "scan-temp", "native write boundary should normalize scan fingerprint echo");
   assert.strictEqual(rejectedWrite.entries[0].result, "rejected", "native write boundary should normalize rejected entries");
+  assert.strictEqual(rejectedWrite.entries[0].rejectCode, "real-executor-disabled", "native write boundary should normalize reject codes");
   assert.strictEqual(rejectedWrite.entries[0].bytes, 0, "native write boundary should reclaim zero bytes");
 
   const capabilities = native.normalizeNativeRuntimeCapabilities({

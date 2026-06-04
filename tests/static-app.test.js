@@ -251,6 +251,7 @@ assert(app.includes("Export review packet"), "release review packet export actio
 assert(app.includes("Probe write boundary"), "write boundary probe action should be visible");
 assert(app.includes("rejection evidence"), "write boundary probe should frame evidence as rejection evidence");
 assert(app.includes("zero bytes"), "write boundary probe should make zero-byte outcome visible");
+assert(app.includes("rejectCode"), "write boundary probe UI should expose native reject codes");
 assert(!app.includes("function clearExecutionState() {\n    clearExecutionState();"), "execution reset should not recursively call itself");
 assert(model.includes("large-user-files"), "model should include large personal file discovery");
 assert(model.includes("Large personal files"), "model should label large personal file discovery");
@@ -347,6 +348,7 @@ assert(nativeAdapter.includes("targetDrive"), "native adapter should pass target
 assert(nativeAdapter.includes("customRoots"), "native adapter should pass custom read-only roots");
 assert(nativeAdapter.includes("simulate_cleanup_plan"), "native adapter should invoke the dry-run executor command");
 assert(nativeAdapter.includes("execute_cleanup_plan"), "native adapter should invoke the rejecting write boundary command");
+assert(nativeAdapter.includes("rejectCode"), "native adapter should normalize write-boundary reject codes");
 assert(nativeAdapter.includes("runtime_capabilities"), "native adapter should invoke runtime capability command");
 assert(nativeAdapter.includes("items.map"), "native adapter should preserve item-level review candidates");
 assert(tauriConfig.includes('"withGlobalTauri": true'), "Tauri config should expose the global bridge used by the adapter");
@@ -358,6 +360,9 @@ assert(rustScanner.includes("measure_custom_roots"), "Rust scanner should measur
 assert(rustScanner.includes("simulate_cleanup_plan"), "Rust native dry-run command should exist");
 assert(rustScanner.includes("execute_cleanup_plan"), "Rust rejecting write boundary command should exist");
 assert(rustScanner.includes("contract_echo"), "Rust rejecting write boundary should echo the first-safe contract");
+assert(rustScanner.includes("write_boundary_rejections"), "Rust write boundary should validate request shape before rejection");
+assert(rustScanner.includes("dry-run-only-required"), "Rust write boundary should reject non-dry-run request shapes");
+assert(rustScanner.includes("route-not-first-safe"), "Rust write boundary should reject non-first-safe routes");
 assert(rustScanner.includes("runtime_capabilities"), "Rust runtime capability command should exist");
 assert(rustScanner.includes("GetDiskFreeSpaceExW"), "Rust native scanner should read Windows volume totals");
 assert(rustScanner.includes("IsUserAnAdmin"), "Rust native scanner should read elevation state");

@@ -186,6 +186,7 @@ struct WriteExecutionEntry {
     title: String,
     route: String,
     result: String,
+    reject_code: String,
     bytes: u64,
     note: String,
 }
@@ -379,6 +380,7 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let boundary_rejections = write_boundary_rejections(&request);
     let contract_echo = WriteContractEcho {
         schema_version: request
             .schema_version
@@ -400,30 +402,134 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
         .into_iter()
         .map(|action| {
             let requested_bytes = action.bytes;
+            let reject_code =
+                write_action_reject_code(&action, &route, &boundary_rejections).to_string();
             WriteExecutionEntry {
                 id: action.id,
                 title: action.title,
                 route: action.route,
                 result: "rejected".to_string(),
+                reject_code: reject_code.clone(),
                 bytes: 0,
                 note: format!(
-                    "Rejected by native write boundary for route {route}. Plan {plan_id} requested {requested_bytes} byte(s), but write execution is disabled."
+                    "Rejected by native write boundary with code {reject_code}. Route {route}, plan {plan_id}, requested {requested_bytes} byte(s); write execution is disabled."
                 ),
             }
         })
         .collect::<Vec<_>>();
+    let mut warnings =
+        vec!["No filesystem mutation was attempted by execute_cleanup_plan.".to_string()];
+    warnings.extend(
+        boundary_rejections
+            .iter()
+            .map(|code| write_boundary_warning(code).to_string()),
+    );
 
     WriteExecutionResponse {
         mode: "native-write-rejected",
         real_run_enabled: false,
         destructive_commands: false,
         accepted: false,
-        reason: "Native write boundary is present for request-shape validation only. Real cleanup is disabled.".to_string(),
+        reason: if boundary_rejections.is_empty() {
+            "Native write boundary validated the request shape and rejected it because real cleanup is disabled.".to_string()
+        } else {
+            "Native write boundary rejected the request shape before any executor could run."
+                .to_string()
+        },
         contract_echo,
         entries,
-        warnings: vec![
-            "No filesystem mutation was attempted by execute_cleanup_plan.".to_string(),
-        ],
+        warnings,
+    }
+}
+
+fn write_boundary_rejections(request: &WriteExecutionRequest) -> Vec<&'static str> {
+    let mut codes = Vec::new();
+    let mode = request.request_mode.as_deref().unwrap_or("capsule-probe");
+
+    if request.plan_id.trim().is_empty() {
+        codes.push("missing-plan-id");
+    }
+    if request
+        .scan_fingerprint
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-scan-fingerprint");
+    }
+    if request
+        .consent_plan_id
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-consent-plan-id");
+    }
+    if request.dry_run_only != Some(true) {
+        codes.push("dry-run-only-required");
+    }
+    if request.mutation_attempted.unwrap_or(false) {
+        codes.push("mutation-attempt-flag");
+    }
+    if !matches!(mode, "reject-only-preview" | "capsule-probe") {
+        codes.push("request-mode-invalid");
+    }
+    if !is_first_safe_write_route(&request.route) {
+        codes.push("route-not-first-safe");
+    }
+    if request.actions.is_empty() {
+        codes.push("no-actions");
+    }
+
+    codes
+}
+
+fn write_action_reject_code(
+    action: &WriteExecutionAction,
+    route: &str,
+    boundary_rejections: &[&'static str],
+) -> &'static str {
+    if route.trim().is_empty() {
+        return "route-missing";
+    }
+    if action.route != route {
+        return "route-mismatch";
+    }
+    if !is_first_safe_write_route(route) {
+        return "route-not-first-safe";
+    }
+    boundary_rejections
+        .first()
+        .copied()
+        .unwrap_or("real-executor-disabled")
+}
+
+fn is_first_safe_write_route(route: &str) -> bool {
+    matches!(
+        route,
+        "known-temp-delete" | "shell-recycle-bin" | "browser-cache-only"
+    )
+}
+
+fn write_boundary_warning(code: &str) -> &'static str {
+    match code {
+        "missing-plan-id" => "Write request rejected: missing current plan id.",
+        "missing-scan-fingerprint" => {
+            "Write request rejected: missing current scan-session fingerprint."
+        }
+        "missing-consent-plan-id" => "Write request rejected: missing current consent plan id.",
+        "dry-run-only-required" => "Write request rejected: dryRunOnly must remain true.",
+        "mutation-attempt-flag" => {
+            "Write request rejected: mutationAttempted must remain false in this build."
+        }
+        "request-mode-invalid" => "Write request rejected: request mode is not a disabled preview.",
+        "route-not-first-safe" => {
+            "Write request rejected: route is not a first-safe executor lane."
+        }
+        "no-actions" => "Write request rejected: no selected actions were supplied.",
+        _ => "Write request rejected by native boundary validation.",
     }
 }
 

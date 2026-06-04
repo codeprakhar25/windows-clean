@@ -331,6 +331,7 @@ export function normalizeNativeWriteBoundary(result = {}) {
           title: entry.title || "",
           route: entry.route || "",
           result: entry.result || "rejected",
+          rejectCode: entry.rejectCode || entry.reject_code || "",
           bytes: Number(entry.bytes || 0),
           note: entry.note || ""
         }))

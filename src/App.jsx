@@ -4622,6 +4622,22 @@ function WriteBoundaryProbePanel({ probe, nativeWriteBoundary, runtimeCapabiliti
         {probe.reason ? (
           <div className="rounded-md border bg-card p-3 text-sm text-muted-foreground">{probe.reason}</div>
         ) : null}
+
+        {probe.entries.length ? (
+          <div className="flex flex-col gap-2">
+            {probe.entries.slice(0, 3).map((entry) => (
+              <div key={`${entry.id}-${entry.rejectCode || entry.result}`} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{entry.title}</span>
+                  <Badge variant="safe">{entry.result}</Badge>
+                  <Badge variant="outline">{entry.rejectCode || "no code"}</Badge>
+                  <Badge variant="outline">{formatBytes(entry.bytes)}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{entry.note}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
