@@ -34,6 +34,7 @@ import {
   buildFamilyGroups,
   buildExecutionPreflight,
   buildExecutionConsentReceipt,
+  buildFirstSafeExecutorContract,
   buildFixtureEvidenceImport,
   buildIntakePolicy,
   buildPlanReview,
@@ -533,6 +534,19 @@ export default function App() {
         runtimeCapabilities: runtimeCapabilities.result
       }),
     [executorManifest, executorPlan, releaseGate, writeReadiness, rollbackPlan, rescanComparison, privilegeBoundary, privacyBoundary, runtimeCapabilities.result]
+  );
+  const firstSafeExecutorContract = useMemo(
+    () =>
+      buildFirstSafeExecutorContract({
+        realExecutorCapsule,
+        executorPlan,
+        planSnapshot,
+        scanSession,
+        consentReceipt,
+        releaseGate,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [realExecutorCapsule, executorPlan, planSnapshot, scanSession, consentReceipt, releaseGate, runtimeCapabilities.result]
   );
   const writeBoundaryProbe = useMemo(
     () =>
@@ -1171,6 +1185,7 @@ export default function App() {
       toolCommandInventory,
       writeReadiness,
       realExecutorCapsule,
+      firstSafeExecutorContract,
       writeBoundaryProbe,
       ledgerHistorySummary,
       storageStrategy,
@@ -1553,6 +1568,7 @@ export default function App() {
             <ReleaseGatePanel releaseGate={releaseGate} runtimeCapabilities={runtimeCapabilities} />
             <WriteReadinessPanel readiness={writeReadiness} />
             <RealExecutorCapsulePanel capsule={realExecutorCapsule} />
+            <FirstSafeExecutorContractPanel contract={firstSafeExecutorContract} />
             <WriteBoundaryProbePanel
               probe={writeBoundaryProbe}
               nativeWriteBoundary={nativeWriteBoundary}
@@ -3309,6 +3325,79 @@ function RealExecutorCapsulePanel({ capsule }) {
           ) : (
             <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">No capsule blockers are listed, but destructive execution remains hidden until implementation is explicit.</div>
           )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function FirstSafeExecutorContractPanel({ contract }) {
+  const blocked = contract.blockedItems.slice(0, 4);
+  const preview = contract.requestPreview;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          First-safe executor contract
+          <Badge variant={contract.tone}>{contract.status}</Badge>
+        </CardTitle>
+        <CardDescription>{contract.primary}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-3 gap-2">
+          <QueueStat label="Actions" value={contract.counts.actions} tone="review" />
+          <QueueStat label="Expected" value={formatBytes(contract.counts.expectedBytes)} tone="safe" />
+          <QueueStat label="Blocked" value={contract.counts.blocked} tone={contract.counts.blocked ? "review" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">{contract.route?.title || "No first-safe route"}</span>
+            <Badge variant={contract.destructiveActionAvailable ? "restricted" : "safe"}>
+              {contract.destructiveActionAvailable ? "write visible" : "write disabled"}
+            </Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Command: {preview?.command || "none"}</span>
+            <span>Mode: {preview?.mode || "none"}</span>
+            <span>Feature flag: {contract.route?.featureFlag || "none"}</span>
+            <span>Plan: {preview?.planId || "none"}</span>
+            <span>Scan: {preview?.scanFingerprint || "none"}</span>
+          </div>
+        </div>
+
+        {contract.route ? (
+          <div className="grid gap-2">
+            <div className="rounded-md border bg-card p-3">
+              <div className="mb-2 text-sm font-medium">Allowed targets</div>
+              <div className="flex flex-wrap gap-1">
+                {contract.route.allowedTargets.map((target) => (
+                  <Badge key={target} variant="outline">{target}</Badge>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-md border bg-card p-3">
+              <div className="mb-2 text-sm font-medium">Forbidden targets</div>
+              <div className="flex flex-wrap gap-1">
+                {contract.route.forbiddenTargets.slice(0, 5).map((target) => (
+                  <Badge key={target} variant="outline">{target}</Badge>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex flex-col gap-2">
+          {(blocked.length ? blocked : contract.items.slice(0, 4)).map((item) => (
+            <div key={item.id} className="rounded-md border bg-card p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 text-sm font-medium">{item.label}</div>
+                <Badge variant={item.passed ? "safe" : "review"}>{item.passed ? "passed" : "waiting"}</Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">{item.detail}</p>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>

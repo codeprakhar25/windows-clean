@@ -1599,6 +1599,34 @@ const assert = require("assert");
   assert.strictEqual(currentBuildExecutorCapsule.codePath.status, "rejecting-stub", "capsule should detect the native rejecting write stub");
   assert.strictEqual(currentBuildExecutorCapsule.route.id, "known-temp-delete", "capsule should select the first-safe temp route from the selected plan");
   assert(currentBuildExecutorCapsule.blockers.some((blocker) => blocker.id === "implementation-missing"), "capsule should block on missing write implementation");
+  const firstSafeContract = guard.buildFirstSafeExecutorContract({
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    executorPlan,
+    planSnapshot: cleanRunSnapshot,
+    scanSession: currentScanSession,
+    consentReceipt: armedConsent,
+    releaseGate: enabledGate,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(firstSafeContract.schemaVersion, "spaceguard-first-safe-executor-contract/v1", "first-safe executor contract should expose a schema version");
+  assert.strictEqual(firstSafeContract.status, "disabled-contract-ready", "first-safe contract should be ready only for rejecting-boundary validation");
+  assert.strictEqual(firstSafeContract.route.id, "known-temp-delete", "first-safe contract should use the capsule route");
+  assert.strictEqual(firstSafeContract.requestPreview.command, "execute_cleanup_plan", "first-safe contract should name the native write boundary command");
+  assert.strictEqual(firstSafeContract.requestPreview.mode, "reject-only-preview", "first-safe request should be reject-only in the current build");
+  assert.strictEqual(firstSafeContract.requestPreview.planId, cleanRunSnapshot.id, "first-safe request should include the current plan id");
+  assert.strictEqual(firstSafeContract.realRunEnabled, false, "first-safe contract must not enable real execution");
+  assert.strictEqual(firstSafeContract.destructiveActionAvailable, false, "first-safe contract must not expose destructive execution");
+  assert(firstSafeContract.route.forbiddenTargets.includes("Downloads"), "temp contract should explicitly forbid user Downloads");
+  const violatedFirstSafeContract = guard.buildFirstSafeExecutorContract({
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    executorPlan,
+    planSnapshot: cleanRunSnapshot,
+    scanSession: currentScanSession,
+    consentReceipt: armedConsent,
+    releaseGate: enabledGate,
+    runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
+  });
+  assert.strictEqual(violatedFirstSafeContract.status, "disabled-contract-violated", "first-safe contract should flag runtime write capability as a violation");
   const defaultWriteBoundaryProbe = guard.buildWriteBoundaryProbe({
     realExecutorCapsule: currentBuildExecutorCapsule,
     runtimeCapabilities: { available: true, executeCleanupPlan: true, realRunEnabled: false, destructiveCommands: false }

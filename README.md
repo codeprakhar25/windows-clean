@@ -164,6 +164,7 @@ The demo also includes:
 - Tool command inventory panel that lists official inspect/prune command shapes for npm, pnpm, Docker, Gradle, and Windows cleanup without executing shell commands.
 - Release gate panel that shows feature flags, runtime capabilities, missing validation checks, and disposable VM coverage.
 - Write boundary probe panel that records native rejection evidence for the future write request shape without counting recovered space.
+- First-safe executor contract panel that previews the disabled request shape for known temp, Recycle Bin, or browser cache routes without enabling writes.
 - Local validation evidence ledger and pack export with Windows VM scenarios, fixture roots, required checks, reviewer/artifact records, command checklist, fixture-evidence import, and signoff fields.
 - Agent questions that guide scan, approvals, item review, dry-run consent, simulation, rescan parity, rollback proof, fixture import, validation details, and write-boundary probe without marking proof complete on their own.
 - User-defined protected paths that remove matching actions from executable plans.
@@ -260,6 +261,8 @@ The rollback plan is evaluated before dry-run consent. Disposable and rebuildabl
 The write-readiness panel is the final real-execution gate. It combines real executor implementation, runtime write capability, release gate status, post-run rescan parity, rollback proof, privilege boundary, privacy boundary, and current plan consent. In the current build it stays locked because no selected route exposes write-capable execution.
 
 The real executor capsule names the next first-safe route that could become a write-capable executor. It lists the route implementation boundary, required fixtures, missing validation, code-path status, and blockers. It always reports destructive action availability separately; in the current build that value is `false`.
+
+The first-safe executor contract turns that capsule into a concrete request-shape preview for `execute_cleanup_plan`: selected route, plan id, scan fingerprint, action ids, expected bytes, allowed targets, forbidden targets, and feature flag. The contract is currently `reject-only-preview`; it is useful for validating the native boundary, not for cleanup.
 
 The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` rejecting stub in the desktop shell, but success means rejection, not cleanup: `accepted=false`, all entries rejected, and zero reclaimed bytes. Probe entries are never ledger recovery.
 

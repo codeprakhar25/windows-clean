@@ -79,6 +79,9 @@ const requiredAppMarkers = [
   "Final write gate",
   "write hidden",
   "Real executor capsule",
+  "First-safe executor contract",
+  "Allowed targets",
+  "Forbidden targets",
   "destructive hidden",
   "Runtime capability",
   "Write command",
@@ -170,6 +173,7 @@ assert(app.includes("buildPublicBetaReadiness"), "public beta readiness should b
 assert(app.includes("buildReleaseGate"), "release gate should be wired");
 assert(app.includes("buildWriteReadiness"), "write readiness should be wired");
 assert(app.includes("buildRealExecutorCapsule"), "real executor capsule should be wired");
+assert(app.includes("buildFirstSafeExecutorContract"), "first-safe executor contract should be wired");
 assert(app.includes("buildWriteBoundaryProbe"), "write boundary probe should be wired");
 assert(app.includes("buildValidationEvidencePack"), "validation evidence pack should be wired");
 assert(app.includes("buildValidationPackMarkdown"), "validation pack markdown export should be wired");
@@ -252,6 +256,7 @@ assert(model.includes("spaceguard-tool-command-inventory/v1"), "model should exp
 assert(model.includes("spaceguard-write-readiness/v1"), "model should expose write readiness schema");
 assert(model.includes("Real executor implementation"), "write readiness should require real executor implementation");
 assert(model.includes("spaceguard-real-executor-capsule/v1"), "model should expose real executor capsule schema");
+assert(model.includes("spaceguard-first-safe-executor-contract/v1"), "model should expose first-safe executor contract schema");
 assert(model.includes("spaceguard-write-boundary-probe/v1"), "model should expose write boundary probe schema");
 assert(model.includes("normalizeValidationEvidenceRecord"), "model should normalize structured validation evidence");
 assert(model.includes("spaceguard-fixture-evidence-import/v1"), "model should expose fixture evidence import schema");

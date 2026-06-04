@@ -232,6 +232,13 @@ Real executor capsule invariant:
 - `destructiveActionAvailable` is independent of route planning and remains `false` until a real Tauri executor command exists and all final gates pass.
 - Capsule planning cannot create a run button or bypass write readiness.
 
+First-safe executor contract invariant:
+
+- A first-safe route can produce only a disabled request-shape preview until real executors are implemented.
+- The contract must include plan id, route, selected action ids, expected bytes, scan-session fingerprint, allowed targets, forbidden targets, and feature flag.
+- Contract status cannot imply cleanup; current mode is `reject-only-preview`.
+- Runtime `realRunEnabled`, `destructiveCommands`, or capsule `destructiveActionAvailable` signals violate the disabled-contract assumption and block release review.
+
 Write boundary probe invariant:
 
 - The probe can call `execute_cleanup_plan` only to prove the native boundary rejects the current request shape.

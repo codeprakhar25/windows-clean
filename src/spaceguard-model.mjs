@@ -939,6 +939,42 @@ export const executorRouteRequirements = {
   }
 };
 
+export const firstSafeExecutorContracts = {
+  "known-temp-delete": {
+    route: "known-temp-delete",
+    title: "Known temp roots",
+    featureFlag: "tempCleanupExecutor",
+    command: "execute_cleanup_plan",
+    allowedTargets: ["Windows\\Temp", "%TEMP%", "%LOCALAPPDATA%\\Temp"],
+    forbiddenTargets: ["User profile root", "Downloads", "Documents", "Desktop", "Project source directories", "Reparse point targets"],
+    requiredReceipt: "Current plan dry-run consent",
+    mutationBoundary: "disabled-contract",
+    disabledReason: "Temp cleanup executor is not implemented or write-enabled in this build."
+  },
+  "shell-recycle-bin": {
+    route: "shell-recycle-bin",
+    title: "Recycle Bin boundary",
+    featureFlag: "recycleBinExecutor",
+    command: "execute_cleanup_plan",
+    allowedTargets: ["Shell Recycle Bin inventory only"],
+    forbiddenTargets: ["Arbitrary user folders", "Downloads by path", "Recycle Bin bypass delete"],
+    requiredReceipt: "Permanent-removal confirmation plus current plan dry-run consent",
+    mutationBoundary: "disabled-contract",
+    disabledReason: "Recycle Bin executor is not implemented or write-enabled in this build."
+  },
+  "browser-cache-only": {
+    route: "browser-cache-only",
+    title: "Browser cache only",
+    featureFlag: "browserCacheExecutor",
+    command: "execute_cleanup_plan",
+    allowedTargets: ["Browser cache folders"],
+    forbiddenTargets: ["Cookies", "Sessions", "Saved logins", "Extensions", "Profile databases"],
+    requiredReceipt: "Current plan dry-run consent",
+    mutationBoundary: "disabled-contract",
+    disabledReason: "Browser cache executor is not implemented or write-enabled in this build."
+  }
+};
+
 export const actions = [
   {
     id: "windows-temp",
@@ -3653,6 +3689,132 @@ export function buildRealExecutorCapsule({
   };
 }
 
+export function buildFirstSafeExecutorContract({
+  realExecutorCapsule = null,
+  executorPlan = null,
+  planSnapshot = null,
+  scanSession = null,
+  consentReceipt = null,
+  releaseGate = null,
+  runtimeCapabilities = {}
+} = {}) {
+  const routeId = realExecutorCapsule?.route?.id || "";
+  const contract = firstSafeExecutorContracts[routeId] || null;
+  const selectedRows = realExecutorCapsule?.selectedRows || [];
+  const expectedBytes = selectedRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+  const requestPreview = contract
+    ? {
+        command: contract.command,
+        mode: "reject-only-preview",
+        planId: planSnapshot?.id || consentReceipt?.planId || "",
+        route: contract.route,
+        actionIds: selectedRows.map((row) => row.id),
+        actionCount: selectedRows.length,
+        expectedBytes,
+        scanFingerprint: scanSession?.currentFingerprint || "",
+        consentPlanId: consentReceipt?.planId || "",
+        dryRunOnly: true,
+        mutationAttempted: false
+      }
+    : null;
+  const items = [
+    {
+      id: "contract-defined",
+      label: "First-safe contract defined",
+      detail: contract ? `${contract.title} has an explicit disabled request contract.` : "No first-safe route is selected.",
+      passed: Boolean(contract)
+    },
+    {
+      id: "request-shape",
+      label: "Request shape complete",
+      detail: requestPreview?.planId && requestPreview.actionCount > 0
+        ? `${requestPreview.actionCount} action(s) map to ${requestPreview.route}.`
+        : "Plan id and selected route actions are required before a request shape can be validated.",
+      passed: Boolean(requestPreview?.planId && requestPreview.actionCount > 0)
+    },
+    {
+      id: "scan-session",
+      label: "Current scan session",
+      detail: scanSession?.readyForPlanning ? `Scan fingerprint ${scanSession.currentFingerprint} is current.` : scanSession?.primary || "Current scan-session evidence is required.",
+      passed: Boolean(scanSession?.readyForPlanning)
+    },
+    {
+      id: "consent",
+      label: "Current plan consent",
+      detail: consentReceipt?.ready ? `Consent is tied to ${consentReceipt.planId}.` : "Dry-run consent must match this plan before any executor request is reviewed.",
+      passed: Boolean(consentReceipt?.ready)
+    },
+    {
+      id: "runtime-disabled",
+      label: "Runtime writes disabled",
+      detail: runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands
+        ? "Runtime exposes write capability; disabled-contract assumptions must be re-reviewed."
+        : "Runtime reports no real execution or destructive command capability.",
+      passed: !runtimeCapabilities?.realRunEnabled && !runtimeCapabilities?.destructiveCommands
+    },
+    {
+      id: "capsule-hidden",
+      label: "Destructive action hidden",
+      detail: realExecutorCapsule?.destructiveActionAvailable
+        ? "Capsule reports destructive action availability."
+        : "Capsule keeps destructive action unavailable.",
+      passed: !realExecutorCapsule?.destructiveActionAvailable
+    },
+    {
+      id: "release-state",
+      label: "Release gate attached",
+      detail: releaseGate
+        ? releaseGate.readyForRealRun
+          ? "Release gate is hypothetically open, but this contract still performs no mutation."
+          : releaseGate.blockedReason || "Release gate is attached and currently closed."
+        : "Release gate evidence is required before implementation planning.",
+      passed: Boolean(releaseGate)
+    }
+  ];
+  const blockedItems = items.filter((item) => !item.passed);
+  const status = !contract
+    ? "no-first-safe-route"
+    : runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands || realExecutorCapsule?.destructiveActionAvailable
+      ? "disabled-contract-violated"
+      : blockedItems.length
+        ? "contract-incomplete"
+        : "disabled-contract-ready";
+
+  return {
+    schemaVersion: "spaceguard-first-safe-executor-contract/v1",
+    status,
+    tone: status === "disabled-contract-ready" ? "safe" : status === "disabled-contract-violated" ? "restricted" : "review",
+    route: contract
+      ? {
+          id: contract.route,
+          title: contract.title,
+          featureFlag: contract.featureFlag,
+          mutationBoundary: contract.mutationBoundary,
+          requiredReceipt: contract.requiredReceipt,
+          disabledReason: contract.disabledReason,
+          allowedTargets: contract.allowedTargets,
+          forbiddenTargets: contract.forbiddenTargets
+        }
+      : null,
+    requestPreview,
+    realRunEnabled: false,
+    destructiveActionAvailable: false,
+    items,
+    blockedItems,
+    counts: {
+      actions: selectedRows.length,
+      expectedBytes,
+      passed: items.length - blockedItems.length,
+      total: items.length,
+      blocked: blockedItems.length,
+      allowedTargets: contract?.allowedTargets?.length || 0,
+      forbiddenTargets: contract?.forbiddenTargets?.length || 0
+    },
+    primary: getFirstSafeExecutorContractPrimary(status, contract, blockedItems),
+    steps: buildFirstSafeExecutorContractSteps(status, contract, blockedItems)
+  };
+}
+
 export function buildWriteBoundaryProbe({
   nativeWriteBoundary = null,
   realExecutorCapsule = null,
@@ -5231,6 +5393,7 @@ export function buildReport({
   toolCommandInventory = null,
   writeReadiness = null,
   realExecutorCapsule = null,
+  firstSafeExecutorContract = null,
   writeBoundaryProbe = null,
   ledgerHistorySummary = null,
   storageStrategy = null,
@@ -5646,6 +5809,23 @@ export function buildReport({
           realExecutorCapsule.blockers.length
             ? realExecutorCapsule.blockers.map((blocker) => `- ${blocker.label}: ${blocker.detail}`).join("\n")
             : "- No capsule blockers."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## First-Safe Executor Contract",
+    firstSafeExecutorContract
+      ? [
+          `- Status: ${firstSafeExecutorContract.status}`,
+          `- Route: ${firstSafeExecutorContract.route ? `${firstSafeExecutorContract.route.title} (${firstSafeExecutorContract.route.id})` : "none"}`,
+          `- Feature flag: ${firstSafeExecutorContract.route?.featureFlag || "none"}`,
+          `- Real run enabled: ${firstSafeExecutorContract.realRunEnabled ? "yes" : "no"}`,
+          `- Destructive action available: ${firstSafeExecutorContract.destructiveActionAvailable ? "yes" : "no"}`,
+          `- Request mode: ${firstSafeExecutorContract.requestPreview?.mode || "none"}`,
+          `- Plan: ${firstSafeExecutorContract.requestPreview?.planId || "none"}`,
+          `- Scan fingerprint: ${firstSafeExecutorContract.requestPreview?.scanFingerprint || "none"}`,
+          `- Expected bytes: ${formatBytes(firstSafeExecutorContract.counts.expectedBytes || 0)}`,
+          `- Passed checks: ${firstSafeExecutorContract.counts.passed}/${firstSafeExecutorContract.counts.total}`,
+          firstSafeExecutorContract.items.map((item) => `- ${item.label}: ${item.passed ? "passed" : "blocked"} | ${item.detail}`).join("\n")
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -6507,6 +6687,24 @@ function buildRealExecutorCapsuleSteps(status, route, blockers = []) {
   return blockerSteps.length
     ? blockerSteps
     : [`Keep ${route.title} in dry-run mode until implementation and validation evidence are complete.`];
+}
+
+function getFirstSafeExecutorContractPrimary(status, contract, blockedItems = []) {
+  if (status === "disabled-contract-ready") return `${contract.title} request contract is ready for rejecting-boundary validation only.`;
+  if (status === "disabled-contract-violated") return "Disabled executor contract assumptions were violated; keep real cleanup blocked.";
+  if (status === "contract-incomplete") return blockedItems[0]?.detail || "First-safe executor contract is waiting on current evidence.";
+  return "Select a first-safe route before building an executor contract.";
+}
+
+function buildFirstSafeExecutorContractSteps(status, contract, blockedItems = []) {
+  if (status === "disabled-contract-ready") {
+    return ["Probe the rejecting write boundary with this request shape.", "Keep bytes at zero and every entry rejected.", "Use validation evidence before any implementation flag is considered."];
+  }
+  if (status === "disabled-contract-violated") {
+    return ["Stop implementation review.", "Confirm runtime realRunEnabled and destructiveCommands are false.", "Keep write readiness locked."];
+  }
+  if (blockedItems.length) return blockedItems.slice(0, 3).map((item) => item.detail);
+  return ["Run a scan.", "Select a first-safe route such as temp cleanup.", "Arm dry-run consent for the current plan."];
 }
 
 function getWriteBoundaryProbeReason(status) {

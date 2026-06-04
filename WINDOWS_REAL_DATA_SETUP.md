@@ -48,7 +48,7 @@ In the app:
 6. Check **Task powers** to confirm selected routes activate only scoped powers and that admin, advanced, manual, or restricted powers stay locked or advisory as expected.
 7. Add protected paths before planning any review-heavy route.
 8. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
-9. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, and **Validation evidence** to confirm real cleanup is still locked.
+9. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, and **Validation evidence** to confirm real cleanup is still locked.
 10. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
 11. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
 12. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
@@ -102,6 +102,7 @@ For each Windows validation run, capture:
 - Scan session status, current fingerprint, captured fingerprint, and any changed settings.
 - Intake constraints, including admin/system action allowance.
 - Task powers state, including active, waiting, locked, advisory, blocked, and real-run-disabled rows.
+- First-safe executor contract status, request mode, selected route, allowed targets, forbidden targets, and write-disabled state.
 - Custom root discovery rows, if any; these are manual-review evidence and not executor routes.
 - Native scan volume totals.
 - Active agent question and question queue state.
