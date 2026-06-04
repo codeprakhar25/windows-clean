@@ -28,6 +28,7 @@ Then install dependencies:
 npm install
 npm test
 npm run demo:rehearsal
+npm run native:rehearsal
 npm run build
 ```
 
