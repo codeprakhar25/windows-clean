@@ -67,6 +67,8 @@ const requiredAppMarkers = [
   "Inspect",
   "Executor policy",
   "Native dry-run",
+  "Scope evidence export",
+  "Rejected samples",
   "Privilege boundary",
   "Privacy boundary",
   "Public beta readiness",

@@ -165,6 +165,7 @@ export default function App() {
   });
   const [customRootInput, setCustomRootInput] = useState("");
   const [nativeExecutorDryRun, setNativeExecutorDryRun] = useState({ status: "idle", result: null, error: "" });
+  const [nativeScopeEvidenceExport, setNativeScopeEvidenceExport] = useState({ status: "idle", result: null, error: "" });
   const [nativeWriteBoundary, setNativeWriteBoundary] = useState({ status: "idle", result: null, error: "" });
   const [runtimeCapabilities, setRuntimeCapabilities] = useState({
     status: "loading",
@@ -946,6 +947,7 @@ export default function App() {
   function clearExecutionState() {
     setLedger([]);
     setNativeExecutorDryRun({ status: "idle", result: null, error: "" });
+    setNativeScopeEvidenceExport({ status: "idle", result: null, error: "" });
     setNativeWriteBoundary({ status: "idle", result: null, error: "" });
     setExecutionConsent({ accepted: false, planId: "", acceptedAt: "" });
   }
@@ -1601,15 +1603,33 @@ export default function App() {
   }
 
   async function exportNativeDryRunScopeEvidence() {
-    if (!runtimeCapabilities.result.simulateCleanupPlan) return;
-    const scopeResult = await runNativeDryRunScopeValidation(globalThis);
-    const evidence = buildNativeDryRunScopeEvidence({
-      nativeExecutorDryRun: { result: scopeResult },
-      planSnapshot,
-      scanSession,
-      exportedAt: new Date().toISOString()
-    });
-    downloadTextFile("spaceguard-native-dry-run-scope.json", JSON.stringify(evidence, null, 2), "application/json;charset=utf-8");
+    if (!runtimeCapabilities.result.simulateCleanupPlan) {
+      setNativeScopeEvidenceExport({
+        status: "unavailable",
+        result: null,
+        error: "Native dry-run scope validation is unavailable in this runtime."
+      });
+      return;
+    }
+
+    setNativeScopeEvidenceExport({ status: "running", result: null, error: "" });
+    try {
+      const scopeResult = await runNativeDryRunScopeValidation(globalThis);
+      const evidence = buildNativeDryRunScopeEvidence({
+        nativeExecutorDryRun: { result: scopeResult },
+        planSnapshot,
+        scanSession,
+        exportedAt: new Date().toISOString()
+      });
+      downloadTextFile("spaceguard-native-dry-run-scope.json", JSON.stringify(evidence, null, 2), "application/json;charset=utf-8");
+      setNativeScopeEvidenceExport({ status: "complete", result: evidence, error: "" });
+    } catch (error) {
+      setNativeScopeEvidenceExport({
+        status: "error",
+        result: null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
   }
 
   function downloadTextFile(fileName, content, type) {
@@ -1944,6 +1964,7 @@ export default function App() {
               executorPlan={executorPlan}
               executorReadiness={executorReadiness}
               nativeExecutorDryRun={nativeExecutorDryRun}
+              scopeEvidenceExport={nativeScopeEvidenceExport}
               canExportScopeEvidence={runtimeCapabilities.result.simulateCleanupPlan}
               onExportScopeEvidence={exportNativeDryRunScopeEvidence}
             />
@@ -4180,9 +4201,10 @@ function TracePanel({ activeStage }) {
   );
 }
 
-function ExecutorPolicyPanel({ executorPlan, executorReadiness, nativeExecutorDryRun, canExportScopeEvidence, onExportScopeEvidence }) {
+function ExecutorPolicyPanel({ executorPlan, executorReadiness, nativeExecutorDryRun, scopeEvidenceExport, canExportScopeEvidence, onExportScopeEvidence }) {
   const previewRows = executorPlan.rows.slice(0, 5);
   const nativeDryRunEntries = nativeExecutorDryRun.result?.entries || [];
+  const scopeCounts = scopeEvidenceExport?.result?.counts || null;
 
   return (
     <Card>
@@ -4216,11 +4238,42 @@ function ExecutorPolicyPanel({ executorPlan, executorReadiness, nativeExecutorDr
             size="sm"
             className="mt-3 w-full"
             onClick={onExportScopeEvidence}
-            disabled={!canExportScopeEvidence}
+            disabled={!canExportScopeEvidence || scopeEvidenceExport?.status === "running"}
           >
             <Download className="h-4 w-4" />
             Export scope evidence
           </Button>
+          <div className="mt-2 rounded-md border bg-card p-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium text-foreground">Scope evidence export</span>
+              <Badge
+                variant={
+                  scopeEvidenceExport?.status === "complete" && scopeEvidenceExport?.result?.passed
+                    ? "safe"
+                    : scopeEvidenceExport?.status === "error" || scopeEvidenceExport?.status === "unavailable" || scopeEvidenceExport?.result?.passed === false
+                      ? "restricted"
+                      : "outline"
+                }
+              >
+                {scopeEvidenceExport?.status || "idle"}
+              </Badge>
+              {scopeEvidenceExport?.result ? (
+                <Badge variant={scopeEvidenceExport.result.passed ? "safe" : "restricted"}>
+                  {scopeEvidenceExport.result.passed ? "passed" : "failed"}
+                </Badge>
+              ) : null}
+            </div>
+            {scopeEvidenceExport?.error ? <div className="mt-1">{scopeEvidenceExport.error}</div> : null}
+            {scopeCounts ? (
+              <div className="mt-2 grid gap-1 sm:grid-cols-3">
+                <span>Allowed: {scopeCounts.allowed}</span>
+                <span>Rejected: {scopeCounts.rejected}</span>
+                <span>Rejected samples: {scopeCounts.rejectedWithSamples}</span>
+              </div>
+            ) : (
+              <div className="mt-1">Runs a metadata-only scope probe for fixture validation.</div>
+            )}
+          </div>
         </div>
 
         {nativeDryRunEntries.length ? (

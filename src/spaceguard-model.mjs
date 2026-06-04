@@ -5473,7 +5473,7 @@ export function buildNativeDryRunScopeEvidence({
     : [];
   const allowed = entries.filter((entry) => entry.targetScopeStatus === "target-allowed").length;
   const rejected = entries.filter((entry) => entry.targetScopeStatus === "target-blocked" || entry.rejectCode).length;
-  const rejectedWithSamples = entries.filter((entry) => entry.rejectCode && entry.candidateCount > 0).length;
+  const rejectedWithSamples = entries.filter((entry) => (entry.targetScopeStatus === "target-blocked" || entry.rejectCode) && entry.candidateCount > 0).length;
   const destructiveCommands = Boolean(result.destructiveCommands || result.destructive_commands);
   const realRunEnabled = Boolean(result.realRunEnabled || result.real_run_enabled);
   const passed = entries.length > 0 && allowed > 0 && rejected > 0 && rejectedWithSamples === 0 && !destructiveCommands && !realRunEnabled;

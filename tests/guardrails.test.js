@@ -2102,6 +2102,20 @@ const assert = require("assert");
     }
   });
   assert.strictEqual(unsafeNativeScopeEvidence.passed, false, "native dry-run scope evidence should fail if rejected targets report samples");
+  const statusOnlyRejectedSamplesEvidence = guard.buildNativeDryRunScopeEvidence({
+    nativeExecutorDryRun: {
+      result: {
+        realRunEnabled: false,
+        destructiveCommands: false,
+        entries: [
+          { id: "allowed", route: "known-temp-delete", targetScopeStatus: "target-allowed", rejectCode: "", candidateCount: 0 },
+          { id: "blocked", route: "known-temp-delete", targetScopeStatus: "target-blocked", rejectCode: "", candidateCount: 1 }
+        ]
+      }
+    }
+  });
+  assert.strictEqual(statusOnlyRejectedSamplesEvidence.counts.rejectedWithSamples, 1, "blocked target scopes with samples should be counted even without a reject code");
+  assert.strictEqual(statusOnlyRejectedSamplesEvidence.passed, false, "blocked target scopes with samples should fail evidence even without a reject code");
   const noReviewerFixtureImport = guard.buildFixtureEvidenceImport({
     evidenceObject: fixtureEvidence,
     reviewer: "",
