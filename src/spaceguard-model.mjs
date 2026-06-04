@@ -2765,6 +2765,88 @@ export function buildRealExecutorCapsule({
   };
 }
 
+export function buildWriteBoundaryProbe({
+  nativeWriteBoundary = null,
+  realExecutorCapsule = null,
+  runtimeCapabilities = {}
+} = {}) {
+  const stateStatus = nativeWriteBoundary?.status || "idle";
+  const result = nativeWriteBoundary?.result || (nativeWriteBoundary?.entries ? nativeWriteBoundary : null);
+  const selectedRows = realExecutorCapsule?.selectedRows || [];
+  const warnings = Array.isArray(result?.warnings) ? result.warnings : [];
+  const entries = Array.isArray(result?.entries)
+    ? result.entries.map((entry) => ({
+        id: entry.id || "",
+        title: entry.title || "",
+        route: entry.route || "",
+        result: entry.result || "unknown",
+        bytes: Number(entry.bytes || 0),
+        note: entry.note || ""
+      }))
+    : [];
+  const accepted = Boolean(result?.accepted);
+  const realRunEnabled = Boolean(result?.realRunEnabled || runtimeCapabilities?.realRunEnabled);
+  const destructiveCommands = Boolean(result?.destructiveCommands || runtimeCapabilities?.destructiveCommands);
+  const available = Boolean(result?.available !== false && runtimeCapabilities?.available);
+  const commandAvailable = Boolean(runtimeCapabilities?.executeCleanupPlan);
+  const bytes = entries.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+  const rejected = entries.filter((entry) => entry.result === "rejected").length;
+  const complete = stateStatus === "complete" || Boolean(result);
+  const unavailable = !runtimeCapabilities?.available || !commandAvailable || result?.available === false;
+  const zeroByteRejection =
+    complete &&
+    !unavailable &&
+    !accepted &&
+    !realRunEnabled &&
+    !destructiveCommands &&
+    bytes === 0 &&
+    entries.length > 0 &&
+    rejected === entries.length;
+  const unsafeSignal =
+    complete &&
+    !unavailable &&
+    (accepted || realRunEnabled || destructiveCommands || bytes > 0 || entries.some((entry) => entry.result !== "rejected"));
+  const status = stateStatus === "running"
+    ? "running"
+    : stateStatus === "error"
+      ? "error"
+      : !complete || stateStatus === "idle"
+        ? "not-run"
+        : unavailable
+          ? "native-unavailable"
+          : unsafeSignal
+            ? "unsafe-signal"
+            : zeroByteRejection
+              ? "rejected"
+              : "inconclusive";
+
+  return {
+    schemaVersion: "spaceguard-write-boundary-probe/v1",
+    status,
+    tone: status === "rejected" ? "safe" : status === "unsafe-signal" || status === "error" ? "restricted" : "review",
+    rejectionEvidence: status === "rejected",
+    destructiveActionAvailable: false,
+    available,
+    commandAvailable,
+    accepted,
+    realRunEnabled,
+    destructiveCommands,
+    reason: nativeWriteBoundary?.error || result?.reason || getWriteBoundaryProbeReason(status),
+    route: realExecutorCapsule?.route || null,
+    entries,
+    warnings,
+    counts: {
+      selectedRows: selectedRows.length,
+      entries: entries.length,
+      rejected,
+      bytes,
+      warnings: warnings.length
+    },
+    primary: getWriteBoundaryProbePrimary(status, { selectedRows, entries, rejected, bytes }),
+    steps: buildWriteBoundaryProbeSteps(status)
+  };
+}
+
 export function buildToolCommandInventory({
   actionList = actions,
   executorPlan = null,
@@ -3975,6 +4057,7 @@ export function buildReport({
   toolCommandInventory = null,
   writeReadiness = null,
   realExecutorCapsule = null,
+  writeBoundaryProbe = null,
   ledgerHistorySummary = null,
   storageStrategy = null,
   manualStrategyChecklist = null,
@@ -4322,6 +4405,24 @@ export function buildReport({
           realExecutorCapsule.blockers.length
             ? realExecutorCapsule.blockers.map((blocker) => `- ${blocker.label}: ${blocker.detail}`).join("\n")
             : "- No capsule blockers."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Write Boundary Probe",
+    writeBoundaryProbe
+      ? [
+          `- Status: ${writeBoundaryProbe.status}`,
+          `- Rejection evidence: ${writeBoundaryProbe.rejectionEvidence ? "yes" : "no"}`,
+          `- Accepted: ${writeBoundaryProbe.accepted ? "yes" : "no"}`,
+          `- Real run enabled: ${writeBoundaryProbe.realRunEnabled ? "yes" : "no"}`,
+          `- Destructive commands: ${writeBoundaryProbe.destructiveCommands ? "present" : "disabled"}`,
+          `- Entries: ${writeBoundaryProbe.counts.entries}`,
+          `- Rejected entries: ${writeBoundaryProbe.counts.rejected}`,
+          `- Bytes reclaimed: ${formatBytes(writeBoundaryProbe.counts.bytes || 0)}`,
+          `- Reason: ${writeBoundaryProbe.reason || "None"}`,
+          writeBoundaryProbe.entries.length
+            ? writeBoundaryProbe.entries.map((entry) => `- ${entry.title}: ${entry.result} | ${formatBytes(entry.bytes)} | ${entry.note || "no mutation"}`).join("\n")
+            : "- No write-boundary entries."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -5031,6 +5132,56 @@ function buildRealExecutorCapsuleSteps(status, route, blockers = []) {
   return blockerSteps.length
     ? blockerSteps
     : [`Keep ${route.title} in dry-run mode until implementation and validation evidence are complete.`];
+}
+
+function getWriteBoundaryProbeReason(status) {
+  if (status === "not-run") return "Probe has not been run for the current plan.";
+  if (status === "native-unavailable") return "Desktop native runtime or rejecting write command is unavailable.";
+  if (status === "unsafe-signal") return "Probe returned a signal that would be unsafe in the current build.";
+  if (status === "error") return "Probe failed before rejection evidence could be recorded.";
+  if (status === "running") return "Probe is running against the native rejecting boundary.";
+  if (status === "rejected") return "Native boundary rejected the request and reported zero reclaimed bytes.";
+  return "Probe result did not provide enough rejection evidence.";
+}
+
+function getWriteBoundaryProbePrimary(status, { selectedRows = [], entries = [], rejected = 0, bytes = 0 } = {}) {
+  if (status === "rejected") return `Rejection evidence recorded for ${rejected} write-boundary entr${rejected === 1 ? "y" : "ies"} with zero bytes reclaimed.`;
+  if (status === "native-unavailable") return "Run the Tauri desktop shell to probe the rejecting native write boundary.";
+  if (status === "unsafe-signal") return `Write boundary returned accepted/destructive/non-zero signals; bytes=${formatBytes(bytes)}.`;
+  if (status === "running") return "Native write boundary probe is running.";
+  if (status === "error") return "Native write boundary probe failed.";
+  if (!selectedRows.length) return "Select a first-safe executor capsule before probing the write boundary.";
+  if (!entries.length) return "Probe the write boundary to collect rejection evidence for the selected capsule.";
+  return "Write boundary result is inconclusive.";
+}
+
+function buildWriteBoundaryProbeSteps(status) {
+  if (status === "rejected") {
+    return [
+      "Keep real cleanup disabled.",
+      "Attach rejection evidence to Windows validation notes.",
+      "Do not count write-boundary probe entries as recovered space."
+    ];
+  }
+  if (status === "unsafe-signal") {
+    return [
+      "Stop release review for this build.",
+      "Inspect the native execute_cleanup_plan implementation.",
+      "Keep destructive UI hidden until the boundary rejects again."
+    ];
+  }
+  if (status === "native-unavailable") {
+    return [
+      "Run npm run native:dev in the desktop shell.",
+      "Confirm runtime capabilities show the rejecting write command.",
+      "Probe again after selecting a first-safe capsule."
+    ];
+  }
+  return [
+    "Select a first-safe executor capsule.",
+    "Run the native rejecting write-boundary probe.",
+    "Verify accepted=false, destructiveCommands=false, and zero bytes."
+  ];
 }
 
 function dedupeBlockers(blockers = []) {

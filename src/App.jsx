@@ -69,6 +69,7 @@ import {
   buildValidationEvidencePack,
   buildValidationPackMarkdown,
   buildVerificationSummary,
+  buildWriteBoundaryProbe,
   buildWriteReadiness,
   computeTotals,
   formatBytes,
@@ -86,7 +87,8 @@ import {
   getNativeRuntimeCapabilities,
   mergeNativeScanIntoActions,
   runNativeExecutorDryRun,
-  runNativeReadonlyScan
+  runNativeReadonlyScan,
+  runNativeWriteBoundary
 } from "./native-scanner.mjs";
 
 const RUN_HISTORY_STORAGE_KEY = "spaceguard.ledgerHistory.v1";
@@ -129,6 +131,7 @@ export default function App() {
     maxEntriesPerRoot: 25000
   });
   const [nativeExecutorDryRun, setNativeExecutorDryRun] = useState({ status: "idle", result: null, error: "" });
+  const [nativeWriteBoundary, setNativeWriteBoundary] = useState({ status: "idle", result: null, error: "" });
   const [runtimeCapabilities, setRuntimeCapabilities] = useState({
     status: "loading",
     result: {
@@ -455,6 +458,15 @@ export default function App() {
       }),
     [executorManifest, executorPlan, releaseGate, writeReadiness, rollbackPlan, rescanComparison, privilegeBoundary, privacyBoundary, runtimeCapabilities.result]
   );
+  const writeBoundaryProbe = useMemo(
+    () =>
+      buildWriteBoundaryProbe({
+        nativeWriteBoundary,
+        realExecutorCapsule,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [nativeWriteBoundary, realExecutorCapsule, runtimeCapabilities.result]
+  );
   const toolCommandInventory = useMemo(
     () => buildToolCommandInventory({ actionList, executorPlan, releaseGate }),
     [actionList, executorPlan, releaseGate]
@@ -516,6 +528,7 @@ export default function App() {
   function clearExecutionState() {
     setLedger([]);
     setNativeExecutorDryRun({ status: "idle", result: null, error: "" });
+    setNativeWriteBoundary({ status: "idle", result: null, error: "" });
     setExecutionConsent({ accepted: false, planId: "", acceptedAt: "" });
   }
 
@@ -721,6 +734,37 @@ export default function App() {
     });
   }
 
+  async function probeNativeWriteBoundary() {
+    if (nativeWriteBoundary.status === "running") return;
+    if (!runtimeCapabilities.result.executeCleanupPlan) {
+      setNativeWriteBoundary({
+        status: "unavailable",
+        result: {
+          available: false,
+          accepted: false,
+          realRunEnabled: false,
+          destructiveCommands: false,
+          entries: [],
+          warnings: ["Native write boundary is unavailable in this runtime."]
+        },
+        error: "Native rejecting write command is not available."
+      });
+      return;
+    }
+
+    setNativeWriteBoundary({ status: "running", result: null, error: "" });
+    try {
+      const result = await runNativeWriteBoundary({ ...realExecutorCapsule, planId: planSnapshot.id });
+      setNativeWriteBoundary({ status: "complete", result, error: "" });
+    } catch (error) {
+      setNativeWriteBoundary({
+        status: "error",
+        result: null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
   function setValidationCheckEvidence(checkId, checked) {
     setValidationEvidence((current) => {
       const next = { ...current };
@@ -854,6 +898,7 @@ export default function App() {
       toolCommandInventory,
       writeReadiness,
       realExecutorCapsule,
+      writeBoundaryProbe,
       ledgerHistorySummary,
       storageStrategy,
       manualStrategyChecklist,
@@ -1191,6 +1236,12 @@ export default function App() {
             <ReleaseGatePanel releaseGate={releaseGate} runtimeCapabilities={runtimeCapabilities} />
             <WriteReadinessPanel readiness={writeReadiness} />
             <RealExecutorCapsulePanel capsule={realExecutorCapsule} />
+            <WriteBoundaryProbePanel
+              probe={writeBoundaryProbe}
+              nativeWriteBoundary={nativeWriteBoundary}
+              runtimeCapabilities={runtimeCapabilities}
+              onProbe={probeNativeWriteBoundary}
+            />
             <ValidationEvidencePanel
               validationPack={validationPack}
               validationEvidence={validationEvidence}
@@ -2515,6 +2566,69 @@ function RealExecutorCapsulePanel({ capsule }) {
             <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">No capsule blockers are listed, but destructive execution remains hidden until implementation is explicit.</div>
           )}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function WriteBoundaryProbePanel({ probe, nativeWriteBoundary, runtimeCapabilities, onProbe }) {
+  const runtimeReady = Boolean(runtimeCapabilities.result.executeCleanupPlan);
+  const hasRows = probe.counts.selectedRows > 0;
+  const running = nativeWriteBoundary.status === "running";
+  const disabled = running || !runtimeReady || !hasRows;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Write boundary probe
+          <Badge variant={probe.tone}>{probe.status}</Badge>
+        </CardTitle>
+        <CardDescription>{probe.primary}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-3 gap-2">
+          <QueueStat label="Entries" value={probe.counts.entries} tone={probe.rejectionEvidence ? "safe" : "review"} />
+          <QueueStat label="Rejected" value={probe.counts.rejected} tone={probe.rejectionEvidence ? "safe" : "restricted"} />
+          <QueueStat label="Bytes" value={formatBytes(probe.counts.bytes)} tone={probe.counts.bytes ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">Rejection evidence</span>
+            <Badge variant={probe.rejectionEvidence ? "safe" : "review"}>
+              {probe.rejectionEvidence ? "zero bytes" : "not recorded"}
+            </Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Accepted: {probe.accepted ? "yes" : "no"}</span>
+            <span>Real run enabled: {probe.realRunEnabled ? "yes" : "no"}</span>
+            <span>Destructive commands: {probe.destructiveCommands ? "present" : "disabled"}</span>
+            <span>Route: {probe.route?.id || "none"}</span>
+          </div>
+        </div>
+
+        <Button variant="outline" size="sm" onClick={onProbe} disabled={disabled}>
+          <Play data-icon="inline-start" />
+          {running ? "Probing boundary" : "Probe write boundary"}
+        </Button>
+
+        <p className="text-xs text-muted-foreground">
+          This calls the native rejecting stub only. It records rejection evidence and zero bytes; it does not create ledger recovery.
+        </p>
+
+        <div className="flex flex-col gap-2">
+          {probe.steps.slice(0, 3).map((step) => (
+            <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+              <ShieldCheck className="mt-0.5 h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">{step}</span>
+            </div>
+          ))}
+        </div>
+
+        {probe.reason ? (
+          <div className="rounded-md border bg-card p-3 text-sm text-muted-foreground">{probe.reason}</div>
+        ) : null}
       </CardContent>
     </Card>
   );

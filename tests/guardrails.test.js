@@ -1126,6 +1126,97 @@ const assert = require("assert");
   assert.strictEqual(currentBuildExecutorCapsule.codePath.status, "rejecting-stub", "capsule should detect the native rejecting write stub");
   assert.strictEqual(currentBuildExecutorCapsule.route.id, "known-temp-delete", "capsule should select the first-safe temp route from the selected plan");
   assert(currentBuildExecutorCapsule.blockers.some((blocker) => blocker.id === "implementation-missing"), "capsule should block on missing write implementation");
+  const defaultWriteBoundaryProbe = guard.buildWriteBoundaryProbe({
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    runtimeCapabilities: { available: true, executeCleanupPlan: true, realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(defaultWriteBoundaryProbe.schemaVersion, "spaceguard-write-boundary-probe/v1", "write boundary probe should expose a schema version");
+  assert.strictEqual(defaultWriteBoundaryProbe.status, "not-run", "write boundary probe should default to not-run");
+  assert.strictEqual(defaultWriteBoundaryProbe.rejectionEvidence, false, "not-run write boundary probe is not rejection evidence");
+  const unavailableWriteBoundaryProbe = guard.buildWriteBoundaryProbe({
+    nativeWriteBoundary: {
+      status: "complete",
+      result: { available: false, accepted: false, realRunEnabled: false, destructiveCommands: false, entries: [], warnings: ["browser"] }
+    },
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    runtimeCapabilities: { available: false, executeCleanupPlan: false, realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(unavailableWriteBoundaryProbe.status, "native-unavailable", "browser runtime should not count as write-boundary evidence");
+  assert.strictEqual(unavailableWriteBoundaryProbe.counts.bytes, 0, "unavailable probe must report zero reclaimed bytes");
+  const rejectedWriteBoundaryProbe = guard.buildWriteBoundaryProbe({
+    nativeWriteBoundary: {
+      status: "complete",
+      result: {
+        available: true,
+        accepted: false,
+        realRunEnabled: false,
+        destructiveCommands: false,
+        reason: "disabled",
+        entries: [
+          {
+            id: "windows-temp",
+            title: "Windows temporary files",
+            route: "known-temp-delete",
+            result: "rejected",
+            bytes: 0,
+            note: "blocked by runtime"
+          }
+        ],
+        warnings: ["no mutation"]
+      }
+    },
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    runtimeCapabilities: { available: true, executeCleanupPlan: true, realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(rejectedWriteBoundaryProbe.status, "rejected", "zero-byte rejected native result should pass as rejection evidence");
+  assert.strictEqual(rejectedWriteBoundaryProbe.rejectionEvidence, true, "rejected native result should be evidence");
+  assert.strictEqual(rejectedWriteBoundaryProbe.counts.rejected, 1, "rejected probe should count rejected entries");
+  assert.strictEqual(rejectedWriteBoundaryProbe.counts.bytes, 0, "rejected probe must not reclaim bytes");
+  const acceptedWriteBoundaryProbe = guard.buildWriteBoundaryProbe({
+    nativeWriteBoundary: {
+      status: "complete",
+      result: {
+        available: true,
+        accepted: true,
+        realRunEnabled: false,
+        destructiveCommands: false,
+        entries: [{ id: "windows-temp", title: "Windows temporary files", result: "rejected", bytes: 0 }]
+      }
+    },
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    runtimeCapabilities: { available: true, executeCleanupPlan: true, realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(acceptedWriteBoundaryProbe.status, "unsafe-signal", "accepted write probe result must be unsafe");
+  const nonZeroWriteBoundaryProbe = guard.buildWriteBoundaryProbe({
+    nativeWriteBoundary: {
+      status: "complete",
+      result: {
+        available: true,
+        accepted: false,
+        realRunEnabled: false,
+        destructiveCommands: false,
+        entries: [{ id: "windows-temp", title: "Windows temporary files", result: "rejected", bytes: 1 }]
+      }
+    },
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    runtimeCapabilities: { available: true, executeCleanupPlan: true, realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(nonZeroWriteBoundaryProbe.status, "unsafe-signal", "non-zero write probe bytes must be unsafe");
+  const destructiveWriteBoundaryProbe = guard.buildWriteBoundaryProbe({
+    nativeWriteBoundary: {
+      status: "complete",
+      result: {
+        available: true,
+        accepted: false,
+        realRunEnabled: false,
+        destructiveCommands: true,
+        entries: [{ id: "windows-temp", title: "Windows temporary files", result: "rejected", bytes: 0 }]
+      }
+    },
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    runtimeCapabilities: { available: true, executeCleanupPlan: true, realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(destructiveWriteBoundaryProbe.status, "unsafe-signal", "destructive command signal must be unsafe");
   const writeReadinessReport = guard.buildReport({
     scenario: guard.getScenario("developer"),
     profile: guard.getScenario("developer").profile,
@@ -1136,12 +1227,16 @@ const assert = require("assert");
     protectedPaths: [],
     goalBytes: 10 * guard.GB,
     writeReadiness: currentBuildWriteReadiness,
-    realExecutorCapsule: currentBuildExecutorCapsule
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    writeBoundaryProbe: rejectedWriteBoundaryProbe
   });
   assert(writeReadinessReport.includes("## Write Readiness"), "dry-run report should include write readiness");
   assert(writeReadinessReport.includes("Ready for real execution: no"), "write readiness report should keep real execution blocked");
   assert(writeReadinessReport.includes("## Real Executor Capsule"), "dry-run report should include real executor capsule");
   assert(writeReadinessReport.includes("Destructive action available: no"), "executor capsule report should keep destructive action hidden");
+  assert(writeReadinessReport.includes("## Write Boundary Probe"), "dry-run report should include write boundary probe");
+  assert(writeReadinessReport.includes("Rejection evidence: yes"), "write boundary probe report should record rejection evidence");
+  assert(writeReadinessReport.includes("Bytes reclaimed: 0 GB"), "write boundary probe report should not count recovered bytes");
   const hypotheticalRealExecutorPlan = {
     ...tempExecutorPlan,
     realRunEnabled: true,

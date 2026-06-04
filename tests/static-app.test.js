@@ -139,6 +139,7 @@ assert(app.includes("buildPublicBetaReadiness"), "public beta readiness should b
 assert(app.includes("buildReleaseGate"), "release gate should be wired");
 assert(app.includes("buildWriteReadiness"), "write readiness should be wired");
 assert(app.includes("buildRealExecutorCapsule"), "real executor capsule should be wired");
+assert(app.includes("buildWriteBoundaryProbe"), "write boundary probe should be wired");
 assert(app.includes("buildValidationEvidencePack"), "validation evidence pack should be wired");
 assert(app.includes("buildValidationPackMarkdown"), "validation pack markdown export should be wired");
 assert(app.includes("VALIDATION_EVIDENCE_STORAGE_KEY"), "validation evidence should be persisted locally");
@@ -162,8 +163,13 @@ assert(app.includes("buildLedgerHistorySummary"), "ledger history summary should
 assert(app.includes("buildLedgerHistoryMarkdown"), "ledger history export should be wired");
 assert(app.includes("localStorage"), "ledger history should use local browser storage");
 assert(app.includes("runNativeExecutorDryRun"), "native executor dry-run should be wired");
+assert(app.includes("runNativeWriteBoundary"), "native write boundary probe should be wired");
 assert(app.includes("getNativeRuntimeCapabilities"), "native runtime capability should be wired");
 assert(app.includes("executeCleanupPlan"), "runtime UI should expose rejecting write command capability");
+assert(app.includes("Write boundary probe"), "write boundary probe panel should be rendered");
+assert(app.includes("Probe write boundary"), "write boundary probe action should be visible");
+assert(app.includes("rejection evidence"), "write boundary probe should frame evidence as rejection evidence");
+assert(app.includes("zero bytes"), "write boundary probe should make zero-byte outcome visible");
 assert(!app.includes("function clearExecutionState() {\n    clearExecutionState();"), "execution reset should not recursively call itself");
 assert(model.includes("large-user-files"), "model should include large personal file discovery");
 assert(model.includes("Large personal files"), "model should label large personal file discovery");
@@ -183,6 +189,7 @@ assert(model.includes("spaceguard-tool-command-inventory/v1"), "model should exp
 assert(model.includes("spaceguard-write-readiness/v1"), "model should expose write readiness schema");
 assert(model.includes("Real executor implementation"), "write readiness should require real executor implementation");
 assert(model.includes("spaceguard-real-executor-capsule/v1"), "model should expose real executor capsule schema");
+assert(model.includes("spaceguard-write-boundary-probe/v1"), "model should expose write boundary probe schema");
 assert(model.includes("destructiveActionAvailable"), "real executor capsule should keep destructive availability explicit");
 assert(model.includes("toolNativeCommandSpecs"), "model should declare tool-native command specs");
 assert(model.includes("commandExecutionEnabled: false"), "tool command inventory should keep command execution disabled");

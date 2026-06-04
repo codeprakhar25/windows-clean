@@ -77,6 +77,8 @@ execute_cleanup_plan
 
 It exists only to validate the future request shape and reject every write attempt. It returns `accepted: false`, `realRunEnabled: false`, `destructiveCommands: false`, zero reclaimed bytes, and no filesystem mutation.
 
+The **Write boundary probe** panel can call this rejecting command from the desktop shell. A passing probe is rejection evidence only: accepted is false, every entry is rejected, reclaimed bytes are zero, and no ledger or recovery claim is created.
+
 The native runtime capability command is:
 
 ```txt
@@ -153,6 +155,7 @@ The demo also includes:
 - Executor manifest panel that shows every route family, first-safe lanes, required validation checks, fixtures, preconditions, rollback notes, and next implementation steps.
 - Tool command inventory panel that lists official inspect/prune command shapes for npm, pnpm, Docker, Gradle, and Windows cleanup without executing shell commands.
 - Release gate panel that shows feature flags, runtime capabilities, missing validation checks, and disposable VM coverage.
+- Write boundary probe panel that records native rejection evidence for the future write request shape without counting recovered space.
 - Local validation evidence ledger and pack export with Windows VM scenarios, fixture roots, required checks, command checklist, and signoff fields.
 - User-defined protected paths that remove matching actions from executable plans.
 - A plan review queue separating ready, pending, protected, and policy-blocked work.
@@ -240,6 +243,8 @@ The write-readiness panel is the final real-execution gate. It combines real exe
 
 The real executor capsule names the next first-safe route that could become a write-capable executor. It lists the route implementation boundary, required fixtures, missing validation, code-path status, and blockers. It always reports destructive action availability separately; in the current build that value is `false`.
 
+The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` rejecting stub in the desktop shell, but success means rejection, not cleanup: `accepted=false`, all entries rejected, and zero reclaimed bytes. Probe entries are never ledger recovery.
+
 Dry-run records are also saved to local browser storage as an append-only run history. A saved record can block a duplicate simulation for the same plan after reload, but it cannot unlock real execution. The history export is audit evidence only; real cleanup still requires native Windows validation and a post-run rescan.
 
 Real deletion is disabled in the current build. The executor layer classifies selected actions as dry-run routes, future safe-executor candidates, gated routes, or blocked routes. Safe executors should only be enabled after Windows validation and rollback tests exist.
@@ -302,6 +307,7 @@ For real-data setup today:
 
 1. Run `npm run native:dev` on a Windows 11 machine with the prerequisites above.
 2. Use **Run real scan** to collect read-only known-root measurements and C: volume totals.
-3. Review protected paths, item review, executor policy, and release gate.
-4. Export the dry-run report and validation pack.
-5. Validate fixtures in disposable Windows VMs before implementing any write-capable executor.
+3. Review protected paths, item review, executor policy, release gate, write readiness, and real executor capsule.
+4. Use **Probe write boundary** only to capture rejection evidence from the native stub.
+5. Export the dry-run report and validation pack.
+6. Validate fixtures in disposable Windows VMs before implementing any write-capable executor.

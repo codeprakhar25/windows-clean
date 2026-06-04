@@ -45,9 +45,10 @@ In the app:
 3. Check **Real data readiness** for native availability, write capability, destructive command state, and C: volume evidence.
 4. Add protected paths before planning any review-heavy route.
 5. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
-6. Use **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, and **Validation evidence** to confirm real cleanup is still locked.
+6. Use **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, and **Validation evidence** to confirm real cleanup is still locked.
 7. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists.
-8. Export the redacted support bundle first, then the dry-run report and validation pack when path-level evidence is needed.
+8. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, and no mutation.
+9. Export the redacted support bundle first, then the dry-run report and validation pack when path-level evidence is needed.
 
 ## Disposable Fixture Run
 
@@ -105,7 +106,7 @@ For each Windows validation run, capture:
 - Rescan comparison state, including ledger timestamp, native scan timestamp, matched rows, waiting rows, and mismatches.
 - Write-readiness state with every final real-execution blocker.
 - Real executor capsule route, code-path status, missing checks, and destructive-action availability.
-- Native `execute_cleanup_plan` boundary state if the desktop runtime exposes it; current evidence must show rejection only.
+- Write boundary probe state if the desktop runtime exposes `execute_cleanup_plan`; current evidence must show accepted false, rejected entries, zero bytes, and no mutation.
 - Exported validation pack.
 
 Rescan comparison only counts when the native scan is taken after the current dry-run ledger. The expected operator order is: finish item decisions, arm and run the dry-run simulation, run the native read-only scan again, then inspect the rescan comparison panel. A native scan captured before the ledger remains evidence for sizing, not parity.
@@ -120,7 +121,7 @@ Do not implement write-capable executors until:
 - Ledger/rescan parity is proven.
 - Write readiness is blocked only by intentionally unfinished implementation work, not by missing validation, rollback, privilege, privacy, or consent evidence.
 - Real executor capsule identifies a single first-safe route and reports `destructiveActionAvailable: false` until implementation is explicit.
-- Native write-boundary command returns rejection evidence only until real execution is intentionally implemented.
+- Native write-boundary probe returns rejection evidence only and does not create ledger records or recovered-byte totals until real execution is intentionally implemented.
 - Runtime privilege boundary is recorded.
 - Real executor feature flag is intentionally enabled.
 - Signed Windows build flow exists.

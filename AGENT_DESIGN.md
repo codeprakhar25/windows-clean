@@ -112,6 +112,9 @@ The UI must also expose a recovery advisor and decision log:
 - `decision log`: data source, scan state, plan coverage, gate state, policy boundary, and execution state.
 - `executor policy`: dry-run route, future executor lane, blocked reason, guardrails, and verification requirement.
 - `release gate`: feature flags, runtime capability, validation evidence, and disposable VM coverage before real execution.
+- `write readiness`: final real-execution gate combining implementation, runtime write capability, validation, rollback, rescan parity, privilege, privacy, and consent.
+- `real executor capsule`: selected first-safe implementation route, code-path state, fixtures, validation blockers, and destructive-action availability.
+- `write boundary probe`: native rejection evidence for the future write request shape; passing evidence means rejected entries and zero bytes, not cleanup readiness.
 - `tool command inventory`: declarative official command shapes for package-manager and tool-native validation without shell execution.
 - `privacy boundary`: local-only data handling, explicit export, browser storage audit records, blocked collection classes, and disabled telemetry/cloud upload.
 - `public beta readiness`: web-demo versus native read-only beta status, signing/support/uninstall evidence, privacy posture, and public claim boundary.
@@ -213,6 +216,13 @@ Real executor capsule invariant:
 - The capsule must expose implementation boundary, fixture requirements, missing validation checks, blockers, and code-path status.
 - `destructiveActionAvailable` is independent of route planning and remains `false` until a real Tauri executor command exists and all final gates pass.
 - Capsule planning cannot create a run button or bypass write readiness.
+
+Write boundary probe invariant:
+
+- The probe can call `execute_cleanup_plan` only to prove the native boundary rejects the current request shape.
+- Passing probe evidence requires `accepted=false`, `realRunEnabled=false`, `destructiveCommands=false`, every entry rejected, and zero reclaimed bytes.
+- Probe entries cannot create ledger records, recovery totals, release-gate credit, or write-readiness credit.
+- Any accepted, destructive, real-run-enabled, non-rejected, or non-zero-byte signal is unsafe and blocks release review.
 
 Rollback invariant:
 

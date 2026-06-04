@@ -91,6 +91,7 @@ The current native shell should be marketed only as a read-only scanner:
 - It has a final write-readiness gate that stays locked until real executor implementation, runtime write capability, release validation, rollback proof, rescan parity, privilege evidence, privacy boundary, and current consent all pass.
 - It has a real executor capsule that names the next first-safe implementation route while keeping destructive action availability false.
 - It has a native write-boundary command that rejects current write attempts and exists only for request-shape validation.
+- It has a write-boundary probe that records accepted=false, rejected entries, and zero bytes as rejection evidence only.
 - It still cannot perform real cleanup.
 
 The native app should not be marketed as capable of real cleanup until the scanner, executor, and rollback story are implemented and tested on disposable Windows VMs.
