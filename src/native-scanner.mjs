@@ -27,6 +27,7 @@ export async function runNativeReadonlyScan(request = {}, host = globalThis) {
       volume: null,
       totalBytes: 0,
       findings: [],
+      driveInventory: [],
       warnings: ["Native scanner is not available in the browser demo."],
       writeCapability: false,
       destructiveCommands: false
@@ -322,10 +323,30 @@ export function normalizeNativeScan(scanResult = {}) {
     volume: normalizeNativeVolume(scanResult.volume),
     totalBytes: Number(scanResult.totalBytes || scanResult.total_bytes || findings.reduce((sum, finding) => sum + finding.bytes, 0)),
     findings,
+    driveInventory: normalizeNativeDriveInventory(scanResult.driveInventory || scanResult.drive_inventory),
     warnings: Array.isArray(scanResult.warnings) ? scanResult.warnings : [],
     writeCapability: Boolean(scanResult.writeCapability || scanResult.write_capability),
     destructiveCommands: Boolean(scanResult.destructiveCommands || scanResult.destructive_commands)
   };
+}
+
+export function normalizeNativeDriveInventory(rows = []) {
+  return Array.isArray(rows)
+    ? rows.map((row) => ({
+        id: row.id || "",
+        name: row.name || "",
+        path: row.path || "",
+        bytes: Number(row.bytes || 0),
+        status: row.status || "unknown",
+        files: Number(row.files || 0),
+        dirs: Number(row.dirs || 0),
+        errors: Number(row.errors || 0),
+        kind: row.kind || "filesystem entry",
+        classification: row.classification || "unknown-review",
+        canCreateExecutor: Boolean(row.canCreateExecutor || row.can_create_executor),
+        note: row.note || ""
+      }))
+    : [];
 }
 
 export function normalizeNativeVolume(volume = null) {

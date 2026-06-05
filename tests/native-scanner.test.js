@@ -15,6 +15,7 @@ const assert = require("assert");
   assert.strictEqual(unavailable.available, false, "native scan should report unavailable outside Tauri");
   assert.strictEqual(unavailable.request.targetDrive, "C:", "browser fallback should still expose normalized scan request");
   assert.strictEqual(unavailable.volume, null, "browser fallback must not expose volume evidence");
+  assert.deepStrictEqual(unavailable.driveInventory, [], "browser fallback must not expose drive inventory evidence");
   assert.strictEqual(unavailable.writeCapability, false, "browser fallback must not expose write capability");
   assert.strictEqual(unavailable.destructiveCommands, false, "browser fallback must not expose destructive commands");
   const executorUnavailable = await native.runNativeExecutorDryRun({ rows: [] }, {});
@@ -127,6 +128,36 @@ const assert = require("assert");
         note: "Advisory read-only custom root measurement; no executor route is created."
       }
     ],
+    drive_inventory: [
+      {
+        id: "drive-users",
+        name: "Users",
+        path: "C:\\Users",
+        bytes: 256 * guard.GB,
+        status: "limited",
+        files: 1200,
+        dirs: 90,
+        errors: 1,
+        kind: "directory",
+        classification: "user-data-review",
+        can_create_executor: false,
+        note: "Measured with drive-inventory caps."
+      },
+      {
+        id: "drive-windows",
+        name: "Windows",
+        path: "C:\\Windows",
+        bytes: 80 * guard.GB,
+        status: "limited",
+        files: 5000,
+        dirs: 300,
+        errors: 20,
+        kind: "directory",
+        classification: "system-or-protected",
+        can_create_executor: false,
+        note: "System context only."
+      }
+    ],
     writeCapability: false,
     destructiveCommands: false
   });
@@ -136,6 +167,9 @@ const assert = require("assert");
   assert.strictEqual(scan.volume.drive, "C:", "native scan should normalize volume drive");
   assert.strictEqual(scan.volume.freeBytes, 64 * guard.GB, "native scan should normalize volume free bytes");
   assert.strictEqual(scan.volume.usedBytes, 448 * guard.GB, "native scan should normalize volume used bytes");
+  assert.strictEqual(scan.driveInventory.length, 2, "native scan should normalize drive inventory rows");
+  assert.strictEqual(scan.driveInventory[0].classification, "user-data-review", "drive inventory classification should normalize");
+  assert.strictEqual(scan.driveInventory[0].canCreateExecutor, false, "drive inventory must not create executor routes");
   const merged = native.mergeNativeScanIntoActions(actionList, scan);
   const gradle = merged.find((action) => action.id === "gradle-cache");
   const docker = merged.find((action) => action.id === "docker-build-cache");
@@ -162,6 +196,19 @@ const assert = require("assert");
   assert.strictEqual(scanCoverage.customRootRows[0].nextStep.includes("never create executor routes"), true, "custom roots should stay advisory");
   assert(scanCoverage.unverifiedRows.some((row) => row.id === "docker-build-cache" && row.evidence === "unsupported"), "unsupported native roots should stay visible in coverage gaps");
   assert(scanCoverage.unverifiedRows.some((row) => row.evidence === "demo-estimate"), "demo-estimated roots should remain visible after partial native scan");
+  const driveInventory = guard.buildDriveInventorySummary({
+    nativeScan: scan,
+    scanMode: "native-readonly"
+  });
+  assert.strictEqual(driveInventory.schemaVersion, "spaceguard-drive-inventory/v1", "drive inventory should expose a schema version");
+  assert.strictEqual(driveInventory.status, "inventory-ready", "native drive inventory should be ready when rows exist");
+  assert.strictEqual(driveInventory.manualOnly, true, "drive inventory should stay manual-only");
+  assert.strictEqual(driveInventory.counts.executorRoutes, 0, "drive inventory should never create executor routes");
+  assert.strictEqual(driveInventory.counts.realRun, 0, "drive inventory should never create real-run rows");
+  assert.strictEqual(driveInventory.counts.system, 1, "drive inventory should identify system buckets");
+  assert.strictEqual(driveInventory.topRows[0].name, "Users", "drive inventory should sort largest buckets first");
+  const demoDriveInventory = guard.buildDriveInventorySummary({ nativeScan: null, scanMode: "demo" });
+  assert.strictEqual(demoDriveInventory.status, "demo-only", "demo mode should not claim drive inventory evidence");
 
   const largeFileReview = guard.buildItemReview("large-user-files", merged, scan, []);
   assert.strictEqual(largeFileReview.source, "native-readonly", "large-file item review should use native candidates when available");

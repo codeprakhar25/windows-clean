@@ -48,6 +48,7 @@ import {
   buildAgentTaskRunbook,
   buildDecisionLog,
   buildDemoRehearsalRunbook,
+  buildDriveInventorySummary,
   buildDryRunLaunchGuard,
   appendLedgerRunRecord,
   buildExecutorManifest,
@@ -359,6 +360,10 @@ export default function App() {
   const scanCoverage = useMemo(
     () => buildScanCoverageSummary({ actionList, scanMode: dataMode, nativeScan: nativeScan.result }),
     [actionList, dataMode, nativeScan.result]
+  );
+  const driveInventorySummary = useMemo(
+    () => buildDriveInventorySummary({ nativeScan: nativeScan.result, scanMode: dataMode }),
+    [nativeScan.result, dataMode]
   );
   const customRootTriage = useMemo(
     () => buildCustomRootTriage({ scanCoverage, evidence: customRootTriageEvidence }),
@@ -1066,6 +1071,7 @@ export default function App() {
         scanMode: dataMode,
         scanSession,
         scanCoverage,
+        driveInventorySummary,
         demoRehearsalRunbook,
         windowsSetupAssistant,
         publicBetaReadiness,
@@ -1085,6 +1091,7 @@ export default function App() {
       dataMode,
       scanSession,
       scanCoverage,
+      driveInventorySummary,
       demoRehearsalRunbook,
       windowsSetupAssistant,
       publicBetaReadiness,
@@ -1234,6 +1241,7 @@ export default function App() {
         readiness,
         scanSession,
         scanCoverage,
+        driveInventorySummary,
         demoRehearsalRunbook,
         windowsSetupAssistant,
         taskPowerCatalog,
@@ -1270,6 +1278,7 @@ export default function App() {
       readiness,
       scanSession,
       scanCoverage,
+      driveInventorySummary,
       demoRehearsalRunbook,
       windowsSetupAssistant,
       taskPowerCatalog,
@@ -2081,6 +2090,7 @@ export default function App() {
       manualStrategyChecklist,
       customRootTriage,
       scanCoverage,
+      driveInventorySummary,
       intakePolicy,
       riskBudget,
       planLock,
@@ -2502,6 +2512,8 @@ export default function App() {
               nativeScan={nativeScan}
               requestGuard={nativeScanRequestGuard}
             />
+
+            <DriveInventoryPanel inventory={driveInventorySummary} />
 
             <ScanCoveragePanel coverage={scanCoverage} />
 
@@ -4635,6 +4647,84 @@ function NativeScanSettingsPanel({
           <QueueStat label="Cap" value={`${settings.maxEntriesPerRoot / 1000}k`} tone="review" />
           <QueueStat label="Projects" value={settings.includeProjectArtifacts ? "on" : "off"} tone={settings.includeProjectArtifacts ? "safe" : "advisory"} />
           <QueueStat label="Custom" value={customRoots.length} tone={customRoots.length ? "review" : "safe"} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DriveInventoryPanel({ inventory }) {
+  const rows = inventory.topRows || [];
+
+  return (
+    <Card id="drive-inventory-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <HardDrive className="h-4 w-4" />
+              Drive inventory
+            </CardTitle>
+            <CardDescription>{inventory.primary}</CardDescription>
+          </div>
+          <Badge variant={inventory.tone}>{inventory.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <QueueStat label="Top entries" value={inventory.counts.total} tone={inventory.counts.total ? "review" : "restricted"} />
+          <QueueStat label="Visible" value={formatBytes(inventory.visibleBytes)} tone={inventory.visibleBytes ? "review" : "safe"} />
+          <QueueStat label="Manual" value={inventory.counts.review} tone={inventory.counts.review ? "review" : "safe"} />
+          <QueueStat label="Executors" value={inventory.counts.executorRoutes} tone="safe" />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Discovery boundary</span>
+            <Badge variant="safe">read-only</Badge>
+            <Badge variant="safe">no executor routes</Badge>
+            <Badge variant={inventory.counts.system ? "restricted" : "outline"}>{inventory.counts.system} system bucket(s)</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Top-level C-drive inventory explains space pressure only. Unknown or user-data buckets must go through custom root triage, item review, or manual strategy.
+          </p>
+        </div>
+
+        {rows.length ? (
+          <div className="grid gap-2 md:grid-cols-2">
+            {rows.map((row) => (
+              <div key={row.id} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 truncate text-sm font-medium">{row.name}</span>
+                  <Badge variant={row.tone}>{row.classification}</Badge>
+                  <Badge variant="outline">{formatBytes(row.bytes)}</Badge>
+                </div>
+                <div className="mt-2 truncate font-mono text-xs text-muted-foreground">{row.path || "path unavailable"}</div>
+                <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
+                  <span>{row.status}</span>
+                  <span>{row.files} file(s)</span>
+                  <span>{row.dirs} folder(s)</span>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{row.nextStep}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+            Run a native read-only scan to capture top-level drive inventory. Browser demo mode cannot enumerate local folders.
+          </div>
+        )}
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 text-sm font-medium">Next inventory moves</div>
+          <div className="flex flex-col gap-2">
+            {inventory.steps.slice(0, 4).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </CardContent>
     </Card>

@@ -61,6 +61,9 @@ const requiredAppMarkers = [
   "Entry cap",
   "Actual volume usage",
   "drive evidence",
+  "Drive inventory",
+  "Discovery boundary",
+  "no executor routes",
   "Scan coverage",
   "Coverage confidence",
   "Recovery advisor",
@@ -243,6 +246,9 @@ assert(app.includes("buildCustomRootTriage"), "custom root triage should be wire
 assert(app.includes("CustomRootTriagePanel"), "custom root triage panel should be rendered");
 assert(app.includes("CUSTOM_ROOT_TRIAGE_STORAGE_KEY"), "custom root triage should be persisted locally");
 assert(app.includes("buildScanCoverageSummary"), "scan coverage summary should be wired");
+assert(app.includes("buildDriveInventorySummary"), "drive inventory summary should be wired");
+assert(app.includes("DriveInventoryPanel"), "drive inventory panel should be rendered");
+assert(app.includes("drive-inventory-panel"), "drive inventory should be focusable");
 assert(app.includes("buildScanSessionEvidence"), "scan session freshness guard should be wired");
 assert(app.includes("buildRecoveryAdvisor"), "recovery advisor should be wired");
 assert(app.includes("buildAgentQuestionQueue"), "agent question queue should be wired");
@@ -429,6 +435,9 @@ assert(model.includes("import-fixture-evidence"), "question queue should ask fix
 assert(model.includes("manualDispositionBytes"), "model should separate manual move/archive bytes from executor bytes");
 assert(model.includes("isItemReviewDecision"), "model should validate expanded item review decisions");
 assert(model.includes("spaceguard-scan-coverage/v1"), "model should expose scan coverage schema");
+assert(model.includes("spaceguard-drive-inventory/v1"), "model should expose drive inventory schema");
+assert(model.includes("top-level drive"), "drive inventory should describe top-level discovery");
+assert(model.includes("noExecutorRoute: true"), "drive inventory should block executor route creation");
 assert(model.includes("spaceguard-custom-root-triage/v1"), "model should expose custom root triage schema");
 assert(model.includes("customRootDispositionOptions"), "model should define custom root disposition options");
 assert(model.includes("canCreateExecutor: false"), "custom root triage should block executor creation");
@@ -497,6 +506,7 @@ assert(app.includes("Native scan settings blocked"), "app should surface blocked
 assert(nativeAdapter.includes("scan_known_roots"), "native adapter should invoke the read-only scanner command");
 assert(nativeAdapter.includes("targetDrive"), "native adapter should pass target drive scope");
 assert(nativeAdapter.includes("customRoots"), "native adapter should pass custom read-only roots");
+assert(nativeAdapter.includes("driveInventory"), "native adapter should normalize drive inventory rows");
 assert(nativeAdapter.includes("simulate_cleanup_plan"), "native adapter should invoke the dry-run executor command");
 assert(nativeAdapter.includes("runNativeDryRunScopeValidation"), "native adapter should expose native dry-run scope validation");
 assert(nativeAdapter.includes("downloads-forbidden-as-temp"), "native adapter scope validation should include forbidden Downloads case");
@@ -516,6 +526,9 @@ assert(tauriConfig.includes('"withGlobalTauri": true'), "Tauri config should exp
 assert(rustScanner.includes("scan_known_roots"), "Rust scanner command should exist");
 assert(rustScanner.includes("target_drive"), "Rust scanner should accept target drive scope");
 assert(rustScanner.includes("target_drive_path"), "Rust scanner should scope system roots to the target drive");
+assert(rustScanner.includes("DriveInventoryEntry"), "Rust scanner should expose drive inventory entries");
+assert(rustScanner.includes("drive_inventory"), "Rust scanner should return drive inventory rows");
+assert(rustScanner.includes("measure_drive_inventory"), "Rust scanner should measure top-level drive inventory read-only");
 assert(rustScanner.includes("custom_roots"), "Rust scanner should accept custom read-only roots");
 assert(rustScanner.includes("measure_custom_roots"), "Rust scanner should measure custom roots read-only");
 assert(rustScanner.includes("simulate_cleanup_plan"), "Rust native dry-run command should exist");
@@ -559,9 +572,11 @@ assert(realDataGuide.includes("DryRunScopeEvidencePath"), "real-data guide shoul
 assert(realDataGuide.includes("Validation pack import"), "real-data guide should explain validation pack import resume flow");
 assert(realDataGuide.includes("beta handoff manifest"), "real-data guide should include beta handoff manifest export");
 assert(realDataGuide.includes("local evidence backup"), "real-data guide should include local evidence backup export");
+assert(realDataGuide.includes("Drive inventory"), "real-data guide should require drive inventory review");
 assert(readme.includes("NATIVE_BETA_DISTRIBUTION.md"), "README should link native beta distribution runbook");
 assert(readme.includes("Beta handoff manifest"), "README should describe beta handoff manifest");
 assert(readme.includes("Local evidence backup"), "README should describe local evidence backup");
+assert(readme.includes("Read-only drive inventory"), "README should describe drive inventory");
 assert(realDataGuide.includes("NATIVE_BETA_DISTRIBUTION.md"), "real-data guide should link native beta distribution runbook");
 assert(nativeBetaRunbook.includes("Native Beta Distribution Runbook"), "native beta runbook should exist");
 assert(nativeBetaRunbook.includes("Install Path"), "native beta runbook should cover install evidence");

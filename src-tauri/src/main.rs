@@ -48,6 +48,7 @@ struct ScanResponse {
     volume: Option<VolumeInfo>,
     total_bytes: u64,
     findings: Vec<ScanFinding>,
+    drive_inventory: Vec<DriveInventoryEntry>,
     warnings: Vec<String>,
     write_capability: bool,
     destructive_commands: bool,
@@ -89,6 +90,23 @@ struct ScanItem {
     kind: String,
     recommendation: String,
     reason: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DriveInventoryEntry {
+    id: String,
+    name: String,
+    path: String,
+    bytes: u64,
+    status: String,
+    files: u64,
+    dirs: u64,
+    errors: u64,
+    kind: String,
+    classification: String,
+    can_create_executor: bool,
+    note: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -362,6 +380,7 @@ fn scan_known_roots(request: Option<ScanRequest>) -> ScanResponse {
         "Advisory only. Partition operations are not automated.",
     ));
 
+    let drive_inventory = measure_drive_inventory(&target_drive, &request, &mut warnings);
     let total_bytes = findings
         .iter()
         .filter(|finding| finding.status == "measured" || finding.status == "limited")
@@ -378,6 +397,7 @@ fn scan_known_roots(request: Option<ScanRequest>) -> ScanResponse {
         volume: primary_volume_info(&target_drive),
         total_bytes,
         findings,
+        drive_inventory,
         warnings,
         write_capability: false,
         destructive_commands: false,
@@ -1241,6 +1261,152 @@ fn exact_specs(target_drive: &str) -> Vec<ExactSpec> {
     }
 
     specs
+}
+
+fn measure_drive_inventory(
+    target_drive: &str,
+    request: &ScanRequest,
+    warnings: &mut Vec<String>,
+) -> Vec<DriveInventoryEntry> {
+    let root = target_drive_path(target_drive, "");
+    let Ok(entries) = fs::read_dir(&root) else {
+        warnings.push(format!(
+            "Drive inventory unavailable for {}.",
+            path_to_string(&root)
+        ));
+        return Vec::new();
+    };
+
+    let mut rows = Vec::new();
+    let inventory_request = drive_inventory_request(request);
+
+    for entry in entries.flatten() {
+        if rows.len() >= 32 {
+            warnings.push("Drive inventory is capped at 32 top-level entries.".to_string());
+            break;
+        }
+
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.trim().is_empty() {
+            continue;
+        }
+
+        rows.push(measure_drive_inventory_entry(
+            &name,
+            &path,
+            &inventory_request,
+        ));
+    }
+
+    rows.sort_by(|a, b| b.bytes.cmp(&a.bytes).then(a.name.cmp(&b.name)));
+    rows
+}
+
+fn drive_inventory_request(request: &ScanRequest) -> ScanRequest {
+    ScanRequest {
+        protected_paths: request.protected_paths.clone(),
+        include_project_artifacts: request.include_project_artifacts,
+        max_depth: Some(request.max_depth.unwrap_or(8).min(3)),
+        max_entries_per_root: Some(request.max_entries_per_root.unwrap_or(25_000).min(5_000)),
+        target_drive: request.target_drive.clone(),
+        custom_roots: Vec::new(),
+    }
+}
+
+fn measure_drive_inventory_entry(
+    name: &str,
+    path: &Path,
+    request: &ScanRequest,
+) -> DriveInventoryEntry {
+    let mut row = DriveInventoryEntry {
+        id: stable_item_id("drive-inventory", path),
+        name: name.to_string(),
+        path: path_to_string(path),
+        bytes: 0,
+        status: "missing".to_string(),
+        files: 0,
+        dirs: 0,
+        errors: 0,
+        kind: "unknown".to_string(),
+        classification: drive_inventory_classification(name).to_string(),
+        can_create_executor: false,
+        note: "Top-level drive inventory is read-only context and never creates executor routes."
+            .to_string(),
+    };
+
+    if is_path_protected(path, &request.protected_paths) {
+        row.status = "protected".to_string();
+        row.note = "Skipped because the path is user-protected.".to_string();
+        return row;
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        row.status = "limited".to_string();
+        row.errors = 1;
+        row.note = "Top-level entry could not be opened for read-only inventory.".to_string();
+        return row;
+    };
+
+    if metadata.file_type().is_symlink() {
+        row.status = "limited".to_string();
+        row.note = "Skipped symbolic link or reparse point in drive inventory.".to_string();
+        return row;
+    }
+
+    if metadata.is_file() {
+        row.bytes = metadata.len();
+        row.files = 1;
+        row.kind = "file".to_string();
+        row.status = "measured".to_string();
+        return row;
+    }
+
+    if metadata.is_dir() {
+        let stats = walk_dir_size(path, MeasureKind::FullTree, request);
+        row.bytes = stats.bytes;
+        row.files = stats.files;
+        row.dirs = stats.dirs;
+        row.errors = stats.errors;
+        row.kind = "directory".to_string();
+        row.status = if stats.limited { "limited" } else { "measured" }.to_string();
+        row.note = if stats.limited {
+            "Measured with drive-inventory depth and entry caps. Add as a custom root for manual detail; no executor route is created."
+                .to_string()
+        } else {
+            "Measured from filesystem metadata only. This row is context, not cleanup authority."
+                .to_string()
+        };
+        return row;
+    }
+
+    row.status = "limited".to_string();
+    row.note = "Unsupported top-level filesystem entry type.".to_string();
+    row
+}
+
+fn drive_inventory_classification(name: &str) -> &'static str {
+    let lower = name.to_ascii_lowercase();
+    if matches!(
+        lower.as_str(),
+        "windows"
+            | "program files"
+            | "program files (x86)"
+            | "programdata"
+            | "recovery"
+            | "system volume information"
+            | "$recycle.bin"
+    ) || lower.starts_with('$')
+    {
+        return "system-or-protected";
+    }
+    if matches!(lower.as_str(), "users" | "documents and settings") {
+        return "user-data-review";
+    }
+    if matches!(lower.as_str(), "hiberfil.sys" | "pagefile.sys" | "swapfile.sys") {
+        return "advanced-system";
+    }
+    "unknown-review"
 }
 
 fn measure_custom_roots(request: &ScanRequest, warnings: &mut Vec<String>) -> Vec<ScanFinding> {

@@ -109,6 +109,7 @@ Runtime capabilities also expose per-executor feature flags: `tempCleanupExecuto
 
 It currently scans or reports:
 
+- Top-level target-drive inventory as capped read-only context.
 - `%TEMP%` and `C:\Windows\Temp`
 - Recycle Bin
 - `C:\Windows.old`
@@ -171,6 +172,7 @@ The demo also includes:
 - Dry-run launch guard that blocks simulation unless run readiness, current consent, and the safety interlock all pass while real execution remains locked.
 - Operating checklist that collapses scan evidence, active user question, run readiness, consent, launch guard, ledger state, and the real-cleanup lock into one safe-next-action surface.
 - Native Windows volume evidence for target-drive total, used, and free bytes when the desktop scanner can read it.
+- Read-only drive inventory for top-level target-drive entries so broad C-drive pressure is visible before any cleanup recipe or custom-root decision.
 - Intake constraints for target drive, goal, risk tolerance, protected paths, and whether admin/system routes can enter dry-run planning.
 - Risk budget gate that blocks dry-run simulation when selected actions exceed Safe, Balanced, or Emergency mode limits.
 - Plan lock that binds the current plan snapshot to the scan fingerprint, selected rows, risk budget, and dry-run consent so stale consent cannot launch.

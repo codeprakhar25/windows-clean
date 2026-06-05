@@ -2290,6 +2290,67 @@ export function buildScanCoverageSummary({
   };
 }
 
+export function buildDriveInventorySummary({
+  nativeScan = null,
+  scanMode = "demo"
+} = {}) {
+  const rows = normalizeDriveInventoryRows(nativeScan?.driveInventory).map((row) => {
+    const measured = row.status === "measured" || row.status === "limited";
+    const restricted = row.classification === "system-or-protected" || row.classification === "advanced-system";
+    return {
+      ...row,
+      measured,
+      manualOnly: true,
+      noExecutorRoute: true,
+      canCreateExecutor: false,
+      tone: restricted ? "restricted" : measured ? "review" : "outline",
+      nextStep: getDriveInventoryNextStep(row)
+    };
+  });
+  const visibleBytes = rows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+  const measuredRows = rows.filter((row) => row.measured);
+  const reviewRows = rows.filter((row) => row.classification === "unknown-review" || row.classification === "user-data-review");
+  const systemRows = rows.filter((row) => row.classification === "system-or-protected" || row.classification === "advanced-system");
+  const limitedRows = rows.filter((row) => row.status === "limited" || row.errors > 0);
+  const topRows = rows.slice(0, 8);
+  const status = scanMode !== "native-readonly"
+    ? "demo-only"
+    : !nativeScan?.available
+      ? "native-unavailable"
+      : rows.length
+        ? "inventory-ready"
+        : "inventory-missing";
+
+  return {
+    schemaVersion: "spaceguard-drive-inventory/v1",
+    status,
+    tone: status === "inventory-ready" ? "review" : status === "demo-only" ? "outline" : "restricted",
+    scanMode,
+    nativeAvailable: Boolean(nativeScan?.available),
+    manualOnly: true,
+    noExecutorRoute: true,
+    realRunEnabled: false,
+    destructiveCommands: false,
+    visibleBytes,
+    rows,
+    topRows,
+    reviewRows,
+    systemRows,
+    limitedRows,
+    counts: {
+      total: rows.length,
+      measured: measuredRows.length,
+      review: reviewRows.length,
+      system: systemRows.length,
+      limited: limitedRows.length,
+      executorRoutes: 0,
+      realRun: 0
+    },
+    primary: getDriveInventoryPrimary(status, rows, visibleBytes),
+    steps: getDriveInventorySteps(status, { reviewRows, systemRows, limitedRows })
+  };
+}
+
 export function buildCustomRootTriage({
   scanCoverage = null,
   evidence = {}
@@ -2399,6 +2460,62 @@ function buildCustomRootCoverageRows(nativeScan = null) {
       };
     })
     .sort((a, b) => b.bytes - a.bytes || a.title.localeCompare(b.title));
+}
+
+function normalizeDriveInventoryRows(rows = []) {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row, index) => ({
+      id: String(row?.id || `drive-inventory-${index + 1}`),
+      name: String(row?.name || "Top-level entry"),
+      path: String(row?.path || ""),
+      bytes: Number(row?.bytes || 0),
+      status: String(row?.status || "unknown"),
+      files: Number(row?.files || 0),
+      dirs: Number(row?.dirs || 0),
+      errors: Number(row?.errors || 0),
+      kind: String(row?.kind || "filesystem entry"),
+      classification: normalizeDriveInventoryClassification(row?.classification),
+      note: String(row?.note || "")
+    }))
+    .sort((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name));
+}
+
+function normalizeDriveInventoryClassification(value = "") {
+  const clean = String(value || "").trim();
+  if (["system-or-protected", "user-data-review", "advanced-system", "unknown-review"].includes(clean)) return clean;
+  return "unknown-review";
+}
+
+function getDriveInventoryNextStep(row) {
+  if (row.status === "protected") return "Leave protected by user policy; do not add to executor plans.";
+  if (row.classification === "system-or-protected") return "Use exact validated recipes only. Do not automate broad system-folder cleanup.";
+  if (row.classification === "advanced-system") return "Keep advisory and require typed acknowledgement plus Windows validation before any future change.";
+  if (row.classification === "user-data-review") return "Review specific user folders or large-file candidates; no bulk user-data cleanup.";
+  if (row.status === "limited") return "Add a narrower custom root for manual review if this bucket matters.";
+  return "Inspect owner and purpose first, or add a narrower custom root for read-only triage.";
+}
+
+function getDriveInventoryPrimary(status, rows, visibleBytes) {
+  if (status === "inventory-ready") return `${rows.length} top-level drive entr${rows.length === 1 ? "y" : "ies"} inventoried read-only (${formatBytes(visibleBytes)} visible).`;
+  if (status === "demo-only") return "Drive inventory needs the native desktop shell; browser demo cannot enumerate C:.";
+  if (status === "native-unavailable") return "Native scanner is unavailable, so drive inventory cannot be captured.";
+  return "Native scan returned no top-level drive inventory rows.";
+}
+
+function getDriveInventorySteps(status, { reviewRows = [], systemRows = [], limitedRows = [] } = {}) {
+  if (status === "inventory-ready") {
+    const steps = [
+      "Use inventory to explain space pressure before selecting cleanup recipes.",
+      "Keep every inventory row manual-only and outside executor routes."
+    ];
+    if (reviewRows.length) steps.push("Add suspicious review buckets as narrower custom roots before any manual action.");
+    if (systemRows.length) steps.push("Use only exact system-safe recipes; never bulk-delete top-level system folders.");
+    if (limitedRows.length) steps.push("Rerun with a narrower custom root when capped inventory is too coarse.");
+    return steps.slice(0, 4);
+  }
+  if (status === "demo-only") return ["Run the desktop shell.", "Run a native read-only scan.", "Use inventory only as discovery evidence."];
+  return ["Fix native scanner availability.", "Run read-only scan again.", "Keep cleanup planning on known measured recipes only."];
 }
 
 export function normalizeCustomRootTriageRecord(value = null) {
@@ -4919,6 +5036,7 @@ export function buildProductCompletionAudit({
   readiness = null,
   scanSession = null,
   scanCoverage = null,
+  driveInventorySummary = null,
   demoRehearsalRunbook = null,
   windowsSetupAssistant = null,
   taskPowerCatalog = null,
@@ -4958,6 +5076,7 @@ export function buildProductCompletionAudit({
       || windowsSetupAssistant?.destructiveCommands
   );
   const nativeScanCurrent = Boolean(scanMode === "native-readonly" && scanSession?.readyForPlanning && scanSession?.nativeEvidence);
+  const driveInventoryCurrent = Boolean(driveInventorySummary?.status === "inventory-ready");
   const demoWorkflowComplete = Boolean(demoRehearsalRunbook?.evidenceComplete);
   const publicDemoReady = Boolean(demoRehearsalRunbook?.safeForPublicDemo && !unsafeRuntime);
   const dryRunLedgerCurrent = Boolean(
@@ -4972,14 +5091,16 @@ export function buildProductCompletionAudit({
     buildProductCompletionAuditRow({
       id: "discover-c-drive",
       requirement: "Search C: and surface cleanup candidates",
-      status: nativeScanCurrent ? "native-proven" : scanned || scanSession?.status === "demo-current" ? "demo-proven" : "waiting-evidence",
-      detail: nativeScanCurrent
-        ? `Native read-only scan is current with ${scanCoverage?.confidenceScore || 0}% coverage confidence.`
+      status: nativeScanCurrent && driveInventoryCurrent ? "native-proven" : nativeScanCurrent ? "partial" : scanned || scanSession?.status === "demo-current" ? "demo-proven" : "waiting-evidence",
+      detail: nativeScanCurrent && driveInventoryCurrent
+        ? `Native read-only scan is current with ${scanCoverage?.confidenceScore || 0}% coverage confidence and ${driveInventorySummary.counts.total} top-level C-drive inventory row(s).`
+        : nativeScanCurrent
+          ? `Native read-only scan is current with ${scanCoverage?.confidenceScore || 0}% coverage confidence; top-level drive inventory is still missing.`
         : scanned || scanSession?.status === "demo-current"
           ? "Demo scan proves the discovery workflow with sample data."
           : "Run demo scan or native read-only scan.",
-      evidence: scanSession?.status || "no scan session",
-      nextStep: nativeScanCurrent ? "Use current native evidence for planning." : "Run the scan path needed for this review."
+      evidence: `${scanSession?.status || "no scan session"}; inventory=${driveInventorySummary?.status || "missing"}`,
+      nextStep: nativeScanCurrent && driveInventoryCurrent ? "Use current native evidence for planning." : "Run the scan path needed for this review."
     }),
     buildProductCompletionAuditRow({
       id: "classify-and-rank",
@@ -9874,6 +9995,7 @@ export function buildReport({
   storageStrategy = null,
   manualStrategyChecklist = null,
   scanCoverage = null,
+  driveInventorySummary = null,
   intakePolicy = null,
   riskBudget = null,
   planLock = null,
@@ -10291,6 +10413,23 @@ export function buildReport({
           scanCoverage.unverifiedRows?.length
             ? scanCoverage.unverifiedRows.slice(0, 8).map((row) => `- ${row.title}: ${row.evidence} | ${row.nextStep}`).join("\n")
             : "- No unverified rows."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Drive Inventory",
+    driveInventorySummary
+      ? [
+          `- Status: ${driveInventorySummary.status}`,
+          `- Manual only: ${driveInventorySummary.manualOnly ? "yes" : "no"}`,
+          `- Executor routes: ${driveInventorySummary.counts.executorRoutes}`,
+          `- Real-run rows: ${driveInventorySummary.counts.realRun}`,
+          `- Top-level entries: ${driveInventorySummary.counts.total}`,
+          `- Visible bytes: ${formatBytes(driveInventorySummary.visibleBytes || 0)}`,
+          `- Review buckets: ${driveInventorySummary.counts.review}`,
+          `- System buckets: ${driveInventorySummary.counts.system}`,
+          driveInventorySummary.topRows?.length
+            ? driveInventorySummary.topRows.map((row) => `- ${row.name}: ${formatBytes(row.bytes)} | ${row.status} | ${row.classification} | executor=${row.canCreateExecutor ? "yes" : "no"} | ${row.nextStep}`).join("\n")
+            : "- No drive inventory rows."
         ].join("\n")
       : "- Not evaluated.",
     "",
