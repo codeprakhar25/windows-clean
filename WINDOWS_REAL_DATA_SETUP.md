@@ -68,6 +68,13 @@ $env:SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR="1"
 npm run native:dev
 ```
 
+Optional Recycle Bin executor:
+
+```powershell
+$env:SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR="1"
+npm run native:dev
+```
+
 Optional browser cache executor:
 
 ```powershell
@@ -75,7 +82,7 @@ $env:SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR="1"
 npm run native:dev
 ```
 
-Those flags enable only their named routes: `known-temp-delete`, reviewed `node_modules` cleanup, current-user Gradle cache cleanup, current-user npm `_cacache` cleanup, and scanned browser cache roots. They do not enable Recycle Bin cleanup, pnpm or Docker tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, browser identity-store deletion, project source deletion, or arbitrary project-folder deletion.
+Those flags enable only their named routes: `known-temp-delete`, reviewed `node_modules` cleanup, current-user Gradle cache cleanup, current-user npm `_cacache` cleanup, Shell Recycle Bin emptying for the selected drive, and scanned browser cache roots. They do not enable pnpm or Docker tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, browser identity-store deletion, project source deletion, or arbitrary project-folder deletion.
 
 ## Read-Only Real Scan
 
@@ -222,6 +229,7 @@ For each Windows validation run, capture:
 - Disabled temp executor scaffold status when probing `known-temp-delete`: route, `tempCleanupExecutor`, validation-required state, mutation disabled, and zero bytes.
 - Gradle cache executor status when selected: route `bounded-cache-delete`, `gradleCacheExecutor`, scanned `.gradle\caches` target evidence, old-file threshold, skipped lock/recent counts, and reclaimed bytes from the native response.
 - npm cache executor status when selected: route `bounded-npm-cache-delete`, `npmCacheExecutor`, scanned `%LocalAppData%\npm-cache\_cacache` target evidence, 14-day threshold, skipped index/recent counts, and reclaimed bytes from the native response.
+- Recycle Bin executor status when selected: route `shell-recycle-bin`, `recycleBinExecutor`, scanned Recycle Bin target evidence, permanent-removal confirmation, native `permanentRemovalConfirmed=true`, and reclaimed bytes from the Shell API response.
 - Browser cache executor status when selected: route `browser-cache-only`, `browserCacheExecutor`, scanned cache-root target count, identity-store rejection boundary, and reclaimed bytes from the native response.
 - Write-boundary preflight rows for request shape, target allowlist, mutation lock, feature flag, and validation evidence.
 - Write boundary probe state if the desktop runtime exposes `execute_cleanup_plan`; current evidence must show accepted false, rejected entries, zero bytes, matching first-safe contract echo, and no mutation.

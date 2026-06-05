@@ -455,6 +455,51 @@ export async function runNativeNpmCacheExecutor(boundary = {}, host = globalThis
   return normalizeNativeWriteBoundary(result);
 }
 
+export async function runNativeRecycleBinExecutor(boundary = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      accepted: false,
+      reason: "Native Recycle Bin executor is not available in the browser demo.",
+      entries: [],
+      warnings: ["Run the Tauri desktop shell before executing Recycle Bin cleanup."]
+    };
+  }
+
+  const row = boundary.row || boundary.selectedRow || {};
+  const targetPath = row.targetPath || row.target || row.path || "";
+  const action = {
+    id: row.id || "recycle-bin",
+    title: row.title || "Recycle Bin",
+    bytes: Number(row.bytes || boundary.expectedBytes || 0),
+    route: "shell-recycle-bin",
+    targetPath
+  };
+  const expectedBytes = Number(boundary.expectedBytes ?? action.bytes);
+
+  const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
+    request: {
+      schemaVersion: "spaceguard-recycle-bin-request/v1",
+      requestMode: "execute-recycle-bin",
+      planId: boundary.planId || "",
+      route: "shell-recycle-bin",
+      scanFingerprint: boundary.scanFingerprint || "",
+      consentPlanId: boundary.consentPlanId || "",
+      expectedBytes,
+      dryRunOnly: false,
+      mutationAttempted: true,
+      permanentRemovalConfirmed: true,
+      actions: [action]
+    }
+  });
+
+  return normalizeNativeWriteBoundary(result);
+}
+
 export async function getNativeRuntimeCapabilities(host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {

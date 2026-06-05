@@ -27,7 +27,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -48,7 +48,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -167,6 +167,19 @@ export function buildOpenAIAgentContext({
       status: finding.status || "unknown"
     }))
     .slice(0, 1);
+  const recycleBinTargets = (nativeScan?.findings || [])
+    .filter((finding) => finding.recipeId === "recycle-bin")
+    .filter((finding) => (finding.status === "measured" || finding.status === "limited") && finding.path)
+    .map((finding) => ({
+      id: "recycle-bin",
+      title: finding.title || "Recycle Bin",
+      route: "shell-recycle-bin",
+      path: finding.path,
+      bytes: Number(finding.bytes || 0),
+      status: finding.status || "unknown",
+      consequence: "permanent removal"
+    }))
+    .slice(0, 1);
 
   return {
     schemaVersion: "spaceguard-openai-agent-context/v1",
@@ -206,7 +219,8 @@ export function buildOpenAIAgentContext({
       projectDependencyExecutor: Boolean(runtimeCapabilities?.executorFlags?.projectDependencyExecutor),
       browserCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.browserCacheExecutor),
       gradleCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.gradleCacheExecutor),
-      npmCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.npmCacheExecutor)
+      npmCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.npmCacheExecutor),
+      recycleBinExecutor: Boolean(runtimeCapabilities?.executorFlags?.recycleBinExecutor)
     },
     selectedActions: selected,
     topFindings,
@@ -214,6 +228,7 @@ export function buildOpenAIAgentContext({
     reviewedProjectTargets,
     gradleCacheTargets,
     npmCacheTargets,
+    recycleBinTargets,
     browserCacheTargets,
     candidateSamples: (candidateSafetyManifest?.rows || []).slice(0, 12).map((row) => ({
       id: row.id,
@@ -409,6 +424,7 @@ function normalizeActionType(value) {
     clean === "run-browser-cache-executor" ||
     clean === "run-gradle-cache-executor" ||
     clean === "run-npm-cache-executor" ||
+    clean === "run-recycle-bin-executor" ||
     clean === "rescan" ||
     clean === "ask-user" ||
     clean === "manual-only"

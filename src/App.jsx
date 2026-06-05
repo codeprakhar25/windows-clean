@@ -145,6 +145,7 @@ import {
   runNativeGradleCacheExecutor,
   runNativeNpmCacheExecutor,
   runNativeProjectDependencyExecutor,
+  runNativeRecycleBinExecutor,
   runNativeTempCleanupExecutor,
   runNativeReadonlyScan,
   runNativeWriteBoundary
@@ -236,6 +237,7 @@ export default function App() {
   const [nativeBrowserCacheExecution, setNativeBrowserCacheExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeGradleCacheExecution, setNativeGradleCacheExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeNpmCacheExecution, setNativeNpmCacheExecution] = useState({ status: "idle", result: null, error: "" });
+  const [nativeRecycleBinExecution, setNativeRecycleBinExecution] = useState({ status: "idle", result: null, error: "" });
   const [aiPrompt, setAiPrompt] = useState("Find the fastest safe path to recover real space from this scan.");
   const [aiAdvice, setAiAdvice] = useState({ status: "idle", result: null, error: "" });
   const [runtimeCapabilities, setRuntimeCapabilities] = useState({
@@ -1559,6 +1561,7 @@ export default function App() {
     setNativeBrowserCacheExecution({ status: "idle", result: null, error: "" });
     setNativeGradleCacheExecution({ status: "idle", result: null, error: "" });
     setNativeNpmCacheExecution({ status: "idle", result: null, error: "" });
+    setNativeRecycleBinExecution({ status: "idle", result: null, error: "" });
     setExecutionConsent({ accepted: false, planId: "", acceptedAt: "" });
   }
 
@@ -1821,6 +1824,7 @@ export default function App() {
         || runtimeCapabilities.result.executorFlags?.browserCacheExecutor
         || runtimeCapabilities.result.executorFlags?.gradleCacheExecutor
         || runtimeCapabilities.result.executorFlags?.npmCacheExecutor
+        || runtimeCapabilities.result.executorFlags?.recycleBinExecutor
     );
     if (!runReadiness.ready || !planLock.readyForPreflight || (safetyInterlock.status === "unsafe-stop" && !scopedExecutorRuntime)) return;
     setExecutionConsent({
@@ -1928,6 +1932,11 @@ export default function App() {
     if (actionType === "run-npm-cache-executor") {
       focusWorkflowPanel("npm-cache-executor-panel");
       await executeNpmCacheCleanup();
+      return;
+    }
+    if (actionType === "run-recycle-bin-executor") {
+      focusWorkflowPanel("recycle-bin-executor-panel");
+      await executeRecycleBinCleanup();
     }
   }
 
@@ -2216,6 +2225,79 @@ export default function App() {
       window.setTimeout(() => setActiveStage("verify"), 240);
     } catch (error) {
       setNativeNpmCacheExecution({
+        status: "error",
+        result: null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  async function executeRecycleBinCleanup() {
+    if (nativeRecycleBinExecution.status === "running") return;
+    const recycleRows = executorPlan.rows.filter((row) => row.id === "recycle-bin" && row.route === "shell-recycle-bin");
+    const finding = (nativeScan.result?.findings || [])
+      .find((row) => row.recipeId === "recycle-bin" && (row.status === "measured" || row.status === "limited") && row.path);
+    const recycleTarget = finding
+      ? {
+          id: "recycle-bin",
+          title: finding.title || "Recycle Bin",
+          path: finding.path,
+          bytes: Number(finding.bytes || 0)
+        }
+      : null;
+
+    if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.recycleBinExecutor) {
+      setNativeRecycleBinExecution({
+        status: "blocked",
+        result: null,
+        error: "Recycle Bin executor is not enabled. Set SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR=1 before launching the Tauri app."
+      });
+      return;
+    }
+    if (!approvals.permanentConfirm) {
+      setNativeRecycleBinExecution({
+        status: "blocked",
+        result: null,
+        error: "Recycle Bin cleanup needs explicit permanent-removal confirmation before the native request can run."
+      });
+      return;
+    }
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !recycleRows.length || !recycleTarget) {
+      setNativeRecycleBinExecution({
+        status: "blocked",
+        result: null,
+        error: "Recycle Bin cleanup needs the recycle-bin action selected, native Recycle Bin evidence, current plan, scan fingerprint, consent receipt, and permanent confirmation."
+      });
+      return;
+    }
+
+    setActiveStage("execute");
+    setNativeRecycleBinExecution({ status: "running", result: null, error: "" });
+    try {
+      const result = await runNativeRecycleBinExecutor({
+        row: recycleTarget,
+        planId: planSnapshot.id,
+        scanFingerprint: scanSession.currentFingerprint,
+        consentPlanId: consentReceipt.planId,
+        expectedBytes: recycleTarget.bytes
+      });
+      setNativeRecycleBinExecution({ status: "complete", result, error: "" });
+      const executedAt = new Date().toISOString();
+      const nextLedger = result.entries.map((entry, index) => ({
+        id: entry.id,
+        planId: planSnapshot.id,
+        executedAt,
+        time: `T+${String(index + 1).padStart(2, "0")}m`,
+        title: entry.title,
+        result: entry.result,
+        bytes: entry.bytes,
+        method: `${entry.route}: ${entry.note}`
+      }));
+      setLedger(nextLedger);
+      recordLedgerRun(nextLedger);
+      window.setTimeout(() => setActiveStage("verify"), 240);
+    } catch (error) {
+      setNativeRecycleBinExecution({
         status: "error",
         result: null,
         error: error instanceof Error ? error.message : String(error)
@@ -3239,6 +3321,16 @@ export default function App() {
               contract={firstSafeExecutorContract}
               capsule={realExecutorCapsule}
               onExecute={executeFirstSafeTempCleanup}
+            />
+            <RecycleBinExecutorPanel
+              runtimeCapabilities={runtimeCapabilities}
+              execution={nativeRecycleBinExecution}
+              executorPlan={executorPlan}
+              nativeScan={nativeScan}
+              scanSession={scanSession}
+              consentReceipt={consentReceipt}
+              permanentConfirmed={Boolean(approvals.permanentConfirm)}
+              onExecute={executeRecycleBinCleanup}
             />
             <GradleCacheExecutorPanel
               runtimeCapabilities={runtimeCapabilities}
@@ -5824,7 +5916,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
   const recommended = result?.recommendedActions || [];
   const blocked = result?.blockedActions || [];
   const configured = Boolean(config.configured);
-  const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor || context.runtime.gradleCacheExecutor || context.runtime.npmCacheExecutor);
+  const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor || context.runtime.gradleCacheExecutor || context.runtime.npmCacheExecutor || context.runtime.recycleBinExecutor);
 
   return (
     <Card id="openai-agent-panel">
@@ -5841,7 +5933,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-8">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-9">
           <QueueStat label="Model" value={config.model} tone={configured ? "safe" : "review"} />
           <QueueStat label="Selected" value={context.selectedActions.length} tone={context.selectedActions.length ? "advanced" : "review"} />
           <QueueStat label="Direct tools" value="blocked" tone="safe" />
@@ -5849,6 +5941,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
           <QueueStat label="Project targets" value={context.reviewedProjectTargets?.length || 0} tone={context.reviewedProjectTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Gradle root" value={context.gradleCacheTargets?.length || 0} tone={context.gradleCacheTargets?.length ? "advanced" : "review"} />
           <QueueStat label="npm root" value={context.npmCacheTargets?.length || 0} tone={context.npmCacheTargets?.length ? "advanced" : "review"} />
+          <QueueStat label="Recycle" value={context.recycleBinTargets?.length || 0} tone={context.recycleBinTargets?.length ? "restricted" : "review"} />
           <QueueStat label="Cache roots" value={context.browserCacheTargets?.length || 0} tone={context.browserCacheTargets?.length ? "advanced" : "review"} />
         </div>
 
@@ -5952,6 +6045,8 @@ function aiRecommendationActionLabel(row = {}) {
       return "Run Gradle cleanup";
     case "run-npm-cache-executor":
       return "Run npm cleanup";
+    case "run-recycle-bin-executor":
+      return "Empty Recycle Bin";
     case "rescan":
       return "Run scan";
     case "ask-user":
@@ -7838,6 +7933,110 @@ function GradleCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan
         <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
           {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {running ? "Cleaning Gradle cache" : "Run Gradle cache cleanup"}
+        </Button>
+
+        {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}
+
+        {result?.warnings?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.warnings.slice(0, 3).map((warning) => (
+              <div key={warning} className="rounded-md border bg-card p-3 text-xs text-muted-foreground">{warning}</div>
+            ))}
+          </div>
+        ) : null}
+
+        {result?.entries?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.entries.slice(0, 4).map((entry) => (
+              <div key={`${entry.id}-${entry.result}-${entry.bytes}`} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{entry.title}</span>
+                  <Badge variant={entry.result === "executed" ? "safe" : "review"}>{entry.result}</Badge>
+                  <Badge variant="outline">{formatBytes(entry.bytes)}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{entry.note}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RecycleBinExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, permanentConfirmed, onExecute }) {
+  const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.recycleBinExecutor);
+  const rows = executorPlan.rows.filter((row) => row.id === "recycle-bin" && row.route === "shell-recycle-bin");
+  const finding = (nativeScan.result?.findings || [])
+    .find((row) => row.recipeId === "recycle-bin" && (row.status === "measured" || row.status === "limited") && row.path);
+  const target = finding
+    ? {
+        id: "recycle-bin",
+        title: finding.title || "Recycle Bin",
+        path: finding.path,
+        bytes: Number(finding.bytes || 0),
+        status: finding.status,
+        files: Number(finding.files || 0)
+      }
+    : null;
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentReceipt.planId && permanentConfirmed);
+  const running = execution.status === "running";
+  const result = execution.result;
+  const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+  const disabled = running || !enabled || !requestReady;
+
+  return (
+    <Card id="recycle-bin-executor-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Recycle Bin cleanup
+          <Badge variant={enabled ? "restricted" : "review"}>{enabled ? "feature on" : "feature off"}</Badge>
+        </CardTitle>
+        <CardDescription>
+          Permanently empties the selected drive's Shell Recycle Bin. This is not rebuildable cache cleanup and has no automated restore path.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Selected" value={rows.length} tone={rows.length ? "advanced" : "review"} />
+          <QueueStat label="Confirm" value={permanentConfirmed ? "yes" : "no"} tone={permanentConfirmed ? "safe" : "restricted"} />
+          <QueueStat label="Recovered" value={formatBytes(reclaimed)} tone={reclaimed ? "safe" : "review"} />
+          <QueueStat label="Request" value={requestReady ? "ready" : "wait"} tone={requestReady ? "safe" : "review"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Recycle Bin executor boundary</span>
+            <Badge variant={enabled ? "restricted" : "safe"}>{enabled ? "can permanently remove" : "cannot delete"}</Badge>
+            <Badge variant="outline">shell-recycle-bin</Badge>
+            <Badge variant="restricted">permanent</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Enable with `SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR=1` before launching Tauri.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, selected Recycle Bin route {rows.length ? "yes" : "no"}, permanent confirmation {permanentConfirmed ? "yes" : "no"}.</span>
+            <span>The native request sends `permanentRemovalConfirmed=true` and uses Windows Shell Recycle Bin APIs for the selected drive root only.</span>
+          </div>
+        </div>
+
+        {target ? (
+          <div className="rounded-md border bg-card p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-auto min-w-0 text-sm font-medium">{target.title}</span>
+              <Badge variant="outline">{formatBytes(target.bytes)}</Badge>
+              <Badge variant="outline">{target.files} item(s)</Badge>
+              <Badge variant={target.status === "limited" ? "review" : "safe"}>{target.status}</Badge>
+            </div>
+            <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{target.path}</p>
+          </div>
+        ) : (
+          <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+            Run a native read-only scan that measures Recycle Bin inventory before this executor has a concrete target.
+          </div>
+        )}
+
+        <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
+          {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          {running ? "Emptying Recycle Bin" : "Empty Recycle Bin"}
         </Button>
 
         {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}

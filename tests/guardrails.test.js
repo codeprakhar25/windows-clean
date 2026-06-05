@@ -4274,6 +4274,30 @@ const assert = require("assert");
     "scoped-executor-visible",
     "AI advisor should label npm cache executor visibility without granting authority"
   );
+  const scopedRecycleAi = guard.buildAIAgentIntegration({
+    providerConfig: { connected: true, provider: "openai" },
+    runtimeCapabilities: {
+      realRunEnabled: true,
+      destructiveCommands: true,
+      safeExecutorsEnabled: true,
+      executorFlags: {
+        projectDependencyExecutor: false,
+        tempCleanupExecutor: false,
+        gradleCacheExecutor: false,
+        npmCacheExecutor: false,
+        recycleBinExecutor: true,
+        browserCacheExecutor: false,
+        toolNativePruneExecutors: false
+      }
+    }
+  });
+  assert.strictEqual(scopedRecycleAi.status, "advisory-connector-ready", "AI advisor should remain available for scoped Recycle Bin execution");
+  assert.strictEqual(scopedRecycleAi.directToolAccess, false, "AI advisor must not receive direct tool access for Recycle Bin cleanup");
+  assert.strictEqual(
+    scopedRecycleAi.rows.find((row) => row.id === "mutation-boundary").status,
+    "scoped-executor-visible",
+    "AI advisor should label Recycle Bin executor visibility without granting authority"
+  );
 
   console.log("guardrails ok");
 })();

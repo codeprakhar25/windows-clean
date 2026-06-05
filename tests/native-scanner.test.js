@@ -569,6 +569,56 @@ const assert = require("assert");
   assert.strictEqual(npmExecutionInvocation.payload.request.actions[0].targetPath.endsWith("\\npm-cache\\_cacache"), true, "npm cache executor should pass concrete _cacache root path");
   assert.strictEqual(npmExecution.accepted, true, "npm cache executor should normalize accepted responses");
   assert.strictEqual(npmExecution.entries[0].route, "bounded-npm-cache-delete", "npm cache executor should normalize executed route");
+  let recycleExecutionInvocation = null;
+  const recycleExecution = await native.runNativeRecycleBinExecutor(
+    {
+      row: { id: "recycle-bin", title: "Recycle Bin", path: "C:\\$Recycle.Bin", bytes: 1234 },
+      planId: "plan-recycle",
+      scanFingerprint: "scan-recycle",
+      consentPlanId: "plan-recycle",
+      expectedBytes: 1234
+    },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            recycleExecutionInvocation = { command, payload };
+            return Promise.resolve({
+              mode: "native-recycle-bin-executor",
+              real_run_enabled: true,
+              destructive_commands: true,
+              accepted: true,
+              reason: "accepted",
+              contract_echo: {
+                schema_version: payload.request.schemaVersion,
+                request_mode: payload.request.requestMode,
+                plan_id: payload.request.planId,
+                route: payload.request.route,
+                scan_fingerprint: payload.request.scanFingerprint,
+                consent_plan_id: payload.request.consentPlanId,
+                expected_bytes: payload.request.expectedBytes,
+                dry_run_only: payload.request.dryRunOnly,
+                mutation_attempted: payload.request.mutationAttempted,
+                action_count: payload.request.actions.length
+              },
+              entries: [{ id: "recycle-bin", title: "Recycle Bin", route: "shell-recycle-bin", result: "executed", reject_code: "", bytes: 1111, note: "emptied recycle bin" }],
+              warnings: ["recycle bin done"]
+            });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(recycleExecutionInvocation.command, "execute_cleanup_plan", "Recycle Bin executor should invoke execute_cleanup_plan");
+  assert.strictEqual(recycleExecutionInvocation.payload.request.schemaVersion, "spaceguard-recycle-bin-request/v1", "Recycle Bin executor should use its schema");
+  assert.strictEqual(recycleExecutionInvocation.payload.request.requestMode, "execute-recycle-bin", "Recycle Bin executor should send execute-recycle-bin mode");
+  assert.strictEqual(recycleExecutionInvocation.payload.request.route, "shell-recycle-bin", "Recycle Bin executor should stay on shell-recycle-bin route");
+  assert.strictEqual(recycleExecutionInvocation.payload.request.dryRunOnly, false, "Recycle Bin executor should be a mutating request");
+  assert.strictEqual(recycleExecutionInvocation.payload.request.mutationAttempted, true, "Recycle Bin executor should require mutation confirmation");
+  assert.strictEqual(recycleExecutionInvocation.payload.request.permanentRemovalConfirmed, true, "Recycle Bin executor should require native permanent-removal acknowledgement");
+  assert.strictEqual(recycleExecutionInvocation.payload.request.actions[0].targetPath.endsWith("\\$Recycle.Bin"), true, "Recycle Bin executor should pass concrete scan target path");
+  assert.strictEqual(recycleExecution.accepted, true, "Recycle Bin executor should normalize accepted responses");
+  assert.strictEqual(recycleExecution.entries[0].route, "shell-recycle-bin", "Recycle Bin executor should normalize executed route");
   const scaffoldedWrite = native.normalizeNativeWriteBoundary({
     mode: "native-write-rejected",
     real_run_enabled: false,
@@ -629,7 +679,7 @@ const assert = require("assert");
       project_dependency_executor: true,
       gradle_cache_executor: true,
       npm_cache_executor: true,
-      recycle_bin_executor: false,
+      recycle_bin_executor: true,
       browser_cache_executor: true,
       tool_native_prune_executors: false
     },
@@ -648,7 +698,7 @@ const assert = require("assert");
       projectDependencyExecutor: true,
       gradleCacheExecutor: true,
       npmCacheExecutor: true,
-      recycleBinExecutor: false,
+      recycleBinExecutor: true,
       browserCacheExecutor: true,
       toolNativePruneExecutors: false
     },

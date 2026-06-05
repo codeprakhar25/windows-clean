@@ -3674,8 +3674,8 @@ export function buildAIAgentIntegration({
         || runtimeCapabilities?.executorFlags?.browserCacheExecutor
         || runtimeCapabilities?.executorFlags?.gradleCacheExecutor
         || runtimeCapabilities?.executorFlags?.npmCacheExecutor
+        || runtimeCapabilities?.executorFlags?.recycleBinExecutor
       )
-      && !runtimeCapabilities?.executorFlags?.recycleBinExecutor
       && !runtimeCapabilities?.executorFlags?.toolNativePruneExecutors
   );
   const unsafeRuntime = Boolean((runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands) && !scopedExecutor);

@@ -175,6 +175,7 @@ struct WriteExecutionRequest {
     expected_bytes: Option<u64>,
     dry_run_only: Option<bool>,
     mutation_attempted: Option<bool>,
+    permanent_removal_confirmed: Option<bool>,
     actions: Vec<WriteExecutionAction>,
 }
 
@@ -465,6 +466,7 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
         expected_bytes: None,
         dry_run_only: Some(true),
         mutation_attempted: Some(false),
+        permanent_removal_confirmed: Some(false),
         actions: Vec::new(),
     });
     if request.request_mode.as_deref() == Some("execute-first-safe") {
@@ -481,6 +483,9 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
     }
     if request.request_mode.as_deref() == Some("execute-npm-cache") {
         return execute_npm_cache_cleanup(request);
+    }
+    if request.request_mode.as_deref() == Some("execute-recycle-bin") {
+        return execute_recycle_bin_cleanup(request);
     }
     let route = request.route.clone();
     let plan_id = request.plan_id.clone();
@@ -1390,6 +1395,202 @@ fn execute_npm_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionRe
     }
 }
 
+fn execute_recycle_bin_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let flag_enabled = recycle_bin_executor_enabled();
+    let rejections = recycle_bin_execution_rejections(&request, flag_enabled);
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-recycle-bin-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-recycle-bin".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+
+    let entries = request
+        .actions
+        .into_iter()
+        .map(|action| {
+            let target_path = action.target_path.clone().unwrap_or_default();
+            let target_reject = recycle_bin_target_reject_code(&target_path);
+            let route_match = action.route == route && route == "shell-recycle-bin";
+            let can_execute = rejections.is_empty() && route_match && target_reject.is_none();
+
+            if can_execute {
+                let emptied = empty_recycle_bin_target(&target_path);
+                let reclaimed = emptied.before_bytes.saturating_sub(emptied.after_bytes);
+                return WriteExecutionEntry {
+                    id: action.id,
+                    title: action.title,
+                    route: action.route,
+                    result: if emptied.succeeded && reclaimed > 0 {
+                        "executed".to_string()
+                    } else if emptied.succeeded {
+                        "no-op".to_string()
+                    } else {
+                        "rejected".to_string()
+                    },
+                    reject_code: if emptied.succeeded {
+                        String::new()
+                    } else {
+                        "recycle-bin-shell-api-failed".to_string()
+                    },
+                    bytes: if emptied.succeeded { reclaimed } else { 0 },
+                    preflight_status: if emptied.succeeded {
+                        "executed".to_string()
+                    } else {
+                        "target-blocked".to_string()
+                    },
+                    preflight_checks: vec![
+                        write_preflight_check(
+                            "route-recycle-bin",
+                            "Recycle Bin route",
+                            "passed",
+                            "Action route is shell-recycle-bin.",
+                        ),
+                        write_preflight_check(
+                            "target-recycle-bin",
+                            "Recycle Bin target",
+                            "passed",
+                            "Target is a scanned Recycle Bin boundary for one drive.",
+                        ),
+                        write_preflight_check(
+                            "feature-flag",
+                            "Executor feature flag",
+                            "passed",
+                            "SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR enabled Recycle Bin cleanup.",
+                        ),
+                        write_preflight_check(
+                            "shell-api",
+                            "Windows Shell API",
+                            if emptied.succeeded { "passed" } else { "blocked" },
+                            if emptied.succeeded {
+                                "SHEmptyRecycleBinW returned success for the derived drive root."
+                            } else {
+                                "SHEmptyRecycleBinW rejected the request; no bytes are claimed."
+                            },
+                        ),
+                    ],
+                    note: if emptied.succeeded {
+                        format!(
+                            "Recycle Bin executor permanently removed {} item(s), reclaimed {} byte(s), and left {} byte(s) after the shell operation.",
+                            emptied.before_items.saturating_sub(emptied.after_items),
+                            reclaimed,
+                            emptied.after_bytes
+                        )
+                    } else {
+                        format!(
+                            "Recycle Bin cleanup failed at the Windows Shell API boundary with HRESULT {}. No bytes were claimed.",
+                            emptied.hresult
+                        )
+                    },
+                };
+            }
+
+            let reject_code = if !route_match {
+                "route-not-recycle-bin"
+            } else {
+                target_reject
+                    .or_else(|| rejections.first().copied())
+                    .unwrap_or("recycle-bin-executor-disabled")
+            };
+
+            WriteExecutionEntry {
+                id: action.id,
+                title: action.title,
+                route: action.route,
+                result: "rejected".to_string(),
+                reject_code: reject_code.to_string(),
+                bytes: 0,
+                preflight_status: "target-blocked".to_string(),
+                preflight_checks: vec![
+                    write_preflight_check(
+                        "route-recycle-bin",
+                        "Recycle Bin route",
+                        if route_match { "passed" } else { "blocked" },
+                        if route_match {
+                            "Action route is shell-recycle-bin."
+                        } else {
+                            "Only shell-recycle-bin can use this executor."
+                        },
+                    ),
+                    write_preflight_check(
+                        "target-recycle-bin",
+                        "Recycle Bin target",
+                        if target_reject.is_none() { "passed" } else { "blocked" },
+                        if target_reject.is_none() {
+                            "Target is a scanned Recycle Bin boundary."
+                        } else {
+                            "Target is missing, forbidden, not a Recycle Bin boundary, or not tied to one drive root."
+                        },
+                    ),
+                    write_preflight_check(
+                        "feature-flag",
+                        "Executor feature flag",
+                        if flag_enabled { "passed" } else { "blocked" },
+                        if flag_enabled {
+                            "Recycle Bin executor feature flag is enabled."
+                        } else {
+                            "SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR is not enabled."
+                        },
+                    ),
+                ],
+                note: format!(
+                    "Recycle Bin cleanup rejected with code {reject_code}. Plan {plan_id}; no bytes were removed for this action."
+                ),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let accepted = rejections.is_empty()
+        && entries
+            .iter()
+            .all(|entry| entry.result == "executed" || entry.result == "no-op");
+    let reclaimed = entries.iter().map(|entry| entry.bytes).sum::<u64>();
+    let mut warnings = recycle_bin_execution_warnings(&rejections);
+    if accepted {
+        warnings.push(format!(
+            "Recycle Bin cleanup completed for plan {plan_id}; permanently removed {reclaimed} byte(s). Run a fresh native scan to verify free space."
+        ));
+    }
+
+    WriteExecutionResponse {
+        mode: if accepted {
+            "native-recycle-bin-executor"
+        } else {
+            "native-recycle-bin-executor-rejected"
+        },
+        real_run_enabled: flag_enabled,
+        destructive_commands: flag_enabled,
+        accepted,
+        reason: if accepted {
+            format!("Recycle Bin executor accepted the shell boundary and permanently removed {reclaimed} byte(s).")
+        } else {
+            "Recycle Bin executor rejected the request before claiming any removed bytes."
+                .to_string()
+        },
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
+        entries,
+        warnings,
+    }
+}
+
 fn write_boundary_rejections(request: &WriteExecutionRequest) -> Vec<&'static str> {
     let mut codes = Vec::new();
     let mode = request.request_mode.as_deref().unwrap_or("capsule-probe");
@@ -1587,6 +1788,30 @@ fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
                 },
             })
         }
+        "shell-recycle-bin" => {
+            let enabled = cfg!(target_os = "windows") && recycle_bin_executor_enabled();
+            Some(WriteExecutorScaffold {
+                route: "shell-recycle-bin".to_string(),
+                title: "Recycle Bin boundary".to_string(),
+                feature_flag: "recycleBinExecutor".to_string(),
+                status: if enabled {
+                    "feature-flag-enabled".to_string()
+                } else {
+                    "feature-flag-disabled".to_string()
+                },
+                validation_status: if enabled {
+                    "shell-recycle-bin-only".to_string()
+                } else {
+                    "validation-required".to_string()
+                },
+                mutation_enabled: enabled,
+                reason: if enabled {
+                    "Recycle Bin executor can empty the selected drive's Shell Recycle Bin boundary only.".to_string()
+                } else {
+                    "Recycle Bin executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR is enabled on Windows.".to_string()
+                },
+            })
+        }
         "item-review-project-cache" => {
             let enabled = cfg!(target_os = "windows") && project_dependency_executor_enabled();
             Some(WriteExecutorScaffold {
@@ -1690,6 +1915,7 @@ fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
 fn write_executor_scaffold_reject_code(route: &str) -> &'static str {
     match route {
         "known-temp-delete" => "temp-executor-feature-flag-disabled",
+        "shell-recycle-bin" => "recycle-bin-executor-disabled",
         "item-review-project-cache" => "project-deps-executor-disabled",
         "browser-cache-only" => "browser-cache-executor-disabled",
         "bounded-cache-delete" => "gradle-cache-executor-disabled",
@@ -1711,6 +1937,9 @@ fn write_action_target_reject_code(
     }
     if route == "bounded-npm-cache-delete" {
         return npm_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
+    }
+    if route == "shell-recycle-bin" {
+        return recycle_bin_target_reject_code(target_path.as_deref().unwrap_or(""));
     }
     if write_target_forbidden(route, &target) {
         return Some("target-forbidden");
@@ -1828,6 +2057,9 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "mutation-attempt-flag" => {
             "Write request rejected: mutationAttempted must remain false in this build."
         }
+        "permanent-confirmation-required" => {
+            "Write request rejected: permanent removal must be explicitly confirmed for Recycle Bin cleanup."
+        }
         "request-mode-invalid" => "Write request rejected: request mode is not a disabled preview.",
         "route-not-first-safe" => {
             "Write request rejected: route is not a first-safe executor lane."
@@ -1846,6 +2078,9 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "browser-cache-executor-disabled" => {
             "Write request rejected: browserCacheExecutor scaffold is feature-flag disabled."
         }
+        "recycle-bin-executor-disabled" => {
+            "Write request rejected: recycleBinExecutor scaffold is feature-flag disabled."
+        }
         "gradle-cache-executor-disabled" => {
             "Write request rejected: gradleCacheExecutor scaffold is feature-flag disabled."
         }
@@ -1855,6 +2090,15 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "target-not-node-modules" => "Write request rejected: project dependency target is not node_modules.",
         "target-not-browser-cache" => "Write request rejected: browser cache target is not a cache directory.",
         "route-not-browser-cache" => "Write request rejected: browser cache cleanup requires route browser-cache-only.",
+        "target-not-recycle-bin" => {
+            "Write request rejected: Recycle Bin target is not a scanned Shell Recycle Bin boundary."
+        }
+        "route-not-recycle-bin" => {
+            "Write request rejected: Recycle Bin cleanup requires route shell-recycle-bin."
+        }
+        "recycle-bin-shell-api-failed" => {
+            "Write request rejected: Windows Shell Recycle Bin API failed."
+        }
         "target-not-gradle-cache" => {
             "Write request rejected: Gradle cache target is not the current user's .gradle\\caches directory."
         }
@@ -1931,6 +2175,17 @@ fn npm_cache_executor_enabled() -> bool {
         .unwrap_or(false)
 }
 
+fn recycle_bin_executor_enabled() -> bool {
+    env::var("SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR")
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
 fn temp_execution_rejections(
     request: &WriteExecutionRequest,
     flag_enabled: bool,
@@ -1974,6 +2229,9 @@ fn temp_execution_rejections(
     }
     if request.mutation_attempted != Some(true) {
         codes.push("mutation-confirmation-required");
+    }
+    if request.permanent_removal_confirmed != Some(true) {
+        codes.push("permanent-confirmation-required");
     }
     if request.actions.is_empty() {
         codes.push("no-actions");
@@ -2317,6 +2575,88 @@ fn npm_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
         .collect()
 }
 
+fn recycle_bin_execution_rejections(
+    request: &WriteExecutionRequest,
+    flag_enabled: bool,
+) -> Vec<&'static str> {
+    let mut codes = Vec::new();
+    if !cfg!(target_os = "windows") {
+        codes.push("windows-required");
+    }
+    if !flag_enabled {
+        codes.push("recycle-bin-executor-disabled");
+    }
+    if request.plan_id.trim().is_empty() {
+        codes.push("missing-plan-id");
+    }
+    if request
+        .scan_fingerprint
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-scan-fingerprint");
+    }
+    if request
+        .consent_plan_id
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-consent-plan-id");
+    }
+    if request.request_mode.as_deref() != Some("execute-recycle-bin") {
+        codes.push("request-mode-invalid");
+    }
+    if request.route != "shell-recycle-bin" {
+        codes.push("route-not-recycle-bin");
+    }
+    if request.dry_run_only != Some(false) {
+        codes.push("dry-run-disabled-required");
+    }
+    if request.mutation_attempted != Some(true) {
+        codes.push("mutation-confirmation-required");
+    }
+    if request.actions.is_empty() {
+        codes.push("no-actions");
+    }
+    codes
+}
+
+fn recycle_bin_execution_warnings(codes: &[&'static str]) -> Vec<String> {
+    if codes.is_empty() {
+        return vec![
+            "Recycle Bin executor permanently removes files already in the selected drive's Shell Recycle Bin; no automated restore path exists after execution.".to_string(),
+        ];
+    }
+    codes
+        .iter()
+        .map(|code| match *code {
+            "windows-required" => "Recycle Bin cleanup is Windows-only in this build.",
+            "recycle-bin-executor-disabled" => {
+                "Set SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR=1 before launching the Tauri app to enable Recycle Bin cleanup."
+            }
+            "dry-run-disabled-required" => {
+                "Recycle Bin cleanup requires dryRunOnly=false on the execute-recycle-bin request."
+            }
+            "mutation-confirmation-required" => {
+                "Recycle Bin cleanup requires mutationAttempted=true on the execute-recycle-bin request."
+            }
+            "permanent-confirmation-required" => {
+                "Recycle Bin cleanup requires permanentRemovalConfirmed=true on the execute-recycle-bin request."
+            }
+            "request-mode-invalid" => {
+                "Recycle Bin cleanup requires requestMode=execute-recycle-bin."
+            }
+            "route-not-recycle-bin" => "Recycle Bin cleanup requires route shell-recycle-bin.",
+            _ => write_boundary_warning(code),
+        })
+        .map(String::from)
+        .collect()
+}
+
 fn project_dependency_target_reject_code(value: &str) -> Option<&'static str> {
     let path = resolve_dry_run_target(value);
     if path.as_os_str().is_empty() {
@@ -2462,6 +2802,34 @@ fn npm_cache_target_reject_code(value: &str) -> Option<&'static str> {
     None
 }
 
+fn recycle_bin_target_reject_code(value: &str) -> Option<&'static str> {
+    let path = resolve_dry_run_target(value);
+    if path.as_os_str().is_empty() {
+        return Some("target-missing");
+    }
+
+    let original = normalize_write_target(value);
+    let resolved = normalize_write_target(&path_to_string(&path));
+    if write_target_forbidden("shell-recycle-bin", &original)
+        || write_target_forbidden("shell-recycle-bin", &resolved)
+    {
+        return Some("target-forbidden");
+    }
+    if !write_target_allowed("shell-recycle-bin", &original)
+        && !write_target_allowed("shell-recycle-bin", &resolved)
+    {
+        return Some("target-not-recycle-bin");
+    }
+    let Some(root) = recycle_bin_drive_root(value) else {
+        return Some("target-not-recycle-bin");
+    };
+    let expected = normalize_write_target(&format!("{root}$Recycle.Bin"));
+    if original != expected && resolved != expected {
+        return Some("target-not-recycle-bin");
+    }
+    None
+}
+
 #[derive(Default)]
 struct TempDeleteResult {
     deleted_bytes: u64,
@@ -2499,6 +2867,15 @@ struct NpmCacheDeleteResult {
     deleted_files: u64,
     deleted_dirs: u64,
     skipped_count: u64,
+}
+
+struct RecycleBinEmptyResult {
+    succeeded: bool,
+    before_bytes: u64,
+    after_bytes: u64,
+    before_items: u64,
+    after_items: u64,
+    hresult: i32,
 }
 
 fn delete_browser_cache_action_targets(value: &str) -> BrowserCacheDeleteResult {
@@ -2791,6 +3168,66 @@ fn npm_cache_file_forbidden(path: &Path) -> bool {
         .unwrap_or(true)
 }
 
+fn recycle_bin_drive_root(value: &str) -> Option<String> {
+    let path = resolve_dry_run_target(value);
+    let text = path_to_string(&path);
+    let mut chars = text.trim().chars();
+    let letter = chars.next()?;
+    let colon = chars.next()?;
+    if !letter.is_ascii_alphabetic() || colon != ':' {
+        return None;
+    }
+    Some(format!("{}:\\", letter.to_ascii_uppercase()))
+}
+
+fn empty_recycle_bin_target(value: &str) -> RecycleBinEmptyResult {
+    let Some(root) = recycle_bin_drive_root(value) else {
+        return RecycleBinEmptyResult {
+            succeeded: false,
+            before_bytes: 0,
+            after_bytes: 0,
+            before_items: 0,
+            after_items: 0,
+            hresult: -1,
+        };
+    };
+    empty_recycle_bin_drive_root(&root)
+}
+
+#[cfg(target_os = "windows")]
+fn empty_recycle_bin_drive_root(root: &str) -> RecycleBinEmptyResult {
+    let before = query_recycle_bin_drive_root(root);
+    let wide_root = wide_null(root);
+    let hresult = unsafe {
+        SHEmptyRecycleBinW(
+            std::ptr::null_mut(),
+            wide_root.as_ptr(),
+            SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND,
+        )
+    };
+    let after = query_recycle_bin_drive_root(root);
+    RecycleBinEmptyResult {
+        succeeded: hresult_succeeded(hresult),
+        before_bytes: before.map(|info| info.0).unwrap_or(0),
+        after_bytes: after.map(|info| info.0).unwrap_or(0),
+        before_items: before.map(|info| info.1).unwrap_or(0),
+        after_items: after.map(|info| info.1).unwrap_or(0),
+        hresult,
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn empty_recycle_bin_drive_root(_root: &str) -> RecycleBinEmptyResult {
+    RecycleBinEmptyResult {
+        succeeded: false,
+        before_bytes: 0,
+        after_bytes: 0,
+        before_items: 0,
+        after_items: 0,
+        hresult: -1,
+    }
+}
+
 fn delete_project_dependency_target(root: &Path) -> ProjectDependencyDeleteResult {
     let mut result = ProjectDependencyDeleteResult::default();
     if project_dependency_target_reject_code(&path_to_string(root)).is_some() {
@@ -2945,11 +3382,13 @@ fn runtime_capabilities() -> RuntimeCapabilities {
     let browser_cache_enabled = cfg!(target_os = "windows") && browser_cache_executor_enabled();
     let gradle_cache_enabled = cfg!(target_os = "windows") && gradle_cache_executor_enabled();
     let npm_cache_enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
+    let recycle_bin_enabled = cfg!(target_os = "windows") && recycle_bin_executor_enabled();
     let real_execution_enabled = temp_enabled
         || project_dependency_enabled
         || browser_cache_enabled
         || gradle_cache_enabled
-        || npm_cache_enabled;
+        || npm_cache_enabled
+        || recycle_bin_enabled;
     RuntimeCapabilities {
         mode: if real_execution_enabled {
             "native-scoped-write"
@@ -2971,7 +3410,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
             project_dependency_executor: project_dependency_enabled,
             gradle_cache_executor: gradle_cache_enabled,
             npm_cache_executor: npm_cache_enabled,
-            recycle_bin_executor: false,
+            recycle_bin_executor: recycle_bin_enabled,
             browser_cache_executor: browser_cache_enabled,
             tool_native_prune_executors: false,
         },
@@ -3177,6 +3616,30 @@ fn env_path_with_suffix(name: &str, suffix: &str) -> Option<PathBuf> {
 #[link(name = "shell32")]
 extern "system" {
     fn IsUserAnAdmin() -> i32;
+    fn SHQueryRecycleBinW(
+        psz_root_path: *const u16,
+        p_sh_query_rb_info: *mut ShQueryRecycleBinInfo,
+    ) -> i32;
+    fn SHEmptyRecycleBinW(
+        hwnd: *mut std::ffi::c_void,
+        psz_root_path: *const u16,
+        dw_flags: u32,
+    ) -> i32;
+}
+
+#[cfg(target_os = "windows")]
+const SHERB_NOCONFIRMATION: u32 = 0x0000_0001;
+#[cfg(target_os = "windows")]
+const SHERB_NOPROGRESSUI: u32 = 0x0000_0002;
+#[cfg(target_os = "windows")]
+const SHERB_NOSOUND: u32 = 0x0000_0004;
+
+#[cfg(target_os = "windows")]
+#[repr(C)]
+struct ShQueryRecycleBinInfo {
+    cb_size: u32,
+    i64_size: i64,
+    i64_num_items: i64,
 }
 
 #[cfg(target_os = "windows")]
@@ -3197,6 +3660,41 @@ fn elevation_source() -> &'static str {
 #[cfg(not(target_os = "windows"))]
 fn elevation_source() -> &'static str {
     "non-windows"
+}
+
+#[cfg(target_os = "windows")]
+fn wide_null(value: &str) -> Vec<u16> {
+    OsStr::new(value)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
+}
+
+fn hresult_succeeded(value: i32) -> bool {
+    value >= 0
+}
+
+#[cfg(target_os = "windows")]
+fn query_recycle_bin_drive_root(root: &str) -> Option<(u64, u64)> {
+    let wide_root = wide_null(root);
+    let mut info = ShQueryRecycleBinInfo {
+        cb_size: std::mem::size_of::<ShQueryRecycleBinInfo>() as u32,
+        i64_size: 0,
+        i64_num_items: 0,
+    };
+    let hresult = unsafe { SHQueryRecycleBinW(wide_root.as_ptr(), &mut info) };
+    if !hresult_succeeded(hresult) {
+        return None;
+    }
+    Some((
+        u64::try_from(info.i64_size.max(0)).unwrap_or(0),
+        u64::try_from(info.i64_num_items.max(0)).unwrap_or(0),
+    ))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn query_recycle_bin_drive_root(_root: &str) -> Option<(u64, u64)> {
+    None
 }
 
 #[cfg(target_os = "windows")]
@@ -4042,6 +4540,28 @@ fn measure_path(
             note: "Skipped because the path is user-protected.".to_string(),
             items: Vec::new(),
         };
+    }
+
+    if recipe_id == "recycle-bin" {
+        let target = path_to_string(path);
+        if let Some(root) = recycle_bin_drive_root(&target) {
+            if let Some((bytes, item_count)) = query_recycle_bin_drive_root(&root) {
+                return ScanFinding {
+                    recipe_id: recipe_id.to_string(),
+                    title: title.to_string(),
+                    path: target,
+                    bytes,
+                    status: "measured".to_string(),
+                    files: item_count,
+                    dirs: 0,
+                    errors: 0,
+                    note: format!(
+                        "Measured through SHQueryRecycleBinW for drive root {root}; no filesystem traversal was required."
+                    ),
+                    items: Vec::new(),
+                };
+            }
+        }
     }
 
     let Ok(metadata) = fs::symlink_metadata(path) else {

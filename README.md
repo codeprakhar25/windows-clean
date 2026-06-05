@@ -79,6 +79,13 @@ $env:SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR="1"
 npm run native:dev
 ```
 
+Enable permanent Recycle Bin emptying for the selected drive:
+
+```powershell
+$env:SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR="1"
+npm run native:dev
+```
+
 Enable browser cache cleanup for scanned cache roots:
 
 ```powershell
@@ -121,7 +128,7 @@ The native write-boundary command is:
 execute_cleanup_plan
 ```
 
-It validates request shape for dry-run probes and contains scoped real executor branches for `requestMode=execute-first-safe`, `requestMode=execute-project-deps`, `requestMode=execute-gradle-cache`, `requestMode=execute-npm-cache`, and `requestMode=execute-browser-cache`.
+It validates request shape for dry-run probes and contains scoped real executor branches for `requestMode=execute-first-safe`, `requestMode=execute-project-deps`, `requestMode=execute-gradle-cache`, `requestMode=execute-npm-cache`, `requestMode=execute-recycle-bin`, and `requestMode=execute-browser-cache`.
 
 For `known-temp-delete`, setting `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1` in the Windows Tauri runtime enables deletion of old files under allowlisted temp roots only. The executor rejects missing plan/scan/consent IDs, non-Windows runtimes, non-temp routes, forbidden targets, symlinks, recent files, folders, and broad personal/project paths. It returns a ledger-style native response with accepted state, bytes reclaimed, skipped count, and warnings. Without the feature flag, it still rejects with zero bytes.
 
@@ -132,6 +139,8 @@ For `node-modules-old`, setting `SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR=1` enab
 For `gradle-cache`, setting `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=1` enables bounded Gradle cache cleanup. The frontend sends only the concrete `.gradle\caches` path from the latest native read-only scan. The native executor accepts only the current user's `.gradle\caches` directory, deletes files older than 30 days, skips symlinks, lock files, recent files, daemon state, wrapper files, init scripts, project folders, `node_modules`, and Program Files paths, removes empty cache subdirectories bottom-up, and never runs Gradle or shell commands.
 
 For `npm-cache`, setting `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1` enables bounded npm cache cleanup. The frontend sends only the concrete `%LocalAppData%\npm-cache\_cacache` path from the latest native read-only scan. The native executor accepts only the current user's `_cacache` directory, deletes content blobs and cache temp files older than 14 days, keeps npm index metadata, skips symlinks, recent files, global packages, project `node_modules`, Program Files paths, and system paths, removes empty cache subdirectories bottom-up, and never runs npm or shell commands.
+
+For `recycle-bin`, setting `SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR=1` enables Shell Recycle Bin emptying for the selected drive. The frontend sends only the concrete Recycle Bin path from the latest native read-only scan, requires the app's permanent-removal confirmation, and adds `permanentRemovalConfirmed=true` to the native request. The native executor derives the drive root, calls `SHQueryRecycleBinW` before/after, calls `SHEmptyRecycleBinW` with no shell prompt/progress UI, records reclaimed bytes, and never accepts Downloads/Documents or arbitrary folder paths.
 
 For `browser-cache`, setting `SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR=1` enables browser cache cleanup. The frontend sends only concrete cache root paths from the latest native read-only scan. The native executor accepts cache folders such as Chromium `Cache`, Chromium `Cache_Data`, Chromium `Code Cache`, and Firefox `cache2`; it rejects cookies, sessions, saved logins, extensions, history, bookmarks, preferences, favicons, profile databases, symlinks, non-directories, and non-cache paths. It removes files through controlled traversal, removes empty cache subdirectories bottom-up, skips recently modified files, and never runs shell commands.
 
@@ -161,7 +170,7 @@ runtime_capabilities
 
 It reports platform, scanner availability, dry-run availability, and whether real executors are enabled.
 
-Runtime capabilities also expose per-executor feature flags: `tempCleanupExecutor`, `projectDependencyExecutor`, `gradleCacheExecutor`, `npmCacheExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`. They default to false independently, so enabling temp, project dependency, Gradle cache, npm cache, or browser cache cleanup cannot accidentally enable Recycle Bin or tool-native cleanup routes.
+Runtime capabilities also expose per-executor feature flags: `tempCleanupExecutor`, `projectDependencyExecutor`, `gradleCacheExecutor`, `npmCacheExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`. They default to false independently, so enabling temp, project dependency, Gradle cache, npm cache, Recycle Bin, or browser cache cleanup cannot accidentally enable unrelated cleanup routes.
 
 It currently scans or reports:
 
@@ -226,6 +235,7 @@ The demo also includes:
 - Native beta distribution readiness for signing, setup docs, install/uninstall, support workflow, read-only scan evidence, no-cleanup claims, and exportable beta evidence records.
 - OpenAI cleanup agent panel for advisory ranking, next-step suggestions, blocked-action explanations, and user questions from real scan context.
 - First-safe temp executor panel for old files under allowlisted temp roots, feature-flagged in the Windows native runtime.
+- Recycle Bin executor panel for permanent Shell Recycle Bin emptying, requiring the permanent-removal confirmation gate and native request acknowledgement.
 - Gradle cache executor panel for old files under the current user's `.gradle\caches` root, with project folders and Gradle daemon/wrapper/config paths rejected.
 - npm cache executor panel for old content blobs and temp files under `%LocalAppData%\npm-cache\_cacache`, with index metadata, globals, and project folders rejected.
 - Reviewed project dependency executor panel for stale `node_modules` cleanup, including Expo/React Native project hints and item-level remove targets.
@@ -407,7 +417,7 @@ The fixture evidence import accepts the JSON produced by `scripts/inspect-spaceg
 
 Dry-run records are also saved to local browser storage as an append-only run history. A saved record can block a duplicate simulation for the same plan after reload, but it cannot unlock real execution. The history export is audit evidence only; real cleanup still requires native Windows validation and a post-run rescan.
 
-Broad deletion remains disabled. The executor layer classifies selected actions as dry-run routes, scoped feature-flagged executors, future safe-executor candidates, gated routes, or blocked routes. Temp files, reviewed `node_modules`, Gradle cache roots, npm `_cacache`, and browser cache roots are the only write-capable families, and only when their Windows runtime flags are enabled.
+Broad deletion remains disabled. The executor layer classifies selected actions as dry-run routes, scoped feature-flagged executors, future safe-executor candidates, gated routes, or blocked routes. Temp files, Recycle Bin emptying, reviewed `node_modules`, Gradle cache roots, npm `_cacache`, and browser cache roots are the only write-capable families, and only when their Windows runtime flags are enabled.
 
 The executor manifest is the real-data implementation map. It covers all route families, not just selected actions:
 
@@ -466,7 +476,7 @@ The production shell should become a signed Windows desktop app with:
 - Append-only local cleanup ledger.
 - No cloud upload by default.
 
-The current native slice is intentionally scoped. The next product milestone is Windows validation evidence for the temp, reviewed dependency, Gradle cache, npm cache, and browser cache executors, while Recycle Bin, pnpm, Docker, and broader tool-native prune commands remain future work.
+The current native slice is intentionally scoped. The next product milestone is Windows validation evidence for the temp, Recycle Bin, reviewed dependency, Gradle cache, npm cache, and browser cache executors, while pnpm, Docker, and broader tool-native prune commands remain future work.
 
 The native runtime also reports elevation state. This is evidence only: the app does not self-elevate, request UAC, or turn admin-sensitive routes into real executors.
 
