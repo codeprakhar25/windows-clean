@@ -52,7 +52,11 @@ const assert = require("assert");
               ageDays: 180,
               kind: "developer tool footprint",
               recommendation: "review",
-              reason: "Large old app footprint"
+              reason: "Large old app footprint",
+              signals: [
+                { label: "usage proof", value: "not proven", tone: "restricted" },
+                { label: "uninstall entry", value: "present", tone: "safe" }
+              ]
             }
           ]
         }
@@ -70,7 +74,11 @@ const assert = require("assert");
             kind: "developer tool footprint",
             recommendation: "review",
             decision: "remove",
-            reason: "Manual uninstall candidate"
+            reason: "Manual uninstall candidate",
+            signals: [
+              { label: "usage proof", value: "not proven", tone: "restricted" },
+              { label: "official action", value: "Windows Settings or vendor uninstaller", tone: "restricted" }
+            ]
           }
         ]
       }
@@ -109,6 +117,8 @@ const assert = require("assert");
   assert.strictEqual(manualContext.manualReviewTargets[0].manualOnly, true, "installed app candidates should stay manual-only in OpenAI context");
   assert.strictEqual(manualContext.manualReviewTargets[0].canCreateExecutor, false, "OpenAI context must not turn installed app review into an executor route");
   assert.strictEqual(manualContext.manualReviewTargets[0].selectedForRemoval, false, "manual uninstall decisions must not be represented as automatic removal authority");
+  assert.strictEqual(manualContext.manualReviewTargets[0].signals[0].label, "usage proof", "OpenAI context should include structured app review signals");
+  assert.strictEqual(manualContext.manualReviewTargets[0].signals[0].value, "not proven", "OpenAI context should not overclaim app usage proof");
   assert.strictEqual(manualContext.driveInventoryRows[0].canCreateExecutor, false, "drive inventory rows should be advisory-only in OpenAI context");
   assert.strictEqual(manualContext.customRootRows[0].manualOnly, true, "custom root rows should be manual-only in OpenAI context");
 

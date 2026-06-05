@@ -2195,7 +2195,8 @@ function compactLedgerExecutorPlan(executorPlan = null) {
                 bytes: Number(target.bytes || 0),
                 ageDays: Number(target.ageDays || 0),
                 kind: target.kind || "",
-                reason: target.reason || ""
+                reason: target.reason || "",
+                signals: normalizeReviewSignals(target.signals)
               }))
             : []
         }))
@@ -6691,7 +6692,8 @@ export function buildExecutorPlan({
             bytes: Number(item.bytes || 0),
             ageDays: Number(item.ageDays || 0),
             kind: item.kind,
-            reason: item.reason
+            reason: item.reason,
+            signals: normalizeReviewSignals(item.signals)
           }))
       : [];
     const gate = unresolvedGate(action, approvals, protectedPaths, itemReview, intakePolicy);
@@ -13966,8 +13968,28 @@ function normalizeReviewItem(item, action, protectedPaths, approvals = {}, index
     selectedForRemoval: decision === "remove",
     selectedForManualDisposition: decision === "move" || decision === "archive",
     protected: protectedByUser,
-    reason: protectedByUser ? "Matches a user-protected path." : item.reason || item.note || inferItemReason(action, recommendation, ageDays)
+    reason: protectedByUser ? "Matches a user-protected path." : item.reason || item.note || inferItemReason(action, recommendation, ageDays),
+    signals: normalizeReviewSignals(item.signals || item.reviewSignals || item.review_signals)
   };
+}
+
+function normalizeReviewSignals(value = []) {
+  return Array.isArray(value)
+    ? value
+        .map((signal) => ({
+          label: String(signal?.label || signal?.name || "").trim(),
+          value: String(signal?.value || signal?.detail || "").trim(),
+          tone: normalizeReviewSignalTone(signal?.tone || signal?.status || "")
+        }))
+        .filter((signal) => signal.label || signal.value)
+        .slice(0, 12)
+    : [];
+}
+
+function normalizeReviewSignalTone(value = "") {
+  const clean = String(value || "").trim().toLowerCase();
+  if (clean === "safe" || clean === "review" || clean === "restricted" || clean === "advanced") return clean;
+  return "outline";
 }
 
 function getItemReviewForAction(action, itemReviewsByAction = {}) {

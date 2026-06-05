@@ -636,7 +636,8 @@ export function normalizeNativeScan(scanResult = {}) {
               ageDays: Number(item.ageDays || item.age_days || 0),
               kind: item.kind || "filesystem item",
               recommendation: item.recommendation || "review",
-              reason: item.reason || item.note || ""
+              reason: item.reason || item.note || "",
+              signals: normalizeNativeReviewSignals(item.signals || item.reviewSignals || item.review_signals)
             }))
           : []
       }))
@@ -660,6 +661,25 @@ export function normalizeNativeScan(scanResult = {}) {
     writeCapability: Boolean(scanResult.writeCapability || scanResult.write_capability),
     destructiveCommands: Boolean(scanResult.destructiveCommands || scanResult.destructive_commands)
   };
+}
+
+function normalizeNativeReviewSignals(value = []) {
+  return Array.isArray(value)
+    ? value
+        .map((signal) => ({
+          label: String(signal?.label || signal?.name || "").trim(),
+          value: String(signal?.value || signal?.detail || "").trim(),
+          tone: normalizeSignalTone(signal?.tone || signal?.status || "")
+        }))
+        .filter((signal) => signal.label || signal.value)
+        .slice(0, 12)
+    : [];
+}
+
+function normalizeSignalTone(value = "") {
+  const clean = String(value || "").trim().toLowerCase();
+  if (clean === "safe" || clean === "review" || clean === "restricted" || clean === "advanced") return clean;
+  return "outline";
 }
 
 export function normalizeNativeDriveInventory(rows = []) {

@@ -95,6 +95,15 @@ struct ScanItem {
     kind: String,
     recommendation: String,
     reason: String,
+    signals: Vec<ScanSignal>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScanSignal {
+    label: String,
+    value: String,
+    tone: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -5481,6 +5490,8 @@ fn installed_app_scan_item(
     let kind = installed_app_kind(folder_name, path);
     let reason =
         installed_app_review_reason(path, bytes, age_days, recommendation, metadata.as_ref());
+    let signals =
+        installed_app_review_signals(bytes, age_days, recommendation, kind, metadata.as_ref());
 
     ScanItem {
         id: stable_item_id("installed-app-footprints", path),
@@ -5491,7 +5502,102 @@ fn installed_app_scan_item(
         kind: kind.to_string(),
         recommendation: recommendation.to_string(),
         reason,
+        signals,
     }
+}
+
+fn installed_app_review_signals(
+    bytes: u64,
+    age_days: u64,
+    recommendation: &str,
+    kind: &str,
+    metadata: Option<&InstalledAppMetadata>,
+) -> Vec<ScanSignal> {
+    let mut signals = vec![
+        review_signal(
+            "candidate",
+            if recommendation == "review" {
+                "large old footprint"
+            } else {
+                "weak usage signal"
+            },
+            if recommendation == "review" {
+                "review"
+            } else {
+                "safe"
+            },
+        ),
+        review_signal("usage proof", "not proven", "restricted"),
+        review_signal("kind", kind, "review"),
+        review_signal(
+            "modified age",
+            format!("{age_days}d"),
+            age_signal_tone(age_days, 45),
+        ),
+        review_signal(
+            "measured size",
+            format!("{bytes} bytes"),
+            size_signal_tone(bytes),
+        ),
+        review_signal(
+            "official action",
+            "Windows Settings or vendor uninstaller",
+            "restricted",
+        ),
+    ];
+
+    if let Some(metadata) = metadata {
+        signals.push(review_signal(
+            "registry match",
+            "Windows uninstall metadata",
+            "safe",
+        ));
+        if !metadata.publisher.trim().is_empty() {
+            signals.push(review_signal(
+                "publisher",
+                metadata.publisher.as_str(),
+                "review",
+            ));
+        }
+        if !metadata.display_version.trim().is_empty() {
+            signals.push(review_signal(
+                "version",
+                metadata.display_version.as_str(),
+                "review",
+            ));
+        }
+        if !metadata.install_date.trim().is_empty() {
+            signals.push(review_signal(
+                "install date",
+                metadata.install_date.as_str(),
+                "review",
+            ));
+        }
+        if metadata.estimated_bytes > 0 {
+            signals.push(review_signal(
+                "Windows estimate",
+                format!("{} bytes", metadata.estimated_bytes),
+                "review",
+            ));
+        }
+        signals.push(review_signal(
+            "uninstall entry",
+            if metadata.uninstall_available {
+                "present"
+            } else {
+                "missing"
+            },
+            if metadata.uninstall_available {
+                "safe"
+            } else {
+                "review"
+            },
+        ));
+    } else {
+        signals.push(review_signal("registry match", "none", "review"));
+    }
+
+    signals
 }
 
 fn installed_app_review_reason(
@@ -6042,7 +6148,7 @@ fn project_dependency_scan_item(recipe_id: &str, node_modules: &Path, bytes: u64
     if let Some(lockfile) = lockfile.as_deref() {
         signals.push(format!("lockfile={lockfile}"));
     }
-    if let Some(package_manager) = package_manager {
+    if let Some(package_manager) = package_manager.as_deref() {
         signals.push(format!("manager={package_manager}"));
     }
     if !framework_signals.is_empty() {
@@ -6073,7 +6179,81 @@ fn project_dependency_scan_item(recipe_id: &str, node_modules: &Path, bytes: u64
                 signals.join(", ")
             )
         },
+        signals: project_dependency_review_signals(
+            project_name,
+            package_name,
+            has_package_json,
+            lockfile.as_deref(),
+            package_manager.as_deref(),
+            &framework_signals,
+            &script_signals,
+            age_days,
+            rebuildable,
+        ),
     }
+}
+
+fn project_dependency_review_signals(
+    project_name: &str,
+    package_name: &str,
+    has_package_json: bool,
+    lockfile: Option<&str>,
+    package_manager: Option<&str>,
+    framework_signals: &[&str],
+    script_signals: &[String],
+    age_days: u64,
+    rebuildable: bool,
+) -> Vec<ScanSignal> {
+    let mut signals = vec![
+        review_signal("project", project_name, "review"),
+        review_signal(
+            "modified age",
+            format!("{age_days}d"),
+            age_signal_tone(age_days, 45),
+        ),
+        review_signal(
+            "rebuild proof",
+            if rebuildable {
+                "package + lockfile"
+            } else {
+                "incomplete"
+            },
+            if rebuildable { "safe" } else { "review" },
+        ),
+    ];
+    if !package_name.trim().is_empty() {
+        signals.push(review_signal("package", package_name, "review"));
+    }
+    signals.push(review_signal(
+        "package.json",
+        if has_package_json {
+            "present"
+        } else {
+            "missing"
+        },
+        if has_package_json {
+            "safe"
+        } else {
+            "restricted"
+        },
+    ));
+    if let Some(lockfile) = lockfile {
+        signals.push(review_signal("lockfile", lockfile, "safe"));
+    }
+    if let Some(package_manager) = package_manager {
+        signals.push(review_signal("manager", package_manager, "safe"));
+    }
+    if !framework_signals.is_empty() {
+        signals.push(review_signal(
+            "framework",
+            framework_signals.join("+"),
+            "advanced",
+        ));
+    }
+    if !script_signals.is_empty() {
+        signals.push(review_signal("scripts", script_signals.join(","), "review"));
+    }
+    signals
 }
 
 fn package_dependency_names(package_value: Option<&Value>) -> Vec<String> {
@@ -6391,6 +6571,43 @@ fn scan_item_from_path(recipe_id: &str, path: &Path, bytes: u64, kind: &str) -> 
         } else {
             "Recent or ambiguous item; keep until the user confirms.".to_string()
         },
+        signals: vec![
+            review_signal("kind", kind, "review"),
+            review_signal(
+                "modified age",
+                format!("{age_days}d"),
+                age_signal_tone(age_days, review_age_days),
+            ),
+            review_signal(
+                "measured size",
+                format!("{bytes} bytes"),
+                size_signal_tone(bytes),
+            ),
+        ],
+    }
+}
+
+fn review_signal(label: &str, value: impl Into<String>, tone: &str) -> ScanSignal {
+    ScanSignal {
+        label: label.to_string(),
+        value: value.into(),
+        tone: tone.to_string(),
+    }
+}
+
+fn age_signal_tone(age_days: u64, threshold_days: u64) -> &'static str {
+    if age_days >= threshold_days {
+        "review"
+    } else {
+        "safe"
+    }
+}
+
+fn size_signal_tone(bytes: u64) -> &'static str {
+    if bytes >= 1024 * 1024 * 1024 {
+        "review"
+    } else {
+        "safe"
     }
 }
 

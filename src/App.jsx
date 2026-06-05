@@ -6516,6 +6516,7 @@ function ItemReviewPanel({ itemReview, selected, onSelectAction, onDecision, onA
                   <span className="text-sm font-medium text-muted-foreground">{formatBytes(item.bytes)}</span>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">{item.reason}</p>
+                <ReviewSignalBadges signals={item.signals} />
                 <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{item.path}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
@@ -8372,6 +8373,7 @@ function ProjectDependencyExecutorPanel({ runtimeCapabilities, execution, execut
                 </div>
                 <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{target.path}</p>
                 <p className="mt-2 text-xs text-muted-foreground">{target.reason}</p>
+                <ReviewSignalBadges signals={target.signals} compact />
               </div>
             ))}
           </div>
@@ -8469,6 +8471,7 @@ function DownloadsCleanupExecutorPanel({ runtimeCapabilities, execution, executo
                 </div>
                 <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{target.path}</p>
                 <p className="mt-2 text-xs text-muted-foreground">{target.reason}</p>
+                <ReviewSignalBadges signals={target.signals} compact />
               </div>
             ))}
           </div>
@@ -8510,6 +8513,26 @@ function DownloadsCleanupExecutorPanel({ runtimeCapabilities, execution, executo
       </CardContent>
     </Card>
   );
+}
+
+function ReviewSignalBadges({ signals = [], compact = false }) {
+  const rows = Array.isArray(signals) ? signals.filter((signal) => signal?.label || signal?.value).slice(0, compact ? 5 : 8) : [];
+  if (!rows.length) return null;
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {rows.map((signal, index) => (
+        <Badge key={`${signal.label || "signal"}-${signal.value || index}`} variant={reviewSignalBadgeVariant(signal.tone)}>
+          {signal.label ? `${signal.label}: ` : ""}{signal.value || "present"}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+function reviewSignalBadgeVariant(tone = "") {
+  if (tone === "safe" || tone === "review" || tone === "restricted" || tone === "advanced" || tone === "advisory") return tone;
+  return "outline";
 }
 
 function BrowserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, onExecute }) {

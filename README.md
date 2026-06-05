@@ -214,7 +214,7 @@ For review-gated roots, the scanner can also return item-level candidates:
 - Top Android Studio cache or emulator entries.
 - Large installed app footprints for manual uninstall review, enriched with read-only Windows uninstall metadata when available.
 
-These candidates are metadata-only. Large personal files and installed app footprints are discovery-only until the user makes per-item decisions. Installed app folder modification age is a weak hint, not proof of usage. When Windows uninstall metadata is available, SpaceGuard reads display name, publisher, display version, install location, install date, estimated size, and whether an uninstall entry exists; it does not store or run uninstall command strings. App cleanup stays manual through Windows Settings or the vendor uninstaller; SpaceGuard does not delete Program Files folders or run uninstallers.
+These candidates are metadata-only. Large personal files and installed app footprints are discovery-only until the user makes per-item decisions. Installed app folder modification age is a weak hint, not proof of usage. When Windows uninstall metadata is available, SpaceGuard reads display name, publisher, display version, install location, install date, estimated size, and whether an uninstall entry exists; it does not store or run uninstall command strings. App review items also carry structured signals such as usage proof, registry match, publisher, install date, uninstall entry, measured size, and official manual action so the UI and OpenAI advisor can reason over explicit evidence instead of parsing prose. App cleanup stays manual through Windows Settings or the vendor uninstaller; SpaceGuard does not delete Program Files folders or run uninstallers.
 
 ## Product Shape
 

@@ -145,7 +145,8 @@ export function buildOpenAIAgentContext({
         bytes: Number(target.bytes || 0),
         ageDays: Number(target.ageDays || 0),
         kind: target.kind || "project dependency folder",
-        reason: target.reason || ""
+        reason: target.reason || "",
+        signals: normalizeAgentReviewSignals(target.signals)
       }))
     )
     .slice(0, 16);
@@ -554,8 +555,28 @@ function buildManualReviewTargets({ nativeScan = null, itemReviewsByAction = nul
       canCreateExecutor: false,
       manualOnly: true,
       officialAction: "Use Windows Settings or the vendor uninstaller only.",
-      reason: item.reason || "Installed app footprint is manual review evidence, not an automated cleanup target."
+      reason: item.reason || "Installed app footprint is manual review evidence, not an automated cleanup target.",
+      signals: normalizeAgentReviewSignals(item.signals)
     }));
+}
+
+function normalizeAgentReviewSignals(value = []) {
+  return Array.isArray(value)
+    ? value
+        .map((signal) => ({
+          label: String(signal?.label || signal?.name || "").trim(),
+          value: String(signal?.value || signal?.detail || "").trim(),
+          tone: normalizeAgentSignalTone(signal?.tone || signal?.status || "")
+        }))
+        .filter((signal) => signal.label || signal.value)
+        .slice(0, 8)
+    : [];
+}
+
+function normalizeAgentSignalTone(value = "") {
+  const clean = String(value || "").trim().toLowerCase();
+  if (clean === "safe" || clean === "review" || clean === "restricted" || clean === "advanced") return clean;
+  return "outline";
 }
 
 function toAgentAction(action = {}) {

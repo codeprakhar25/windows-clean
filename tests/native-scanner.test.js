@@ -142,7 +142,11 @@ const assert = require("assert");
             age_days: 180,
             kind: "developer tool footprint",
             recommendation: "review",
-            reason: "Manual uninstall candidate"
+            reason: "Manual uninstall candidate",
+            signals: [
+              { label: "usage proof", value: "not proven", tone: "restricted" },
+              { label: "uninstall entry", value: "present", tone: "safe" }
+            ]
           }
         ]
       }
@@ -239,6 +243,8 @@ const assert = require("assert");
   const appFootprintReview = guard.buildItemReview("installed-app-footprints", merged, scan, []);
   assert.strictEqual(appFootprintReview.source, "native-readonly", "app footprint item review should use native candidates when available");
   assert.strictEqual(appFootprintReview.items[0].name, "Old IDE 2023", "native app footprint candidate should be preserved");
+  assert.strictEqual(appFootprintReview.items[0].signals[0].label, "usage proof", "app footprint review should preserve structured review signals");
+  assert.strictEqual(appFootprintReview.items[0].signals[0].value, "not proven", "app footprint signals should make usage uncertainty explicit");
   assert.strictEqual(appFootprintReview.selectedBytes, 0, "app footprint candidates should not become executor recovery bytes");
 
   const normalizedWithItems = native.normalizeNativeScan({
@@ -258,7 +264,8 @@ const assert = require("assert");
             age_days: 45,
             kind: "installer",
             recommendation: "review",
-            reason: "Old installer"
+            reason: "Old installer",
+            signals: [{ label: "modified age", value: "45d", tone: "review" }]
           }
         ]
       }
@@ -266,6 +273,8 @@ const assert = require("assert");
   });
   assert.strictEqual(normalizedWithItems.findings[0].items[0].ageDays, 45, "native item age should normalize to camelCase");
   assert.strictEqual(normalizedWithItems.findings[0].items[0].recommendation, "review", "native item recommendation should be preserved");
+  assert.strictEqual(normalizedWithItems.findings[0].items[0].signals[0].label, "modified age", "native item signals should normalize");
+  assert.strictEqual(normalizedWithItems.findings[0].items[0].signals[0].tone, "review", "native item signal tone should normalize");
   assert.strictEqual(native.normalizeNativeVolume({ drive: "C:", totalBytes: 10, freeBytes: 3 }).usedBytes, 7, "native volume should derive used bytes when needed");
   assert.strictEqual(native.normalizeNativeVolume({ totalBytes: 10, freeBytes: 3 }), null, "native volume should reject missing drive");
 

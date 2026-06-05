@@ -476,9 +476,13 @@ assert(model.includes("manual-app-uninstall"), "installed app footprints should 
 assert(model.includes("Modification age is not usage proof"), "installed app policy should not overclaim usage detection");
 assert(app.includes("Mark uninstall"), "item review should label app footprint decisions as manual uninstall follow-up");
 assert(app.includes("SpaceGuard will not delete Program Files folders"), "item review should preserve the Program Files deletion boundary");
+assert(app.includes("ReviewSignalBadges"), "item review should render structured review signal badges");
 assert(rustScanner.includes("measure_installed_app_footprints"), "Rust scanner should measure installed app footprints read-only");
 assert(rustScanner.includes("InstalledAppFootprints"), "Rust scanner should use an installed-app footprint measure kind");
 assert(rustScanner.includes("installed_app_scan_item"), "Rust scanner should emit app footprint review candidates");
+assert(rustScanner.includes("installed_app_review_signals"), "Rust scanner should emit structured installed-app review signals");
+assert(rustScanner.includes("\"usage proof\""), "Rust scanner should make app usage uncertainty explicit");
+assert(rustScanner.includes("\"official action\""), "Rust scanner should identify the manual uninstall action");
 assert(rustScanner.includes("installed_app_registry_inventory"), "Rust scanner should enrich installed app review with read-only uninstall metadata");
 assert(rustScanner.includes("RegOpenKeyExW"), "Rust scanner should read Windows uninstall metadata through the registry API");
 assert(rustScanner.includes("RegQueryValueExW"), "Rust scanner should query uninstall metadata values read-only");
