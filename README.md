@@ -95,6 +95,8 @@ The **Temp activation rehearsal** panel is a browser-safe demo of that same rout
 
 The **Real data launch roadmap** panel consolidates product status and rough delivery ranges. It separates the web demo, native read-only beta, first-safe temp executor, and broader cleanup product milestones. It is evidence tracking only: estimates do not unlock real cleanup, and the roadmap still reports zero real-run rows until write readiness and release review both pass.
 
+The **Native beta distribution** panel separates read-only beta packaging from real cleanup. It requires a current native read-only scan, local-only privacy, release/setup docs, install/uninstall path, redacted support workflow, signing or SmartScreen evidence, and no real-cleanup claim before native beta can be called ready.
+
 The native runtime capability command is:
 
 ```txt
@@ -162,6 +164,7 @@ The demo also includes:
 - Real data readiness panel for the Tauri read-only scanner.
 - Windows setup assistant that separates browser demo, desktop shell, current read-only scan evidence, local privacy/export, native beta readiness, and the real-cleanup lock.
 - Real data launch roadmap with current milestone, progress, rough estimate, confidence, demo/native activation proof, and real-cleanup lock status.
+- Native beta distribution readiness for signing, setup docs, install/uninstall, support workflow, read-only scan evidence, and no-cleanup claims.
 - Demo rehearsal runbook that proves the browser demo can go from scan to gated plan, dry-run consent, simulated ledger, and report export without native data or real cleanup.
 - Product completion audit that maps the original product requirements to proven, partial, waiting, locked, or unsafe evidence so the app cannot overclaim real cleanup readiness.
 - Safety interlock that summarizes runtime write signals, native write signals, scan freshness, dry-run consent, task power leases, standing permission, run readiness, write-boundary evidence, release review, and write readiness into one stop/hold/dry-run state.

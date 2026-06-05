@@ -64,6 +64,7 @@ import {
   buildRescanComparison,
   buildRescanComparisonMarkdown,
   buildManualStrategyChecklist,
+  buildNativeBetaDistributionReadiness,
   buildRestrictionPolicyMatrix,
   buildPlanLock,
   buildReleaseGate,
@@ -143,6 +144,13 @@ const modes = [
   ["balanced", "Balanced"],
   ["emergency", "Emergency"]
 ];
+const nativeBetaDocumentationEvidence = {
+  publicReleaseResearch: true,
+  windowsRealDataSetup: true,
+  installUninstallRunbook: true,
+  supportRunbook: true,
+  supportBundleExport: true
+};
 
 const riskAccent = {
   safe: "bg-emerald-500",
@@ -806,6 +814,20 @@ export default function App() {
       }),
     [actionList, selectedIds, protectedPaths, intakePolicy, customRootTriage, taskRunbook, runtimeCapabilities.result]
   );
+  const nativeBetaDistributionReadiness = useMemo(
+    () =>
+      buildNativeBetaDistributionReadiness({
+        scanMode: dataMode,
+        nativeCapability,
+        runtimeCapabilities: runtimeCapabilities.result,
+        scanSession,
+        privacyBoundary,
+        releaseGate,
+        validationEvidence,
+        documentationEvidence: nativeBetaDocumentationEvidence
+      }),
+    [dataMode, nativeCapability, runtimeCapabilities.result, scanSession, privacyBoundary, releaseGate, validationEvidence]
+  );
   const publicBetaReadiness = useMemo(
     () =>
       buildPublicBetaReadiness({
@@ -815,12 +837,10 @@ export default function App() {
         releaseGate,
         privacyBoundary,
         validationEvidence,
-        documentationEvidence: {
-          publicReleaseResearch: true,
-          windowsRealDataSetup: true
-        }
+        documentationEvidence: nativeBetaDocumentationEvidence,
+        distributionReadiness: nativeBetaDistributionReadiness
       }),
-    [dataMode, nativeCapability, runtimeCapabilities.result, releaseGate, privacyBoundary, validationEvidence]
+    [dataMode, nativeCapability, runtimeCapabilities.result, releaseGate, privacyBoundary, validationEvidence, nativeBetaDistributionReadiness]
   );
   const supportBundle = useMemo(
     () =>
@@ -912,6 +932,7 @@ export default function App() {
         privilegeBoundary,
         privacyBoundary,
         publicBetaReadiness,
+        nativeBetaDistributionReadiness,
         supportBundle,
         releaseGate,
         writeReadiness,
@@ -932,6 +953,7 @@ export default function App() {
       privilegeBoundary,
       privacyBoundary,
       publicBetaReadiness,
+      nativeBetaDistributionReadiness,
       supportBundle,
       releaseGate,
       writeReadiness,
@@ -993,6 +1015,7 @@ export default function App() {
         demoRehearsalRunbook,
         windowsSetupAssistant,
         publicBetaReadiness,
+        nativeBetaDistributionReadiness,
         validationPack,
         releaseReviewPacket,
         writeReadiness,
@@ -1011,6 +1034,7 @@ export default function App() {
       demoRehearsalRunbook,
       windowsSetupAssistant,
       publicBetaReadiness,
+      nativeBetaDistributionReadiness,
       validationPack,
       releaseReviewPacket,
       writeReadiness,
@@ -1824,6 +1848,7 @@ export default function App() {
       privacyBoundary,
       rollbackPlan,
       publicBetaReadiness,
+      nativeBetaDistributionReadiness,
       releaseReviewPacket,
       executorManifest,
       toolCommandInventory,
@@ -2132,6 +2157,8 @@ export default function App() {
             <WindowsSetupAssistantPanel assistant={windowsSetupAssistant} />
 
             <RealDataLaunchRoadmapPanel roadmap={realDataLaunchRoadmap} />
+
+            <NativeBetaDistributionPanel readiness={nativeBetaDistributionReadiness} />
 
             <DemoRehearsalRunbookPanel runbook={demoRehearsalRunbook} onExport={exportReport} />
 
@@ -2725,6 +2752,76 @@ function RealDataLaunchRoadmapPanel({ roadmap }) {
               </div>
             ))}
           </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function NativeBetaDistributionPanel({ readiness }) {
+  const visibleRows = readiness.waitingRows.length ? readiness.waitingRows : readiness.rows.slice(0, 4);
+
+  return (
+    <Card id="native-beta-distribution-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Native beta distribution
+            </CardTitle>
+            <CardDescription>{readiness.primary}</CardDescription>
+          </div>
+          <Badge variant={readiness.tone}>{readiness.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <QueueStat label="Rows" value={`${readiness.counts.ready}/${readiness.counts.total}`} tone={readiness.readyForNativeBeta ? "safe" : "review"} />
+          <QueueStat label="Docs" value={readiness.docsReady ? "ready" : "wait"} tone={readiness.docsReady ? "safe" : "review"} />
+          <QueueStat label="Signing" value={readiness.signingReady ? "ready" : "wait"} tone={readiness.signingReady ? "safe" : "review"} />
+          <QueueStat label="Real cleanup" value={readiness.realRunEnabled ? "visible" : "locked"} tone={readiness.realRunEnabled ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Distribution boundary</span>
+            <Badge variant={readiness.readyForWebDemo ? "safe" : "outline"}>
+              {readiness.readyForWebDemo ? "web demo ok" : "web demo waiting"}
+            </Badge>
+            <Badge variant={readiness.readyForNativeBeta ? "safe" : "outline"}>
+              {readiness.readyForNativeBeta ? "native beta ok" : "native beta waiting"}
+            </Badge>
+            <Badge variant={readiness.destructiveCommands ? "restricted" : "safe"}>
+              {readiness.destructiveCommands ? "destructive visible" : "no destructive commands"}
+            </Badge>
+          </div>
+          <div className="flex flex-col gap-2">
+            {readiness.steps.slice(0, 3).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <Lock className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {visibleRows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 text-sm font-medium">{row.label}</div>
+                <Badge variant={row.tone}>{row.status}</Badge>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                <Badge variant="outline">{row.lane}</Badge>
+                <Badge variant={row.realRunAllowed ? "restricted" : "safe"}>
+                  {row.realRunAllowed ? "real run" : "no real run"}
+                </Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{row.detail}</p>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>

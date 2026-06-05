@@ -184,6 +184,10 @@ assert(app.includes("buildRealDataLaunchRoadmap"), "real data launch roadmap sho
 assert(app.includes("RealDataLaunchRoadmapPanel"), "real data launch roadmap panel should be rendered");
 assert(app.includes("real-data-launch-roadmap-panel"), "real data launch roadmap should be focusable");
 assert(app.includes("Real data launch roadmap"), "real data roadmap should expose launch status copy");
+assert(app.includes("buildNativeBetaDistributionReadiness"), "native beta distribution readiness should be wired");
+assert(app.includes("NativeBetaDistributionPanel"), "native beta distribution panel should be rendered");
+assert(app.includes("native-beta-distribution-panel"), "native beta distribution panel should be focusable");
+assert(app.includes("Native beta distribution"), "native beta distribution panel should expose setup copy");
 assert(app.includes("buildDemoRehearsalRunbook"), "demo rehearsal runbook should be wired");
 assert(app.includes("DemoRehearsalRunbookPanel"), "demo rehearsal runbook panel should be rendered");
 assert(app.includes("buildProductCompletionAudit"), "product completion audit should be wired");
@@ -375,6 +379,7 @@ assert(model.includes("proof-complete"), "rollback rows should expose complete p
 assert(model.includes("spaceguard-rescan-comparison/v1"), "model should expose rescan comparison schema");
 assert(model.includes("executedAt"), "ledger entries should carry absolute execution timestamps");
 assert(model.includes("spaceguard-public-beta-readiness/v1"), "model should expose public beta readiness schema");
+assert(model.includes("spaceguard-native-beta-distribution/v1"), "model should expose native beta distribution schema");
 assert(model.includes("spaceguard-support-bundle/v1"), "model should expose support bundle schema");
 assert(model.includes("spaceguard-workflow-handoff/v1"), "model should expose workflow handoff schema");
 assert(model.includes("SpaceGuard Workflow Handoff"), "model should export workflow handoff markdown");

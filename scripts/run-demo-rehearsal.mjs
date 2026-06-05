@@ -15,6 +15,7 @@ import {
   buildFirstSafeValidationGate,
   buildIntakePolicy,
   buildLedgerRunRecord,
+  buildNativeBetaDistributionReadiness,
   buildPlanLock,
   buildPlanSnapshot,
   buildRealDataLaunchRoadmap,
@@ -42,6 +43,14 @@ import {
   selectedByDefault
 } from "../src/spaceguard-model.mjs";
 import { pathToFileURL } from "node:url";
+
+const nativeBetaDocumentationEvidence = {
+  publicReleaseResearch: true,
+  windowsRealDataSetup: true,
+  installUninstallRunbook: true,
+  supportRunbook: true,
+  supportBundleExport: true
+};
 
 export function buildDemoRehearsalSummary() {
 const executedAt = "2026-06-04T00:00:00.000Z";
@@ -195,6 +204,14 @@ const validationPack = buildValidationEvidencePack({
   scanMode: "demo",
   runtimeCapabilities,
   nativeScan: null
+});
+const nativeBetaDistributionReadiness = buildNativeBetaDistributionReadiness({
+  scanMode: "demo",
+  nativeCapability: { available: false },
+  runtimeCapabilities,
+  releaseGate,
+  validationEvidence: {},
+  documentationEvidence: nativeBetaDocumentationEvidence
 });
 const firstSafeValidationGate = buildFirstSafeValidationGate({
   executorManifest,
@@ -354,6 +371,7 @@ const realDataLaunchRoadmap = buildRealDataLaunchRoadmap({
   scanSession,
   demoRehearsalRunbook,
   windowsSetupAssistant,
+  nativeBetaDistributionReadiness,
   validationPack,
   writeReadiness,
   realExecutorCapsule,
@@ -387,6 +405,7 @@ const failures = [
   ["temp activation keeps mutation locked", !tempExecutorActivationGate.activationAllowed && !tempExecutorActivationGate.mutationEnabled],
   ["temp activation rehearsal ready", tempExecutorActivationRehearsal.status === "rehearsal-ready"],
   ["temp activation rehearsal stays flag-blocked", tempExecutorActivationRehearsal.activationGate?.status === "feature-flag-disabled"],
+  ["native beta distribution not ready in demo", nativeBetaDistributionReadiness.readyForNativeBeta === false],
   ["real data roadmap reaches demo milestone", realDataLaunchRoadmap.status === "demo-ready"],
   ["real data roadmap keeps cleanup locked", realDataLaunchRoadmap.realCleanupLocked && realDataLaunchRoadmap.counts.realRun === 0],
   ["zero real-run routes", demoRehearsalRunbook.counts.realRun === 0 && planLock.counts.realRun === 0],
@@ -410,6 +429,7 @@ const summary = {
   activationGateStatus: tempExecutorActivationGate.status,
   activationRehearsalStatus: tempExecutorActivationRehearsal.status,
   activationRehearsalGateStatus: tempExecutorActivationRehearsal.activationGate?.status || "not-evaluated",
+  nativeBetaDistributionStatus: nativeBetaDistributionReadiness.status,
   realDataRoadmapStatus: realDataLaunchRoadmap.status,
   realDataRoadmapEstimate: realDataLaunchRoadmap.estimate,
   realDataRoadmapMilestone: realDataLaunchRoadmap.currentMilestone,

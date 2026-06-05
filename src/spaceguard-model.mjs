@@ -4825,6 +4825,7 @@ export function buildProductCompletionAudit({
   customRootTriage = null,
   privacyBoundary = null,
   publicBetaReadiness = null,
+  nativeBetaDistributionReadiness = null,
   supportBundle = null,
   validationPack = null,
   releaseReviewPacket = null,
@@ -4991,6 +4992,22 @@ export function buildProductCompletionAudit({
         : "Support bundle or privacy boundary is incomplete.",
       evidence: privacyBoundary?.status || supportBundle?.schemaVersion || "privacy/support missing",
       nextStep: "Keep path-level dry-run report as a separate explicit export."
+    }),
+    buildProductCompletionAuditRow({
+      id: "native-beta-distribution",
+      requirement: "Package native read-only beta without cleanup claims",
+      status: nativeBetaDistributionReadiness?.status === "unsafe-stop"
+        ? "unsafe"
+        : nativeBetaDistributionReadiness?.readyForNativeBeta
+          ? "proven"
+          : nativeBetaDistributionReadiness?.readyForWebDemo || nativeBetaDistributionReadiness?.schemaVersion
+            ? "partial"
+            : "waiting-evidence",
+      detail: nativeBetaDistributionReadiness?.primary || "Native beta distribution readiness has not been evaluated.",
+      evidence: nativeBetaDistributionReadiness?.status || "distribution readiness missing",
+      nextStep: nativeBetaDistributionReadiness?.readyForNativeBeta
+        ? "Publish read-only beta only."
+        : "Record native scan, signing, install/uninstall, support, privacy, and no-cleanup claim evidence."
     }),
     buildProductCompletionAuditRow({
       id: "release-validation",
@@ -6925,6 +6942,7 @@ export function buildRealDataLaunchRoadmap({
   demoRehearsalRunbook = null,
   windowsSetupAssistant = null,
   publicBetaReadiness = null,
+  nativeBetaDistributionReadiness = null,
   validationPack = null,
   releaseReviewPacket = null,
   writeReadiness = null,
@@ -6955,8 +6973,8 @@ export function buildRealDataLaunchRoadmap({
   const nativeAvailable = Boolean(windowsSetupAssistant?.nativeAvailable || runtimeCapabilities?.available || runtimeCapabilities?.scanKnownRoots);
   const nativeScanCurrent = Boolean(scanMode === "native-readonly" && scanSession?.readyForPlanning && scanSession?.nativeEvidence);
   const privacyReady = Boolean(windowsSetupAssistant?.privacyReady);
-  const webDemoReady = Boolean(publicBetaReadiness?.readyForWebDemo);
-  const nativeBetaReady = Boolean(publicBetaReadiness?.readyForNativeBeta);
+  const webDemoReady = Boolean(publicBetaReadiness?.readyForWebDemo || nativeBetaDistributionReadiness?.readyForWebDemo);
+  const nativeBetaReady = Boolean(publicBetaReadiness?.readyForNativeBeta || nativeBetaDistributionReadiness?.readyForNativeBeta);
   const validationReady = Boolean(firstSafeValidationGate?.implementationPlanningReady || validationPack?.readyForRealRun);
   const workOrderReady = Boolean(firstSafeImplementationWorkOrder?.implementationWorkAllowed);
   const activationRehearsed = Boolean(tempExecutorActivationRehearsal?.status === "rehearsal-ready");
@@ -7051,7 +7069,7 @@ export function buildRealDataLaunchRoadmap({
       detail: privacyReady
         ? "Local-only privacy boundary is ready; public release packaging still controls the claim."
         : "Local-only scan handling, explicit exports, and support bundle evidence must be visible.",
-      evidence: publicBetaReadiness?.status || windowsSetupAssistant?.status || "not-evaluated",
+      evidence: nativeBetaDistributionReadiness?.status || publicBetaReadiness?.status || windowsSetupAssistant?.status || "not-evaluated",
       nextStep: privacyReady ? "Finish native beta distribution evidence." : "Resolve privacy and support bundle rows.",
       estimate: privacyReady ? "3-5 days" : "1 week"
     }),
@@ -7774,10 +7792,19 @@ export function buildPublicBetaReadiness({
   releaseGate = null,
   privacyBoundary = null,
   validationEvidence = {},
-  documentationEvidence = {}
+  documentationEvidence = {},
+  distributionReadiness = null
 } = {}) {
   const signingRecord = normalizeValidationEvidenceRecord("signing-and-smartscreen", validationEvidence["signing-and-smartscreen"]);
-  const signingPassed = signingRecord.passed || releaseGate?.rows?.find((row) => row.id === "signing-and-smartscreen")?.passed;
+  const signingPassed = distributionReadiness
+    ? distributionReadiness.signingReady
+    : signingRecord.passed || releaseGate?.rows?.find((row) => row.id === "signing-and-smartscreen")?.passed;
+  const docsReady = distributionReadiness
+    ? distributionReadiness.docsReady
+    : Boolean(documentationEvidence.publicReleaseResearch && documentationEvidence.windowsRealDataSetup);
+  const distributionReady = distributionReadiness
+    ? distributionReadiness.distributionReady
+    : Boolean(signingPassed);
   const destructiveLocked = !runtimeCapabilities?.realRunEnabled && !runtimeCapabilities?.destructiveCommands;
   const localOnlyPrivacy = Boolean(privacyBoundary?.cloudDisabled && privacyBoundary?.telemetryDisabled && privacyBoundary?.exportOnly);
   const nativeReadOnly = scanMode === "native-readonly" && Boolean(nativeCapability?.available || runtimeCapabilities?.scanKnownRoots);
@@ -7824,19 +7851,19 @@ export function buildPublicBetaReadiness({
       id: "public-release-runbook",
       lane: "docs",
       label: "Public release runbook",
-      passed: Boolean(documentationEvidence.publicReleaseResearch && documentationEvidence.windowsRealDataSetup),
-      status: documentationEvidence.publicReleaseResearch && documentationEvidence.windowsRealDataSetup ? "ready" : "waiting",
+      passed: docsReady,
+      status: docsReady ? "ready" : "waiting",
       detail: "Public release notes and Windows real-data setup must exist before beta distribution."
     },
     {
       id: "signing-support-uninstall",
       lane: "distribution",
       label: "Signing and support",
-      passed: Boolean(signingPassed),
-      status: signingPassed ? "ready" : "waiting",
-      detail: signingPassed
+      passed: Boolean(distributionReady),
+      status: distributionReady ? "ready" : "waiting",
+      detail: distributionReady
         ? "Signing, install/uninstall, privacy, and support evidence is recorded."
-        : "Record signing, SmartScreen/distribution, install/uninstall, privacy, and support evidence before native beta."
+        : distributionReadiness?.primary || "Record signing, SmartScreen/distribution, install/uninstall, privacy, and support evidence before native beta."
     }
   ];
   const webDemoReady = rows.find((row) => row.id === "web-demo-safe")?.passed && rows.find((row) => row.id === "real-executor-claims")?.passed && localOnlyPrivacy;
@@ -7867,6 +7894,146 @@ export function buildPublicBetaReadiness({
         ? "The web demo is publishable; native beta still needs distribution evidence."
         : "Public release is blocked until privacy and claim boundaries are safe.",
     steps: buildPublicBetaSteps(status, waitingRows)
+  };
+}
+
+export function buildNativeBetaDistributionReadiness({
+  scanMode = "demo",
+  nativeCapability = { available: false },
+  runtimeCapabilities = {},
+  scanSession = null,
+  privacyBoundary = null,
+  releaseGate = null,
+  validationEvidence = {},
+  documentationEvidence = {}
+} = {}) {
+  const signingRecord = normalizeValidationEvidenceRecord("signing-and-smartscreen", validationEvidence["signing-and-smartscreen"]);
+  const signingPassed = signingRecord.passed || releaseGate?.rows?.find((row) => row.id === "signing-and-smartscreen")?.passed;
+  const destructiveLocked = !runtimeCapabilities?.realRunEnabled && !runtimeCapabilities?.destructiveCommands && !releaseGate?.readyForRealRun;
+  const nativeReadOnly = scanMode === "native-readonly" && Boolean(nativeCapability?.available || runtimeCapabilities?.scanKnownRoots || scanSession?.nativeEvidence);
+  const nativeScanCurrent = Boolean(nativeReadOnly && (scanSession?.readyForPlanning || !scanSession));
+  const localOnlyPrivacy = Boolean(privacyBoundary?.cloudDisabled && privacyBoundary?.telemetryDisabled && privacyBoundary?.exportOnly);
+  const publicReleaseDocs = Boolean(documentationEvidence.publicReleaseResearch && documentationEvidence.windowsRealDataSetup);
+  const installUninstallReady = Boolean(documentationEvidence.installUninstallRunbook);
+  const supportReady = Boolean(documentationEvidence.supportRunbook && documentationEvidence.supportBundleExport);
+  const docsReady = Boolean(publicReleaseDocs && installUninstallReady && supportReady);
+  const distributionReady = Boolean(signingPassed && installUninstallReady && supportReady);
+  const unsafeRuntime = !destructiveLocked || Boolean(runtimeCapabilities?.safeExecutorsEnabled);
+
+  const rows = [
+    buildNativeBetaDistributionRow({
+      id: "claim-boundary",
+      label: "No real-cleanup claim",
+      lane: "claims",
+      passed: destructiveLocked,
+      blocked: unsafeRuntime,
+      detail: destructiveLocked
+        ? "Native beta can be described as read-only because real cleanup and destructive commands are locked."
+        : "Write capability or release readiness is visible; stop native beta claims."
+    }),
+    buildNativeBetaDistributionRow({
+      id: "native-readonly-evidence",
+      label: "Native read-only evidence",
+      lane: "scan",
+      passed: nativeScanCurrent,
+      blocked: unsafeRuntime,
+      detail: nativeScanCurrent
+        ? `Native scan session ${scanSession?.status || "native-readonly"} is current for planning.`
+        : "Run the Windows desktop shell and capture a current read-only scan."
+    }),
+    buildNativeBetaDistributionRow({
+      id: "local-privacy",
+      label: "Local-only privacy",
+      lane: "privacy",
+      passed: localOnlyPrivacy,
+      blocked: unsafeRuntime,
+      detail: localOnlyPrivacy
+        ? "Telemetry/cloud upload is disabled and exports are explicit."
+        : "Privacy boundary must prove local-only operation and explicit export."
+    }),
+    buildNativeBetaDistributionRow({
+      id: "release-docs",
+      label: "Release and setup docs",
+      lane: "docs",
+      passed: publicReleaseDocs,
+      blocked: unsafeRuntime,
+      detail: publicReleaseDocs
+        ? "Public release and Windows real-data setup docs are present."
+        : "Public release notes and Windows real-data setup docs must be available before beta."
+    }),
+    buildNativeBetaDistributionRow({
+      id: "install-uninstall",
+      label: "Install and uninstall path",
+      lane: "distribution",
+      passed: installUninstallReady,
+      blocked: unsafeRuntime,
+      detail: installUninstallReady
+        ? "Install, uninstall, and rollback instructions are represented in the distribution runbook."
+        : "Document install, uninstall, rollback, and support contact steps before native beta."
+    }),
+    buildNativeBetaDistributionRow({
+      id: "support-workflow",
+      label: "Support workflow",
+      lane: "support",
+      passed: supportReady,
+      blocked: unsafeRuntime,
+      detail: supportReady
+        ? "Redacted support bundle export and support runbook are available."
+        : "Support must use redacted bundles by default and ask separately for path-level reports."
+    }),
+    buildNativeBetaDistributionRow({
+      id: "signing-smartscreen",
+      label: "Signing and SmartScreen",
+      lane: "distribution",
+      passed: Boolean(signingPassed),
+      blocked: unsafeRuntime,
+      detail: signingPassed
+        ? "Signing or SmartScreen/distribution evidence is recorded with reviewer and artifact path."
+        : signingRecord.detail || "Record signing or SmartScreen/distribution evidence with reviewer and artifact path."
+    })
+  ];
+  const readyRows = rows.filter((row) => row.status === "ready");
+  const waitingRows = rows.filter((row) => row.status === "waiting");
+  const blockedRows = rows.filter((row) => row.status === "blocked");
+  const nativeBetaReady = !blockedRows.length && rows.every((row) => row.passed);
+  const webDemoReady = destructiveLocked && localOnlyPrivacy && publicReleaseDocs;
+  const status = unsafeRuntime
+    ? "unsafe-stop"
+    : nativeBetaReady
+      ? "native-beta-ready"
+      : nativeScanCurrent
+        ? "distribution-evidence-waiting"
+        : webDemoReady
+          ? "web-demo-ready"
+          : "native-scan-waiting";
+
+  return {
+    schemaVersion: "spaceguard-native-beta-distribution/v1",
+    status,
+    tone: status === "native-beta-ready" ? "safe" : status === "unsafe-stop" ? "restricted" : "review",
+    readyForWebDemo: Boolean(webDemoReady && !unsafeRuntime),
+    readyForNativeBeta: nativeBetaReady,
+    docsReady,
+    distributionReady,
+    signingReady: Boolean(signingPassed),
+    supportReady,
+    installUninstallReady,
+    nativeScanCurrent,
+    realRunEnabled: Boolean(runtimeCapabilities?.realRunEnabled || releaseGate?.readyForRealRun),
+    destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
+    rows,
+    readyRows,
+    waitingRows,
+    blockedRows,
+    counts: {
+      total: rows.length,
+      ready: readyRows.length,
+      waiting: waitingRows.length,
+      blocked: blockedRows.length,
+      realRun: 0
+    },
+    primary: getNativeBetaDistributionPrimary(status, { waitingRows, blockedRows }),
+    steps: getNativeBetaDistributionSteps(status, { waitingRows, blockedRows })
   };
 }
 
@@ -8946,6 +9113,7 @@ export function buildReport({
   privacyBoundary = null,
   rollbackPlan = null,
   publicBetaReadiness = null,
+  nativeBetaDistributionReadiness = null,
   releaseReviewPacket = null,
   customRootTriage = null,
   executorManifest = null,
@@ -9633,6 +9801,22 @@ export function buildReport({
           `- Ready checks: ${publicBetaReadiness.counts.ready}/${publicBetaReadiness.counts.total}`,
           `- Primary: ${publicBetaReadiness.primary}`,
           publicBetaReadiness.rows.map((row) => `- ${row.label}: ${row.status} | ${row.detail}`).join("\n")
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Native Beta Distribution Readiness",
+    nativeBetaDistributionReadiness
+      ? [
+          `- Status: ${nativeBetaDistributionReadiness.status}`,
+          `- Web demo ready: ${nativeBetaDistributionReadiness.readyForWebDemo ? "yes" : "no"}`,
+          `- Native beta ready: ${nativeBetaDistributionReadiness.readyForNativeBeta ? "yes" : "no"}`,
+          `- Docs ready: ${nativeBetaDistributionReadiness.docsReady ? "yes" : "no"}`,
+          `- Signing ready: ${nativeBetaDistributionReadiness.signingReady ? "yes" : "no"}`,
+          `- Support ready: ${nativeBetaDistributionReadiness.supportReady ? "yes" : "no"}`,
+          `- Install/uninstall ready: ${nativeBetaDistributionReadiness.installUninstallReady ? "yes" : "no"}`,
+          `- Real run enabled: ${nativeBetaDistributionReadiness.realRunEnabled ? "yes" : "no"}`,
+          `- Primary: ${nativeBetaDistributionReadiness.primary}`,
+          nativeBetaDistributionReadiness.rows.map((row) => `- ${row.label}: ${row.status} | ${row.detail}`).join("\n")
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -12109,6 +12293,43 @@ function buildPublicBetaSteps(status, waitingRows = []) {
     "Run browser-demo checks and native read-only smoke tests.",
     "Record distribution/support evidence before native beta."
   ];
+}
+
+function buildNativeBetaDistributionRow({ id, label, lane, passed = false, blocked = false, detail = "" }) {
+  const status = blocked ? "blocked" : passed ? "ready" : "waiting";
+  return {
+    id,
+    label,
+    lane,
+    status,
+    tone: blocked ? "restricted" : passed ? "safe" : "review",
+    passed: Boolean(passed && !blocked),
+    detail,
+    realRunAllowed: false
+  };
+}
+
+function getNativeBetaDistributionPrimary(status, { waitingRows = [], blockedRows = [] } = {}) {
+  if (status === "native-beta-ready") return "Native read-only beta distribution evidence is ready without real cleanup claims.";
+  if (status === "unsafe-stop") return blockedRows[0]?.detail || "Write capability is visible; stop native beta distribution review.";
+  if (status === "distribution-evidence-waiting") return `${waitingRows.length} distribution evidence row(s) still need reviewer-backed proof.`;
+  if (status === "web-demo-ready") return "Web demo distribution is safe; native read-only beta still needs scan and package evidence.";
+  return "Run the native desktop read-only scan before native beta distribution can be reviewed.";
+}
+
+function getNativeBetaDistributionSteps(status, { waitingRows = [], blockedRows = [] } = {}) {
+  if (status === "native-beta-ready") {
+    return [
+      "Publish only read-only scanner claims.",
+      "Keep support bundles redacted by default.",
+      "Keep real cleanup hidden behind separate validation and release review."
+    ];
+  }
+  if (status === "unsafe-stop") return blockedRows.slice(0, 3).map((row) => `${row.label}: ${row.detail}`);
+  const visibleWaitingRows = waitingRows.slice(0, 4);
+  return visibleWaitingRows.length
+    ? visibleWaitingRows.map((row) => `${row.label}: ${row.detail}`)
+    : ["Capture native read-only scan evidence.", "Record signing/support/uninstall evidence.", "Keep real cleanup claims out of beta copy."];
 }
 
 function getExecutorRouteRequirement(route) {

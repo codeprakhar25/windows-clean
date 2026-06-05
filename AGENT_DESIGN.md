@@ -132,6 +132,7 @@ The UI must also expose a recovery advisor and decision log:
 - `tool command inventory`: declarative official command shapes for package-manager and tool-native validation without shell execution.
 - `privacy boundary`: local-only data handling, explicit export, browser storage audit records, blocked collection classes, and disabled telemetry/cloud upload.
 - `public beta readiness`: web-demo versus native read-only beta status, signing/support/uninstall evidence, privacy posture, and public claim boundary.
+- `native beta distribution`: packaging gate for read-only beta claims, native scan evidence, local privacy, setup docs, install/uninstall path, redacted support workflow, and signing/SmartScreen evidence.
 - `release review packet`: one exportable review artifact that combines plan, scan session, task grants, contract, write-boundary rejection, validation, rollback, rescan, privilege, privacy, support redaction, public claims, and real-cleanup lock evidence.
 - `safety interlock`: global stop/hold surface derived from runtime write signals, native write signals, scan freshness, dry-run consent, plan lock, task power leases, broker standing permission, run readiness, write-boundary evidence, release review, and write readiness.
 - `dry-run launch guard`: final execution gate that allows simulation only when run readiness, current consent, current plan lock, and the safety interlock pass while real execution remains locked.
@@ -395,6 +396,7 @@ Public beta invariant:
 - Web-demo readiness is not native-beta readiness.
 - Native read-only beta readiness is not real-cleanup readiness.
 - Public beta requires local-only privacy, no real-cleanup claims, distribution/signing/support/uninstall evidence, and the Windows real-data runbook.
+- Native beta distribution evidence can publish read-only scanner claims only; it cannot satisfy release review, write readiness, rollback proof, or executor validation.
 - Real-executor release gates remain separate and stricter.
 
 Demo rehearsal invariant:

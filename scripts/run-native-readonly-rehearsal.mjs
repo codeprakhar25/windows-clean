@@ -12,6 +12,7 @@ import {
   buildFirstSafeValidationGate,
   buildDryRunLaunchGuard,
   buildIntakePolicy,
+  buildNativeBetaDistributionReadiness,
   buildPlanLock,
   buildPlanSnapshot,
   buildPrivacyBoundary,
@@ -38,6 +39,14 @@ import {
   makeExecutionLedgerForActions
 } from "../src/spaceguard-model.mjs";
 import { mergeNativeScanIntoActions, normalizeNativeScan } from "../src/native-scanner.mjs";
+
+const nativeBetaDocumentationEvidence = {
+  publicReleaseResearch: true,
+  windowsRealDataSetup: true,
+  installUninstallRunbook: true,
+  supportRunbook: true,
+  supportBundleExport: true
+};
 
 export function buildNativeReadonlyRehearsalSummary() {
   const executedAt = "2026-06-04T00:00:00.000Z";
@@ -346,6 +355,16 @@ export function buildNativeReadonlyRehearsalSummary() {
     validationEvidence: {},
     runtimeCapabilities
   });
+  const nativeBetaDistributionReadiness = buildNativeBetaDistributionReadiness({
+    scanMode: "native-readonly",
+    nativeCapability: { available: true },
+    runtimeCapabilities,
+    scanSession,
+    privacyBoundary,
+    releaseGate,
+    validationEvidence: {},
+    documentationEvidence: nativeBetaDocumentationEvidence
+  });
   const windowsSetupAssistant = buildWindowsSetupAssistant({
     nativeCapability: { available: true },
     runtimeCapabilities,
@@ -384,6 +403,7 @@ export function buildNativeReadonlyRehearsalSummary() {
     scanSession,
     scanCoverage,
     windowsSetupAssistant,
+    nativeBetaDistributionReadiness,
     validationPack,
     writeReadiness,
     realExecutorCapsule,
@@ -417,6 +437,7 @@ export function buildNativeReadonlyRehearsalSummary() {
     ["temp activation keeps mutation locked", !tempExecutorActivationGate.activationAllowed && !tempExecutorActivationGate.mutationEnabled],
     ["temp activation rehearsal ready", tempExecutorActivationRehearsal.status === "rehearsal-ready"],
     ["temp activation rehearsal stays flag-blocked", tempExecutorActivationRehearsal.activationGate?.status === "feature-flag-disabled"],
+    ["native beta distribution waits on signing", nativeBetaDistributionReadiness.status === "distribution-evidence-waiting"],
     ["real data roadmap reaches native milestone", realDataLaunchRoadmap.status === "native-readonly-ready"],
     ["real data roadmap keeps cleanup locked", realDataLaunchRoadmap.realCleanupLocked && realDataLaunchRoadmap.counts.realRun === 0],
     ["destructive commands absent", !runtimeCapabilities.destructiveCommands],
@@ -443,6 +464,7 @@ export function buildNativeReadonlyRehearsalSummary() {
     activationGateStatus: tempExecutorActivationGate.status,
     activationRehearsalStatus: tempExecutorActivationRehearsal.status,
     activationRehearsalGateStatus: tempExecutorActivationRehearsal.activationGate?.status || "not-evaluated",
+    nativeBetaDistributionStatus: nativeBetaDistributionReadiness.status,
     realDataRoadmapStatus: realDataLaunchRoadmap.status,
     realDataRoadmapEstimate: realDataLaunchRoadmap.estimate,
     realDataRoadmapMilestone: realDataLaunchRoadmap.currentMilestone,

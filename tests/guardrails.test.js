@@ -1271,6 +1271,73 @@ const assert = require("assert");
   });
   assert.strictEqual(nativePublicReadiness.readyForNativeBeta, true, "native beta should pass when scan, privacy, docs, and signing/support evidence exist");
   assert.strictEqual(nativePublicReadiness.realRunEnabled, false, "native beta readiness should not imply real cleanup");
+  const demoDistributionReadiness = guard.buildNativeBetaDistributionReadiness({
+    scanMode: "demo",
+    nativeCapability: { available: false },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false },
+    privacyBoundary: demoPrivacyBoundary,
+    releaseGate: guard.buildReleaseGate({ scanMode: "demo", nativeCapability: { available: false }, executorPlan: null }),
+    documentationEvidence: {
+      publicReleaseResearch: true,
+      windowsRealDataSetup: true,
+      installUninstallRunbook: true,
+      supportRunbook: true,
+      supportBundleExport: true
+    }
+  });
+  assert.strictEqual(demoDistributionReadiness.schemaVersion, "spaceguard-native-beta-distribution/v1", "native beta distribution should expose a schema version");
+  assert.strictEqual(demoDistributionReadiness.readyForNativeBeta, false, "distribution readiness must not claim native beta from demo data");
+  assert.strictEqual(demoDistributionReadiness.readyForWebDemo, true, "distribution readiness should allow web-demo packaging when claims and privacy are safe");
+  assert.strictEqual(demoDistributionReadiness.counts.realRun, 0, "distribution readiness must not expose real-run rows");
+  const nativeDistributionReadiness = guard.buildNativeBetaDistributionReadiness({
+    scanMode: "native-readonly",
+    nativeCapability: { available: true },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false, scanKnownRoots: true },
+    scanSession: { status: "native-current", readyForPlanning: true, nativeEvidence: true },
+    privacyBoundary: nativePrivacyBoundary,
+    releaseGate: guard.buildReleaseGate({
+      validationEvidence: makePassedEvidence(["signing-and-smartscreen"]),
+      scanMode: "native-readonly",
+      nativeCapability: { available: true },
+      executorPlan: null
+    }),
+    validationEvidence: makePassedEvidence(["signing-and-smartscreen"]),
+    documentationEvidence: {
+      publicReleaseResearch: true,
+      windowsRealDataSetup: true,
+      installUninstallRunbook: true,
+      supportRunbook: true,
+      supportBundleExport: true
+    }
+  });
+  assert.strictEqual(nativeDistributionReadiness.readyForNativeBeta, true, "native distribution should pass when scan, privacy, signing, install, uninstall, and support evidence exist");
+  assert.strictEqual(nativeDistributionReadiness.realRunEnabled, false, "native distribution readiness should not imply real cleanup");
+  const signingOnlyDistributionReadiness = guard.buildNativeBetaDistributionReadiness({
+    scanMode: "native-readonly",
+    nativeCapability: { available: true },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false, scanKnownRoots: true },
+    scanSession: { status: "native-current", readyForPlanning: true, nativeEvidence: true },
+    privacyBoundary: nativePrivacyBoundary,
+    validationEvidence: makePassedEvidence(["signing-and-smartscreen"]),
+    documentationEvidence: {
+      publicReleaseResearch: true,
+      windowsRealDataSetup: true
+    }
+  });
+  const signingOnlyPublicReadiness = guard.buildPublicBetaReadiness({
+    scanMode: "native-readonly",
+    nativeCapability: { available: true },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false, scanKnownRoots: true },
+    privacyBoundary: nativePrivacyBoundary,
+    validationEvidence: makePassedEvidence(["signing-and-smartscreen"]),
+    documentationEvidence: {
+      publicReleaseResearch: true,
+      windowsRealDataSetup: true
+    },
+    distributionReadiness: signingOnlyDistributionReadiness
+  });
+  assert.strictEqual(signingOnlyDistributionReadiness.readyForNativeBeta, false, "signing alone should not satisfy native beta distribution");
+  assert.strictEqual(signingOnlyPublicReadiness.readyForNativeBeta, false, "public beta should respect missing install/uninstall/support evidence when distribution gate is attached");
   const publicReadinessReport = guard.buildReport({
     scenario: guard.getScenario("developer"),
     profile: guard.getScenario("developer").profile,
@@ -1280,10 +1347,13 @@ const assert = require("assert");
     ledger: [],
     protectedPaths,
     goalBytes: 10 * guard.GB,
-    publicBetaReadiness: demoPublicReadiness
+    publicBetaReadiness: demoPublicReadiness,
+    nativeBetaDistributionReadiness: demoDistributionReadiness
   });
   assert(publicReadinessReport.includes("## Public Beta Readiness"), "report should include public beta readiness");
   assert(publicReadinessReport.includes("Web demo ready: yes"), "public beta report should distinguish web demo readiness");
+  assert(publicReadinessReport.includes("## Native Beta Distribution Readiness"), "report should include native beta distribution readiness");
+  assert(publicReadinessReport.includes("Native beta ready: no"), "distribution report should keep native beta separate from web demo");
   const supportBundle = guard.buildSupportBundle({
     profile: guard.getScenario("developer").profile,
     scanMode: "native-readonly",
