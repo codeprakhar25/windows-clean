@@ -2526,6 +2526,165 @@ export function buildStoragePressureDiagnosis({
   };
 }
 
+export function buildNativeEvidenceQualityGate({
+  scanned = false,
+  scanMode = "demo",
+  scanSession = null,
+  scanCoverage = null,
+  driveInventorySummary = null,
+  storagePressureDiagnosis = null,
+  nativeCapability = { available: false },
+  runtimeCapabilities = {},
+  privacyBoundary = null
+} = {}) {
+  const nativeMode = scanMode === "native-readonly";
+  const nativeAvailable = Boolean(
+    nativeCapability?.available ||
+      runtimeCapabilities?.available ||
+      runtimeCapabilities?.scanKnownRoots ||
+      scanSession?.nativeEvidence ||
+      scanCoverage?.nativeAvailable ||
+      driveInventorySummary?.nativeAvailable
+  );
+  const unsafeWriteSignal = Boolean(
+    runtimeCapabilities?.realRunEnabled ||
+      runtimeCapabilities?.destructiveCommands ||
+      runtimeCapabilities?.safeExecutorsEnabled ||
+      storagePressureDiagnosis?.destructiveCommands
+  );
+  const scanCurrent = Boolean(nativeMode && scanned && scanSession?.readyForPlanning && scanSession?.nativeEvidence);
+  const measuredRoots = Number(scanCoverage?.counts?.verified || 0);
+  const unverifiedRows = Number(scanCoverage?.counts?.unverified || 0);
+  const coverageScore = Number(scanCoverage?.confidenceScore || 0);
+  const hasMeasuredCoverage = Boolean(nativeMode && scanCoverage?.schemaVersion && measuredRoots > 0);
+  const coverageComplete = scanCoverage?.status === "native-covered";
+  const inventoryReady = driveInventorySummary?.status === "inventory-ready";
+  const diagnosisReady = storagePressureDiagnosis?.status === "native-diagnosis-ready";
+  const privacyReady = privacyBoundary?.status === "native-local-only";
+  const mutationLocked = !unsafeWriteSignal && privacyBoundary?.destructiveDisabled !== false;
+  const planningReady = Boolean(scanCurrent && hasMeasuredCoverage && inventoryReady && diagnosisReady && privacyReady && mutationLocked);
+  const status = unsafeWriteSignal
+    ? "unsafe-write-signal"
+    : !nativeMode
+      ? "demo-evidence-only"
+      : !nativeAvailable
+        ? "native-runtime-missing"
+        : !scanCurrent
+          ? "native-scan-stale"
+          : !planningReady
+            ? "native-evidence-incomplete"
+            : coverageComplete
+              ? "planning-grade-ready"
+              : "planning-grade-partial";
+  const rows = [
+    buildNativeEvidenceQualityRow({
+      id: "native-runtime",
+      label: "Native runtime",
+      lane: "runtime",
+      status: nativeAvailable ? "ready" : nativeMode ? "missing" : "demo-only",
+      detail: nativeAvailable
+        ? `Desktop bridge is available for read-only evidence${runtimeCapabilities?.platform ? ` on ${runtimeCapabilities.platform}` : ""}.`
+        : nativeMode ? "Native mode was requested, but the desktop bridge is not available." : "Browser demo has no local filesystem bridge.",
+      nextStep: nativeAvailable ? "Use the desktop shell for local evidence." : "Start the Tauri desktop app before claiming real-data evidence."
+    }),
+    buildNativeEvidenceQualityRow({
+      id: "scan-session",
+      label: "Scan session",
+      lane: "freshness",
+      status: scanCurrent ? "current" : nativeMode ? "stale-or-missing" : "demo-only",
+      detail: scanSession?.primary || (scanCurrent ? "Native read-only scan is current." : "No current native scan session is attached."),
+      nextStep: scanCurrent ? "Keep planning tied to this scan fingerprint." : "Run a fresh native read-only scan with the current settings."
+    }),
+    buildNativeEvidenceQualityRow({
+      id: "known-root-coverage",
+      label: "Known-root coverage",
+      lane: "coverage",
+      status: !nativeMode ? "demo-only" : coverageComplete ? "covered" : hasMeasuredCoverage ? "partial" : "missing",
+      detail: scanCoverage
+        ? `${coverageScore}% confidence, ${measuredRoots} measured recipe row(s), ${unverifiedRows} unverified row(s).`
+        : "Scan coverage has not been evaluated.",
+      nextStep: coverageComplete ? "Use covered recipe rows for planning." : "Treat unsupported, protected, missing, or demo-estimated rows as planning gaps."
+    }),
+    buildNativeEvidenceQualityRow({
+      id: "drive-inventory",
+      label: "Drive inventory",
+      lane: "inventory",
+      status: inventoryReady ? "ready" : driveInventorySummary?.status || "missing",
+      detail: inventoryReady
+        ? `${driveInventorySummary.counts.total} top-level bucket(s) captured for broad pressure context.`
+        : "Top-level drive inventory is missing or not native.",
+      nextStep: inventoryReady ? "Use inventory as manual context only." : "Capture top-level inventory in the native read-only scan."
+    }),
+    buildNativeEvidenceQualityRow({
+      id: "pressure-diagnosis",
+      label: "Pressure diagnosis",
+      lane: "diagnosis",
+      status: diagnosisReady ? "ready" : storagePressureDiagnosis?.status || "missing",
+      detail: storagePressureDiagnosis?.primary || "Storage pressure diagnosis has not been evaluated.",
+      nextStep: diagnosisReady ? "Use diagnosis to pick the next safe branch." : "Build native storage pressure diagnosis after scan evidence is current."
+    }),
+    buildNativeEvidenceQualityRow({
+      id: "privacy-boundary",
+      label: "Privacy boundary",
+      lane: "privacy",
+      status: privacyReady ? "local-only" : privacyBoundary?.status || "missing",
+      detail: privacyReady
+        ? "Native path evidence stays local and leaves only through explicit export."
+        : "Local-only privacy evidence is not ready for native planning.",
+      nextStep: privacyReady ? "Keep path-level exports explicit." : "Review privacy/support rows before sharing real-data evidence."
+    }),
+    buildNativeEvidenceQualityRow({
+      id: "mutation-lock",
+      label: "Mutation lock",
+      lane: "guardrail",
+      status: mutationLocked ? "locked" : "unsafe",
+      detail: mutationLocked
+        ? "Runtime and privacy evidence keep destructive commands disabled."
+        : "A write-capability signal is visible and native evidence cannot be trusted for cleanup planning.",
+      nextStep: mutationLocked ? "Continue read-only planning only." : "Stop and restore the dry-run/read-only lock."
+    })
+  ];
+  const readyRows = rows.filter((row) => row.status === "ready" || row.status === "current" || row.status === "covered" || row.status === "local-only" || row.status === "locked");
+  const waitingRows = rows.filter((row) => row.tone === "review" || row.tone === "outline");
+  const blockedRows = rows.filter((row) => row.tone === "restricted");
+
+  return {
+    schemaVersion: "spaceguard-native-evidence-quality/v1",
+    status,
+    tone: getNativeEvidenceQualityTone(status),
+    scanMode,
+    nativeAvailable,
+    planningReady,
+    coverageComplete,
+    privacyReady,
+    mutationLocked,
+    realRunEnabled: false,
+    destructiveCommands: unsafeWriteSignal,
+    executorRoutes: 0,
+    coverageScore,
+    measuredRoots,
+    unverifiedRows,
+    measuredBytes: Number(scanCoverage?.measuredBytes || 0),
+    driveInventoryBytes: Number(driveInventorySummary?.visibleBytes || 0),
+    rows,
+    readyRows,
+    waitingRows,
+    blockedRows,
+    counts: {
+      rows: rows.length,
+      ready: readyRows.length,
+      waiting: waitingRows.length,
+      blocked: blockedRows.length,
+      measuredRoots,
+      unverifiedRows,
+      executorRoutes: 0,
+      realRun: 0
+    },
+    primary: getNativeEvidenceQualityPrimary(status, { coverageScore, unverifiedRows, blockedRows }),
+    steps: getNativeEvidenceQualitySteps(status, { rows, unverifiedRows })
+  };
+}
+
 export function buildCustomRootTriage({
   scanCoverage = null,
   evidence = {}
@@ -2739,6 +2898,63 @@ function getStoragePressureDiagnosisSteps(status, { recoveryAdvisor = null, inve
       : ["Add safe measured recipes first.", "Ask for required approvals.", "Use manual storage strategy if cleanup cannot meet the target."];
   }
   return ["Resolve any pending gates.", "Arm dry-run consent only for the current plan.", "Simulate, rescan, and export the report."];
+}
+
+function buildNativeEvidenceQualityRow({ id, label, lane, status, detail = "", nextStep = "" }) {
+  return {
+    id,
+    label,
+    lane,
+    status,
+    detail,
+    nextStep,
+    tone: getNativeEvidenceQualityRowTone(status),
+    canCreateExecutor: false,
+    canRealRun: false
+  };
+}
+
+function getNativeEvidenceQualityRowTone(status) {
+  if (status === "unsafe" || status === "missing" || status === "stale-or-missing") return "restricted";
+  if (status === "partial" || status === "native-diagnosis-partial" || status === "native-evidence-incomplete" || status === "demo-only") return "review";
+  if (status === "ready" || status === "current" || status === "covered" || status === "local-only" || status === "locked") return "safe";
+  return "outline";
+}
+
+function getNativeEvidenceQualityTone(status) {
+  if (status === "planning-grade-ready") return "safe";
+  if (status === "unsafe-write-signal" || status === "native-runtime-missing") return "restricted";
+  return "review";
+}
+
+function getNativeEvidenceQualityPrimary(status, { coverageScore = 0, unverifiedRows = 0, blockedRows = [] } = {}) {
+  if (status === "planning-grade-ready") return "Native evidence is planning-grade and fully covered for visible cleanup recipes.";
+  if (status === "planning-grade-partial") return `Native evidence is planning-grade with ${coverageScore}% measured confidence; ${unverifiedRows} row(s) remain partial or estimated.`;
+  if (status === "unsafe-write-signal") return "A write-capability signal is visible; native evidence review must stop until the read-only lock is restored.";
+  if (status === "demo-evidence-only") return "This session is demo-only, so it cannot prove real local disk evidence.";
+  if (status === "native-runtime-missing") return "The native desktop bridge is missing, so real local evidence cannot be captured.";
+  if (status === "native-scan-stale") return "Native runtime exists, but the scan session is missing or stale.";
+  const first = blockedRows[0];
+  return first ? `${first.label}: ${first.detail}` : "Native evidence is incomplete for planning.";
+}
+
+function getNativeEvidenceQualitySteps(status, { rows = [], unverifiedRows = 0 } = {}) {
+  if (status === "planning-grade-ready") {
+    return ["Use native evidence for dry-run planning.", "Keep real cleanup locked.", "Export the report only when the user chooses to share path-level evidence."];
+  }
+  if (status === "planning-grade-partial") {
+    return [
+      "Use measured native rows only for planning.",
+      `${unverifiedRows} unverified row(s) must stay visible as partial evidence.`,
+      "Run fixture validation before any executor implementation work."
+    ];
+  }
+  if (status === "unsafe-write-signal") return ["Stop planning.", "Disable write-capability signals.", "Rerun native read-only evidence checks."];
+  if (status === "demo-evidence-only") return ["Start the desktop shell.", "Run a native read-only scan.", "Review evidence quality before planning on real data."];
+  const waiting = rows.filter((row) => row.tone !== "safe").slice(0, 4);
+  return waiting.length
+    ? waiting.map((row) => `${row.label}: ${row.nextStep}`)
+    : ["Run a native read-only scan.", "Review scan coverage, drive inventory, diagnosis, privacy, and mutation lock."];
 }
 
 export function normalizeCustomRootTriageRecord(value = null) {
@@ -5261,6 +5477,7 @@ export function buildProductCompletionAudit({
   scanCoverage = null,
   driveInventorySummary = null,
   storagePressureDiagnosis = null,
+  nativeEvidenceQuality = null,
   demoRehearsalRunbook = null,
   windowsSetupAssistant = null,
   taskPowerCatalog = null,
@@ -5451,6 +5668,20 @@ export function buildProductCompletionAudit({
         : windowsSetupAssistant?.nativeAvailable ? "Desktop shell is available; scan evidence is not current." : "Browser demo cannot inspect local folders.",
       evidence: windowsSetupAssistant?.status || "setup assistant missing",
       nextStep: nativeScanCurrent ? "Use native evidence for dry-run planning." : "Start desktop shell and run real read-only scan."
+    }),
+    buildProductCompletionAuditRow({
+      id: "grade-native-evidence",
+      requirement: "Grade read-only native evidence before planning",
+      status: nativeEvidenceQuality?.status === "unsafe-write-signal"
+        ? "unsafe"
+        : nativeEvidenceQuality?.planningReady
+          ? "native-proven"
+          : nativeEvidenceQuality?.schemaVersion
+            ? "partial"
+            : "waiting-evidence",
+      detail: nativeEvidenceQuality?.primary || "Native evidence quality has not been evaluated.",
+      evidence: nativeEvidenceQuality?.status || "quality gate missing",
+      nextStep: nativeEvidenceQuality?.steps?.[0] || "Run native read-only scan and review evidence quality."
     }),
     buildProductCompletionAuditRow({
       id: "privacy-and-support",
@@ -10233,6 +10464,7 @@ export function buildReport({
   scanCoverage = null,
   driveInventorySummary = null,
   storagePressureDiagnosis = null,
+  nativeEvidenceQuality = null,
   intakePolicy = null,
   riskBudget = null,
   planLock = null,
@@ -10650,6 +10882,28 @@ export function buildReport({
           scanCoverage.unverifiedRows?.length
             ? scanCoverage.unverifiedRows.slice(0, 8).map((row) => `- ${row.title}: ${row.evidence} | ${row.nextStep}`).join("\n")
             : "- No unverified rows."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Native Evidence Quality",
+    nativeEvidenceQuality
+      ? [
+          `- Status: ${nativeEvidenceQuality.status}`,
+          `- Planning ready: ${nativeEvidenceQuality.planningReady ? "yes" : "no"}`,
+          `- Native available: ${nativeEvidenceQuality.nativeAvailable ? "yes" : "no"}`,
+          `- Coverage: ${nativeEvidenceQuality.coverageScore}%`,
+          `- Measured roots: ${nativeEvidenceQuality.measuredRoots}`,
+          `- Unverified rows: ${nativeEvidenceQuality.unverifiedRows}`,
+          `- Mutation locked: ${nativeEvidenceQuality.mutationLocked ? "yes" : "no"}`,
+          `- Executor routes: ${nativeEvidenceQuality.counts.executorRoutes}`,
+          `- Real-run rows: ${nativeEvidenceQuality.counts.realRun}`,
+          `- Primary: ${nativeEvidenceQuality.primary}`,
+          nativeEvidenceQuality.rows?.length
+            ? nativeEvidenceQuality.rows.map((row) => `- ${row.label}: ${row.status} | executor=${row.canCreateExecutor ? "yes" : "no"} | real=${row.canRealRun ? "yes" : "no"} | ${row.detail}`).join("\n")
+            : "- No quality rows.",
+          nativeEvidenceQuality.steps?.length
+            ? nativeEvidenceQuality.steps.map((step) => `- Next: ${step}`).join("\n")
+            : "- No quality steps."
         ].join("\n")
       : "- Not evaluated.",
     "",

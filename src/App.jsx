@@ -72,6 +72,7 @@ import {
   buildManualStrategyChecklist,
   buildNativeBetaDistributionReadiness,
   buildNativeBetaEvidenceImport,
+  buildNativeEvidenceQualityGate,
   buildRestrictionPolicyMatrix,
   buildPlanLock,
   buildReleaseGate,
@@ -490,6 +491,31 @@ export default function App() {
       driveInventorySummary,
       recoveryAdvisor,
       customRootTriage
+    ]
+  );
+  const nativeEvidenceQuality = useMemo(
+    () =>
+      buildNativeEvidenceQualityGate({
+        scanned,
+        scanMode: dataMode,
+        scanSession,
+        scanCoverage,
+        driveInventorySummary,
+        storagePressureDiagnosis,
+        nativeCapability,
+        runtimeCapabilities: runtimeCapabilities.result,
+        privacyBoundary
+      }),
+    [
+      scanned,
+      dataMode,
+      scanSession,
+      scanCoverage,
+      driveInventorySummary,
+      storagePressureDiagnosis,
+      nativeCapability,
+      runtimeCapabilities.result,
+      privacyBoundary
     ]
   );
   const storageStrategy = useMemo(
@@ -1279,6 +1305,7 @@ export default function App() {
         scanCoverage,
         driveInventorySummary,
         storagePressureDiagnosis,
+        nativeEvidenceQuality,
         demoRehearsalRunbook,
         windowsSetupAssistant,
         taskPowerCatalog,
@@ -1317,6 +1344,7 @@ export default function App() {
       scanCoverage,
       driveInventorySummary,
       storagePressureDiagnosis,
+      nativeEvidenceQuality,
       demoRehearsalRunbook,
       windowsSetupAssistant,
       taskPowerCatalog,
@@ -2128,6 +2156,7 @@ export default function App() {
       manualStrategyChecklist,
       customRootTriage,
       storagePressureDiagnosis,
+      nativeEvidenceQuality,
       scanCoverage,
       driveInventorySummary,
       intakePolicy,
@@ -2555,6 +2584,8 @@ export default function App() {
             <DriveInventoryPanel inventory={driveInventorySummary} />
 
             <StoragePressureDiagnosisPanel diagnosis={storagePressureDiagnosis} />
+
+            <NativeEvidenceQualityPanel quality={nativeEvidenceQuality} />
 
             <ScanCoveragePanel coverage={scanCoverage} />
 
@@ -4850,6 +4881,72 @@ function StoragePressureDiagnosisPanel({ diagnosis }) {
           <div className="mb-2 text-sm font-medium">Next diagnosis moves</div>
           <div className="flex flex-col gap-2">
             {diagnosis.steps.slice(0, 4).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function NativeEvidenceQualityPanel({ quality }) {
+  const visibleRows = quality.rows || [];
+
+  return (
+    <Card id="native-evidence-quality-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Native evidence quality
+            </CardTitle>
+            <CardDescription>{quality.primary}</CardDescription>
+          </div>
+          <Badge variant={quality.tone}>{quality.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <QueueStat label="Planning" value={quality.planningReady ? "ready" : "blocked"} tone={quality.planningReady ? "safe" : "review"} />
+          <QueueStat label="Coverage" value={`${quality.coverageScore}%`} tone={quality.coverageComplete ? "safe" : quality.coverageScore ? "review" : "restricted"} />
+          <QueueStat label="Measured roots" value={quality.measuredRoots} tone={quality.measuredRoots ? "safe" : "restricted"} />
+          <QueueStat label="Real run" value={quality.counts.realRun} tone="safe" />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Evidence boundary</span>
+            <Badge variant={quality.nativeAvailable ? "safe" : "review"}>{quality.nativeAvailable ? "native visible" : "native missing"}</Badge>
+            <Badge variant={quality.mutationLocked ? "safe" : "restricted"}>{quality.mutationLocked ? "mutation locked" : "write signal"}</Badge>
+            <Badge variant="safe">no executor authority</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            This gate grades read-only scan evidence for planning. It cannot create executor routes, count reclaimed bytes, or satisfy release/write readiness.
+          </p>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {visibleRows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="mr-auto min-w-0 text-sm font-medium">{row.label}</span>
+                <Badge variant={row.tone}>{row.status}</Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{row.detail}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{row.nextStep}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 text-sm font-medium">Next evidence steps</div>
+          <div className="flex flex-col gap-2">
+            {quality.steps.slice(0, 4).map((step) => (
               <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
                 <span className="text-muted-foreground">{step}</span>

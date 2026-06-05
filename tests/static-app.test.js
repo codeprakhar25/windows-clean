@@ -67,6 +67,9 @@ const requiredAppMarkers = [
   "Storage pressure diagnosis",
   "Diagnosis boundary",
   "no cleanup authority",
+  "Native evidence quality",
+  "Evidence boundary",
+  "no executor authority",
   "Scan coverage",
   "Coverage confidence",
   "Recovery advisor",
@@ -255,6 +258,9 @@ assert(app.includes("drive-inventory-panel"), "drive inventory should be focusab
 assert(app.includes("buildStoragePressureDiagnosis"), "storage pressure diagnosis should be wired");
 assert(app.includes("StoragePressureDiagnosisPanel"), "storage pressure diagnosis panel should be rendered");
 assert(app.includes("storage-pressure-diagnosis-panel"), "storage pressure diagnosis should be focusable");
+assert(app.includes("buildNativeEvidenceQualityGate"), "native evidence quality should be wired");
+assert(app.includes("NativeEvidenceQualityPanel"), "native evidence quality panel should be rendered");
+assert(app.includes("native-evidence-quality-panel"), "native evidence quality should be focusable");
 assert(app.includes("buildScanSessionEvidence"), "scan session freshness guard should be wired");
 assert(app.includes("buildRecoveryAdvisor"), "recovery advisor should be wired");
 assert(app.includes("buildAgentQuestionQueue"), "agent question queue should be wired");
@@ -447,6 +453,9 @@ assert(model.includes("noExecutorRoute: true"), "drive inventory should block ex
 assert(model.includes("spaceguard-storage-pressure-diagnosis/v1"), "model should expose storage pressure diagnosis schema");
 assert(model.includes("diagnose-storage-pressure"), "product audit should track storage pressure diagnosis");
 assert(model.includes("Diagnosis can recommend workflow branches"), "diagnosis should not grant cleanup authority");
+assert(model.includes("spaceguard-native-evidence-quality/v1"), "model should expose native evidence quality schema");
+assert(model.includes("grade-native-evidence"), "product audit should track native evidence quality");
+assert(model.includes("Native evidence is planning-grade"), "native evidence quality should grade read-only planning evidence");
 assert(model.includes("spaceguard-custom-root-triage/v1"), "model should expose custom root triage schema");
 assert(model.includes("customRootDispositionOptions"), "model should define custom root disposition options");
 assert(model.includes("canCreateExecutor: false"), "custom root triage should block executor creation");
@@ -583,11 +592,13 @@ assert(realDataGuide.includes("beta handoff manifest"), "real-data guide should 
 assert(realDataGuide.includes("local evidence backup"), "real-data guide should include local evidence backup export");
 assert(realDataGuide.includes("Drive inventory"), "real-data guide should require drive inventory review");
 assert(realDataGuide.includes("Storage pressure diagnosis"), "real-data guide should require storage pressure diagnosis review");
+assert(realDataGuide.includes("Native evidence quality"), "real-data guide should require native evidence quality review");
 assert(readme.includes("NATIVE_BETA_DISTRIBUTION.md"), "README should link native beta distribution runbook");
 assert(readme.includes("Beta handoff manifest"), "README should describe beta handoff manifest");
 assert(readme.includes("Local evidence backup"), "README should describe local evidence backup");
 assert(readme.includes("Read-only drive inventory"), "README should describe drive inventory");
 assert(readme.includes("Storage pressure diagnosis"), "README should describe storage pressure diagnosis");
+assert(readme.includes("Native evidence quality"), "README should describe native evidence quality");
 assert(realDataGuide.includes("NATIVE_BETA_DISTRIBUTION.md"), "real-data guide should link native beta distribution runbook");
 assert(nativeBetaRunbook.includes("Native Beta Distribution Runbook"), "native beta runbook should exist");
 assert(nativeBetaRunbook.includes("Install Path"), "native beta runbook should cover install evidence");

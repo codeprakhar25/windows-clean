@@ -1222,6 +1222,16 @@ const assert = require("assert");
   assert(coverageReport.includes("Confidence: 0%"), "report should include scan confidence");
   assert(coverageReport.includes("## Scan Settings"), "report should include scan settings");
   assert(coverageReport.includes("Project artifacts: excluded"), "report should preserve project artifact scan setting");
+  const nativeMeasuredActions = developerActions.map((action) =>
+    action.id === "windows-temp"
+      ? { ...action, scanSource: "native", scanStatus: "measured" }
+      : action
+  );
+  const nativePartialCoverage = guard.buildScanCoverageSummary({
+    actionList: nativeMeasuredActions,
+    scanMode: "native-readonly",
+    nativeScan: { available: true }
+  });
   const diagnosisInventory = guard.buildDriveInventorySummary({
     scanMode: "native-readonly",
     nativeScan: {
@@ -1264,7 +1274,7 @@ const assert = require("assert");
     selectedIds: new Set(["windows-temp"]),
     approvals: { groupConfirm: true, reviewed: {}, typed: {} },
     protectedPaths,
-    scanCoverage: demoCoverage,
+    scanCoverage: nativePartialCoverage,
     driveInventorySummary: diagnosisInventory,
     recoveryAdvisor: { primary: "Add safe findings first.", steps: ["Add temp cleanup.", "Review rebuildable caches."] }
   });
@@ -1275,33 +1285,61 @@ const assert = require("assert");
   assert.strictEqual(storagePressureDiagnosis.counts.realRun, 0, "diagnosis must not create real-run rows");
   assert(storagePressureDiagnosis.rows.some((row) => row.id === "execution-boundary" && row.status === "real-cleanup-locked"), "diagnosis should keep a visible execution boundary");
   assert(storagePressureDiagnosis.topCauses.some((row) => row.label === "Drive pressure"), "diagnosis should rank drive pressure as a cause");
+  const nativeEvidenceQuality = guard.buildNativeEvidenceQualityGate({
+    scanned: true,
+    scanMode: "native-readonly",
+    scanSession: { readyForPlanning: true, nativeEvidence: true, status: "native-current", primary: "Native scan is current." },
+    scanCoverage: nativePartialCoverage,
+    driveInventorySummary: diagnosisInventory,
+    storagePressureDiagnosis,
+    nativeCapability: { available: true },
+    runtimeCapabilities: { available: true, scanKnownRoots: true, realRunEnabled: false, destructiveCommands: false },
+    privacyBoundary: {
+      status: "native-local-only",
+      destructiveDisabled: true
+    }
+  });
+  assert.strictEqual(nativeEvidenceQuality.schemaVersion, "spaceguard-native-evidence-quality/v1", "native evidence quality should expose a schema version");
+  assert.strictEqual(nativeEvidenceQuality.status, "planning-grade-partial", "partial native coverage should still be planning-grade when required evidence is present");
+  assert.strictEqual(nativeEvidenceQuality.planningReady, true, "native evidence quality should be ready for planning");
+  assert.strictEqual(nativeEvidenceQuality.counts.executorRoutes, 0, "native evidence quality must not create executor routes");
+  assert.strictEqual(nativeEvidenceQuality.counts.realRun, 0, "native evidence quality must not create real-run rows");
+  assert(nativeEvidenceQuality.rows.some((row) => row.id === "mutation-lock" && row.status === "locked"), "native evidence quality should keep mutation locked");
   const diagnosisReport = guard.buildReport({
     scenario: guard.getScenario("developer"),
     profile: guard.getScenario("developer").profile,
-    actionList: developerActions,
+    actionList: nativeMeasuredActions,
     selectedIds: new Set(["windows-temp"]),
     readiness: guard.getExecutionReadinessForActions(new Set(["windows-temp"]), { groupConfirm: true, reviewed: {}, typed: {} }, developerActions, protectedPaths),
     ledger: [],
     protectedPaths,
     goalBytes: 40 * guard.GB,
-    scanCoverage: demoCoverage,
+    scanCoverage: nativePartialCoverage,
     driveInventorySummary: diagnosisInventory,
-    storagePressureDiagnosis
+    storagePressureDiagnosis,
+    nativeEvidenceQuality
   });
   assert(diagnosisReport.includes("## Storage Pressure Diagnosis"), "report should include storage pressure diagnosis");
+  assert(diagnosisReport.includes("## Native Evidence Quality"), "report should include native evidence quality");
   assert(diagnosisReport.includes("Executor routes: 0"), "diagnosis report should preserve zero executor routes");
   const diagnosisAudit = guard.buildProductCompletionAudit({
     scanned: true,
     scanMode: "native-readonly",
     scanSession: { readyForPlanning: true, nativeEvidence: true, status: "native-current" },
-    scanCoverage: demoCoverage,
+    scanCoverage: nativePartialCoverage,
     driveInventorySummary: diagnosisInventory,
-    storagePressureDiagnosis
+    storagePressureDiagnosis,
+    nativeEvidenceQuality
   });
   assert.strictEqual(
     diagnosisAudit.rows.find((row) => row.id === "diagnose-storage-pressure").status,
     "native-proven",
     "product audit should track storage pressure diagnosis"
+  );
+  assert.strictEqual(
+    diagnosisAudit.rows.find((row) => row.id === "grade-native-evidence").status,
+    "native-proven",
+    "product audit should track native evidence quality"
   );
 
   const demoPrivacyBoundary = guard.buildPrivacyBoundary({
