@@ -7630,13 +7630,15 @@ export function buildExecutorSmokeRunPacketMarkdown(packet = null) {
 
 export function buildScopedExecutorCommandFlow({
   smokeRunPacket = null,
+  preferredRoute = "",
   executionProofHandoff = null,
   nativeCapability = null,
   scanning = false,
   generatedAt = "set-on-export"
 } = {}) {
   const packet = smokeRunPacket || buildExecutorSmokeRunPacket();
-  const primaryRow = selectScopedExecutorCommandRow(packet);
+  const primaryRow = selectScopedExecutorCommandRow(packet, preferredRoute);
+  const routeOptions = buildScopedExecutorCommandRouteOptions(packet, primaryRow);
   const proofStatus = executionProofHandoff?.status || packet.proofStatus || "waiting-for-execution";
   const proofRequiresAction = Boolean(proofStatus && proofStatus !== "waiting-for-execution" && proofStatus !== "proof-complete");
   const scanCheck = primaryRow?.checks?.find((check) => check.id === "scan-fingerprint");
@@ -7687,6 +7689,8 @@ export function buildScopedExecutorCommandFlow({
     status,
     tone: status === "ready-to-execute" || status === "proof-complete" ? "safe" : status === "proof-required" || status === "route-blocked" ? "restricted" : "review",
     route: primaryRow?.route || "",
+    selectedRoute: primaryRow?.route || "",
+    routeOptions,
     title: primaryRow?.title || "No scoped executor selected",
     panelId: primaryRow?.panelId || "executor-smoke-run-packet-panel",
     actionLabel: primaryRow?.actionLabel || "Select route",
@@ -15404,8 +15408,13 @@ function getExecutorSmokeRunSteps(status, { readyRows = [], blockedRows = [], pr
   return ["Run a native scan.", "Select one scoped executor route.", "Enable only that route's feature flag."];
 }
 
-function selectScopedExecutorCommandRow(packet = null) {
+function selectScopedExecutorCommandRow(packet = null, preferredRoute = "") {
   const rows = packet?.rows || [];
+  const preferred = String(preferredRoute || "").trim();
+  if (preferred) {
+    const selected = rows.find((row) => row.route === preferred || row.id === preferred);
+    if (selected) return selected;
+  }
   return (
     rows.find((row) => row.status === "ready") ||
     rows.find((row) => row.status === "needs-proof") ||
@@ -15413,6 +15422,24 @@ function selectScopedExecutorCommandRow(packet = null) {
     rows[0] ||
     null
   );
+}
+
+function buildScopedExecutorCommandRouteOptions(packet = null, primaryRow = null) {
+  const rows = packet?.rows || [];
+  return rows.map((row) => ({
+    id: row.id || row.route || "",
+    route: row.route || "",
+    title: row.title || row.route || "Scoped route",
+    status: row.status || "blocked",
+    tone: row.tone || (row.status === "ready" ? "safe" : row.status === "needs-proof" ? "restricted" : "review"),
+    selected: Boolean(primaryRow && (primaryRow.route === row.route || primaryRow.id === row.id)),
+    envVar: row.envVar || "",
+    requestMode: row.requestMode || "",
+    panelId: row.panelId || "",
+    flagEnabled: Boolean(row.flagEnabled),
+    blockedReason: row.blockedReason || "",
+    actionLabel: row.actionLabel || "Run scoped executor"
+  }));
 }
 
 function buildScopedExecutorCommandSteps({

@@ -401,6 +401,10 @@ assert(app.includes("ScopedExecutorCommandFlowPanel"), "scoped executor command 
 assert(app.includes("scoped-executor-command-flow-panel"), "scoped executor command flow should be focusable");
 assert(app.includes("handleScopedExecutorCommand"), "scoped executor command flow should dispatch primary workflow actions");
 assert(app.includes("executeScopedExecutorRoute"), "scoped executor command flow should call existing executor handlers");
+assert(app.includes("selectedScopedExecutorRoute"), "scoped executor command flow should keep user-selected route state");
+assert(app.includes("Choose scoped route"), "scoped executor command flow should expose route selection");
+assert(app.includes("one route at a time"), "scoped executor command flow should explain one-route execution");
+assert(app.includes("onSelectRoute"), "scoped executor command flow should accept route selection actions");
 assert(app.includes("ExecutorSmokeRunPacketPanel"), "executor smoke-run packet panel should be rendered");
 assert(app.includes("executor-smoke-run-packet-panel"), "executor smoke-run packet should be focusable");
 assert(app.includes("Export smoke packet"), "executor smoke-run packet should be exportable");
@@ -608,6 +612,8 @@ assert(app.includes("Run post-run rescan"), "execution proof handoff should expo
 assert(model.includes("spaceguard-executor-smoke-run-packet/v1"), "model should expose executor smoke-run packet schema");
 assert(model.includes("spaceguard-scoped-executor-command-flow/v1"), "model should expose scoped executor command flow schema");
 assert(model.includes("buildScopedExecutorCommandFlow"), "model should build the scoped executor command flow");
+assert(model.includes("preferredRoute"), "model should accept a preferred scoped executor route");
+assert(model.includes("routeOptions"), "model should expose route selector options");
 assert(model.includes("Review proof"), "scoped command flow should review proof before another executor run");
 assert(model.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "smoke packet should name scoped executor env vars");
 assert(app.includes("blockExecutorForPendingProof"), "scoped executor handlers should block when post-run proof is pending");

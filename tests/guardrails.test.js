@@ -3249,6 +3249,58 @@ const assert = require("assert");
   assert.strictEqual(scopedCommandFlow.nextAction.targetPanel, "npm-cache-executor-panel", "ready command flow should focus the scoped executor panel");
   assert(scopedCommandFlow.steps.some((step) => step.id === "scan" && step.targetPanel === "real-data-readiness-panel"), "command flow should route scan work to the real data panel");
   assert(scopedCommandFlow.steps.some((step) => step.id === "proof" && step.actionType === "run-post-run-rescan"), "command flow should include post-run proof as the final step");
+  const multiRouteSmokePacket = guard.buildExecutorSmokeRunPacket({
+    executorPlan: guard.buildExecutorPlan({
+      selectedIds: new Set(["npm-cache", "pnpm-store"]),
+      actionList: guard.actions,
+      approvals: { groupConfirm: true, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
+      scanMode: "native-readonly"
+    }),
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      platform: "windows",
+      realRunEnabled: true,
+      destructiveCommands: true,
+      executorFlags: { npmCacheExecutor: true, pnpmStoreExecutor: true }
+    },
+    scanSession: { currentFingerprint: "scan-package-cache-smoke" },
+    consentReceipt: { planId: "plan-package-cache-smoke" },
+    executionProofHandoff: { status: "waiting-for-execution" },
+    planSnapshot: { id: "plan-package-cache-smoke" },
+    nativeScan: {
+      findings: [
+        {
+          recipeId: "npm-cache",
+          status: "measured",
+          path: "C:\\Users\\qa\\AppData\\Local\\npm-cache\\_cacache",
+          bytes: 1024
+        },
+        {
+          recipeId: "pnpm-store",
+          status: "measured",
+          path: "C:\\Users\\qa\\AppData\\Local\\pnpm\\store",
+          bytes: 2048
+        }
+      ]
+    }
+  });
+  const selectedPnpmCommandFlow = guard.buildScopedExecutorCommandFlow({
+    smokeRunPacket: multiRouteSmokePacket,
+    preferredRoute: "bounded-pnpm-store-delete",
+    executionProofHandoff: { status: "waiting-for-execution" },
+    nativeCapability: { available: true },
+    scanning: false
+  });
+  assert.strictEqual(selectedPnpmCommandFlow.route, "bounded-pnpm-store-delete", "command flow should honor the user-selected scoped route");
+  assert.strictEqual(selectedPnpmCommandFlow.nextAction.targetPanel, "pnpm-store-executor-panel", "selected route should focus the matching executor panel");
+  assert.strictEqual(selectedPnpmCommandFlow.routeOptions.length, 2, "command flow should expose route selector options");
+  assert.strictEqual(selectedPnpmCommandFlow.routeOptions.filter((row) => row.selected).length, 1, "command flow should select exactly one route option");
+  assert.strictEqual(
+    selectedPnpmCommandFlow.routeOptions.find((row) => row.selected).route,
+    "bounded-pnpm-store-delete",
+    "route selector should mark the preferred route"
+  );
   const proofRequiredCommandFlow = guard.buildScopedExecutorCommandFlow({
     smokeRunPacket: proofBlockedSmokePacket,
     executionProofHandoff: { status: "proof-required" },

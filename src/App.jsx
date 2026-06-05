@@ -319,6 +319,7 @@ export default function App() {
   const [localEvidenceBackupImportText, setLocalEvidenceBackupImportText] = useState("");
   const [localEvidenceBackupImportResult, setLocalEvidenceBackupImportResult] = useState(null);
   const [executionConsent, setExecutionConsent] = useState({ accepted: false, planId: "", acceptedAt: "" });
+  const [selectedScopedExecutorRoute, setSelectedScopedExecutorRoute] = useState("");
 
   const scenario = useMemo(() => getScenario(scenarioId), [scenarioId]);
   const nativeCapability = useMemo(() => getNativeScannerCapability(globalThis), []);
@@ -911,11 +912,12 @@ export default function App() {
     () =>
       buildScopedExecutorCommandFlow({
         smokeRunPacket: executorSmokeRunPacket,
+        preferredRoute: selectedScopedExecutorRoute,
         executionProofHandoff,
         nativeCapability,
         scanning
       }),
-    [executorSmokeRunPacket, executionProofHandoff, nativeCapability, scanning]
+    [executorSmokeRunPacket, selectedScopedExecutorRoute, executionProofHandoff, nativeCapability, scanning]
   );
   const firstSafeValidationGate = useMemo(
     () =>
@@ -2161,6 +2163,7 @@ export default function App() {
   }
 
   async function handleOpenAIAgentRecommendation(row = {}) {
+    if (row.route) setSelectedScopedExecutorRoute(row.route);
     const brokerRow = getOpenAIBrokerRow(row);
     if (brokerRow && !brokerRow.canAct) {
       if (brokerRow.targetPanel) focusWorkflowPanel(brokerRow.targetPanel);
@@ -3510,6 +3513,7 @@ export default function App() {
                 runHistory: openAiAgentRunHistory
               }}
               onAction={handleScopedExecutorCommand}
+              onSelectRoute={setSelectedScopedExecutorRoute}
               onAskAgent={askOpenAIAgent}
               onAgentAction={handleOpenAIAgentRecommendation}
               onExportSmokePacket={exportExecutorSmokeRunPacket}
@@ -4248,8 +4252,9 @@ function RealDataLaunchRoadmapPanel({ roadmap }) {
   );
 }
 
-function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onAskAgent, onAgentAction, onExportSmokePacket }) {
+function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRoute, onAskAgent, onAgentAction, onExportSmokePacket }) {
   const next = flow.nextAction || {};
+  const routeOptions = flow.routeOptions || [];
   const result = agent.result || null;
   const brokerRows = agent.broker?.rows || [];
   const brokerByKey = new Map(brokerRows.map((row) => [row.key, row]));
@@ -4280,6 +4285,39 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onAskAgent
           <QueueStat label="AI ready" value={agent.broker?.counts?.ready || 0} tone={agent.broker?.counts?.ready ? "safe" : "review"} />
           <QueueStat label="AI blocked" value={agent.broker?.counts?.blocked || 0} tone={agent.broker?.counts?.blocked ? "restricted" : "safe"} />
           <QueueStat label="AI runs" value={agent.runHistory?.length || 0} tone={agent.runHistory?.length ? "safe" : "review"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Choose scoped route</span>
+            <Badge variant={routeOptions.length ? "review" : "restricted"}>{routeOptions.length} route(s)</Badge>
+            <Badge variant="safe">one route at a time</Badge>
+          </div>
+          {routeOptions.length ? (
+            <div className="grid gap-2 md:grid-cols-3">
+              {routeOptions.map((row) => (
+                <button
+                  key={row.id || row.route}
+                  type="button"
+                  className={`rounded-md border p-3 text-left transition hover:bg-muted/40 ${row.selected ? "bg-primary text-primary-foreground" : "bg-card"}`}
+                  onClick={() => onSelectRoute?.(row.route)}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="mr-auto text-sm font-medium">{row.title}</span>
+                    <Badge variant={row.selected ? "secondary" : row.tone}>{row.status}</Badge>
+                  </div>
+                  <div className={`mt-2 flex flex-wrap gap-1 text-xs ${row.selected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                    {row.envVar ? <span>{row.envVar}</span> : null}
+                    {row.requestMode ? <span>{row.requestMode}</span> : null}
+                    <span>{row.flagEnabled ? "flag on" : "flag off"}</span>
+                  </div>
+                  {row.blockedReason ? <p className={`mt-2 text-xs ${row.selected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{row.blockedReason}</p> : null}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-md border bg-card p-3 text-sm text-muted-foreground">Select cleanup actions to create scoped executor routes.</div>
+          )}
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
