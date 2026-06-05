@@ -5,11 +5,11 @@ const assert = require("assert");
 
   const primaryConfig = openai.getOpenAIAgentConfig({
     OPENAI_API_KEY: "test-openai-key",
-    OPENAI_MODEL: "gpt-5.2",
+    OPENAI_MODEL: "gpt-5.5",
     OPENAI_REASONING_EFFORT: "low"
   });
   assert.strictEqual(primaryConfig.connected, true, "OPENAI_API_KEY should configure the OpenAI advisor");
-  assert.strictEqual(primaryConfig.model, "gpt-5.2", "OpenAI advisor should accept OPENAI_MODEL");
+  assert.strictEqual(primaryConfig.model, "gpt-5.5", "OpenAI advisor should accept OPENAI_MODEL");
   assert.strictEqual(primaryConfig.keySource, "OPENAI_API_KEY", "OpenAI advisor should prefer OPENAI_API_KEY");
   assert.strictEqual(primaryConfig.reasoningEffort, "low", "OpenAI advisor should normalize reasoning effort");
   assert.strictEqual(primaryConfig.directToolAccess, false, "OpenAI advisor must not receive direct tool access");
@@ -31,6 +31,10 @@ const assert = require("assert");
   );
 
   const manualContext = openai.buildOpenAIAgentContext({
+    scanSession: {
+      status: "current",
+      currentFingerprint: "scan-openai-manual"
+    },
     planSnapshot: {
       id: "plan-openai-manual",
       scanMode: "native-readonly",
@@ -132,8 +136,22 @@ const assert = require("assert");
           nextStep: "Choose keep, archive, move, or inspect later."
         }
       ]
-    }
+    },
+    consentReceipt: { planId: "plan-openai-manual" },
+    writeReadiness: { status: "ready-for-real-execution", readyForRealExecution: true },
+    releaseGate: { readyForRealRun: true },
+    validationPack: { readyForRealRun: true },
+    executionProofHandoff: { status: "waiting-for-execution", canRunRescan: false, primary: "Ready for first scoped executor." },
+    rescanComparison: { status: "not-run", postRunScanEvidence: false }
   });
+  assert.strictEqual(manualContext.execution.planId, "plan-openai-manual", "OpenAI context should expose the active execution plan id");
+  assert.strictEqual(manualContext.execution.scanFingerprintPresent, true, "OpenAI context should expose scan fingerprint presence");
+  assert.strictEqual(manualContext.execution.consentMatchesPlan, true, "OpenAI context should expose current consent match");
+  assert.strictEqual(manualContext.execution.proofStatus, "waiting-for-execution", "OpenAI context should expose post-run proof state");
+  assert.strictEqual(manualContext.execution.proofAllowsNextExecutor, true, "OpenAI context should expose whether another executor may run");
+  assert.strictEqual(manualContext.execution.readyForRealExecution, true, "OpenAI context should expose write readiness");
+  assert.strictEqual(manualContext.execution.validationReadyForRealRun, true, "OpenAI context should expose validation readiness");
+  assert.strictEqual(manualContext.execution.releaseReadyForRealRun, true, "OpenAI context should expose release readiness");
   assert.strictEqual(manualContext.appBoundary.allowedActions.includes("recommend-manual-review"), true, "OpenAI context should permit manual-review recommendations");
   assert.strictEqual(manualContext.plan.id, "plan-openai-manual", "OpenAI context should include the current plan id");
   assert.strictEqual(manualContext.plan.selectedCount, 1, "OpenAI context should include current plan selection counts");
@@ -167,7 +185,7 @@ const assert = require("assert");
             return Promise.resolve({
               schemaVersion: "spaceguard-openai-agent-advice/v1",
               provider: "openai",
-              model: "gpt-5.2",
+              model: "gpt-5.5",
               requestId: "req_native_openai",
               responseId: "resp_native_openai",
               createdAt: "unix:1",
@@ -221,7 +239,7 @@ const assert = require("assert");
   assert.strictEqual(nativeInvocation.command, "openai_agent_advice", "OpenAI adapter should prefer the native Tauri advisor command");
   assert.strictEqual(nativeInvocation.payload.request.userPrompt, "Use the native advisor.", "native OpenAI request should pass the user prompt");
   assert.strictEqual(nativeInvocation.payload.request.context.schemaVersion, "spaceguard-openai-agent-context/v1", "native OpenAI request should pass bounded context");
-  assert.strictEqual(nativeInvocation.payload.request.model, "gpt-5.2", "native OpenAI request should pass model preference without a key");
+  assert.strictEqual(nativeInvocation.payload.request.model, "gpt-5.5", "native OpenAI request should pass model preference without a key");
   assert.strictEqual(JSON.stringify(nativeInvocation.payload).includes("renderer-key-should-not-cross"), false, "renderer API key must not be sent to the native command");
   assert.strictEqual(nativeResult.transport, "native-tauri", "native OpenAI result should preserve transport");
   assert.strictEqual(nativeResult.keySource, ".env:OPENAI_API_KEY", "native OpenAI result should expose key source only");
@@ -237,9 +255,12 @@ const assert = require("assert");
   assert.strictEqual(nativeRunRecord.planId, "plan-openai-manual", "OpenAI run records should bind advice to a plan id");
   assert.strictEqual(nativeRunRecord.context.counts.manualReviewTargets, 1, "OpenAI run records should retain compact context counts");
   assert.strictEqual(nativeRunRecord.context.counts.installedAppReviewRows, 1, "OpenAI run records should retain compact installed app review counts");
+  assert.strictEqual(nativeRunRecord.context.execution.scanFingerprintPresent, true, "OpenAI run records should retain compact scan proof presence");
+  assert.strictEqual(nativeRunRecord.context.execution.proofStatus, "waiting-for-execution", "OpenAI run records should retain compact proof status");
   assert.strictEqual(nativeRunRecord.context.privacy.storesFullContext, false, "OpenAI run records should not persist the full path-level context");
   assert.strictEqual(nativeRunRecord.recommendationBroker.status, "not-recorded", "OpenAI run records should show missing broker provenance explicitly");
   assert.strictEqual(JSON.stringify(nativeRunRecord).includes("C:\\Program Files"), false, "OpenAI run records should not persist local app paths");
+  assert.strictEqual(JSON.stringify(nativeRunRecord).includes("scan-openai-manual"), false, "OpenAI run records should not persist raw scan fingerprints");
   const appendedAgentRuns = openai.appendOpenAIAgentRunRecord([], nativeRunRecord);
   const dedupedAgentRuns = openai.appendOpenAIAgentRunRecord(appendedAgentRuns, nativeRunRecord);
   assert.strictEqual(appendedAgentRuns.length, 1, "OpenAI run history should append valid run records");
@@ -276,7 +297,7 @@ const assert = require("assert");
         json() {
           return Promise.resolve({
             id: "resp_test_openai",
-            model: "gpt-5.2",
+            model: "gpt-5.5",
             output: [
               {
                 content: [
@@ -312,7 +333,7 @@ const assert = require("assert");
 
   assert.strictEqual(request.url, "https://api.openai.com/v1/responses", "OpenAI advisor should call the Responses API endpoint");
   assert.strictEqual(request.headers.Authorization, "Bearer test-openai-key", "OpenAI key should be sent only as an Authorization header");
-  assert.strictEqual(request.body.model, "gpt-5.2", "OpenAI request should use the configured model");
+  assert.strictEqual(request.body.model, "gpt-5.5", "OpenAI request should use the configured model");
   assert.deepStrictEqual(request.body.reasoning, { effort: "low" }, "OpenAI request should include configured reasoning effort");
   assert.strictEqual(request.body.store, false, "OpenAI request should disable response storage");
   assert.strictEqual(request.body.text.format.type, "json_schema", "OpenAI request should use structured outputs");
@@ -344,6 +365,21 @@ const assert = require("assert");
   assert.strictEqual(readyBroker.rows[0].canAct, true, "ready broker row should be actionable");
   assert.strictEqual(readyBroker.rows[0].directToolAccess, false, "brokered recommendations should not grant direct tool access");
   assert.strictEqual(readyBroker.counts.ready, 1, "broker should count ready recommendations");
+  const contextOnlyBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: result.advice,
+    context: {
+      plan: { id: "plan-npm" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, npmCacheExecutor: true },
+      execution: {
+        planId: "plan-npm",
+        scanFingerprint: "scan-npm",
+        consentPlanId: "plan-npm",
+        proofStatus: "waiting-for-execution"
+      },
+      npmCacheTargets: [{ id: "npm-cache", route: "bounded-npm-cache-delete", bytes: 1024 }]
+    }
+  });
+  assert.strictEqual(contextOnlyBroker.rows[0].status, "ready", "broker should use execution state embedded in the OpenAI context");
   const brokeredRunRecord = openai.buildOpenAIAgentRunRecord({
     result,
     context: { plan: { id: "plan-npm" }, runtime: { openAiKeySource: ".env:OPENAI_API_KEY" } },

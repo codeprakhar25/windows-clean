@@ -37,13 +37,14 @@ Optional OpenAI advisor:
 ```powershell
 Copy-Item .env.example .env
 # edit .env and set OPENAI_API_KEY
-# optional: set OPENAI_MODEL=gpt-5.2 and OPENAI_REASONING_EFFORT=low
+# optional: set OPENAI_MODEL=gpt-5.5 and OPENAI_REASONING_EFFORT=low
 npm run native:dev
 ```
 
 Optional first-safe temp executor:
 
 ```powershell
+# alternatively set this in .env
 $env:SPACEGUARD_ENABLE_TEMP_EXECUTOR="1"
 npm run native:dev
 ```
@@ -104,7 +105,7 @@ $env:SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR="1"
 npm run native:dev
 ```
 
-Those flags enable only their named routes: `known-temp-delete`, reviewed Downloads installer/archive moves through Recycle Bin semantics, reviewed large-file archive to an explicit other-drive destination, reviewed `node_modules` cleanup, current-user Gradle cache cleanup, current-user npm `_cacache` cleanup, current-user pnpm store cleanup, Shell Recycle Bin emptying for the selected drive, and scanned browser cache roots. They do not enable Docker tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, browser identity-store deletion, project source deletion, arbitrary Downloads folder deletion, arbitrary personal-folder deletion, or arbitrary project-folder deletion.
+Those flags can be set in `.env` or the PowerShell process before `npm run native:dev`. Those flags enable only their named routes: `known-temp-delete`, reviewed Downloads installer/archive moves through Recycle Bin semantics, reviewed large-file archive to an explicit other-drive destination, reviewed `node_modules` cleanup, current-user Gradle cache cleanup, current-user npm `_cacache` cleanup, current-user pnpm store cleanup, Shell Recycle Bin emptying for the selected drive, and scanned browser cache roots. They do not enable Docker tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, browser identity-store deletion, project source deletion, arbitrary Downloads folder deletion, arbitrary personal-folder deletion, or arbitrary project-folder deletion.
 
 ## Read-Only Real Scan
 
@@ -142,7 +143,7 @@ In the app:
 24. Add protected paths before planning any review-heavy route.
 25. Use **Custom root triage** for custom read-only findings. Mark each unknown folder Keep, Archive, Move, Inspect, or Escalate; these dispositions stay manual and cannot create executor routes.
 26. Use **Item review** for Downloads, large personal files, project artifacts, Android Studio findings, and installed app footprints. App footprint decisions are manual uninstall follow-up only; folder age is not usage proof. Structured app signals such as usage proof, registry match, publisher, install date, uninstall entry, measured size, and official manual action should be visible before marking an app for uninstall follow-up. The app uninstall review dossier must show the same missing-usage-proof boundary and manual-only status.
-27. Use **OpenAI cleanup agent** for advisory ranking and explanation only. In the desktop shell, the panel calls the native `openai_agent_advice` command; Rust reads `OPENAI_API_KEY` from `.env` or the process environment, sends the bounded scan/plan context plus reviewed project dependency targets and scanned Gradle/npm/browser cache targets to OpenAI, and defaults to `gpt-5.2` unless `OPENAI_MODEL` is set. The response is strict JSON for ranked actions, blockers, questions, and warnings; successful advice calls create a compact local run record with plan id, provider metadata, recommendations, and redacted context counts. Executor recommendations may show user-clickable buttons, but those buttons still use the app's existing consent, scan, feature-flag, and target-validation checks. The model cannot scan folders, approve gates, or run cleanup.
+27. Use **OpenAI cleanup agent** for advisory ranking and explanation only. In the desktop shell, the panel calls the native `openai_agent_advice` command; Rust reads `OPENAI_API_KEY` from `.env` or the process environment, sends the bounded scan/plan context plus reviewed project dependency targets and scanned Gradle/npm/browser cache targets to OpenAI, and defaults to `gpt-5.5` unless `OPENAI_MODEL` is set. The response is strict JSON for ranked actions, blockers, questions, and warnings; successful advice calls create a compact local run record with plan id, provider metadata, recommendations, and redacted context counts. Executor recommendations may show user-clickable buttons, but those buttons still use the app's existing consent, scan, feature-flag, proof-state, and target-validation checks. The model cannot scan folders, approve gates, or run cleanup.
 28. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, **First-safe validation gate**, **First-safe work order**, **Temp executor activation**, **Release review packet**, **Validation evidence**, and **Product completion audit** to confirm only named feature-flagged scoped executors can run and every other route remains locked.
 29. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
 30. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.

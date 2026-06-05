@@ -1384,6 +1384,12 @@ export default function App() {
         itemReviewsByAction,
         driveInventorySummary,
         customRootTriage,
+        writeReadiness,
+        releaseGate,
+        validationPack,
+        consentReceipt,
+        executionProofHandoff,
+        rescanComparison,
         planSnapshot
       }),
     [
@@ -1405,6 +1411,12 @@ export default function App() {
       itemReviewsByAction,
       driveInventorySummary,
       customRootTriage,
+      writeReadiness,
+      releaseGate,
+      validationPack,
+      consentReceipt,
+      executionProofHandoff,
+      rescanComparison,
       planSnapshot
     ]
   );
@@ -6294,6 +6306,9 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, recomm
   const keySource = nativeConfigured ? context.runtime.openAiKeySource : config.keySource;
   const transport = context.runtime.openAiAgentAdvice ? "native-tauri" : "browser-fetch";
   const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.downloadsCleanupExecutor || context.runtime.largeFileArchiveExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor || context.runtime.gradleCacheExecutor || context.runtime.npmCacheExecutor || context.runtime.pnpmStoreExecutor || context.runtime.recycleBinExecutor);
+  const execution = context.execution || {};
+  const proofLabel = execution.proofStatus === "waiting-for-execution" ? "waiting" : String(execution.proofStatus || "waiting").replace(/^proof-/, "");
+  const rescanLabel = execution.rescanComparisonStatus === "not-run" ? "none" : execution.rescanComparisonStatus || "none";
 
   return (
     <Card id="openai-agent-panel">
@@ -6324,6 +6339,9 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, recomm
           <QueueStat label="pnpm root" value={context.pnpmStoreTargets?.length || 0} tone={context.pnpmStoreTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Recycle" value={context.recycleBinTargets?.length || 0} tone={context.recycleBinTargets?.length ? "restricted" : "review"} />
           <QueueStat label="Cache roots" value={context.browserCacheTargets?.length || 0} tone={context.browserCacheTargets?.length ? "advanced" : "review"} />
+          <QueueStat label="Consent" value={execution.consentMatchesPlan ? "current" : "missing"} tone={execution.consentMatchesPlan ? "safe" : "review"} />
+          <QueueStat label="Proof" value={proofLabel} tone={execution.proofAllowsNextExecutor ? "safe" : "restricted"} />
+          <QueueStat label="Rescan proof" value={rescanLabel} tone={execution.rescanComparisonStatus === "matched" ? "safe" : "review"} />
           <QueueStat label="AI ready" value={recommendationBroker?.counts?.ready || 0} tone={recommendationBroker?.counts?.ready ? "safe" : "review"} />
           <QueueStat label="AI blocked" value={recommendationBroker?.counts?.blocked || 0} tone={recommendationBroker?.counts?.blocked ? "restricted" : "safe"} />
           <QueueStat label="AI runs" value={runHistory.length} tone={runHistory.length ? "safe" : "review"} />
@@ -6348,6 +6366,8 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, recomm
             <span>Drive inventory rows: {context.driveInventoryRows?.length || 0}</span>
             <span>Custom root rows: {context.customRootRows?.length || 0}</span>
             <span>Current plan: {context.plan?.id || "not locked"}</span>
+            <span>Scan fingerprint: {execution.scanFingerprintPresent ? "current" : "missing"}</span>
+            <span>Write readiness: {execution.writeReadinessStatus || "unknown"}</span>
             <span>Last advice: {lastRun ? `${lastRun.recommendedActions.length} recommendation(s)` : "none recorded"}</span>
           </div>
         </div>

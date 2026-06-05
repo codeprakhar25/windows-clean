@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const DEFAULT_OPENAI_MODEL: &str = "gpt-5.2";
+const DEFAULT_OPENAI_MODEL: &str = "gpt-5.5";
 const DEFAULT_OPENAI_ENDPOINT: &str = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_REASONING_EFFORT: &str = "low";
 
@@ -566,6 +566,8 @@ async fn openai_agent_advice(
             "You cannot approve gates, modify files, run shell commands, or delete data.",
             "Manual review targets such as installed app footprints, custom roots, and broad drive inventory rows are advisory only; never recommend direct folder deletion or automated uninstall.",
             "When a scoped executor is visible, recommend the exact UI button only after the context says current consent and route-specific targets exist.",
+            "If execution.proofAllowsNextExecutor is false, recommend post-run rescan or proof review instead of another executor.",
+            "Use execution.consentMatchesPlan, execution.scanFingerprintPresent, and execution.proofStatus when explaining blockers.",
             "Use actionType values from the schema. Keep targetId empty unless you are referring to a provided target id.",
             "Prioritize concrete next steps that move toward real safe cleanup.",
             "Return structured JSON that matches the provided response schema."
@@ -3106,102 +3108,52 @@ fn write_boundary_warning(code: &str) -> &'static str {
 }
 
 fn temp_executor_enabled() -> bool {
-    env::var("SPACEGUARD_ENABLE_TEMP_EXECUTOR")
-        .map(|value| {
-            matches!(
-                value.to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
+    runtime_feature_flag_enabled("SPACEGUARD_ENABLE_TEMP_EXECUTOR")
 }
 
 fn project_dependency_executor_enabled() -> bool {
-    env::var("SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR")
-        .map(|value| {
-            matches!(
-                value.to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
+    runtime_feature_flag_enabled("SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR")
 }
 
 fn downloads_cleanup_executor_enabled() -> bool {
-    env::var("SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR")
-        .map(|value| {
-            matches!(
-                value.to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
+    runtime_feature_flag_enabled("SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR")
 }
 
 fn large_file_archive_executor_enabled() -> bool {
-    env::var("SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR")
-        .map(|value| {
-            matches!(
-                value.to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
+    runtime_feature_flag_enabled("SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR")
 }
 
 fn browser_cache_executor_enabled() -> bool {
-    env::var("SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR")
-        .map(|value| {
-            matches!(
-                value.to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
+    runtime_feature_flag_enabled("SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR")
 }
 
 fn gradle_cache_executor_enabled() -> bool {
-    env::var("SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR")
-        .map(|value| {
-            matches!(
-                value.to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
+    runtime_feature_flag_enabled("SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR")
 }
 
 fn npm_cache_executor_enabled() -> bool {
-    env::var("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR")
-        .map(|value| {
-            matches!(
-                value.to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
+    runtime_feature_flag_enabled("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR")
 }
 
 fn pnpm_store_executor_enabled() -> bool {
-    env::var("SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR")
-        .map(|value| {
-            matches!(
-                value.to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
+    runtime_feature_flag_enabled("SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR")
 }
 
 fn recycle_bin_executor_enabled() -> bool {
-    env::var("SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR")
-        .map(|value| {
-            matches!(
-                value.to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
+    runtime_feature_flag_enabled("SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR")
+}
+
+fn runtime_feature_flag_enabled(name: &str) -> bool {
+    runtime_env_value(&[name])
+        .map(|(value, _)| is_truthy_runtime_flag(&value))
         .unwrap_or(false)
+}
+
+fn is_truthy_runtime_flag(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
 }
 
 fn temp_execution_rejections(
@@ -5229,6 +5181,10 @@ fn normalize_openai_reasoning_effort(value: &str) -> String {
 }
 
 fn openai_env_value(names: &[&str]) -> Option<(String, String)> {
+    runtime_env_value(names)
+}
+
+fn runtime_env_value(names: &[&str]) -> Option<(String, String)> {
     for name in names {
         if let Ok(value) = env::var(name) {
             let value = value.trim().to_string();

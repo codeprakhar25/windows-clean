@@ -304,7 +304,7 @@ assert(app.includes("appendOpenAIAgentRunRecord"), "OpenAI run history should ap
 assert(openAiAgent.includes("https://api.openai.com/v1/responses"), "OpenAI adapter should use the Responses API endpoint");
 assert(openAiAgent.includes("OPENAI_API_KEY"), "OpenAI adapter should read the primary .env API key");
 assert(openAiAgent.includes("VITE_OPENAI_API_KEY"), "OpenAI adapter should keep the Vite env API key fallback");
-assert(openAiAgent.includes("gpt-5.2"), "OpenAI adapter should default to the current GPT-5.2 model");
+assert(openAiAgent.includes("gpt-5.5"), "OpenAI adapter should default to the current GPT-5.5 model");
 assert(openAiAgent.includes("OPENAI_REASONING_EFFORT"), "OpenAI adapter should support configurable reasoning effort");
 assert(openAiAgent.includes("body.reasoning"), "OpenAI adapter should send configured reasoning effort");
 assert(openAiAgent.includes("openai_agent_advice"), "OpenAI adapter should prefer the native Tauri advisor command");
@@ -323,6 +323,10 @@ assert(openAiAgent.includes("manualReviewTargets"), "OpenAI context should inclu
 assert(openAiAgent.includes("installedAppReview"), "OpenAI context should include installed app review summary");
 assert(openAiAgent.includes("automated-uninstall"), "OpenAI installed app context should forbid automated uninstall");
 assert(openAiAgent.includes("planSnapshot"), "OpenAI context should include current plan snapshot identity");
+assert(openAiAgent.includes("proofAllowsNextExecutor"), "OpenAI context should include post-run proof state");
+assert(openAiAgent.includes("consentMatchesPlan"), "OpenAI context should include current consent state");
+assert(openAiAgent.includes("scanFingerprintPresent"), "OpenAI run records should retain only compact scan-fingerprint evidence");
+assert(app.includes("Rescan proof"), "OpenAI panel should show post-run proof state");
 assert(openAiAgent.includes("spaceguard-openai-agent-run/v1"), "OpenAI adapter should expose local run provenance records");
 assert(openAiAgent.includes("spaceguard-openai-recommendation-broker/v1"), "OpenAI adapter should expose recommendation broker records");
 assert(openAiAgent.includes("spaceguard-openai-recommendation-broker-summary/v1"), "OpenAI run records should persist compact broker summaries");
@@ -416,6 +420,8 @@ assert(app.includes("runNativeTempCleanupExecutor"), "real temp executor should 
 assert(nativeAdapter.includes("requestMode: \"execute-first-safe\""), "native adapter should send the execute-first-safe request mode");
 assert(rustScanner.includes("execute_first_safe_temp_cleanup"), "Rust native shell should implement the first-safe temp executor branch");
 assert(rustScanner.includes("SPACEGUARD_ENABLE_TEMP_EXECUTOR"), "Rust native shell should require the temp executor feature flag");
+assert(rustScanner.includes("runtime_feature_flag_enabled"), "Rust native shell should read scoped executor flags through the shared .env resolver");
+assert(rustScanner.includes("runtime_env_value"), "Rust native shell should read local .env values for runtime configuration");
 assert(rustScanner.includes("fs::remove_file"), "Rust temp executor should perform file deletion only");
 assert(!rustScanner.includes("remove_dir_all"), "Rust executors must not use broad recursive directory removal");
 assert(app.includes("ProjectDependencyExecutorPanel"), "project dependency executor panel should be rendered");

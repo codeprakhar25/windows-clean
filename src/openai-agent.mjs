@@ -1,4 +1,4 @@
-const DEFAULT_OPENAI_MODEL = "gpt-5.2";
+const DEFAULT_OPENAI_MODEL = "gpt-5.5";
 const DEFAULT_OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_REASONING_EFFORT = "low";
 const NATIVE_OPENAI_AGENT_COMMAND = "openai_agent_advice";
@@ -112,6 +112,12 @@ export function buildOpenAIAgentContext({
   itemReviewsByAction,
   driveInventorySummary,
   customRootTriage,
+  writeReadiness,
+  releaseGate,
+  validationPack,
+  consentReceipt,
+  executionProofHandoff,
+  rescanComparison,
   planSnapshot
 } = {}) {
   const selected = actionList
@@ -311,6 +317,31 @@ export function buildOpenAIAgentContext({
       openAiAgentAdvice: Boolean(runtimeCapabilities?.openAiAgentAdvice),
       openAiAdvisorConfigured: Boolean(runtimeCapabilities?.openAiAdvisorConfigured),
       openAiKeySource: runtimeCapabilities?.openAiKeySource || "missing"
+    },
+    execution: {
+      planId: planSnapshot?.id || "",
+      scanFingerprint: scanSession?.currentFingerprint || "",
+      scanFingerprintPresent: Boolean(scanSession?.currentFingerprint),
+      consentPlanId: consentReceipt?.planId || "",
+      consentMatchesPlan: Boolean(planSnapshot?.id && consentReceipt?.planId && consentReceipt.planId === planSnapshot.id),
+      writeReadinessStatus: writeReadiness?.status || "unknown",
+      readyForRealExecution: Boolean(writeReadiness?.readyForRealExecution),
+      releaseReadyForRealRun: Boolean(releaseGate?.readyForRealRun),
+      validationReadyForRealRun: Boolean(validationPack?.readyForRealRun),
+      proofStatus: executionProofHandoff?.status || "waiting-for-execution",
+      proofAllowsNextExecutor: ["waiting-for-execution", "proof-complete"].includes(executionProofHandoff?.status || "waiting-for-execution"),
+      proofPrimary: executionProofHandoff?.primary || "",
+      canRunPostRunRescan: Boolean(executionProofHandoff?.canRunRescan),
+      rescanComparisonStatus: rescanComparison?.status || "not-run",
+      postRunScanEvidence: Boolean(rescanComparison?.postRunScanEvidence),
+      selectedExecutorRoutes: executableRows.map((row) => ({
+        id: row.id,
+        route: row.route,
+        title: row.title,
+        canExecute: Boolean(row.canExecute),
+        canSimulate: Boolean(row.canSimulate),
+        bytes: Number(row.bytes || 0)
+      }))
     },
     selectedActions: selected,
     topFindings,
@@ -569,10 +600,11 @@ function buildOpenAIAgentRecommendationBrokerRow(row = {}, context = null, execu
 
 function buildExecutorRecommendationBrokerRow({ row, actionType, key, policy, context, executionState }) {
   const runtime = context?.runtime || {};
-  const planId = executionState.planId || context?.plan?.id || "";
-  const consentPlanId = executionState.consentPlanId || "";
-  const scanFingerprint = executionState.scanFingerprint || "";
-  const proofStatus = String(executionState.proofStatus || "waiting-for-execution");
+  const execution = context?.execution || {};
+  const planId = executionState.planId || execution.planId || context?.plan?.id || "";
+  const consentPlanId = executionState.consentPlanId || execution.consentPlanId || "";
+  const scanFingerprint = executionState.scanFingerprint || execution.scanFingerprint || "";
+  const proofStatus = String(executionState.proofStatus || execution.proofStatus || "waiting-for-execution");
   const proofAllowsExecution = proofStatus === "waiting-for-execution" || proofStatus === "proof-complete";
   const targetCount = getExecutorRecommendationTargetCount(policy, context);
   const checks = [
@@ -779,6 +811,27 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
       openAiAgentAdvice: Boolean(context?.runtime?.openAiAgentAdvice),
       openAiAdvisorConfigured: Boolean(context?.runtime?.openAiAdvisorConfigured)
     },
+    execution: {
+      planId: context?.execution?.planId || planSnapshot?.id || plan.id || "",
+      scanFingerprintPresent: Boolean(context?.execution?.scanFingerprintPresent || context?.execution?.scanFingerprint),
+      consentMatchesPlan: Boolean(context?.execution?.consentMatchesPlan),
+      writeReadinessStatus: context?.execution?.writeReadinessStatus || "unknown",
+      readyForRealExecution: Boolean(context?.execution?.readyForRealExecution),
+      releaseReadyForRealRun: Boolean(context?.execution?.releaseReadyForRealRun),
+      validationReadyForRealRun: Boolean(context?.execution?.validationReadyForRealRun),
+      proofStatus: context?.execution?.proofStatus || "waiting-for-execution",
+      proofAllowsNextExecutor: Boolean(context?.execution?.proofAllowsNextExecutor),
+      canRunPostRunRescan: Boolean(context?.execution?.canRunPostRunRescan),
+      rescanComparisonStatus: context?.execution?.rescanComparisonStatus || "not-run",
+      postRunScanEvidence: Boolean(context?.execution?.postRunScanEvidence),
+      selectedExecutorRoutes: (context?.execution?.selectedExecutorRoutes || []).slice(0, 12).map((row) => ({
+        id: row.id || "",
+        route: row.route || "",
+        canExecute: Boolean(row.canExecute),
+        canSimulate: Boolean(row.canSimulate),
+        bytes: Number(row.bytes || 0)
+      }))
+    },
     counts: {
       selectedActions: selectedActions.length,
       topFindings: Array.isArray(context?.topFindings) ? context.topFindings.length : 0,
@@ -866,6 +919,8 @@ export async function requestOpenAIAgentAdvice({
       "You cannot approve gates, modify files, run shell commands, or delete data.",
       "Manual review targets such as installed app footprints, custom roots, and broad drive inventory rows are advisory only; never recommend direct folder deletion or automated uninstall.",
       "When a scoped executor is visible, recommend the exact UI button only after the context says current consent and route-specific targets exist.",
+      "If execution.proofAllowsNextExecutor is false, recommend post-run rescan or proof review instead of another executor.",
+      "Use execution.consentMatchesPlan, execution.scanFingerprintPresent, and execution.proofStatus when explaining blockers.",
       "Use actionType values from the schema. Keep targetId empty unless you are referring to a provided target id.",
       "Prioritize concrete next steps that move toward real safe cleanup.",
       "Return structured JSON that matches the provided response schema."
