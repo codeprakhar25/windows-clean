@@ -191,6 +191,12 @@ export default function App() {
       simulateCleanupPlan: false,
       executeCleanupPlan: false,
       safeExecutorsEnabled: false,
+      executorFlags: {
+        tempCleanupExecutor: false,
+        recycleBinExecutor: false,
+        browserCacheExecutor: false,
+        toolNativePruneExecutors: false
+      },
       reason: "Runtime capability check has not completed."
     },
     error: ""
@@ -537,20 +543,22 @@ export default function App() {
     [planSnapshot, executorPlan, itemReviewsByAction, postRunVerification, rollbackEvidence, dataMode]
   );
   const releaseGate = useMemo(
-    () =>
-      buildReleaseGate({
+    () => {
+      const executorFlags = runtimeCapabilities.result.executorFlags || {};
+      return buildReleaseGate({
         scanMode: dataMode,
         nativeCapability,
         executorPlan,
         validationEvidence,
         featureFlags: {
           realExecutors: Boolean(runtimeCapabilities.result.realRunEnabled),
-          tempCleanupExecutor: Boolean(runtimeCapabilities.result.safeExecutorsEnabled),
-          recycleBinExecutor: Boolean(runtimeCapabilities.result.safeExecutorsEnabled),
-          browserCacheExecutor: Boolean(runtimeCapabilities.result.safeExecutorsEnabled),
-          toolNativePruneExecutors: Boolean(runtimeCapabilities.result.safeExecutorsEnabled)
+          tempCleanupExecutor: Boolean(executorFlags.tempCleanupExecutor),
+          recycleBinExecutor: Boolean(executorFlags.recycleBinExecutor),
+          browserCacheExecutor: Boolean(executorFlags.browserCacheExecutor),
+          toolNativePruneExecutors: Boolean(executorFlags.toolNativePruneExecutors)
         }
-      }),
+      });
+    },
     [dataMode, nativeCapability, executorPlan, validationEvidence, runtimeCapabilities.result]
   );
   const privilegeBoundary = useMemo(

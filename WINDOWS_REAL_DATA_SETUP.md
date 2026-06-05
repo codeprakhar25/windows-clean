@@ -135,6 +135,7 @@ For each Windows validation run, capture:
 - User decision receipt state, including approval rows, item-review decision counts, protected-path count, consent row, active question, unsafe rows, and real-run row count.
 - Custom root discovery rows, if any; these are manual-review evidence and not executor routes.
 - Native scan volume totals.
+- Runtime executor flags for `tempCleanupExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`; capture each independently.
 - Active agent question and question queue state.
 - Per-check validation evidence records with reviewer, timestamp, artifact path, and notes.
 - Public beta readiness state.

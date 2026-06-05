@@ -57,7 +57,13 @@ export function buildNativeReadonlyRehearsalSummary() {
     scanKnownRoots: true,
     simulateCleanupPlan: true,
     executeCleanupPlan: true,
-    safeExecutorsEnabled: false
+    safeExecutorsEnabled: false,
+    executorFlags: {
+      tempCleanupExecutor: false,
+      recycleBinExecutor: false,
+      browserCacheExecutor: false,
+      toolNativePruneExecutors: false
+    }
   };
   const nativeScan = normalizeNativeScan({
     available: true,

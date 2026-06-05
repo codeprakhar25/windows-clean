@@ -222,6 +222,7 @@ assert(app.includes("buildPrivilegeBoundary"), "privilege boundary should be wir
 assert(app.includes("buildPrivacyBoundary"), "privacy boundary should be wired");
 assert(app.includes("buildPublicBetaReadiness"), "public beta readiness should be wired");
 assert(app.includes("buildReleaseGate"), "release gate should be wired");
+assert(app.includes("executorFlags"), "release gate should consume per-executor runtime feature flags");
 assert(app.includes("buildReleaseReviewPacket"), "release review packet should be wired");
 assert(app.includes("buildReleaseReviewPacketMarkdown"), "release review packet export should be wired");
 assert(app.includes("buildWriteReadiness"), "write readiness should be wired");
@@ -374,6 +375,7 @@ assert(model.includes("targetPath"), "first-safe contract should include native 
 assert(model.includes("target-scope-rejected"), "write boundary probe should separate target-scope rejection from passing evidence");
 assert(model.includes("spaceguard-write-boundary-probe/v1"), "model should expose write boundary probe schema");
 assert(model.includes("normalizeWriteExecutorScaffold"), "model should normalize native write executor scaffold metadata");
+assert(model.includes("normalizeExecutorFeatureFlags"), "model should normalize per-executor runtime feature flags");
 assert(model.includes("contract-mismatch"), "write boundary probe should reject mismatched contract echoes");
 assert(model.includes("normalizeValidationEvidenceRecord"), "model should normalize structured validation evidence");
 assert(model.includes("spaceguard-fixture-evidence-import/v1"), "model should expose fixture evidence import schema");
@@ -413,6 +415,7 @@ assert(nativeAdapter.includes("rejectCode"), "native adapter should normalize wr
 assert(nativeAdapter.includes("targetPath"), "native adapter should pass selected target paths to the write boundary");
 assert(nativeAdapter.includes("executorScaffold"), "native adapter should normalize write executor scaffold metadata");
 assert(nativeAdapter.includes("runtime_capabilities"), "native adapter should invoke runtime capability command");
+assert(nativeAdapter.includes("executorFlags"), "native adapter should normalize per-executor feature flags");
 assert(nativeAdapter.includes("items.map"), "native adapter should preserve item-level review candidates");
 assert(tauriConfig.includes('"withGlobalTauri": true'), "Tauri config should expose the global bridge used by the adapter");
 assert(rustScanner.includes("scan_known_roots"), "Rust scanner command should exist");
@@ -437,6 +440,7 @@ assert(rustScanner.includes("route-not-first-safe"), "Rust write boundary should
 assert(rustScanner.includes("target-not-allowlisted"), "Rust write boundary should reject targets outside route allowlists");
 assert(rustScanner.includes("target-forbidden"), "Rust write boundary should reject forbidden targets");
 assert(rustScanner.includes("runtime_capabilities"), "Rust runtime capability command should exist");
+assert(rustScanner.includes("ExecutorFeatureFlags"), "Rust runtime capabilities should expose per-executor feature flags");
 assert(rustScanner.includes("GetDiskFreeSpaceExW"), "Rust native scanner should read Windows volume totals");
 assert(rustScanner.includes("IsUserAnAdmin"), "Rust native scanner should read elevation state");
 assert(rustScanner.includes("LargeUserFiles"), "Rust scanner should include large personal file measurement");

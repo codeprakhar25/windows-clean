@@ -2414,6 +2414,21 @@ const assert = require("assert");
   assert.strictEqual(releaseGate.realFlagEnabled, false, "real executor feature flag should default off");
   assert(releaseGate.missingRows.length > 0, "release gate should require validation evidence");
   assert(releaseGate.vmRows.some((row) => row.totalCount > 0), "release gate should include disposable VM matrix");
+  const perExecutorFlagGate = guard.buildReleaseGate({
+    featureFlags: {
+      realExecutors: true,
+      tempCleanupExecutor: true,
+      recycleBinExecutor: false,
+      browserCacheExecutor: false,
+      toolNativePruneExecutors: false
+    },
+    validationEvidence: makePassedEvidence(["windows-native-build", "scanner-fixtures"]),
+    scanMode: "native-readonly",
+    nativeCapability: { available: true },
+    executorPlan
+  });
+  assert.strictEqual(perExecutorFlagGate.flags.tempCleanupExecutor, true, "release gate should preserve per-executor temp flag");
+  assert.strictEqual(perExecutorFlagGate.flags.recycleBinExecutor, false, "release gate should keep unrelated executor flags separate");
 
   const partialEvidenceGate = guard.buildReleaseGate({
     featureFlags: { realExecutors: true },

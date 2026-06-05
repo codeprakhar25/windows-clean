@@ -95,6 +95,8 @@ runtime_capabilities
 
 It reports platform, scanner availability, dry-run availability, and whether real executors are enabled. In the current build, real executors are disabled.
 
+Runtime capabilities also expose per-executor feature flags: `tempCleanupExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`. They default to false independently, so enabling a temp executor cannot accidentally enable browser, Recycle Bin, or tool-native cleanup routes.
+
 It currently scans or reports:
 
 - `%TEMP%` and `C:\Windows\Temp`
@@ -187,7 +189,7 @@ The demo also includes:
 - Native dry-run scope evidence export that runs a metadata-only allowed/rejected scope probe and writes a minimal JSON artifact for fixture validation without raw candidate filename samples.
 - Executor manifest panel that shows every route family, first-safe lanes, required validation checks, fixtures, preconditions, rollback notes, and next implementation steps.
 - Tool command inventory panel that lists official inspect/prune command shapes for npm, pnpm, Docker, Gradle, and Windows cleanup without executing shell commands.
-- Release gate panel that shows feature flags, runtime capabilities, missing validation checks, and disposable VM coverage.
+- Release gate panel that shows per-executor feature flags, runtime capabilities, missing validation checks, and disposable VM coverage.
 - Write boundary probe panel that records native rejection evidence for the future write request shape without counting recovered space.
 - First-safe executor contract panel that previews the disabled request shape for known temp, Recycle Bin, or browser cache routes without enabling writes.
 - Local validation evidence ledger and pack export with Windows VM scenarios, fixture roots, required checks, reviewer/artifact records, command checklist, fixture-evidence import, and signoff fields.

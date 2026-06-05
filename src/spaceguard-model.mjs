@@ -7494,6 +7494,7 @@ export function buildValidationEvidencePack({
       scanKnownRoots: Boolean(runtime.scanKnownRoots),
       simulateCleanupPlan: Boolean(runtime.simulateCleanupPlan),
       safeExecutorsEnabled: Boolean(runtime.safeExecutorsEnabled),
+      executorFlags: normalizeExecutorFeatureFlags(runtime.executorFlags || runtime.executor_flags),
       reason: runtime.reason || ""
     },
     nativeScan: nativeScan
@@ -9041,6 +9042,7 @@ export function buildReport({
           `- Detail-needed records: ${validationPack.validationChecks.filter((check) => check.evidenceValue && !check.evidenceComplete).length}`,
           `- VM scenarios: ${validationPack.vmScenarios.length}`,
           `- Fixture roots: ${validationPack.fixtureRoots.length}`,
+          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
           `- Safety invariants waiting: ${validationPack.safetyInvariants.filter((item) => !item.passed).length}`,
           validationPack.validationChecks.length
             ? validationPack.validationChecks
@@ -11596,6 +11598,15 @@ function normalizeWriteExecutorScaffold(value = null) {
     validationStatus: value.validationStatus || value.validation_status || "",
     mutationEnabled: Boolean(value.mutationEnabled || value.mutation_enabled),
     reason: value.reason || ""
+  };
+}
+
+function normalizeExecutorFeatureFlags(value = {}) {
+  return {
+    tempCleanupExecutor: Boolean(value.tempCleanupExecutor || value.temp_cleanup_executor),
+    recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
+    browserCacheExecutor: Boolean(value.browserCacheExecutor || value.browser_cache_executor),
+    toolNativePruneExecutors: Boolean(value.toolNativePruneExecutors || value.tool_native_prune_executors)
   };
 }
 

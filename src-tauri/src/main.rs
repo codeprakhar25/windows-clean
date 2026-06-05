@@ -237,7 +237,17 @@ struct RuntimeCapabilities {
     simulate_cleanup_plan: bool,
     execute_cleanup_plan: bool,
     safe_executors_enabled: bool,
+    executor_flags: ExecutorFeatureFlags,
     reason: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExecutorFeatureFlags {
+    temp_cleanup_executor: bool,
+    recycle_bin_executor: bool,
+    browser_cache_executor: bool,
+    tool_native_prune_executors: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -695,6 +705,12 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         simulate_cleanup_plan: true,
         execute_cleanup_plan: true,
         safe_executors_enabled: false,
+        executor_flags: ExecutorFeatureFlags {
+            temp_cleanup_executor: false,
+            recycle_bin_executor: false,
+            browser_cache_executor: false,
+            tool_native_prune_executors: false,
+        },
         reason: "Real executors are disabled until Windows VM validation and rollback tests pass."
             .to_string(),
     }

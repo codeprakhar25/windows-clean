@@ -233,6 +233,7 @@ export async function getNativeRuntimeCapabilities(host = globalThis) {
       simulateCleanupPlan: false,
       executeCleanupPlan: false,
       safeExecutorsEnabled: false,
+      executorFlags: defaultExecutorFlags(),
       reason: "Browser demo cannot perform native scans or cleanup."
     };
   }
@@ -446,8 +447,22 @@ export function normalizeNativeRuntimeCapabilities(result = {}) {
     simulateCleanupPlan: Boolean(result.simulateCleanupPlan || result.simulate_cleanup_plan),
     executeCleanupPlan: Boolean(result.executeCleanupPlan || result.execute_cleanup_plan),
     safeExecutorsEnabled: Boolean(result.safeExecutorsEnabled || result.safe_executors_enabled),
+    executorFlags: normalizeExecutorFlags(result.executorFlags || result.executor_flags),
     reason: result.reason || ""
   };
+}
+
+function normalizeExecutorFlags(value = {}) {
+  return {
+    tempCleanupExecutor: Boolean(value.tempCleanupExecutor || value.temp_cleanup_executor),
+    recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
+    browserCacheExecutor: Boolean(value.browserCacheExecutor || value.browser_cache_executor),
+    toolNativePruneExecutors: Boolean(value.toolNativePruneExecutors || value.tool_native_prune_executors)
+  };
+}
+
+function defaultExecutorFlags() {
+  return normalizeExecutorFlags();
 }
 
 function summarizePaths(paths, fallback) {

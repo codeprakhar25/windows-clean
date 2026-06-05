@@ -125,6 +125,7 @@ The UI must also expose a recovery advisor and decision log:
 - `restriction matrix`: explicit refusal surface for hard-blocked, manual-only, review-gated, intake-gated, and future-disabled cleanup classes.
 - `executor policy`: dry-run route, future executor lane, blocked reason, guardrails, and verification requirement.
 - `release gate`: feature flags, runtime capability, validation evidence, and disposable VM coverage before real execution.
+- `executor feature flags`: native-reported per-route switches for temp, Recycle Bin, browser cache, and tool-native executors; no shared safe-executor toggle can unlock multiple routes.
 - `write readiness`: final real-execution gate combining implementation, runtime write capability, validation, rollback, rescan parity, privilege, privacy, and consent.
 - `real executor capsule`: selected first-safe implementation route, code-path state, fixtures, validation blockers, and destructive-action availability.
 - `write boundary probe`: native rejection evidence for the future write request shape; passing evidence means rejected entries and zero bytes, not cleanup readiness.

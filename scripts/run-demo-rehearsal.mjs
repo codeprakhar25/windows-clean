@@ -60,7 +60,13 @@ const runtimeCapabilities = {
   scanKnownRoots: false,
   simulateCleanupPlan: false,
   executeCleanupPlan: false,
-  safeExecutorsEnabled: false
+  safeExecutorsEnabled: false,
+  executorFlags: {
+    tempCleanupExecutor: false,
+    recycleBinExecutor: false,
+    browserCacheExecutor: false,
+    toolNativePruneExecutors: false
+  }
 };
 const actionList = buildScenarioActions(scenarioId);
 const intakePolicy = buildIntakePolicy({

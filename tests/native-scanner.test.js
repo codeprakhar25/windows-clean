@@ -379,6 +379,12 @@ const assert = require("assert");
     simulate_cleanup_plan: true,
     execute_cleanup_plan: true,
     safe_executors_enabled: false,
+    executor_flags: {
+      temp_cleanup_executor: false,
+      recycle_bin_executor: false,
+      browser_cache_executor: false,
+      tool_native_prune_executors: false
+    },
     reason: "disabled"
   });
   assert.strictEqual(capabilities.elevated, true, "native capabilities should normalize elevation state");
@@ -387,6 +393,16 @@ const assert = require("assert");
   assert.strictEqual(capabilities.scanKnownRoots, true, "native capabilities should expose scanner availability");
   assert.strictEqual(capabilities.simulateCleanupPlan, true, "native capabilities should expose dry-run availability");
   assert.strictEqual(capabilities.executeCleanupPlan, true, "native capabilities should expose rejecting write boundary availability");
+  assert.deepStrictEqual(
+    capabilities.executorFlags,
+    {
+      tempCleanupExecutor: false,
+      recycleBinExecutor: false,
+      browserCacheExecutor: false,
+      toolNativePruneExecutors: false
+    },
+    "native capabilities should normalize per-executor feature flags"
+  );
 
   console.log("native scanner adapter ok");
 })();
