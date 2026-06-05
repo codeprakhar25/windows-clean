@@ -140,6 +140,7 @@ import {
   getNativeRuntimeCapabilities,
   mergeNativeScanIntoActions,
   runNativeDryRunScopeValidation,
+  runNativeDownloadsCleanupExecutor,
   runNativeBrowserCacheExecutor,
   runNativeExecutorDryRun,
   runNativeGradleCacheExecutor,
@@ -239,6 +240,7 @@ export default function App() {
   const [nativeWriteBoundary, setNativeWriteBoundary] = useState({ status: "idle", result: null, error: "" });
   const [nativeRealExecution, setNativeRealExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeProjectDependencyExecution, setNativeProjectDependencyExecution] = useState({ status: "idle", result: null, error: "" });
+  const [nativeDownloadsExecution, setNativeDownloadsExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeBrowserCacheExecution, setNativeBrowserCacheExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeGradleCacheExecution, setNativeGradleCacheExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeNpmCacheExecution, setNativeNpmCacheExecution] = useState({ status: "idle", result: null, error: "" });
@@ -267,6 +269,7 @@ export default function App() {
       executorFlags: {
         tempCleanupExecutor: false,
         projectDependencyExecutor: false,
+        downloadsCleanupExecutor: false,
         gradleCacheExecutor: false,
         npmCacheExecutor: false,
         recycleBinExecutor: false,
@@ -727,6 +730,7 @@ export default function App() {
         featureFlags: {
           realExecutors: Boolean(runtimeCapabilities.result.realRunEnabled),
           tempCleanupExecutor: Boolean(executorFlags.tempCleanupExecutor),
+          downloadsCleanupExecutor: Boolean(executorFlags.downloadsCleanupExecutor),
           gradleCacheExecutor: Boolean(executorFlags.gradleCacheExecutor),
           npmCacheExecutor: Boolean(executorFlags.npmCacheExecutor),
           recycleBinExecutor: Boolean(executorFlags.recycleBinExecutor),
@@ -1936,6 +1940,7 @@ export default function App() {
   function armExecutionConsent() {
     const scopedExecutorRuntime = Boolean(
       (runtimeCapabilities.result.executorFlags?.tempCleanupExecutor && realExecutorCapsule?.route?.id === "known-temp-delete")
+        || runtimeCapabilities.result.executorFlags?.downloadsCleanupExecutor
         || runtimeCapabilities.result.executorFlags?.projectDependencyExecutor
         || runtimeCapabilities.result.executorFlags?.browserCacheExecutor
         || runtimeCapabilities.result.executorFlags?.gradleCacheExecutor
@@ -2052,6 +2057,11 @@ export default function App() {
       await executeFirstSafeTempCleanup();
       return;
     }
+    if (actionType === "run-downloads-cleanup-executor") {
+      focusWorkflowPanel("downloads-cleanup-executor-panel");
+      await executeReviewedDownloadsCleanup();
+      return;
+    }
     if (actionType === "run-project-deps-executor") {
       focusWorkflowPanel("project-dependency-executor-panel");
       await executeReviewedProjectDependencies();
@@ -2145,6 +2155,49 @@ export default function App() {
       commitExecutionLedger(buildNativeExecutionLedger(result, executedAt), { executedAt, source: "native-project-dependency-executor" });
     } catch (error) {
       setNativeProjectDependencyExecution({
+        status: "error",
+        result: null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  async function executeReviewedDownloadsCleanup() {
+    if (nativeDownloadsExecution.status === "running") return;
+    const downloadRows = executorPlan.rows.filter((row) => row.route === "item-review-recycle-bin" && row.reviewTargets?.length);
+    const downloadTargets = downloadRows.flatMap((row) => row.reviewTargets || []);
+    if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.downloadsCleanupExecutor) {
+      setNativeDownloadsExecution({
+        status: "blocked",
+        result: null,
+        error: "Reviewed Downloads executor is not enabled. Set SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR=1 before launching the Tauri app."
+      });
+      return;
+    }
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !downloadRows.length) {
+      setNativeDownloadsExecution({
+        status: "blocked",
+        result: null,
+        error: "Reviewed Downloads cleanup needs item Remove targets plus current plan, scan fingerprint, and consent receipt."
+      });
+      return;
+    }
+
+    setActiveStage("execute");
+    setNativeDownloadsExecution({ status: "running", result: null, error: "" });
+    try {
+      const result = await runNativeDownloadsCleanupExecutor({
+        rows: downloadRows,
+        planId: planSnapshot.id,
+        scanFingerprint: scanSession.currentFingerprint,
+        consentPlanId: consentReceipt.planId,
+        expectedBytes: downloadTargets.reduce((sum, target) => sum + Number(target.bytes || 0), 0)
+      });
+      setNativeDownloadsExecution({ status: "complete", result, error: "" });
+      const executedAt = new Date().toISOString();
+      commitExecutionLedger(buildNativeExecutionLedger(result, executedAt), { executedAt, source: "native-downloads-recycle-bin-executor" });
+    } catch (error) {
+      setNativeDownloadsExecution({
         status: "error",
         result: null,
         error: error instanceof Error ? error.message : String(error)
@@ -3416,6 +3469,14 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               onExecute={executeNpmCacheCleanup}
+            />
+            <DownloadsCleanupExecutorPanel
+              runtimeCapabilities={runtimeCapabilities}
+              execution={nativeDownloadsExecution}
+              executorPlan={executorPlan}
+              scanSession={scanSession}
+              consentReceipt={consentReceipt}
+              onExecute={executeReviewedDownloadsCleanup}
             />
             <ProjectDependencyExecutorPanel
               runtimeCapabilities={runtimeCapabilities}
@@ -5987,7 +6048,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, runHis
   const configured = Boolean(config.configured || nativeConfigured);
   const keySource = nativeConfigured ? context.runtime.openAiKeySource : config.keySource;
   const transport = context.runtime.openAiAgentAdvice ? "native-tauri" : "browser-fetch";
-  const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor || context.runtime.gradleCacheExecutor || context.runtime.npmCacheExecutor || context.runtime.recycleBinExecutor);
+  const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.downloadsCleanupExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor || context.runtime.gradleCacheExecutor || context.runtime.npmCacheExecutor || context.runtime.recycleBinExecutor);
 
   return (
     <Card id="openai-agent-panel">
@@ -6009,6 +6070,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, runHis
           <QueueStat label="Selected" value={context.selectedActions.length} tone={context.selectedActions.length ? "advanced" : "review"} />
           <QueueStat label="Direct tools" value="blocked" tone="safe" />
           <QueueStat label="Real exec" value={scopedRealFlag ? "scoped flag" : "off"} tone={scopedRealFlag ? "restricted" : "safe"} />
+          <QueueStat label="Downloads" value={context.runtime.downloadsCleanupExecutor ? "on" : "off"} tone={context.runtime.downloadsCleanupExecutor ? "restricted" : "review"} />
           <QueueStat label="Manual" value={context.manualReviewTargets?.length || 0} tone={context.manualReviewTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Project targets" value={context.reviewedProjectTargets?.length || 0} tone={context.reviewedProjectTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Gradle root" value={context.gradleCacheTargets?.length || 0} tone={context.gradleCacheTargets?.length ? "advanced" : "review"} />
@@ -6116,6 +6178,8 @@ function aiRecommendationActionLabel(row = {}) {
       return "Open review";
     case "run-temp-executor":
       return "Run temp cleanup";
+    case "run-downloads-cleanup-executor":
+      return "Move Downloads items";
     case "run-project-deps-executor":
       return "Run project cleanup";
     case "run-browser-cache-executor":
@@ -8320,6 +8384,103 @@ function ProjectDependencyExecutorPanel({ runtimeCapabilities, execution, execut
         <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
           {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {running ? "Cleaning dependencies" : "Run reviewed dependency cleanup"}
+        </Button>
+
+        {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}
+
+        {result?.warnings?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.warnings.slice(0, 3).map((warning) => (
+              <div key={warning} className="rounded-md border bg-card p-3 text-xs text-muted-foreground">{warning}</div>
+            ))}
+          </div>
+        ) : null}
+
+        {result?.entries?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.entries.slice(0, 4).map((entry) => (
+              <div key={`${entry.id}-${entry.result}-${entry.bytes}`} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{entry.title}</span>
+                  <Badge variant={entry.result === "executed" ? "safe" : "review"}>{entry.result}</Badge>
+                  <Badge variant="outline">{formatBytes(entry.bytes)}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{entry.note}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function DownloadsCleanupExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, onExecute }) {
+  const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.downloadsCleanupExecutor);
+  const rows = executorPlan.rows.filter((row) => row.route === "item-review-recycle-bin" && row.reviewTargets?.length);
+  const targets = rows.flatMap((row) => row.reviewTargets || []);
+  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentReceipt.planId);
+  const running = execution.status === "running";
+  const result = execution.result;
+  const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+  const disabled = running || !enabled || !requestReady;
+
+  return (
+    <Card id="downloads-cleanup-executor-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Reviewed Downloads cleanup
+          <Badge variant={enabled ? "restricted" : "review"}>{enabled ? "feature on" : "feature off"}</Badge>
+        </CardTitle>
+        <CardDescription>
+          Moves only reviewed old installer/archive files from Downloads through Recycle Bin semantics.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Targets" value={targets.length} tone={targets.length ? "advanced" : "review"} />
+          <QueueStat label="Selected" value={formatBytes(targets.reduce((sum, target) => sum + Number(target.bytes || 0), 0))} tone={targets.length ? "advanced" : "review"} />
+          <QueueStat label="Recovered" value={formatBytes(reclaimed)} tone={reclaimed ? "safe" : "review"} />
+          <QueueStat label="Request" value={requestReady ? "ready" : "wait"} tone={requestReady ? "safe" : "review"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Downloads executor boundary</span>
+            <Badge variant={enabled ? "restricted" : "safe"}>{enabled ? "can move reviewed files" : "cannot delete"}</Badge>
+            <Badge variant="outline">item-review-recycle-bin</Badge>
+            <Badge variant="safe">Recycle Bin semantics</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Enable with `SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR=1` before launching Tauri.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, reviewed remove targets {targets.length}.</span>
+            <span>Native validation accepts only old installer/archive files under the current user's Downloads folder. It rejects directories, protected paths, recent files, and arbitrary personal folders.</span>
+          </div>
+        </div>
+
+        {targets.length ? (
+          <div className="flex flex-col gap-2">
+            {targets.slice(0, 4).map((target) => (
+              <div key={target.id} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{target.name}</span>
+                  <Badge variant="outline">{formatBytes(target.bytes)}</Badge>
+                  <Badge variant="outline">{target.kind || "download file"}</Badge>
+                </div>
+                <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{target.path}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{target.reason}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+            Mark old installer/archive items in Downloads as Remove before this executor has a target.
+          </div>
+        )}
+
+        <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
+          {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          {running ? "Moving reviewed files" : "Move reviewed Downloads items"}
         </Button>
 
         {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}

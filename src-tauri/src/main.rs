@@ -284,6 +284,7 @@ struct RuntimeCapabilities {
 struct ExecutorFeatureFlags {
     temp_cleanup_executor: bool,
     project_dependency_executor: bool,
+    downloads_cleanup_executor: bool,
     gradle_cache_executor: bool,
     npm_cache_executor: bool,
     recycle_bin_executor: bool,
@@ -660,6 +661,9 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
     }
     if request.request_mode.as_deref() == Some("execute-project-deps") {
         return execute_project_dependency_cleanup(request);
+    }
+    if request.request_mode.as_deref() == Some("execute-downloads-recycle-bin") {
+        return execute_downloads_review_cleanup(request);
     }
     if request.request_mode.as_deref() == Some("execute-browser-cache") {
         return execute_browser_cache_cleanup(request);
@@ -1072,6 +1076,203 @@ fn execute_project_dependency_cleanup(request: WriteExecutionRequest) -> WriteEx
             format!("Project dependency executor accepted reviewed targets and reclaimed {reclaimed} byte(s).")
         } else {
             "Project dependency executor rejected the request before mutation.".to_string()
+        },
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
+        entries,
+        warnings,
+    }
+}
+
+fn execute_downloads_review_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let flag_enabled = downloads_cleanup_executor_enabled();
+    let rejections = downloads_cleanup_execution_rejections(&request, flag_enabled);
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-downloads-recycle-bin-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-downloads-recycle-bin".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+
+    let entries = request
+        .actions
+        .into_iter()
+        .map(|action| {
+            let target_path = action.target_path.clone().unwrap_or_default();
+            let target_reject = downloads_cleanup_target_reject_code(&target_path);
+            let route_match = action.route == route && route == "item-review-recycle-bin";
+            let can_execute = rejections.is_empty() && route_match && target_reject.is_none();
+
+            if can_execute {
+                let target = resolve_dry_run_target(&target_path);
+                let moved = move_download_file_to_recycle_bin(&target);
+                return WriteExecutionEntry {
+                    id: action.id,
+                    title: action.title,
+                    route: action.route,
+                    result: if moved.succeeded && moved.bytes > 0 {
+                        "executed".to_string()
+                    } else if moved.succeeded {
+                        "no-op".to_string()
+                    } else {
+                        "rejected".to_string()
+                    },
+                    reject_code: if moved.succeeded {
+                        String::new()
+                    } else {
+                        "downloads-recycle-bin-shell-api-failed".to_string()
+                    },
+                    bytes: if moved.succeeded { moved.bytes } else { 0 },
+                    preflight_status: if moved.succeeded {
+                        "executed".to_string()
+                    } else {
+                        "target-blocked".to_string()
+                    },
+                    preflight_checks: vec![
+                        write_preflight_check(
+                            "route-downloads-review",
+                            "Reviewed Downloads route",
+                            "passed",
+                            "Action route is item-review-recycle-bin.",
+                        ),
+                        write_preflight_check(
+                            "target-download-file",
+                            "Reviewed Downloads file",
+                            "passed",
+                            "Target is a single old installer or archive file under the user's Downloads folder.",
+                        ),
+                        write_preflight_check(
+                            "feature-flag",
+                            "Executor feature flag",
+                            "passed",
+                            "SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR enabled reviewed Downloads cleanup.",
+                        ),
+                        write_preflight_check(
+                            "shell-api",
+                            "Windows Shell recycle operation",
+                            if moved.succeeded { "passed" } else { "blocked" },
+                            if moved.succeeded {
+                                "SHFileOperationW moved the reviewed file through Recycle Bin semantics."
+                            } else {
+                                "SHFileOperationW rejected the reviewed file move; no bytes are claimed."
+                            },
+                        ),
+                    ],
+                    note: if moved.succeeded {
+                        format!(
+                            "Reviewed Downloads executor moved one file to Recycle Bin semantics and reclaimed {} byte(s).",
+                            moved.bytes
+                        )
+                    } else {
+                        format!(
+                            "Reviewed Downloads cleanup failed at the Windows Shell API boundary with code {}. No bytes were claimed.",
+                            moved.error_code
+                        )
+                    },
+                };
+            }
+
+            let reject_code = if !route_match {
+                "route-not-downloads-review"
+            } else {
+                target_reject
+                    .or_else(|| rejections.first().copied())
+                    .unwrap_or("downloads-executor-disabled")
+            };
+
+            WriteExecutionEntry {
+                id: action.id,
+                title: action.title,
+                route: action.route,
+                result: "rejected".to_string(),
+                reject_code: reject_code.to_string(),
+                bytes: 0,
+                preflight_status: "target-blocked".to_string(),
+                preflight_checks: vec![
+                    write_preflight_check(
+                        "route-downloads-review",
+                        "Reviewed Downloads route",
+                        if route_match { "passed" } else { "blocked" },
+                        if route_match {
+                            "Action route is item-review-recycle-bin."
+                        } else {
+                            "Only reviewed Downloads item cleanup can use this executor."
+                        },
+                    ),
+                    write_preflight_check(
+                        "target-download-file",
+                        "Reviewed Downloads file",
+                        if target_reject.is_none() {
+                            "passed"
+                        } else {
+                            "blocked"
+                        },
+                        if target_reject.is_none() {
+                            "Target is a reviewed Downloads installer/archive file."
+                        } else {
+                            "Target is missing, too recent, outside Downloads, not a file, link-like, or not an allowed installer/archive type."
+                        },
+                    ),
+                    write_preflight_check(
+                        "feature-flag",
+                        "Executor feature flag",
+                        if flag_enabled { "passed" } else { "blocked" },
+                        if flag_enabled {
+                            "Downloads executor feature flag is enabled."
+                        } else {
+                            "SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR is not enabled."
+                        },
+                    ),
+                ],
+                note: format!(
+                    "Reviewed Downloads cleanup rejected with code {reject_code}. Plan {plan_id}; no bytes were removed for this action."
+                ),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let accepted = rejections.is_empty()
+        && entries
+            .iter()
+            .all(|entry| entry.result == "executed" || entry.result == "no-op");
+    let reclaimed = entries.iter().map(|entry| entry.bytes).sum::<u64>();
+    let mut warnings = downloads_cleanup_execution_warnings(&rejections);
+    if accepted {
+        warnings.push(format!(
+            "Reviewed Downloads cleanup completed for plan {plan_id}; moved {reclaimed} byte(s) through Recycle Bin semantics. Run a fresh native scan to verify free space."
+        ));
+    }
+
+    WriteExecutionResponse {
+        mode: if accepted {
+            "native-downloads-recycle-bin-executor"
+        } else {
+            "native-downloads-recycle-bin-executor-rejected"
+        },
+        real_run_enabled: flag_enabled,
+        destructive_commands: flag_enabled,
+        accepted,
+        reason: if accepted {
+            format!("Reviewed Downloads executor accepted selected files and reclaimed {reclaimed} byte(s).")
+        } else {
+            "Reviewed Downloads executor rejected the request before mutation.".to_string()
         },
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
@@ -1940,6 +2141,7 @@ fn is_first_safe_write_route(route: &str) -> bool {
         route,
         "known-temp-delete"
             | "shell-recycle-bin"
+            | "item-review-recycle-bin"
             | "browser-cache-only"
             | "item-review-project-cache"
             | "bounded-cache-delete"
@@ -1995,6 +2197,30 @@ fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
                     "Recycle Bin executor can empty the selected drive's Shell Recycle Bin boundary only.".to_string()
                 } else {
                     "Recycle Bin executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR is enabled on Windows.".to_string()
+                },
+            })
+        }
+        "item-review-recycle-bin" => {
+            let enabled = cfg!(target_os = "windows") && downloads_cleanup_executor_enabled();
+            Some(WriteExecutorScaffold {
+                route: "item-review-recycle-bin".to_string(),
+                title: "Reviewed Downloads items".to_string(),
+                feature_flag: "downloadsCleanupExecutor".to_string(),
+                status: if enabled {
+                    "feature-flag-enabled".to_string()
+                } else {
+                    "feature-flag-disabled".to_string()
+                },
+                validation_status: if enabled {
+                    "reviewed-download-files-only".to_string()
+                } else {
+                    "validation-required".to_string()
+                },
+                mutation_enabled: enabled,
+                reason: if enabled {
+                    "Downloads executor can move reviewed old installer/archive files through Recycle Bin semantics only.".to_string()
+                } else {
+                    "Downloads executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR is enabled on Windows.".to_string()
                 },
             })
         }
@@ -2102,6 +2328,7 @@ fn write_executor_scaffold_reject_code(route: &str) -> &'static str {
     match route {
         "known-temp-delete" => "temp-executor-feature-flag-disabled",
         "shell-recycle-bin" => "recycle-bin-executor-disabled",
+        "item-review-recycle-bin" => "downloads-executor-disabled",
         "item-review-project-cache" => "project-deps-executor-disabled",
         "browser-cache-only" => "browser-cache-executor-disabled",
         "bounded-cache-delete" => "gradle-cache-executor-disabled",
@@ -2126,6 +2353,9 @@ fn write_action_target_reject_code(
     }
     if route == "shell-recycle-bin" {
         return recycle_bin_target_reject_code(target_path.as_deref().unwrap_or(""));
+    }
+    if route == "item-review-recycle-bin" {
+        return downloads_cleanup_target_reject_code(target_path.as_deref().unwrap_or(""));
     }
     if write_target_forbidden(route, &target) {
         return Some("target-forbidden");
@@ -2157,6 +2387,18 @@ fn write_target_forbidden(route: &str, target: &str) -> bool {
                 || target.contains("reparse")
         }
         "shell-recycle-bin" => target.contains("downloads") || target.contains("documents"),
+        "item-review-recycle-bin" => {
+            target.contains("\\windows\\")
+                || target.contains("\\program files")
+                || target.contains("\\programdata\\")
+                || target.contains("\\appdata\\roaming\\microsoft")
+                || target.contains("\\desktop\\")
+                || target.contains("\\documents\\")
+                || target.contains("\\pictures\\")
+                || target.contains("\\videos\\")
+                || target.contains("\\music\\")
+                || target.ends_with("\\downloads")
+        }
         "browser-cache-only" => {
             target.contains("cookie")
                 || target.contains("session")
@@ -2213,6 +2455,7 @@ fn write_target_allowed(route: &str, target: &str) -> bool {
                 || target.contains("%tmp%")
         }
         "shell-recycle-bin" => target.contains("$recycle.bin") || target.contains("recycle bin"),
+        "item-review-recycle-bin" => target.contains("\\downloads\\"),
         "browser-cache-only" => {
             target.contains("\\cache")
                 || target.contains("cache2")
@@ -2267,6 +2510,9 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "recycle-bin-executor-disabled" => {
             "Write request rejected: recycleBinExecutor scaffold is feature-flag disabled."
         }
+        "downloads-executor-disabled" => {
+            "Write request rejected: downloadsCleanupExecutor scaffold is feature-flag disabled."
+        }
         "gradle-cache-executor-disabled" => {
             "Write request rejected: gradleCacheExecutor scaffold is feature-flag disabled."
         }
@@ -2284,6 +2530,24 @@ fn write_boundary_warning(code: &str) -> &'static str {
         }
         "recycle-bin-shell-api-failed" => {
             "Write request rejected: Windows Shell Recycle Bin API failed."
+        }
+        "target-not-downloads-file" => {
+            "Write request rejected: reviewed Downloads target is not an allowed installer/archive file."
+        }
+        "target-not-downloads-folder" => {
+            "Write request rejected: reviewed target is not inside the current user's Downloads folder."
+        }
+        "target-too-recent" => {
+            "Write request rejected: reviewed Downloads file is too recent for native cleanup."
+        }
+        "target-link-or-not-file" => {
+            "Write request rejected: reviewed target is link-like or not a regular file."
+        }
+        "route-not-downloads-review" => {
+            "Write request rejected: reviewed Downloads cleanup requires route item-review-recycle-bin."
+        }
+        "downloads-recycle-bin-shell-api-failed" => {
+            "Write request rejected: Windows Shell file recycle operation failed."
         }
         "target-not-gradle-cache" => {
             "Write request rejected: Gradle cache target is not the current user's .gradle\\caches directory."
@@ -2319,6 +2583,17 @@ fn temp_executor_enabled() -> bool {
 
 fn project_dependency_executor_enabled() -> bool {
     env::var("SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR")
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn downloads_cleanup_executor_enabled() -> bool {
+    env::var("SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR")
         .map(|value| {
             matches!(
                 value.to_ascii_lowercase().as_str(),
@@ -2522,6 +2797,87 @@ fn project_dependency_execution_warnings(codes: &[&'static str]) -> Vec<String> 
             }
             "request-mode-invalid" => "Project dependency cleanup requires requestMode=execute-project-deps.",
             "route-not-project-cache" => "Project dependency cleanup requires route item-review-project-cache.",
+            _ => write_boundary_warning(code),
+        })
+        .map(String::from)
+        .collect()
+}
+
+fn downloads_cleanup_execution_rejections(
+    request: &WriteExecutionRequest,
+    flag_enabled: bool,
+) -> Vec<&'static str> {
+    let mut codes = Vec::new();
+    if !cfg!(target_os = "windows") {
+        codes.push("windows-required");
+    }
+    if !flag_enabled {
+        codes.push("downloads-executor-disabled");
+    }
+    if request.plan_id.trim().is_empty() {
+        codes.push("missing-plan-id");
+    }
+    if request
+        .scan_fingerprint
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-scan-fingerprint");
+    }
+    if request
+        .consent_plan_id
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-consent-plan-id");
+    }
+    if request.request_mode.as_deref() != Some("execute-downloads-recycle-bin") {
+        codes.push("request-mode-invalid");
+    }
+    if request.route != "item-review-recycle-bin" {
+        codes.push("route-not-downloads-review");
+    }
+    if request.dry_run_only != Some(false) {
+        codes.push("dry-run-disabled-required");
+    }
+    if request.mutation_attempted != Some(true) {
+        codes.push("mutation-confirmation-required");
+    }
+    if request.actions.is_empty() {
+        codes.push("no-actions");
+    }
+    codes
+}
+
+fn downloads_cleanup_execution_warnings(codes: &[&'static str]) -> Vec<String> {
+    if codes.is_empty() {
+        return vec![
+            "Reviewed Downloads executor moves selected old installer/archive files through Recycle Bin semantics only.".to_string(),
+        ];
+    }
+    codes
+        .iter()
+        .map(|code| match *code {
+            "windows-required" => "Reviewed Downloads cleanup is Windows-only in this build.",
+            "downloads-executor-disabled" => {
+                "Set SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR=1 before launching the Tauri app to enable reviewed Downloads cleanup."
+            }
+            "dry-run-disabled-required" => {
+                "Reviewed Downloads cleanup requires dryRunOnly=false on the execute-downloads-recycle-bin request."
+            }
+            "mutation-confirmation-required" => {
+                "Reviewed Downloads cleanup requires mutationAttempted=true on the execute-downloads-recycle-bin request."
+            }
+            "request-mode-invalid" => {
+                "Reviewed Downloads cleanup requires requestMode=execute-downloads-recycle-bin."
+            }
+            "route-not-downloads-review" => {
+                "Reviewed Downloads cleanup requires route item-review-recycle-bin."
+            }
             _ => write_boundary_warning(code),
         })
         .map(String::from)
@@ -3016,6 +3372,59 @@ fn recycle_bin_target_reject_code(value: &str) -> Option<&'static str> {
     None
 }
 
+fn downloads_cleanup_target_reject_code(value: &str) -> Option<&'static str> {
+    let path = resolve_dry_run_target(value);
+    if path.as_os_str().is_empty() {
+        return Some("target-missing");
+    }
+
+    let original = normalize_write_target(value);
+    let resolved = normalize_write_target(&path_to_string(&path));
+    if write_target_forbidden("item-review-recycle-bin", &original)
+        || write_target_forbidden("item-review-recycle-bin", &resolved)
+    {
+        return Some("target-forbidden");
+    }
+    if !write_target_allowed("item-review-recycle-bin", &original)
+        && !write_target_allowed("item-review-recycle-bin", &resolved)
+    {
+        return Some("target-not-downloads-folder");
+    }
+
+    let Some(downloads) = user_downloads_dir() else {
+        return Some("target-not-downloads-folder");
+    };
+    if !path_is_under(&path, &downloads) {
+        return Some("target-not-downloads-folder");
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(&path) else {
+        return Some("target-missing");
+    };
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Some("target-link-or-not-file");
+    }
+    if !should_count_file(MeasureKind::DownloadInstallers, &path) {
+        return Some("target-not-downloads-file");
+    }
+    if path_age_days(&path).unwrap_or(0) < 30 {
+        return Some("target-too-recent");
+    }
+    None
+}
+
+fn user_downloads_dir() -> Option<PathBuf> {
+    env_path("USERPROFILE")
+        .or_else(|| env_path("HOME"))
+        .map(|profile| profile.join("Downloads"))
+}
+
+fn path_is_under(path: &Path, root: &Path) -> bool {
+    let path = normalize_path(&path_to_string(path));
+    let root = normalize_path(&path_to_string(root));
+    path == root || path.starts_with(&format!("{root}\\"))
+}
+
 #[derive(Default)]
 struct TempDeleteResult {
     deleted_bytes: u64,
@@ -3062,6 +3471,13 @@ struct RecycleBinEmptyResult {
     before_items: u64,
     after_items: u64,
     hresult: i32,
+}
+
+#[derive(Default)]
+struct DownloadsRecycleMoveResult {
+    succeeded: bool,
+    bytes: u64,
+    error_code: i32,
 }
 
 fn delete_browser_cache_action_targets(value: &str) -> BrowserCacheDeleteResult {
@@ -3414,6 +3830,40 @@ fn empty_recycle_bin_drive_root(_root: &str) -> RecycleBinEmptyResult {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn move_download_file_to_recycle_bin(path: &Path) -> DownloadsRecycleMoveResult {
+    let bytes = fs::metadata(path)
+        .map(|metadata| metadata.len())
+        .unwrap_or(0);
+    let from = wide_double_null(&path_to_string(path));
+    let mut operation = ShFileOpStructW {
+        hwnd: std::ptr::null_mut(),
+        w_func: FO_DELETE,
+        p_from: from.as_ptr(),
+        p_to: std::ptr::null(),
+        f_flags: FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT,
+        f_any_operations_aborted: 0,
+        h_name_mappings: std::ptr::null_mut(),
+        lpsz_progress_title: std::ptr::null(),
+    };
+    let error_code = unsafe { SHFileOperationW(&mut operation) };
+    let succeeded = error_code == 0 && operation.f_any_operations_aborted == 0 && !path.exists();
+    DownloadsRecycleMoveResult {
+        succeeded,
+        bytes: if succeeded { bytes } else { 0 },
+        error_code,
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn move_download_file_to_recycle_bin(_path: &Path) -> DownloadsRecycleMoveResult {
+    DownloadsRecycleMoveResult {
+        succeeded: false,
+        bytes: 0,
+        error_code: -1,
+    }
+}
+
 fn delete_project_dependency_target(root: &Path) -> ProjectDependencyDeleteResult {
     let mut result = ProjectDependencyDeleteResult::default();
     if project_dependency_target_reject_code(&path_to_string(root)).is_some() {
@@ -3603,7 +4053,7 @@ fn openai_advice_row_schema() -> Value {
             "priority": { "type": "string", "enum": ["high", "medium", "low"] },
             "actionType": {
                 "type": "string",
-                "enum": ["review-target", "run-temp-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+                "enum": ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             "targetId": { "type": "string" },
             "route": { "type": "string" }
@@ -3755,6 +4205,8 @@ fn runtime_capabilities() -> RuntimeCapabilities {
     let temp_enabled = cfg!(target_os = "windows") && temp_executor_enabled();
     let project_dependency_enabled =
         cfg!(target_os = "windows") && project_dependency_executor_enabled();
+    let downloads_cleanup_enabled =
+        cfg!(target_os = "windows") && downloads_cleanup_executor_enabled();
     let browser_cache_enabled = cfg!(target_os = "windows") && browser_cache_executor_enabled();
     let gradle_cache_enabled = cfg!(target_os = "windows") && gradle_cache_executor_enabled();
     let npm_cache_enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
@@ -3765,6 +4217,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
     let openai_advisor_configured = openai_key_source != "missing";
     let real_execution_enabled = temp_enabled
         || project_dependency_enabled
+        || downloads_cleanup_enabled
         || browser_cache_enabled
         || gradle_cache_enabled
         || npm_cache_enabled
@@ -3791,6 +4244,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         executor_flags: ExecutorFeatureFlags {
             temp_cleanup_executor: temp_enabled,
             project_dependency_executor: project_dependency_enabled,
+            downloads_cleanup_executor: downloads_cleanup_enabled,
             gradle_cache_executor: gradle_cache_enabled,
             npm_cache_executor: npm_cache_enabled,
             recycle_bin_executor: recycle_bin_enabled,
@@ -4008,6 +4462,7 @@ extern "system" {
         psz_root_path: *const u16,
         dw_flags: u32,
     ) -> i32;
+    fn SHFileOperationW(lp_file_op: *mut ShFileOpStructW) -> i32;
 }
 
 #[cfg(target_os = "windows")]
@@ -4016,6 +4471,30 @@ const SHERB_NOCONFIRMATION: u32 = 0x0000_0001;
 const SHERB_NOPROGRESSUI: u32 = 0x0000_0002;
 #[cfg(target_os = "windows")]
 const SHERB_NOSOUND: u32 = 0x0000_0004;
+
+#[cfg(target_os = "windows")]
+const FO_DELETE: u32 = 0x0003;
+#[cfg(target_os = "windows")]
+const FOF_SILENT: u16 = 0x0004;
+#[cfg(target_os = "windows")]
+const FOF_NOCONFIRMATION: u16 = 0x0010;
+#[cfg(target_os = "windows")]
+const FOF_ALLOWUNDO: u16 = 0x0040;
+#[cfg(target_os = "windows")]
+const FOF_NOERRORUI: u16 = 0x0400;
+
+#[cfg(target_os = "windows")]
+#[repr(C)]
+struct ShFileOpStructW {
+    hwnd: *mut std::ffi::c_void,
+    w_func: u32,
+    p_from: *const u16,
+    p_to: *const u16,
+    f_flags: u16,
+    f_any_operations_aborted: i32,
+    h_name_mappings: *mut std::ffi::c_void,
+    lpsz_progress_title: *const u16,
+}
 
 #[cfg(target_os = "windows")]
 #[repr(C)]
@@ -4051,6 +4530,11 @@ fn wide_null(value: &str) -> Vec<u16> {
         .encode_wide()
         .chain(std::iter::once(0))
         .collect()
+}
+
+#[cfg(target_os = "windows")]
+fn wide_double_null(value: &str) -> Vec<u16> {
+    OsStr::new(value).encode_wide().chain([0, 0]).collect()
 }
 
 #[cfg(target_os = "windows")]

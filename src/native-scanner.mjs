@@ -322,6 +322,53 @@ export async function runNativeProjectDependencyExecutor(boundary = {}, host = g
   return normalizeNativeWriteBoundary(result);
 }
 
+export async function runNativeDownloadsCleanupExecutor(boundary = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      accepted: false,
+      reason: "Native reviewed Downloads executor is not available in the browser demo.",
+      entries: [],
+      warnings: ["Run the Tauri desktop shell before executing reviewed Downloads cleanup."]
+    };
+  }
+
+  const rows = boundary.rows || boundary.selectedRows || [];
+  const reviewTargets = rows.flatMap((row) =>
+    Array.isArray(row.reviewTargets)
+      ? row.reviewTargets.map((target) => ({
+          id: target.id || row.id,
+          title: target.name || row.title,
+          bytes: Number(target.bytes || 0),
+          route: "item-review-recycle-bin",
+          targetPath: target.path || ""
+        }))
+      : []
+  );
+  const expectedBytes = Number(boundary.expectedBytes ?? reviewTargets.reduce((sum, row) => sum + Number(row.bytes || 0), 0));
+
+  const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
+    request: {
+      schemaVersion: "spaceguard-downloads-recycle-bin-request/v1",
+      requestMode: "execute-downloads-recycle-bin",
+      planId: boundary.planId || "",
+      route: "item-review-recycle-bin",
+      scanFingerprint: boundary.scanFingerprint || "",
+      consentPlanId: boundary.consentPlanId || "",
+      expectedBytes,
+      dryRunOnly: false,
+      mutationAttempted: true,
+      actions: reviewTargets
+    }
+  });
+
+  return normalizeNativeWriteBoundary(result);
+}
+
 export async function runNativeBrowserCacheExecutor(boundary = {}, host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {
@@ -778,6 +825,7 @@ function normalizeExecutorFlags(value = {}) {
   return {
     tempCleanupExecutor: Boolean(value.tempCleanupExecutor || value.temp_cleanup_executor),
     projectDependencyExecutor: Boolean(value.projectDependencyExecutor || value.project_dependency_executor),
+    downloadsCleanupExecutor: Boolean(value.downloadsCleanupExecutor || value.downloads_cleanup_executor),
     gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
     npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),

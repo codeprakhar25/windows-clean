@@ -137,6 +137,8 @@ For `known-temp-delete`, the native response exposes an executor scaffold: route
 
 For `node-modules-old`, setting `SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR=1` enables reviewed dependency cleanup. The frontend sends only item-review targets marked **Remove**. The native executor accepts only `node_modules` directories whose parent has `package.json`, skips link-like entries, removes files through controlled traversal, removes empty directories bottom-up, and never runs package-manager or shell commands. Native review items parse readable `package.json` metadata for package name, package manager or lockfile, framework hints such as Expo/React Native/Next/Vite, and common scripts so stale dependency folders can be reviewed with better context.
 
+For `downloads-installers`, setting `SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR=1` enables reviewed Downloads cleanup. The frontend sends only item-review targets marked **Remove**. The native executor accepts only single non-symlink installer/archive files under the current user's Downloads folder, requires the file to be at least 30 days old, moves accepted files through Windows Shell Recycle Bin semantics with `SHFileOperationW`, rejects directories and arbitrary personal folders, and never runs shell commands.
+
 For `gradle-cache`, setting `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=1` enables bounded Gradle cache cleanup. The frontend sends only the concrete `.gradle\caches` path from the latest native read-only scan. The native executor accepts only the current user's `.gradle\caches` directory, deletes files older than 30 days, skips symlinks, lock files, recent files, daemon state, wrapper files, init scripts, project folders, `node_modules`, and Program Files paths, removes empty cache subdirectories bottom-up, and never runs Gradle or shell commands.
 
 For `npm-cache`, setting `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1` enables bounded npm cache cleanup. The frontend sends only the concrete `%LocalAppData%\npm-cache\_cacache` path from the latest native read-only scan. The native executor accepts only the current user's `_cacache` directory, deletes content blobs and cache temp files older than 14 days, keeps npm index metadata, skips symlinks, recent files, global packages, project `node_modules`, Program Files paths, and system paths, removes empty cache subdirectories bottom-up, and never runs npm or shell commands.
@@ -171,7 +173,7 @@ runtime_capabilities
 
 It reports platform, scanner availability, dry-run availability, and whether real executors are enabled.
 
-Runtime capabilities also expose per-executor feature flags: `tempCleanupExecutor`, `projectDependencyExecutor`, `gradleCacheExecutor`, `npmCacheExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`. They default to false independently, so enabling temp, project dependency, Gradle cache, npm cache, Recycle Bin, or browser cache cleanup cannot accidentally enable unrelated cleanup routes.
+Runtime capabilities also expose per-executor feature flags: `tempCleanupExecutor`, `downloadsCleanupExecutor`, `projectDependencyExecutor`, `gradleCacheExecutor`, `npmCacheExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`. They default to false independently, so enabling temp, reviewed Downloads, project dependency, Gradle cache, npm cache, Recycle Bin, or browser cache cleanup cannot accidentally enable unrelated cleanup routes.
 
 It currently scans or reports:
 
@@ -239,6 +241,7 @@ The demo also includes:
 - Recycle Bin executor panel for permanent Shell Recycle Bin emptying, requiring the permanent-removal confirmation gate and native request acknowledgement.
 - Gradle cache executor panel for old files under the current user's `.gradle\caches` root, with project folders and Gradle daemon/wrapper/config paths rejected.
 - npm cache executor panel for old content blobs and temp files under `%LocalAppData%\npm-cache\_cacache`, with index metadata, globals, and project folders rejected.
+- Reviewed Downloads executor panel for selected old installer/archive files under the current user's Downloads folder, moved through Recycle Bin semantics only.
 - Reviewed project dependency executor panel for stale `node_modules` cleanup, including Expo/React Native project hints and item-level remove targets.
 - Browser cache executor panel for scanned cache roots only, with cookies, sessions, logins, extensions, history, and profile stores blocked by native target validation.
 - Installed app footprint review for large app folders, with manual uninstall guidance and no automated uninstall or Program Files deletion.

@@ -569,6 +569,68 @@ const assert = require("assert");
   assert.strictEqual(npmExecutionInvocation.payload.request.actions[0].targetPath.endsWith("\\npm-cache\\_cacache"), true, "npm cache executor should pass concrete _cacache root path");
   assert.strictEqual(npmExecution.accepted, true, "npm cache executor should normalize accepted responses");
   assert.strictEqual(npmExecution.entries[0].route, "bounded-npm-cache-delete", "npm cache executor should normalize executed route");
+  let downloadsExecutionInvocation = null;
+  const downloadsExecution = await native.runNativeDownloadsCleanupExecutor(
+    {
+      rows: [
+        {
+          id: "downloads-installers",
+          title: "Old installers and archives in Downloads",
+          reviewTargets: [
+            {
+              id: "setup-old",
+              name: "setup-old.exe",
+              path: "C:\\Users\\real\\Downloads\\setup-old.exe",
+              bytes: 789
+            }
+          ]
+        }
+      ],
+      planId: "plan-downloads",
+      scanFingerprint: "scan-downloads",
+      consentPlanId: "plan-downloads",
+      expectedBytes: 789
+    },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            downloadsExecutionInvocation = { command, payload };
+            return Promise.resolve({
+              mode: "native-downloads-recycle-bin-executor",
+              real_run_enabled: true,
+              destructive_commands: true,
+              accepted: true,
+              reason: "accepted",
+              contract_echo: {
+                schema_version: payload.request.schemaVersion,
+                request_mode: payload.request.requestMode,
+                plan_id: payload.request.planId,
+                route: payload.request.route,
+                scan_fingerprint: payload.request.scanFingerprint,
+                consent_plan_id: payload.request.consentPlanId,
+                expected_bytes: payload.request.expectedBytes,
+                dry_run_only: payload.request.dryRunOnly,
+                mutation_attempted: payload.request.mutationAttempted,
+                action_count: payload.request.actions.length
+              },
+              entries: [{ id: "setup-old", title: "setup-old.exe", route: "item-review-recycle-bin", result: "executed", reject_code: "", bytes: 789, note: "moved through recycle bin" }],
+              warnings: ["downloads done"]
+            });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(downloadsExecutionInvocation.command, "execute_cleanup_plan", "Downloads executor should invoke execute_cleanup_plan");
+  assert.strictEqual(downloadsExecutionInvocation.payload.request.schemaVersion, "spaceguard-downloads-recycle-bin-request/v1", "Downloads executor should use its schema");
+  assert.strictEqual(downloadsExecutionInvocation.payload.request.requestMode, "execute-downloads-recycle-bin", "Downloads executor should send execute-downloads-recycle-bin mode");
+  assert.strictEqual(downloadsExecutionInvocation.payload.request.route, "item-review-recycle-bin", "Downloads executor should stay on item-review-recycle-bin route");
+  assert.strictEqual(downloadsExecutionInvocation.payload.request.dryRunOnly, false, "Downloads executor should be a mutating request");
+  assert.strictEqual(downloadsExecutionInvocation.payload.request.mutationAttempted, true, "Downloads executor should require mutation confirmation");
+  assert.strictEqual(downloadsExecutionInvocation.payload.request.actions[0].targetPath.endsWith("\\Downloads\\setup-old.exe"), true, "Downloads executor should pass only exact reviewed file paths");
+  assert.strictEqual(downloadsExecution.accepted, true, "Downloads executor should normalize accepted responses");
+  assert.strictEqual(downloadsExecution.entries[0].route, "item-review-recycle-bin", "Downloads executor should normalize executed route");
   let recycleExecutionInvocation = null;
   const recycleExecution = await native.runNativeRecycleBinExecutor(
     {
@@ -680,6 +742,7 @@ const assert = require("assert");
     executor_flags: {
       temp_cleanup_executor: false,
       project_dependency_executor: true,
+      downloads_cleanup_executor: true,
       gradle_cache_executor: true,
       npm_cache_executor: true,
       recycle_bin_executor: true,
@@ -702,6 +765,7 @@ const assert = require("assert");
     {
       tempCleanupExecutor: false,
       projectDependencyExecutor: true,
+      downloadsCleanupExecutor: true,
       gradleCacheExecutor: true,
       npmCacheExecutor: true,
       recycleBinExecutor: true,

@@ -29,7 +29,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -50,7 +50,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -269,6 +269,7 @@ export function buildOpenAIAgentContext({
       realRunEnabled: Boolean(runtimeCapabilities?.realRunEnabled),
       destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
       tempCleanupExecutor: Boolean(runtimeCapabilities?.executorFlags?.tempCleanupExecutor),
+      downloadsCleanupExecutor: Boolean(runtimeCapabilities?.executorFlags?.downloadsCleanupExecutor),
       projectDependencyExecutor: Boolean(runtimeCapabilities?.executorFlags?.projectDependencyExecutor),
       browserCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.browserCacheExecutor),
       gradleCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.gradleCacheExecutor),
@@ -688,6 +689,7 @@ function normalizeActionType(value) {
   if (
     clean === "review-target" ||
     clean === "run-temp-executor" ||
+    clean === "run-downloads-cleanup-executor" ||
     clean === "run-project-deps-executor" ||
     clean === "run-browser-cache-executor" ||
     clean === "run-gradle-cache-executor" ||

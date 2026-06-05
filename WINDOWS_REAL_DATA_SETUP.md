@@ -55,6 +55,13 @@ $env:SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR="1"
 npm run native:dev
 ```
 
+Optional reviewed Downloads executor:
+
+```powershell
+$env:SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR="1"
+npm run native:dev
+```
+
 Optional Gradle cache executor:
 
 ```powershell
@@ -83,7 +90,7 @@ $env:SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR="1"
 npm run native:dev
 ```
 
-Those flags enable only their named routes: `known-temp-delete`, reviewed `node_modules` cleanup, current-user Gradle cache cleanup, current-user npm `_cacache` cleanup, Shell Recycle Bin emptying for the selected drive, and scanned browser cache roots. They do not enable pnpm or Docker tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, browser identity-store deletion, project source deletion, or arbitrary project-folder deletion.
+Those flags enable only their named routes: `known-temp-delete`, reviewed Downloads installer/archive moves through Recycle Bin semantics, reviewed `node_modules` cleanup, current-user Gradle cache cleanup, current-user npm `_cacache` cleanup, Shell Recycle Bin emptying for the selected drive, and scanned browser cache roots. They do not enable pnpm or Docker tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, browser identity-store deletion, project source deletion, arbitrary Downloads folder deletion, or arbitrary project-folder deletion.
 
 ## Read-Only Real Scan
 
@@ -129,10 +136,11 @@ In the app:
 32. If resuming from an exported `spaceguard-validation-pack/v1` file, paste the JSON or markdown export into **Validation pack import**. Imported rows still need reviewer and artifact detail before they can pass release gates.
 33. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; rejection-mode evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
 34. Use **Real temp cleanup** only for the `known-temp-delete` route after a current plan, scan fingerprint, and consent receipt are present. After execution, run a fresh native scan to verify free space.
-35. Use **Reviewed project dependencies** only after native scan item review shows exact `node_modules` targets, structured package metadata, package manager or lockfile evidence, framework/script hints, and the user has marked those items **Remove**. Expo and React Native hints are advisory context; they do not auto-select a target.
-36. Record native beta distribution evidence with reviewer and artifact paths. Use [NATIVE_BETA_DISTRIBUTION.md](./NATIVE_BETA_DISTRIBUTION.md) for install/uninstall, support, signing, and public-claim evidence.
-37. Export the local evidence backup before clearing browser storage or switching profiles. Importing this backup restores evidence ledgers and run history only; it does not restore scan results, selected actions, consent, runtime capability, or cleanup authority.
-38. Export the workflow handoff for resume guidance, the redacted support bundle for diagnostics, and the beta handoff manifest to label which artifacts are public-safe, internal-only, or path-level. Export the release review packet, dry-run report, validation pack, and native beta evidence ledger when review or path-level evidence is needed.
+35. Use **Reviewed Downloads cleanup** only after native scan item review shows exact old installer/archive file targets in the current user's Downloads folder and the user has marked those items **Remove**. The native executor moves accepted files through Recycle Bin semantics; it rejects directories, recent files, and arbitrary personal folders.
+36. Use **Reviewed project dependencies** only after native scan item review shows exact `node_modules` targets, structured package metadata, package manager or lockfile evidence, framework/script hints, and the user has marked those items **Remove**. Expo and React Native hints are advisory context; they do not auto-select a target.
+37. Record native beta distribution evidence with reviewer and artifact paths. Use [NATIVE_BETA_DISTRIBUTION.md](./NATIVE_BETA_DISTRIBUTION.md) for install/uninstall, support, signing, and public-claim evidence.
+38. Export the local evidence backup before clearing browser storage or switching profiles. Importing this backup restores evidence ledgers and run history only; it does not restore scan results, selected actions, consent, runtime capability, or cleanup authority.
+39. Export the workflow handoff for resume guidance, the redacted support bundle for diagnostics, and the beta handoff manifest to label which artifacts are public-safe, internal-only, or path-level. Export the release review packet, dry-run report, validation pack, and native beta evidence ledger when review or path-level evidence is needed.
 
 ## Disposable Fixture Run
 
@@ -202,7 +210,7 @@ For each Windows validation run, capture:
 - Drive inventory rows, including top-level bucket status, bytes, classification, and confirmation that executor routes remain zero.
 - Storage pressure diagnosis status, ranked causes, current plan gap, and confirmation that diagnosis has zero executor and real-run rows.
 - Native evidence quality status, planning-ready flag, measured coverage, missing evidence rows, mutation lock, and confirmation that executor and real-run rows remain zero.
-- Runtime executor flags for `tempCleanupExecutor`, `projectDependencyExecutor`, `gradleCacheExecutor`, `npmCacheExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`; capture each independently.
+- Runtime executor flags for `tempCleanupExecutor`, `downloadsCleanupExecutor`, `projectDependencyExecutor`, `gradleCacheExecutor`, `npmCacheExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`; capture each independently.
 - Active agent question and question queue state.
 - Per-check validation evidence records with reviewer, timestamp, artifact path, and notes.
 - Public beta readiness state.
@@ -230,6 +238,7 @@ For each Windows validation run, capture:
 - Disabled temp executor scaffold status when probing `known-temp-delete`: route, `tempCleanupExecutor`, validation-required state, mutation disabled, and zero bytes.
 - Gradle cache executor status when selected: route `bounded-cache-delete`, `gradleCacheExecutor`, scanned `.gradle\caches` target evidence, old-file threshold, skipped lock/recent counts, and reclaimed bytes from the native response.
 - npm cache executor status when selected: route `bounded-npm-cache-delete`, `npmCacheExecutor`, scanned `%LocalAppData%\npm-cache\_cacache` target evidence, 14-day threshold, skipped index/recent counts, and reclaimed bytes from the native response.
+- Reviewed Downloads executor status when selected: route `item-review-recycle-bin`, `downloadsCleanupExecutor`, exact reviewed file targets, 30-day threshold, Shell Recycle Bin move evidence, and reclaimed bytes from the native response.
 - Recycle Bin executor status when selected: route `shell-recycle-bin`, `recycleBinExecutor`, scanned Recycle Bin target evidence, permanent-removal confirmation, native `permanentRemovalConfirmed=true`, and reclaimed bytes from the Shell API response.
 - Browser cache executor status when selected: route `browser-cache-only`, `browserCacheExecutor`, scanned cache-root target count, identity-store rejection boundary, and reclaimed bytes from the native response.
 - Write-boundary preflight rows for request shape, target allowlist, mutation lock, feature flag, and validation evidence.

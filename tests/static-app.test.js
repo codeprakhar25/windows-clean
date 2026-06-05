@@ -292,6 +292,7 @@ assert(app.includes("requestOpenAIAgentAdvice"), "OpenAI agent should call the p
 assert(app.includes("handleOpenAIAgentRecommendation"), "OpenAI recommendations should map to guarded UI actions");
 assert(app.includes("aiRecommendationActionLabel"), "OpenAI recommendation rows should expose action labels");
 assert(app.includes("Run npm cleanup"), "OpenAI recommendations should include npm executor action labels");
+assert(app.includes("Move Downloads items"), "OpenAI recommendations should include reviewed Downloads executor action labels");
 assert(app.includes("onAction={handleOpenAIAgentRecommendation}"), "OpenAI panel should receive the guarded recommendation action handler");
 assert(app.includes("OPENAI_AGENT_RUN_HISTORY_STORAGE_KEY"), "OpenAI agent runs should persist as local advisory history");
 assert(app.includes("buildOpenAIAgentRunRecord"), "OpenAI advice should create plan-bound run records");
@@ -322,6 +323,7 @@ assert(openAiAgent.includes("storesRawModelText: false"), "OpenAI run records sh
 assert(openAiAgent.includes("driveInventoryRows"), "OpenAI context should include drive inventory rows");
 assert(openAiAgent.includes("customRootRows"), "OpenAI context should include custom root triage rows");
 assert(openAiAgent.includes("run-gradle-cache-executor"), "OpenAI schema should allow Gradle cache executor recommendations");
+assert(openAiAgent.includes("run-downloads-cleanup-executor"), "OpenAI schema should allow reviewed Downloads executor recommendations");
 assert(openAiAgent.includes("run-npm-cache-executor"), "OpenAI schema should allow npm cache executor recommendations");
 assert(openAiAgent.includes("run-recycle-bin-executor"), "OpenAI schema should allow Recycle Bin executor recommendations");
 assert(openAiAgent.includes("run-browser-cache-executor"), "OpenAI schema should allow browser cache executor recommendations");
@@ -334,6 +336,8 @@ assert(app.includes("Gradle root"), "OpenAI panel should show Gradle cache targe
 assert(app.includes("npm root"), "OpenAI panel should show npm cache target count");
 assert(app.includes("Recycle"), "OpenAI panel should show Recycle Bin target count");
 assert(app.includes("Cache roots"), "OpenAI panel should show browser cache target count");
+assert(app.includes("Reviewed Downloads cleanup"), "App should expose reviewed Downloads executor panel");
+assert(app.includes("downloads-cleanup-executor-panel"), "Reviewed Downloads executor panel should be focusable");
 assert(app.includes("strict JSON"), "OpenAI panel should show structured output boundary");
 assert(app.includes("Reasoning:"), "OpenAI panel should show configured reasoning effort");
 assert(app.includes("Transport:"), "OpenAI panel should show native/browser transport");
@@ -407,6 +411,15 @@ assert(rustScanner.includes("SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR"), "Rust na
 assert(rustScanner.includes("project_dependency_scan_item"), "Rust scanner should enrich node_modules review items with project metadata");
 assert(rustScanner.includes("Expo project dependency folder"), "Rust scanner should surface Expo project hints");
 assert(rustScanner.includes("React Native project dependency folder"), "Rust scanner should surface React Native project hints");
+assert(app.includes("DownloadsCleanupExecutorPanel"), "reviewed Downloads executor panel should be rendered");
+assert(app.includes("runNativeDownloadsCleanupExecutor"), "reviewed Downloads executor should be wired through the native adapter");
+assert(nativeAdapter.includes("requestMode: \"execute-downloads-recycle-bin\""), "native adapter should send the reviewed Downloads request mode");
+assert(nativeAdapter.includes("downloadsCleanupExecutor"), "native adapter should normalize reviewed Downloads executor flag");
+assert(rustScanner.includes("execute_downloads_review_cleanup"), "Rust native shell should implement reviewed Downloads cleanup");
+assert(rustScanner.includes("SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR"), "Rust native shell should require the reviewed Downloads executor feature flag");
+assert(rustScanner.includes("downloads_cleanup_target_reject_code"), "Rust native shell should validate reviewed Downloads targets");
+assert(rustScanner.includes("SHFileOperationW"), "Rust reviewed Downloads executor should use Windows Shell file operation");
+assert(rustScanner.includes("FOF_ALLOWUNDO"), "Rust reviewed Downloads executor should use Recycle Bin semantics");
 assert(app.includes("GradleCacheExecutorPanel"), "Gradle cache executor panel should be rendered");
 assert(app.includes("gradle-cache-executor-panel"), "Gradle cache executor panel should be focusable");
 assert(app.includes("Run Gradle cache cleanup"), "Gradle cache executor should expose a user-triggered cleanup button");

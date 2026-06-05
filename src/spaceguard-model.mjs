@@ -658,6 +658,7 @@ export const customRootDispositionOptions = [
 export const releaseFeatureFlags = {
   realExecutors: false,
   tempCleanupExecutor: false,
+  downloadsCleanupExecutor: false,
   projectDependencyExecutor: false,
   gradleCacheExecutor: false,
   npmCacheExecutor: false,
@@ -3742,6 +3743,7 @@ export function buildAIAgentIntegration({
       && runtimeCapabilities?.safeExecutorsEnabled
       && (
         runtimeCapabilities?.executorFlags?.tempCleanupExecutor
+        || runtimeCapabilities?.executorFlags?.downloadsCleanupExecutor
         || runtimeCapabilities?.executorFlags?.projectDependencyExecutor
         || runtimeCapabilities?.executorFlags?.browserCacheExecutor
         || runtimeCapabilities?.executorFlags?.gradleCacheExecutor
@@ -12052,7 +12054,7 @@ export function buildReport({
           `- Detail-needed records: ${validationPack.validationChecks.filter((check) => check.evidenceValue && !check.evidenceComplete).length}`,
           `- VM scenarios: ${validationPack.vmScenarios.length}`,
           `- Fixture roots: ${validationPack.fixtureRoots.length}`,
-          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, projectDeps=${validationPack.runtime?.executorFlags?.projectDependencyExecutor ? "on" : "off"}, gradle=${validationPack.runtime?.executorFlags?.gradleCacheExecutor ? "on" : "off"}, npm=${validationPack.runtime?.executorFlags?.npmCacheExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
+          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, downloads=${validationPack.runtime?.executorFlags?.downloadsCleanupExecutor ? "on" : "off"}, projectDeps=${validationPack.runtime?.executorFlags?.projectDependencyExecutor ? "on" : "off"}, gradle=${validationPack.runtime?.executorFlags?.gradleCacheExecutor ? "on" : "off"}, npm=${validationPack.runtime?.executorFlags?.npmCacheExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
           `- Safety invariants waiting: ${validationPack.safetyInvariants.filter((item) => !item.passed).length}`,
           validationPack.validationChecks.length
             ? validationPack.validationChecks
@@ -15077,6 +15079,7 @@ function normalizeExecutorFeatureFlags(value = {}) {
   return {
     tempCleanupExecutor: Boolean(value.tempCleanupExecutor || value.temp_cleanup_executor),
     projectDependencyExecutor: Boolean(value.projectDependencyExecutor || value.project_dependency_executor),
+    downloadsCleanupExecutor: Boolean(value.downloadsCleanupExecutor || value.downloads_cleanup_executor),
     gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
     npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
