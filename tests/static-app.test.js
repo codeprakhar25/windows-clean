@@ -49,6 +49,8 @@ const requiredAppMarkers = [
   "Run real scan",
   "Native app required",
   "Real scan settings",
+  "Native scan request guard",
+  "Fix scan settings",
   "Target drive scope",
   "System roots resolve to",
   "Custom read-only roots",
@@ -468,6 +470,9 @@ assert(model.includes("uninstall-apps-manually"), "model should include manual i
 assert(model.includes("review-custom-roots"), "model should include manual custom root strategy");
 assert(model.includes("No executor route"), "custom root strategy should keep automation blocked");
 assert(model.includes("No automated partition writes"), "model should keep partition strategy advisory");
+assert(model.includes("spaceguard-native-scan-request-guard/v1"), "model should expose native scan request guard schema");
+assert(app.includes("buildNativeScanRequestGuard"), "app should gate native scan settings before invoking the scanner");
+assert(app.includes("Native scan settings blocked"), "app should surface blocked native scan settings");
 assert(nativeAdapter.includes("scan_known_roots"), "native adapter should invoke the read-only scanner command");
 assert(nativeAdapter.includes("targetDrive"), "native adapter should pass target drive scope");
 assert(nativeAdapter.includes("customRoots"), "native adapter should pass custom read-only roots");

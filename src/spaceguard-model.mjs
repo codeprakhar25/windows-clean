@@ -1421,6 +1421,118 @@ export function normalizeScanSessionSettings({ scanSettings = {}, protectedPaths
   };
 }
 
+const nativeScanDepthOptions = new Set([4, 6, 8, 10]);
+const nativeScanEntryCapOptions = new Set([5000, 10000, 25000, 50000]);
+
+export function buildNativeScanRequestGuard({ scanSettings = {}, protectedPaths = [] } = {}) {
+  const settings = scanSettings && typeof scanSettings === "object" ? scanSettings : {};
+  const rawTargetDrive = String(settings.targetDrive ?? settings.target_drive ?? "C:").trim();
+  const normalizedSettings = normalizeScanSessionSettings({ scanSettings: settings, protectedPaths });
+  const maxDepth = Number(settings.maxDepth ?? settings.max_depth ?? 8);
+  const maxEntriesPerRoot = Number(settings.maxEntriesPerRoot ?? settings.max_entries_per_root ?? 25000);
+  const customRootSource = Array.isArray(settings.customRoots || settings.custom_roots) ? settings.customRoots || settings.custom_roots : [];
+  const customRoots = customRootSource.map((root) => String(root || "").trim()).filter(Boolean);
+  const protectedRootRows = normalizeSessionPathList(protectedPaths);
+  const duplicateRoots = duplicateNormalizedPaths(customRoots);
+  const restrictedRoots = customRoots
+    .map((root) => ({ root, reason: restrictedCustomScanRootReason(root) }))
+    .filter((row) => row.reason);
+  const protectedOverlaps = customRoots.filter((root) => protectedRootRows.some((protectedPath) => scanPathsOverlap(root, protectedPath)));
+
+  const rows = [
+    guardRow({
+      id: "target-drive",
+      label: "Target drive",
+      passed: isNativeScanTargetDrive(rawTargetDrive),
+      detail: isNativeScanTargetDrive(rawTargetDrive)
+        ? `${normalizeTargetDrive(rawTargetDrive)} is a valid Windows target drive scope.`
+        : "Use a single Windows drive letter such as C: or D:."
+    }),
+    guardRow({
+      id: "traversal-depth",
+      label: "Traversal depth",
+      passed: nativeScanDepthOptions.has(maxDepth),
+      detail: nativeScanDepthOptions.has(maxDepth)
+        ? `Depth ${maxDepth} is inside the approved read-only scan range.`
+        : "Use one of the approved depth presets: 4, 6, 8, or 10."
+    }),
+    guardRow({
+      id: "entry-cap",
+      label: "Entry cap",
+      passed: nativeScanEntryCapOptions.has(maxEntriesPerRoot),
+      detail: nativeScanEntryCapOptions.has(maxEntriesPerRoot)
+        ? `${maxEntriesPerRoot} entries per root is inside the approved read-only cap set.`
+        : "Use one of the approved entry caps: 5k, 10k, 25k, or 50k."
+    }),
+    guardRow({
+      id: "custom-root-count",
+      label: "Custom root count",
+      passed: customRoots.length <= 8,
+      detail: customRoots.length <= 8
+        ? `${customRoots.length}/8 custom read-only roots configured.`
+        : "Custom root scans are capped at 8 roots per run."
+    }),
+    guardRow({
+      id: "protected-root-overlap",
+      label: "Protected path overlap",
+      passed: protectedOverlaps.length === 0,
+      detail: protectedOverlaps.length
+        ? `${protectedOverlaps.length} custom root(s) overlap protected paths and must be removed before scan.`
+        : "Custom roots do not overlap user-protected paths."
+    }),
+    guardRow({
+      id: "system-root-boundary",
+      label: "System root boundary",
+      passed: restrictedRoots.length === 0,
+      detail: restrictedRoots.length
+        ? `${restrictedRoots.length} broad system root(s) are blocked from custom scans.`
+        : "Custom roots avoid broad system folders and drive roots."
+    }),
+    {
+      id: "duplicate-custom-roots",
+      label: "Duplicate custom roots",
+      status: duplicateRoots.length ? "review" : "passed",
+      passed: true,
+      detail: duplicateRoots.length
+        ? `${duplicateRoots.length} duplicate root(s) will be deduped before scan.`
+        : "No duplicate custom roots detected.",
+      evidence: duplicateRoots
+    },
+    {
+      id: "read-only-boundary",
+      label: "Read-only boundary",
+      status: "passed",
+      passed: true,
+      detail: "The native scan request can measure metadata only; it does not create executor routes or write commands."
+    }
+  ];
+
+  const blockers = rows.filter((row) => row.status === "blocked");
+  const warnings = [
+    ...duplicateRoots.map((root) => `Duplicate custom root will be deduped: ${root}`),
+    ...restrictedRoots.map((row) => `${row.root}: ${row.reason}`)
+  ];
+
+  return {
+    schemaVersion: "spaceguard-native-scan-request-guard/v1",
+    status: blockers.length ? "blocked" : "ready",
+    tone: blockers.length ? "restricted" : warnings.length ? "review" : "safe",
+    canScan: blockers.length === 0,
+    primary: blockers.length ? `${blockers.length} scan setting blocker(s) must be fixed before native scan.` : "Native read-only scan request is ready.",
+    normalizedSettings,
+    rows,
+    blockers,
+    warnings,
+    counts: {
+      rows: rows.length,
+      blockers: blockers.length,
+      warnings: warnings.length,
+      customRoots: customRoots.length,
+      protectedPaths: protectedRootRows.length
+    }
+  };
+}
+
 export function buildScanSessionEvidence({
   scanned = false,
   scanning = false,
@@ -13666,6 +13778,71 @@ function normalizeSessionPathList(values = []) {
     rows.push(row);
   }
   return rows.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+
+function guardRow({ id, label, passed, detail }) {
+  return {
+    id,
+    label,
+    status: passed ? "passed" : "blocked",
+    passed,
+    detail
+  };
+}
+
+function isNativeScanTargetDrive(value) {
+  return /^([a-zA-Z])(?::)?(?:\\)?$/.test(String(value || "").trim());
+}
+
+function duplicateNormalizedPaths(paths = []) {
+  const seen = new Set();
+  const duplicates = [];
+  for (const path of paths) {
+    const key = normalizeScanComparePath(path);
+    if (!key) continue;
+    if (seen.has(key) && !duplicates.includes(path)) {
+      duplicates.push(path);
+      continue;
+    }
+    seen.add(key);
+  }
+  return duplicates;
+}
+
+function restrictedCustomScanRootReason(path) {
+  const raw = String(path || "").trim().replace(/\/+$/g, "") || String(path || "").trim();
+  const unix = raw.replace(/\/+$/g, "").toLowerCase();
+  if (raw === "/" || ["/home", "/users", "/usr", "/var", "/etc", "/system", "/library", "/applications"].includes(unix)) {
+    return "Broad system or all-user roots are too large for custom read-only scans.";
+  }
+  const normalized = normalizeScanComparePath(path);
+  if (!normalized) return "";
+  if (/^[a-z]:$/.test(normalized)) {
+    return "Drive and filesystem roots are too broad for custom read-only scans.";
+  }
+  if (/^[a-z]:\\(windows|windows\\system32|program files|program files \(x86\)|users)$/.test(normalized)) {
+    return "Broad Windows system and all-user roots must stay out of custom scans.";
+  }
+  if (["%windir%", "%systemroot%", "%programfiles%", "%programfiles(x86)%", "%programw6432%"].includes(normalized)) {
+    return "Broad Windows environment roots must stay out of custom scans.";
+  }
+  return "";
+}
+
+function scanPathsOverlap(left, right) {
+  const a = normalizeScanComparePath(left);
+  const b = normalizeScanComparePath(right);
+  if (!a || !b) return false;
+  return a === b || a.startsWith(`${b}\\`) || b.startsWith(`${a}\\`) || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+}
+
+function normalizeScanComparePath(path) {
+  return String(path || "")
+    .trim()
+    .replace(/\//g, "\\")
+    .replace(/\\+/g, "\\")
+    .replace(/\\$/g, "")
+    .toLowerCase();
 }
 
 function getScanSessionChanges(currentSettings, capturedSettings) {

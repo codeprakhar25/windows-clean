@@ -660,6 +660,38 @@ const assert = require("assert");
     maxEntriesPerRoot: 25000,
     customRoots: ["C:\\Users\\demo\\Archives"]
   };
+  const scanRequestGuard = guard.buildNativeScanRequestGuard({
+    scanSettings: sessionSettings,
+    protectedPaths: ["C:\\Users\\demo\\ClientWork"]
+  });
+  assert.strictEqual(scanRequestGuard.schemaVersion, "spaceguard-native-scan-request-guard/v1", "native scan request guard should expose a schema version");
+  assert.strictEqual(scanRequestGuard.canScan, true, "valid native scan settings should pass the request guard");
+  assert.strictEqual(scanRequestGuard.rows.some((row) => row.status === "blocked"), false, "valid native scan settings should not expose blockers");
+  const duplicateRootGuard = guard.buildNativeScanRequestGuard({
+    scanSettings: {
+      ...sessionSettings,
+      customRoots: ["C:\\Users\\demo\\Archives", "c:\\users\\demo\\archives"]
+    },
+    protectedPaths: []
+  });
+  assert.strictEqual(duplicateRootGuard.canScan, true, "duplicate custom roots should be dedupe warnings, not scan blockers");
+  assert.strictEqual(duplicateRootGuard.rows.find((row) => row.id === "duplicate-custom-roots").status, "review", "duplicate custom roots should be visible for review");
+  const blockedScanRequestGuard = guard.buildNativeScanRequestGuard({
+    scanSettings: {
+      targetDrive: "CD",
+      includeProjectArtifacts: true,
+      maxDepth: 99,
+      maxEntriesPerRoot: 999999,
+      customRoots: ["C:\\", "C:\\Windows", "C:\\Users\\demo\\ClientWork", "/"]
+    },
+    protectedPaths: ["C:\\Users\\demo\\ClientWork"]
+  });
+  assert.strictEqual(blockedScanRequestGuard.canScan, false, "unsafe native scan settings should block scan invocation");
+  assert(blockedScanRequestGuard.blockers.some((row) => row.id === "target-drive"), "native scan guard should block malformed target drives");
+  assert(blockedScanRequestGuard.blockers.some((row) => row.id === "traversal-depth"), "native scan guard should block unapproved traversal depth");
+  assert(blockedScanRequestGuard.blockers.some((row) => row.id === "entry-cap"), "native scan guard should block unapproved entry caps");
+  assert(blockedScanRequestGuard.blockers.some((row) => row.id === "system-root-boundary"), "native scan guard should block broad system roots");
+  assert(blockedScanRequestGuard.blockers.some((row) => row.id === "protected-root-overlap"), "native scan guard should block protected path overlap");
   const capturedNativeScan = {
     available: true,
     generatedAt: "2026-06-04T09:00:00.000Z",

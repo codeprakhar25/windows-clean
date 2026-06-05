@@ -88,6 +88,7 @@ import {
   buildSafetyInterlock,
   buildScanCoverageSummary,
   buildScanSessionEvidence,
+  buildNativeScanRequestGuard,
   buildStorageStrategyPlan,
   buildSupportBundle,
   buildSupportBundleMarkdown,
@@ -306,6 +307,10 @@ export default function App() {
 
   const dataMode = nativeScan.result?.available ? "native-readonly" : "demo";
   const targetDrive = useMemo(() => normalizeTargetDrive(scanSettings.targetDrive), [scanSettings.targetDrive]);
+  const nativeScanRequestGuard = useMemo(
+    () => buildNativeScanRequestGuard({ scanSettings, protectedPaths }),
+    [scanSettings, protectedPaths]
+  );
   const profile = useMemo(
     () => {
       if (!nativeScan.result?.available) {
@@ -1406,6 +1411,15 @@ export default function App() {
 
   async function runRealReadonlyScan() {
     if (nativeScan.status === "scanning" || scanning) return;
+    if (!nativeScanRequestGuard.canScan) {
+      clearExecutionState();
+      setNativeScan({ status: "blocked", result: null, error: nativeScanRequestGuard.primary });
+      setScanned(false);
+      setScanProgress(0);
+      setScanLabel("Native scan settings blocked");
+      setActiveStage("discover");
+      return;
+    }
 
     setNativeScan({ status: "scanning", result: null, error: "" });
     setApprovals({ groupConfirm: false, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} });
@@ -2212,9 +2226,9 @@ export default function App() {
                   {scanning && nativeScan.status !== "scanning" ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
                   {scanning && nativeScan.status !== "scanning" ? "Scanning" : scanned && dataMode === "demo" ? "Rescan demo" : "Run demo scan"}
                 </Button>
-                <Button className="w-full" variant="outline" onClick={runRealReadonlyScan} disabled={scanning || !nativeCapability.available}>
+                <Button className="w-full" variant="outline" onClick={runRealReadonlyScan} disabled={scanning || !nativeCapability.available || !nativeScanRequestGuard.canScan}>
                   {nativeScan.status === "scanning" ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
-                  {nativeCapability.available ? "Run real scan" : "Native app required"}
+                  {!nativeCapability.available ? "Native app required" : !nativeScanRequestGuard.canScan ? "Fix scan settings" : "Run real scan"}
                 </Button>
               </div>
             </CardContent>
@@ -2367,6 +2381,7 @@ export default function App() {
               onRemoveCustomRoot={removeCustomScanRoot}
               onChange={updateScanSetting}
               nativeScan={nativeScan}
+              requestGuard={nativeScanRequestGuard}
             />
 
             <ScanCoveragePanel coverage={scanCoverage} />
@@ -4178,12 +4193,14 @@ function NativeScanSettingsPanel({
   onAddCustomRoot,
   onRemoveCustomRoot,
   onChange,
-  nativeScan
+  nativeScan,
+  requestGuard
 }) {
   const depthOptions = [4, 6, 8, 10];
   const entryOptions = [5000, 10000, 25000, 50000];
   const hasNativeEvidence = Boolean(nativeScan.result);
   const customRoots = settings.customRoots || [];
+  const guardRows = requestGuard?.rows || [];
 
   return (
     <Card>
@@ -4196,12 +4213,35 @@ function NativeScanSettingsPanel({
             </CardTitle>
             <CardDescription>Read-only limits applied to the next native scan.</CardDescription>
           </div>
-          <Badge variant={hasNativeEvidence ? "review" : "safe"}>
-            {hasNativeEvidence ? "current scan set" : "ready"}
+          <Badge variant={requestGuard?.tone || (hasNativeEvidence ? "review" : "safe")}>
+            {requestGuard?.status || (hasNativeEvidence ? "current scan set" : "ready")}
           </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        {requestGuard ? (
+          <div className="rounded-md border bg-card p-3">
+            <div className="mb-2 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium">Native scan request guard</div>
+                <p className="text-xs text-muted-foreground">{requestGuard.primary}</p>
+              </div>
+              {requestGuard.canScan ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertTriangle className="h-4 w-4 text-amber-600" />}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {guardRows.map((row) => (
+                <div key={row.id} className="rounded-md border bg-muted/30 p-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">{row.label}</span>
+                    <Badge variant={row.status === "blocked" ? "restricted" : row.status === "review" ? "review" : "safe"}>{row.status}</Badge>
+                  </div>
+                  <p className="mt-1 text-muted-foreground">{row.detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="rounded-md border bg-muted/30 p-3">
           <div className="mb-2 flex items-center justify-between gap-3">
             <div>
