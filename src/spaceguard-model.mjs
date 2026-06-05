@@ -2351,6 +2351,181 @@ export function buildDriveInventorySummary({
   };
 }
 
+export function buildStoragePressureDiagnosis({
+  scanned = false,
+  scanMode = "demo",
+  profile = {},
+  goalBytes = 0,
+  actionList = actions,
+  selectedIds = new Set(),
+  approvals = { groupConfirm: false, permanentConfirm: false, reviewed: {}, typed: {} },
+  protectedPaths = [],
+  itemReviewsByAction = null,
+  intakePolicy = null,
+  scanCoverage = null,
+  driveInventorySummary = null,
+  recoveryAdvisor = null,
+  customRootTriage = null
+} = {}) {
+  const reviewsByAction = itemReviewsByAction || buildReviewItemsByAction(actionList, null, protectedPaths, approvals);
+  const totals = computeTotals(selectedIds, actionList, { approvals, itemReviewsByAction: reviewsByAction });
+  const totalBytes = Number(profile.totalBytes || 0);
+  const usedBytes = Number(profile.usedBytes || 0);
+  const freeBytes = Number(profile.freeBytes || Math.max(0, totalBytes - usedBytes));
+  const usedPercent = totalBytes ? Math.round((usedBytes / totalBytes) * 100) : 0;
+  const selectedGapBytes = Math.max(0, Number(goalBytes || 0) - totals.selectedBytes);
+  const selectableBytes = actionList
+    .filter((action) => selectableAction(action, protectedPaths, intakePolicy))
+    .reduce((sum, action) => sum + Number(action.bytes || 0), 0);
+  const topRecipeRows = actionList
+    .slice()
+    .sort((a, b) => Number(b.bytes || 0) - Number(a.bytes || 0) || a.title.localeCompare(b.title))
+    .slice(0, 5)
+    .map((action) => ({
+      id: action.id,
+      label: action.title,
+      bytes: Number(action.bytes || 0),
+      lane: action.risk,
+      route: action.route || "",
+      gate: action.gate,
+      source: action.scanSource || "demo",
+      status: action.scanStatus || (action.scanSource ? "measured" : "demo-estimate"),
+      canCreateExecutor: selectableAction(action, protectedPaths, intakePolicy),
+      canRealRun: false
+    }));
+  const topInventoryRows = (driveInventorySummary?.topRows || []).slice(0, 5);
+  const inventoryReady = driveInventorySummary?.status === "inventory-ready";
+  const coverageNative = scanCoverage?.scanMode === "native-readonly" && scanCoverage?.nativeAvailable;
+  const rows = [
+    buildStoragePressureDiagnosisRow({
+      id: "drive-pressure",
+      label: "Drive pressure",
+      lane: "why",
+      status: totalBytes ? usedPercent >= 90 ? "critical" : usedPercent >= 80 ? "high" : "normal" : "unknown",
+      bytes: usedBytes,
+      detail: totalBytes
+        ? `${profile.drive || "Target drive"} is ${usedPercent}% full with ${formatBytes(freeBytes)} free.`
+        : "Drive total evidence is missing.",
+      nextStep: totalBytes ? "Rank recoverable buckets before touching data." : "Run native scan for volume evidence.",
+      canCreateExecutor: false
+    }),
+    buildStoragePressureDiagnosisRow({
+      id: "known-cleanup-pool",
+      label: "Known cleanup pool",
+      lane: "recipe",
+      status: scanCoverage?.status || "not-evaluated",
+      bytes: scanCoverage?.measuredBytes || totals.visibleBytes,
+      detail: scanCoverage
+        ? `${formatBytes(scanCoverage.measuredBytes || 0)} measured, ${formatBytes(scanCoverage.estimatedBytes || 0)} still estimated.`
+        : `${formatBytes(totals.visibleBytes)} visible in cleanup recipes.`,
+      nextStep: coverageNative ? "Use measured recipe rows for planning." : "Run native read-only scan before real-data claims.",
+      canCreateExecutor: false
+    }),
+    buildStoragePressureDiagnosisRow({
+      id: "largest-recipes",
+      label: "Largest cleanup recipes",
+      lane: "recipe",
+      status: topRecipeRows.length ? "ranked" : "missing",
+      bytes: topRecipeRows.reduce((sum, row) => sum + row.bytes, 0),
+      detail: topRecipeRows.length
+        ? `${topRecipeRows[0].label} is the largest visible cleanup recipe.`
+        : "No recipe candidates are available.",
+      nextStep: "Resolve gates only on selected recipe rows; do not infer cleanup from broad folders.",
+      canCreateExecutor: false
+    }),
+    buildStoragePressureDiagnosisRow({
+      id: "drive-inventory-context",
+      label: "Top-level drive context",
+      lane: "inventory",
+      status: inventoryReady ? "inventory-ready" : driveInventorySummary?.status || "missing",
+      bytes: driveInventorySummary?.visibleBytes || 0,
+      detail: inventoryReady
+        ? `${driveInventorySummary.counts.total} top-level bucket(s) explain broad drive pressure.`
+        : "Top-level C-drive inventory is not available yet.",
+      nextStep: inventoryReady ? "Use custom roots for narrower manual triage; do not create executor routes from inventory." : "Run the native desktop scan.",
+      canCreateExecutor: false
+    }),
+    buildStoragePressureDiagnosisRow({
+      id: "manual-review-buckets",
+      label: "Manual review buckets",
+      lane: "manual",
+      status: customRootTriage?.status || (inventoryReady ? "manual-review-available" : "waiting"),
+      bytes: Number(customRootTriage?.visibleBytes || driveInventorySummary?.reviewRows?.reduce((sum, row) => sum + row.bytes, 0) || 0),
+      detail: customRootTriage?.rows?.length
+        ? `${customRootTriage.counts.waiting} custom root(s) still need manual disposition.`
+        : "Unknown and user-data buckets must be narrowed before any decision.",
+      nextStep: "Use Keep, Archive, Move, Inspect, or Escalate; no automated executor is created.",
+      canCreateExecutor: false
+    }),
+    buildStoragePressureDiagnosisRow({
+      id: "plan-gap",
+      label: "Current plan gap",
+      lane: "decision",
+      status: selectedGapBytes ? "gap-open" : "target-met",
+      bytes: selectedGapBytes,
+      detail: selectedGapBytes
+        ? `${formatBytes(selectedGapBytes)} remains after current selections.`
+        : "Current selected plan reaches the recovery target.",
+      nextStep: recoveryAdvisor?.primary || "Use recovery advisor for the next decision.",
+      canCreateExecutor: false
+    }),
+    buildStoragePressureDiagnosisRow({
+      id: "execution-boundary",
+      label: "Execution boundary",
+      lane: "guardrail",
+      status: "real-cleanup-locked",
+      bytes: 0,
+      detail: "Diagnosis can recommend workflow branches, but it never grants cleanup authority.",
+      nextStep: "Use preflight, task grants, consent, validation, and write readiness before any future executor.",
+      canCreateExecutor: false
+    })
+  ];
+  const topCauses = rows
+    .filter((row) => row.id !== "execution-boundary")
+    .slice()
+    .sort((a, b) => Number(b.bytes || 0) - Number(a.bytes || 0))
+    .slice(0, 3);
+  const diagnosisReady = scanned && (scanMode === "demo" || coverageNative || inventoryReady);
+  const status = !scanned
+    ? "scan-first"
+    : scanMode === "native-readonly" && inventoryReady
+      ? "native-diagnosis-ready"
+      : scanMode === "native-readonly"
+        ? "native-diagnosis-partial"
+        : "demo-diagnosis";
+
+  return {
+    schemaVersion: "spaceguard-storage-pressure-diagnosis/v1",
+    status,
+    tone: status === "native-diagnosis-ready" ? "safe" : status === "scan-first" ? "review" : "advisory",
+    scanMode,
+    drive: profile.drive || "",
+    usedPercent,
+    freeBytes,
+    goalBytes: Number(goalBytes || 0),
+    selectedBytes: totals.selectedBytes,
+    selectedGapBytes,
+    selectableBytes,
+    manualOnly: true,
+    realRunEnabled: false,
+    destructiveCommands: false,
+    counts: {
+      rows: rows.length,
+      causes: topCauses.length,
+      recipeRows: topRecipeRows.length,
+      inventoryRows: topInventoryRows.length,
+      executorRoutes: 0,
+      realRun: 0
+    },
+    rows,
+    topCauses,
+    topRecipeRows,
+    topInventoryRows,
+    primary: getStoragePressureDiagnosisPrimary(status, { usedPercent, selectedGapBytes, topCauses, recoveryAdvisor }),
+    steps: getStoragePressureDiagnosisSteps(status, { recoveryAdvisor, inventoryReady, selectedGapBytes })
+  };
+}
+
 export function buildCustomRootTriage({
   scanCoverage = null,
   evidence = {}
@@ -2516,6 +2691,54 @@ function getDriveInventorySteps(status, { reviewRows = [], systemRows = [], limi
   }
   if (status === "demo-only") return ["Run the desktop shell.", "Run a native read-only scan.", "Use inventory only as discovery evidence."];
   return ["Fix native scanner availability.", "Run read-only scan again.", "Keep cleanup planning on known measured recipes only."];
+}
+
+function buildStoragePressureDiagnosisRow({ id, label, lane, status, bytes = 0, detail = "", nextStep = "", canCreateExecutor = false }) {
+  return {
+    id,
+    label,
+    lane,
+    status,
+    bytes: Number(bytes || 0),
+    detail,
+    nextStep,
+    tone: getStoragePressureDiagnosisRowTone(status),
+    canCreateExecutor: Boolean(canCreateExecutor),
+    canRealRun: false
+  };
+}
+
+function getStoragePressureDiagnosisRowTone(status) {
+  if (status === "critical" || status === "real-cleanup-locked") return "restricted";
+  if (status === "high" || status === "gap-open" || status === "native-diagnosis-partial") return "review";
+  if (status === "target-met" || status === "normal" || status === "inventory-ready" || status === "ranked") return "safe";
+  return "outline";
+}
+
+function getStoragePressureDiagnosisPrimary(status, { usedPercent = 0, selectedGapBytes = 0, topCauses = [], recoveryAdvisor = null } = {}) {
+  if (status === "scan-first") return "Run a scan before diagnosing C-drive pressure.";
+  const firstCause = topCauses[0];
+  if (selectedGapBytes > 0) {
+    return `${firstCause?.label || "Drive pressure"} is the current pressure source; ${formatBytes(selectedGapBytes)} remains after selected recovery.`;
+  }
+  if (recoveryAdvisor?.status === "verify") return "A plan has already run in dry-run mode; verification is now the pressure diagnosis.";
+  return `C-drive pressure is explainable from current evidence (${usedPercent}% used), and the selected plan reaches the target.`;
+}
+
+function getStoragePressureDiagnosisSteps(status, { recoveryAdvisor = null, inventoryReady = false, selectedGapBytes = 0 } = {}) {
+  if (status === "scan-first") {
+    return ["Run demo scan or native read-only scan.", "Inspect drive inventory and scan coverage.", "Then choose the lowest-risk cleanup branch."];
+  }
+  if (!inventoryReady && status !== "demo-diagnosis") {
+    return ["Capture top-level drive inventory.", "Keep known recipe cleanup separate from broad folder context.", "Use custom roots only for manual triage."];
+  }
+  if (selectedGapBytes > 0) {
+    const advisorSteps = recoveryAdvisor?.steps || [];
+    return advisorSteps.length
+      ? advisorSteps.slice(0, 4)
+      : ["Add safe measured recipes first.", "Ask for required approvals.", "Use manual storage strategy if cleanup cannot meet the target."];
+  }
+  return ["Resolve any pending gates.", "Arm dry-run consent only for the current plan.", "Simulate, rescan, and export the report."];
 }
 
 export function normalizeCustomRootTriageRecord(value = null) {
@@ -5037,6 +5260,7 @@ export function buildProductCompletionAudit({
   scanSession = null,
   scanCoverage = null,
   driveInventorySummary = null,
+  storagePressureDiagnosis = null,
   demoRehearsalRunbook = null,
   windowsSetupAssistant = null,
   taskPowerCatalog = null,
@@ -5101,6 +5325,18 @@ export function buildProductCompletionAudit({
           : "Run demo scan or native read-only scan.",
       evidence: `${scanSession?.status || "no scan session"}; inventory=${driveInventorySummary?.status || "missing"}`,
       nextStep: nativeScanCurrent && driveInventoryCurrent ? "Use current native evidence for planning." : "Run the scan path needed for this review."
+    }),
+    buildProductCompletionAuditRow({
+      id: "diagnose-storage-pressure",
+      requirement: "Explain why the target drive is full",
+      status: storagePressureDiagnosis?.status === "native-diagnosis-ready"
+        ? "native-proven"
+        : storagePressureDiagnosis?.schemaVersion
+          ? "partial"
+          : "waiting-evidence",
+      detail: storagePressureDiagnosis?.primary || "Storage pressure diagnosis has not been evaluated.",
+      evidence: storagePressureDiagnosis?.status || "diagnosis missing",
+      nextStep: storagePressureDiagnosis?.steps?.[0] || "Run scan and build storage pressure diagnosis."
     }),
     buildProductCompletionAuditRow({
       id: "classify-and-rank",
@@ -9996,6 +10232,7 @@ export function buildReport({
   manualStrategyChecklist = null,
   scanCoverage = null,
   driveInventorySummary = null,
+  storagePressureDiagnosis = null,
   intakePolicy = null,
   riskBudget = null,
   planLock = null,
@@ -10430,6 +10667,27 @@ export function buildReport({
           driveInventorySummary.topRows?.length
             ? driveInventorySummary.topRows.map((row) => `- ${row.name}: ${formatBytes(row.bytes)} | ${row.status} | ${row.classification} | executor=${row.canCreateExecutor ? "yes" : "no"} | ${row.nextStep}`).join("\n")
             : "- No drive inventory rows."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Storage Pressure Diagnosis",
+    storagePressureDiagnosis
+      ? [
+          `- Status: ${storagePressureDiagnosis.status}`,
+          `- Drive: ${storagePressureDiagnosis.drive || reportProfile.drive || "unknown"}`,
+          `- Used: ${storagePressureDiagnosis.usedPercent}%`,
+          `- Selected recovery: ${formatBytes(storagePressureDiagnosis.selectedBytes || 0)}`,
+          `- Remaining gap: ${formatBytes(storagePressureDiagnosis.selectedGapBytes || 0)}`,
+          `- Manual only: ${storagePressureDiagnosis.manualOnly ? "yes" : "no"}`,
+          `- Executor routes: ${storagePressureDiagnosis.counts.executorRoutes}`,
+          `- Real-run rows: ${storagePressureDiagnosis.counts.realRun}`,
+          `- Primary: ${storagePressureDiagnosis.primary}`,
+          storagePressureDiagnosis.topCauses?.length
+            ? storagePressureDiagnosis.topCauses.map((row) => `- Cause: ${row.label} | ${row.status} | ${formatBytes(row.bytes)} | ${row.detail} | ${row.nextStep}`).join("\n")
+            : "- No pressure causes ranked.",
+          storagePressureDiagnosis.steps?.length
+            ? storagePressureDiagnosis.steps.map((step) => `- Next: ${step}`).join("\n")
+            : "- No diagnosis steps."
         ].join("\n")
       : "- Not evaluated.",
     "",

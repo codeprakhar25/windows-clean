@@ -1222,6 +1222,87 @@ const assert = require("assert");
   assert(coverageReport.includes("Confidence: 0%"), "report should include scan confidence");
   assert(coverageReport.includes("## Scan Settings"), "report should include scan settings");
   assert(coverageReport.includes("Project artifacts: excluded"), "report should preserve project artifact scan setting");
+  const diagnosisInventory = guard.buildDriveInventorySummary({
+    scanMode: "native-readonly",
+    nativeScan: {
+      available: true,
+      driveInventory: [
+        {
+          id: "drive-users",
+          name: "Users",
+          path: "C:\\Users",
+          bytes: 260 * guard.GB,
+          status: "limited",
+          files: 12000,
+          dirs: 900,
+          classification: "user-data-review"
+        },
+        {
+          id: "drive-windows",
+          name: "Windows",
+          path: "C:\\Windows",
+          bytes: 80 * guard.GB,
+          status: "limited",
+          files: 8000,
+          dirs: 600,
+          classification: "system-or-protected"
+        }
+      ]
+    }
+  });
+  const storagePressureDiagnosis = guard.buildStoragePressureDiagnosis({
+    scanned: true,
+    scanMode: "native-readonly",
+    profile: {
+      drive: "C:",
+      totalBytes: 512 * guard.GB,
+      usedBytes: 470 * guard.GB,
+      freeBytes: 42 * guard.GB
+    },
+    goalBytes: 40 * guard.GB,
+    actionList: developerActions,
+    selectedIds: new Set(["windows-temp"]),
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    protectedPaths,
+    scanCoverage: demoCoverage,
+    driveInventorySummary: diagnosisInventory,
+    recoveryAdvisor: { primary: "Add safe findings first.", steps: ["Add temp cleanup.", "Review rebuildable caches."] }
+  });
+  assert.strictEqual(storagePressureDiagnosis.schemaVersion, "spaceguard-storage-pressure-diagnosis/v1", "storage pressure diagnosis should expose a schema version");
+  assert.strictEqual(storagePressureDiagnosis.status, "native-diagnosis-ready", "native inventory should make diagnosis ready");
+  assert.strictEqual(storagePressureDiagnosis.manualOnly, true, "diagnosis should be advice only");
+  assert.strictEqual(storagePressureDiagnosis.counts.executorRoutes, 0, "diagnosis must not create executor routes");
+  assert.strictEqual(storagePressureDiagnosis.counts.realRun, 0, "diagnosis must not create real-run rows");
+  assert(storagePressureDiagnosis.rows.some((row) => row.id === "execution-boundary" && row.status === "real-cleanup-locked"), "diagnosis should keep a visible execution boundary");
+  assert(storagePressureDiagnosis.topCauses.some((row) => row.label === "Drive pressure"), "diagnosis should rank drive pressure as a cause");
+  const diagnosisReport = guard.buildReport({
+    scenario: guard.getScenario("developer"),
+    profile: guard.getScenario("developer").profile,
+    actionList: developerActions,
+    selectedIds: new Set(["windows-temp"]),
+    readiness: guard.getExecutionReadinessForActions(new Set(["windows-temp"]), { groupConfirm: true, reviewed: {}, typed: {} }, developerActions, protectedPaths),
+    ledger: [],
+    protectedPaths,
+    goalBytes: 40 * guard.GB,
+    scanCoverage: demoCoverage,
+    driveInventorySummary: diagnosisInventory,
+    storagePressureDiagnosis
+  });
+  assert(diagnosisReport.includes("## Storage Pressure Diagnosis"), "report should include storage pressure diagnosis");
+  assert(diagnosisReport.includes("Executor routes: 0"), "diagnosis report should preserve zero executor routes");
+  const diagnosisAudit = guard.buildProductCompletionAudit({
+    scanned: true,
+    scanMode: "native-readonly",
+    scanSession: { readyForPlanning: true, nativeEvidence: true, status: "native-current" },
+    scanCoverage: demoCoverage,
+    driveInventorySummary: diagnosisInventory,
+    storagePressureDiagnosis
+  });
+  assert.strictEqual(
+    diagnosisAudit.rows.find((row) => row.id === "diagnose-storage-pressure").status,
+    "native-proven",
+    "product audit should track storage pressure diagnosis"
+  );
 
   const demoPrivacyBoundary = guard.buildPrivacyBoundary({
     scanMode: "demo",

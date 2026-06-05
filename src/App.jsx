@@ -95,6 +95,7 @@ import {
   buildScanCoverageSummary,
   buildScanSessionEvidence,
   buildNativeScanRequestGuard,
+  buildStoragePressureDiagnosis,
   buildStorageStrategyPlan,
   buildSupportBundle,
   buildSupportBundleMarkdown,
@@ -455,6 +456,41 @@ export default function App() {
         intakePolicy
       }),
     [scanned, dataMode, goalGb, actionList, selectedIds, approvals, protectedPaths, activeLedger, itemReviewsByAction, planSnapshot, intakePolicy]
+  );
+  const storagePressureDiagnosis = useMemo(
+    () =>
+      buildStoragePressureDiagnosis({
+        scanned,
+        scanMode: dataMode,
+        profile,
+        goalBytes: goalGb * GB,
+        actionList,
+        selectedIds,
+        approvals,
+        protectedPaths,
+        itemReviewsByAction,
+        intakePolicy,
+        scanCoverage,
+        driveInventorySummary,
+        recoveryAdvisor,
+        customRootTriage
+      }),
+    [
+      scanned,
+      dataMode,
+      profile,
+      goalGb,
+      actionList,
+      selectedIds,
+      approvals,
+      protectedPaths,
+      itemReviewsByAction,
+      intakePolicy,
+      scanCoverage,
+      driveInventorySummary,
+      recoveryAdvisor,
+      customRootTriage
+    ]
   );
   const storageStrategy = useMemo(
     () =>
@@ -1242,6 +1278,7 @@ export default function App() {
         scanSession,
         scanCoverage,
         driveInventorySummary,
+        storagePressureDiagnosis,
         demoRehearsalRunbook,
         windowsSetupAssistant,
         taskPowerCatalog,
@@ -1279,6 +1316,7 @@ export default function App() {
       scanSession,
       scanCoverage,
       driveInventorySummary,
+      storagePressureDiagnosis,
       demoRehearsalRunbook,
       windowsSetupAssistant,
       taskPowerCatalog,
@@ -2089,6 +2127,7 @@ export default function App() {
       storageStrategy,
       manualStrategyChecklist,
       customRootTriage,
+      storagePressureDiagnosis,
       scanCoverage,
       driveInventorySummary,
       intakePolicy,
@@ -2514,6 +2553,8 @@ export default function App() {
             />
 
             <DriveInventoryPanel inventory={driveInventorySummary} />
+
+            <StoragePressureDiagnosisPanel diagnosis={storagePressureDiagnosis} />
 
             <ScanCoveragePanel coverage={scanCoverage} />
 
@@ -4719,6 +4760,96 @@ function DriveInventoryPanel({ inventory }) {
           <div className="mb-2 text-sm font-medium">Next inventory moves</div>
           <div className="flex flex-col gap-2">
             {inventory.steps.slice(0, 4).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StoragePressureDiagnosisPanel({ diagnosis }) {
+  const causes = diagnosis.topCauses || [];
+  const recipeRows = diagnosis.topRecipeRows || [];
+
+  return (
+    <Card id="storage-pressure-diagnosis-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <CircleGauge className="h-4 w-4" />
+              Storage pressure diagnosis
+            </CardTitle>
+            <CardDescription>{diagnosis.primary}</CardDescription>
+          </div>
+          <Badge variant={diagnosis.tone}>{diagnosis.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <QueueStat label="Used" value={`${diagnosis.usedPercent}%`} tone={diagnosis.usedPercent >= 90 ? "restricted" : diagnosis.usedPercent >= 80 ? "review" : "safe"} />
+          <QueueStat label="Selected" value={formatBytes(diagnosis.selectedBytes)} tone={diagnosis.selectedBytes ? "safe" : "review"} />
+          <QueueStat label="Gap" value={formatBytes(diagnosis.selectedGapBytes)} tone={diagnosis.selectedGapBytes ? "review" : "safe"} />
+          <QueueStat label="Real run" value={diagnosis.counts.realRun} tone="safe" />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Diagnosis boundary</span>
+            <Badge variant="safe">manual advice</Badge>
+            <Badge variant="safe">no cleanup authority</Badge>
+            <Badge variant={diagnosis.destructiveCommands ? "restricted" : "safe"}>{diagnosis.destructiveCommands ? "destructive visible" : "destructive hidden"}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Diagnosis explains why space is low and which branch to take next. It cannot bypass approval gates, protected paths, dry-run consent, validation, or write readiness.
+          </p>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {causes.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="mr-auto min-w-0 text-sm font-medium">{row.label}</span>
+                <Badge variant={row.tone}>{row.status}</Badge>
+                <Badge variant="outline">{formatBytes(row.bytes)}</Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{row.detail}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{row.nextStep}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 text-sm font-medium">Largest recipe context</div>
+          <div className="flex flex-col gap-2">
+            {recipeRows.length ? (
+              recipeRows.slice(0, 4).map((row) => (
+                <div key={row.id} className="grid gap-2 rounded-md border bg-card p-2 text-sm sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{row.label}</div>
+                    <div className="text-xs text-muted-foreground">{row.status} / {row.gate}</div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">{formatBytes(row.bytes)}</Badge>
+                    <Badge variant={row.canCreateExecutor ? "review" : "safe"}>{row.canCreateExecutor ? "gated route" : "no route"}</Badge>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">Run a scan to rank recipe context.</div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 text-sm font-medium">Next diagnosis moves</div>
+          <div className="flex flex-col gap-2">
+            {diagnosis.steps.slice(0, 4).map((step) => (
               <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
                 <span className="text-muted-foreground">{step}</span>

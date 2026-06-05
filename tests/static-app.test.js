@@ -64,6 +64,9 @@ const requiredAppMarkers = [
   "Drive inventory",
   "Discovery boundary",
   "no executor routes",
+  "Storage pressure diagnosis",
+  "Diagnosis boundary",
+  "no cleanup authority",
   "Scan coverage",
   "Coverage confidence",
   "Recovery advisor",
@@ -249,6 +252,9 @@ assert(app.includes("buildScanCoverageSummary"), "scan coverage summary should b
 assert(app.includes("buildDriveInventorySummary"), "drive inventory summary should be wired");
 assert(app.includes("DriveInventoryPanel"), "drive inventory panel should be rendered");
 assert(app.includes("drive-inventory-panel"), "drive inventory should be focusable");
+assert(app.includes("buildStoragePressureDiagnosis"), "storage pressure diagnosis should be wired");
+assert(app.includes("StoragePressureDiagnosisPanel"), "storage pressure diagnosis panel should be rendered");
+assert(app.includes("storage-pressure-diagnosis-panel"), "storage pressure diagnosis should be focusable");
 assert(app.includes("buildScanSessionEvidence"), "scan session freshness guard should be wired");
 assert(app.includes("buildRecoveryAdvisor"), "recovery advisor should be wired");
 assert(app.includes("buildAgentQuestionQueue"), "agent question queue should be wired");
@@ -438,6 +444,9 @@ assert(model.includes("spaceguard-scan-coverage/v1"), "model should expose scan 
 assert(model.includes("spaceguard-drive-inventory/v1"), "model should expose drive inventory schema");
 assert(model.includes("top-level drive"), "drive inventory should describe top-level discovery");
 assert(model.includes("noExecutorRoute: true"), "drive inventory should block executor route creation");
+assert(model.includes("spaceguard-storage-pressure-diagnosis/v1"), "model should expose storage pressure diagnosis schema");
+assert(model.includes("diagnose-storage-pressure"), "product audit should track storage pressure diagnosis");
+assert(model.includes("Diagnosis can recommend workflow branches"), "diagnosis should not grant cleanup authority");
 assert(model.includes("spaceguard-custom-root-triage/v1"), "model should expose custom root triage schema");
 assert(model.includes("customRootDispositionOptions"), "model should define custom root disposition options");
 assert(model.includes("canCreateExecutor: false"), "custom root triage should block executor creation");
@@ -573,10 +582,12 @@ assert(realDataGuide.includes("Validation pack import"), "real-data guide should
 assert(realDataGuide.includes("beta handoff manifest"), "real-data guide should include beta handoff manifest export");
 assert(realDataGuide.includes("local evidence backup"), "real-data guide should include local evidence backup export");
 assert(realDataGuide.includes("Drive inventory"), "real-data guide should require drive inventory review");
+assert(realDataGuide.includes("Storage pressure diagnosis"), "real-data guide should require storage pressure diagnosis review");
 assert(readme.includes("NATIVE_BETA_DISTRIBUTION.md"), "README should link native beta distribution runbook");
 assert(readme.includes("Beta handoff manifest"), "README should describe beta handoff manifest");
 assert(readme.includes("Local evidence backup"), "README should describe local evidence backup");
 assert(readme.includes("Read-only drive inventory"), "README should describe drive inventory");
+assert(readme.includes("Storage pressure diagnosis"), "README should describe storage pressure diagnosis");
 assert(realDataGuide.includes("NATIVE_BETA_DISTRIBUTION.md"), "real-data guide should link native beta distribution runbook");
 assert(nativeBetaRunbook.includes("Native Beta Distribution Runbook"), "native beta runbook should exist");
 assert(nativeBetaRunbook.includes("Install Path"), "native beta runbook should cover install evidence");

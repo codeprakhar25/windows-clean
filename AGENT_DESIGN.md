@@ -110,6 +110,7 @@ The UI must also expose a recovery advisor and decision log:
 - `windows setup assistant`: first-run setup state for browser demo, desktop shell, read-only scan evidence, privacy/export, native beta evidence, and real-cleanup lock.
 - `real scan settings`: project artifact inclusion, traversal depth, and per-root entry cap for the next native read-only scan.
 - `scan coverage`: confidence summary for measured, limited, missing, protected, unsupported, and demo-estimated roots; partial native scans must remain visibly partial.
+- `storage pressure diagnosis`: an advisory explanation of why the target drive is full, ranking drive pressure, known cleanup recipes, top-level inventory, manual-review buckets, and current plan gap without creating executor routes.
 - `custom root triage`: manual disposition workflow for custom read-only findings, with Keep, Archive, Move, Inspect, and Escalate states that cannot create executor routes.
 - `storage strategy`: manual-only guidance for app uninstall review, library migration, archive storage, drive upgrades, and backup-first partition planning when cleanup cannot meet the target.
 - `manual strategy checklist`: local follow-along evidence for backup, archive destination, app-native move, official uninstall path, and partition-prep readiness.
