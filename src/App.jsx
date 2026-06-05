@@ -1326,7 +1326,10 @@ export default function App() {
         storagePressureDiagnosis,
         executorPlan,
         nativeScan: nativeScan.result,
-        runtimeCapabilities: runtimeCapabilities.result
+        runtimeCapabilities: runtimeCapabilities.result,
+        itemReviewsByAction,
+        driveInventorySummary,
+        customRootTriage
       }),
     [
       profile,
@@ -1343,7 +1346,10 @@ export default function App() {
       storagePressureDiagnosis,
       executorPlan,
       nativeScan.result,
-      runtimeCapabilities.result
+      runtimeCapabilities.result,
+      itemReviewsByAction,
+      driveInventorySummary,
+      customRootTriage
     ]
   );
   const aiAgentIntegration = useMemo(
@@ -5952,11 +5958,12 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-9">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-5 xl:grid-cols-10">
           <QueueStat label="Model" value={config.model} tone={configured ? "safe" : "review"} />
           <QueueStat label="Selected" value={context.selectedActions.length} tone={context.selectedActions.length ? "advanced" : "review"} />
           <QueueStat label="Direct tools" value="blocked" tone="safe" />
           <QueueStat label="Real exec" value={scopedRealFlag ? "scoped flag" : "off"} tone={scopedRealFlag ? "restricted" : "safe"} />
+          <QueueStat label="Manual" value={context.manualReviewTargets?.length || 0} tone={context.manualReviewTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Project targets" value={context.reviewedProjectTargets?.length || 0} tone={context.reviewedProjectTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Gradle root" value={context.gradleCacheTargets?.length || 0} tone={context.gradleCacheTargets?.length ? "advanced" : "review"} />
           <QueueStat label="npm root" value={context.npmCacheTargets?.length || 0} tone={context.npmCacheTargets?.length ? "advanced" : "review"} />
@@ -5979,6 +5986,8 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
             <span>Reasoning: {config.reasoningEffort || "default"}</span>
             <span>Native scan: {context.runtime.nativeAvailable ? "available" : "not available"}</span>
             <span>Candidate samples: {context.candidateSamples.length}</span>
+            <span>Drive inventory rows: {context.driveInventoryRows?.length || 0}</span>
+            <span>Custom root rows: {context.customRootRows?.length || 0}</span>
           </div>
         </div>
 

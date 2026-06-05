@@ -30,6 +30,78 @@ const assert = require("assert");
     "Tauri host should expose the native OpenAI command"
   );
 
+  const manualContext = openai.buildOpenAIAgentContext({
+    nativeScan: {
+      findings: [
+        {
+          recipeId: "installed-app-footprints",
+          items: [
+            {
+              id: "app-old-ide",
+              name: "Old IDE 2023",
+              path: "C:\\Program Files\\Old IDE 2023",
+              bytes: 6 * 1024 ** 3,
+              ageDays: 180,
+              kind: "developer tool footprint",
+              recommendation: "review",
+              reason: "Large old app footprint"
+            }
+          ]
+        }
+      ]
+    },
+    itemReviewsByAction: {
+      "installed-app-footprints": {
+        items: [
+          {
+            id: "app-old-ide",
+            name: "Old IDE 2023",
+            path: "C:\\Program Files\\Old IDE 2023",
+            bytes: 6 * 1024 ** 3,
+            ageDays: 180,
+            kind: "developer tool footprint",
+            recommendation: "review",
+            decision: "remove",
+            reason: "Manual uninstall candidate"
+          }
+        ]
+      }
+    },
+    driveInventorySummary: {
+      topRows: [
+        {
+          id: "drive-users",
+          name: "Users",
+          path: "C:\\Users",
+          bytes: 256 * 1024 ** 3,
+          status: "limited",
+          classification: "user-data-review",
+          nextStep: "Review user-owned folders manually."
+        }
+      ]
+    },
+    customRootTriage: {
+      rows: [
+        {
+          id: "custom-root-1",
+          title: "Custom folder: Archives",
+          path: "C:\\Users\\real\\Archives",
+          bytes: 7 * 1024 ** 3,
+          status: "needs-disposition",
+          disposition: "undecided",
+          nextStep: "Choose keep, archive, move, or inspect later."
+        }
+      ]
+    }
+  });
+  assert.strictEqual(manualContext.appBoundary.allowedActions.includes("recommend-manual-review"), true, "OpenAI context should permit manual-review recommendations");
+  assert.strictEqual(manualContext.manualReviewTargets[0].route, "manual-app-uninstall", "installed app candidates should enter the OpenAI context as manual uninstall targets");
+  assert.strictEqual(manualContext.manualReviewTargets[0].manualOnly, true, "installed app candidates should stay manual-only in OpenAI context");
+  assert.strictEqual(manualContext.manualReviewTargets[0].canCreateExecutor, false, "OpenAI context must not turn installed app review into an executor route");
+  assert.strictEqual(manualContext.manualReviewTargets[0].selectedForRemoval, false, "manual uninstall decisions must not be represented as automatic removal authority");
+  assert.strictEqual(manualContext.driveInventoryRows[0].canCreateExecutor, false, "drive inventory rows should be advisory-only in OpenAI context");
+  assert.strictEqual(manualContext.customRootRows[0].manualOnly, true, "custom root rows should be manual-only in OpenAI context");
+
   let nativeInvocation = null;
   const nativeResult = await openai.requestOpenAIAgentAdvice({
     config: openai.getOpenAIAgentConfig({ OPENAI_API_KEY: "renderer-key-should-not-cross" }),

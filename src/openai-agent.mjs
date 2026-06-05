@@ -108,7 +108,10 @@ export function buildOpenAIAgentContext({
   storagePressureDiagnosis,
   executorPlan,
   nativeScan,
-  runtimeCapabilities
+  runtimeCapabilities,
+  itemReviewsByAction,
+  driveInventorySummary,
+  customRootTriage
 } = {}) {
   const selected = actionList
     .filter((action) => selectedIds.has(action.id))
@@ -194,6 +197,33 @@ export function buildOpenAIAgentContext({
       consequence: "permanent removal"
     }))
     .slice(0, 1);
+  const manualReviewTargets = buildManualReviewTargets({ nativeScan, itemReviewsByAction });
+  const driveInventoryRows = (driveInventorySummary?.topRows || driveInventorySummary?.rows || [])
+    .slice(0, 8)
+    .map((row) => ({
+      id: row.id || "",
+      name: row.name || "",
+      path: row.path || "",
+      bytes: Number(row.bytes || 0),
+      status: row.status || "unknown",
+      classification: row.classification || "unknown-review",
+      canCreateExecutor: false,
+      manualOnly: true,
+      nextStep: row.nextStep || "Review this drive bucket manually before acting."
+    }));
+  const customRootRows = (customRootTriage?.rows || [])
+    .slice(0, 8)
+    .map((row) => ({
+      id: row.id || "",
+      title: row.title || "",
+      path: row.path || "",
+      bytes: Number(row.bytes || 0),
+      status: row.status || "unknown",
+      disposition: row.disposition || "undecided",
+      canCreateExecutor: false,
+      manualOnly: true,
+      nextStep: row.nextStep || "Choose a manual disposition; no executor route is available."
+    }));
 
   return {
     schemaVersion: "spaceguard-openai-agent-context/v1",
@@ -204,7 +234,7 @@ export function buildOpenAIAgentContext({
       directDeleteAuthority: false,
       userApprovalRequired: true,
       executorAuthority: "native code only after explicit user action",
-      allowedActions: ["rank-reviewed-targets", "explain-blockers", "ask-user", "recommend-rescan", "recommend-scoped-executor-button"],
+      allowedActions: ["rank-reviewed-targets", "explain-blockers", "ask-user", "recommend-rescan", "recommend-scoped-executor-button", "recommend-manual-review"],
       forbiddenActions: ["delete-files", "approve-gates", "scan-folders", "run-shell", "edit-registry", "change-partitions"]
     },
     machine: {
@@ -247,6 +277,9 @@ export function buildOpenAIAgentContext({
     npmCacheTargets,
     recycleBinTargets,
     browserCacheTargets,
+    manualReviewTargets,
+    driveInventoryRows,
+    customRootRows,
     candidateSamples: (candidateSafetyManifest?.rows || []).slice(0, 12).map((row) => ({
       id: row.id,
       title: row.title,
@@ -301,6 +334,7 @@ export async function requestOpenAIAgentAdvice({
       "You are the SpaceGuard local Windows cleanup advisor.",
       "You never claim you scanned the computer yourself; you only interpret the provided app context.",
       "You cannot approve gates, modify files, run shell commands, or delete data.",
+      "Manual review targets such as installed app footprints, custom roots, and broad drive inventory rows are advisory only; never recommend direct folder deletion or automated uninstall.",
       "When a scoped executor is visible, recommend the exact UI button only after the context says current consent and route-specific targets exist.",
       "Use actionType values from the schema. Keep targetId empty unless you are referring to a provided target id.",
       "Prioritize concrete next steps that move toward real safe cleanup.",
@@ -357,6 +391,36 @@ export async function requestOpenAIAgentAdvice({
     advice: parseAgentAdvice(text),
     responseId: payload?.id || ""
   }, { fallbackModel: config.model, transport: "browser-fetch" });
+}
+
+function buildManualReviewTargets({ nativeScan = null, itemReviewsByAction = null } = {}) {
+  const appReview = itemReviewsByAction?.["installed-app-footprints"];
+  const sourceItems = appReview?.items?.length
+    ? appReview.items
+    : (nativeScan?.findings || [])
+        .filter((finding) => finding.recipeId === "installed-app-footprints")
+        .flatMap((finding) => finding.items || []);
+
+  return sourceItems
+    .slice()
+    .sort((left, right) => Number(right.bytes || 0) - Number(left.bytes || 0))
+    .slice(0, 12)
+    .map((item) => ({
+      id: item.id || "",
+      name: item.name || "",
+      route: "manual-app-uninstall",
+      path: item.path || "",
+      bytes: Number(item.bytes || 0),
+      ageDays: Number(item.ageDays || 0),
+      kind: item.kind || "installed app footprint",
+      recommendation: item.recommendation || "review",
+      decision: item.decision || "undecided",
+      selectedForRemoval: false,
+      canCreateExecutor: false,
+      manualOnly: true,
+      officialAction: "Use Windows Settings or the vendor uninstaller only.",
+      reason: item.reason || "Installed app footprint is manual review evidence, not an automated cleanup target."
+    }));
 }
 
 function toAgentAction(action = {}) {

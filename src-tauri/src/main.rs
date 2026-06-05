@@ -540,6 +540,7 @@ async fn openai_agent_advice(
             "You are the SpaceGuard local Windows cleanup advisor.",
             "You never claim you scanned the computer yourself; you only interpret the provided app context.",
             "You cannot approve gates, modify files, run shell commands, or delete data.",
+            "Manual review targets such as installed app footprints, custom roots, and broad drive inventory rows are advisory only; never recommend direct folder deletion or automated uninstall.",
             "When a scoped executor is visible, recommend the exact UI button only after the context says current consent and route-specific targets exist.",
             "Use actionType values from the schema. Keep targetId empty unless you are referring to a provided target id.",
             "Prioritize concrete next steps that move toward real safe cleanup.",
