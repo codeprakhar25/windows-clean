@@ -358,6 +358,15 @@ assert(rustScanner.includes("SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR"), "Rust na
 assert(rustScanner.includes("project_dependency_scan_item"), "Rust scanner should enrich node_modules review items with project metadata");
 assert(rustScanner.includes("Expo project dependency folder"), "Rust scanner should surface Expo project hints");
 assert(rustScanner.includes("React Native project dependency folder"), "Rust scanner should surface React Native project hints");
+assert(model.includes("installed-app-footprints"), "model should include installed app footprint review");
+assert(model.includes("manual-app-uninstall"), "installed app footprints should stay manual uninstall guidance");
+assert(model.includes("Modification age is not usage proof"), "installed app policy should not overclaim usage detection");
+assert(app.includes("Mark uninstall"), "item review should label app footprint decisions as manual uninstall follow-up");
+assert(app.includes("SpaceGuard will not delete Program Files folders"), "item review should preserve the Program Files deletion boundary");
+assert(rustScanner.includes("measure_installed_app_footprints"), "Rust scanner should measure installed app footprints read-only");
+assert(rustScanner.includes("InstalledAppFootprints"), "Rust scanner should use an installed-app footprint measure kind");
+assert(rustScanner.includes("installed_app_scan_item"), "Rust scanner should emit app footprint review candidates");
+assert(rustScanner.includes("Windows Settings or the vendor uninstaller"), "Rust scanner should keep app cleanup as manual uninstall guidance");
 assert(app.includes("buildWriteBoundaryProbe"), "write boundary probe should be wired");
 assert(app.includes("buildValidationEvidencePack"), "validation evidence pack should be wired");
 assert(app.includes("buildValidationPackMarkdown"), "validation pack markdown export should be wired");
@@ -656,6 +665,8 @@ assert(readme.includes("Local evidence backup"), "README should describe local e
 assert(readme.includes("Read-only drive inventory"), "README should describe drive inventory");
 assert(readme.includes("Storage pressure diagnosis"), "README should describe storage pressure diagnosis");
 assert(readme.includes("Native evidence quality"), "README should describe native evidence quality");
+assert(readme.includes("Installed app footprints"), "README should describe installed app footprint discovery");
+assert(realDataGuide.includes("App footprint decisions"), "real-data guide should describe app footprint manual decisions");
 assert(realDataGuide.includes("NATIVE_BETA_DISTRIBUTION.md"), "real-data guide should link native beta distribution runbook");
 assert(nativeBetaRunbook.includes("Native Beta Distribution Runbook"), "native beta runbook should exist");
 assert(nativeBetaRunbook.includes("Install Path"), "native beta runbook should cover install evidence");

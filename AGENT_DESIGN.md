@@ -223,6 +223,7 @@ Review gate invariant:
 - Protected candidates are forced to `Keep`.
 - Only `Remove` item bytes count toward selected recovery, executor preview, and ledger output.
 - `Move` and `Archive` item bytes are manual recovery intent and cannot create executor rows.
+- Installed app footprint candidates are an explicit exception: `Remove` means manual uninstall follow-up, not executor recovery. The app must not count those bytes in dry-run totals, executor previews, or ledgers.
 - If all items are kept, the action should be unselected rather than simulated as cleanup.
 
 ### 6. Execution
@@ -589,6 +590,7 @@ For review-gated roots, the native scanner may return item-level candidates. The
 - Large personal file candidates are top files under user folders; they are discovery-only until per-file review decides keep, move, archive, or remove.
 - Project candidates are dependency folders such as `node_modules`, not source files.
 - Android candidates are tooling/cache/emulator entries, not unknown app data.
+- Installed app footprint candidates come from Program Files, ProgramData, or LocalAppData\Programs top-level folders. Folder modification age is a weak hint, not usage proof, and cleanup remains manual through Windows Settings or the vendor uninstaller.
 - Protected item paths are marked `keep` and excluded from executable planning.
 
 ## Executor Policy

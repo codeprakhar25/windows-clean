@@ -285,6 +285,7 @@ enum MeasureKind {
     FullTree,
     DownloadInstallers,
     LargeUserFiles,
+    InstalledAppFootprints,
 }
 
 struct ExactSpec {
@@ -343,6 +344,11 @@ fn scan_known_roots(request: Option<ScanRequest>) -> ScanResponse {
     findings.extend(measure_android_studio_roots(&request));
     findings.extend(measure_browser_cache_roots(&request));
     findings.extend(measure_wsl_vhdx_roots(&request));
+    findings.push(measure_installed_app_footprints(
+        &target_drive,
+        &request,
+        &mut warnings,
+    ));
 
     if request.include_project_artifacts {
         findings.extend(measure_node_modules_roots(&request, &mut warnings));
@@ -2338,6 +2344,183 @@ fn measure_wsl_vhdx_roots(request: &ScanRequest) -> Vec<ScanFinding> {
     findings
 }
 
+fn measure_installed_app_footprints(
+    target_drive: &str,
+    request: &ScanRequest,
+    warnings: &mut Vec<String>,
+) -> ScanFinding {
+    let mut roots = vec![
+        target_drive_path(target_drive, "Program Files"),
+        target_drive_path(target_drive, "Program Files (x86)"),
+        target_drive_path(target_drive, "ProgramData"),
+    ];
+    if let Some(local) = env_path("LOCALAPPDATA") {
+        roots.push(local.join("Programs"));
+    }
+
+    let mut seen_roots = Vec::new();
+    let mut items = Vec::new();
+    let mut files = 0_u64;
+    let mut dirs = 0_u64;
+    let mut errors = 0_u64;
+    let mut limited = false;
+
+    for root in roots {
+        let normalized = normalize_path(&path_to_string(&root));
+        if seen_roots.iter().any(|item: &String| item == &normalized) {
+            continue;
+        }
+        seen_roots.push(normalized);
+
+        let Ok(entries) = fs::read_dir(&root) else {
+            errors = errors.saturating_add(1);
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            if items.len() >= 24 {
+                limited = true;
+                warnings.push(
+                    "Installed app footprint discovery is capped at 24 top-level candidates."
+                        .to_string(),
+                );
+                break;
+            }
+
+            let path = entry.path();
+            if is_path_protected(&path, &request.protected_paths) {
+                continue;
+            }
+
+            let Ok(metadata) = fs::symlink_metadata(&path) else {
+                errors = errors.saturating_add(1);
+                continue;
+            };
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                continue;
+            }
+
+            let app_request = installed_app_measure_request(request);
+            let stats = walk_dir_size(&path, MeasureKind::InstalledAppFootprints, &app_request);
+            files = files.saturating_add(stats.files);
+            dirs = dirs.saturating_add(stats.dirs);
+            errors = errors.saturating_add(stats.errors);
+            limited = limited || stats.limited;
+            if stats.bytes > 0 {
+                items.push(installed_app_scan_item(&path, stats.bytes));
+            }
+        }
+    }
+
+    items.sort_by(|left, right| right.bytes.cmp(&left.bytes));
+    items.truncate(16);
+    let bytes = items
+        .iter()
+        .fold(0_u64, |sum, item| sum.saturating_add(item.bytes));
+
+    if items.is_empty() {
+        return missing_finding(
+            "installed-app-footprints",
+            "Installed app footprints",
+            "Program Files, ProgramData, LocalAppData\\Programs",
+            "No readable installed-app footprint candidates were found within the configured search budget.",
+        );
+    }
+
+    ScanFinding {
+        recipe_id: "installed-app-footprints".to_string(),
+        title: "Installed app footprints".to_string(),
+        path: "Program Files, ProgramData, LocalAppData\\Programs".to_string(),
+        bytes,
+        status: if limited { "limited" } else { "measured" }.to_string(),
+        files,
+        dirs,
+        errors,
+        note: if limited {
+            "Read-only installed app footprint discovery with depth, entry, and candidate caps. Modification age is a weak signal, not proof of app usage."
+                .to_string()
+        } else {
+            "Read-only installed app footprint discovery. Modification age is a weak signal; uninstall decisions stay manual."
+                .to_string()
+        },
+        items,
+    }
+}
+
+fn installed_app_measure_request(request: &ScanRequest) -> ScanRequest {
+    ScanRequest {
+        protected_paths: request.protected_paths.clone(),
+        include_project_artifacts: false,
+        max_depth: Some(request.max_depth.unwrap_or(8).min(5)),
+        max_entries_per_root: Some(request.max_entries_per_root.unwrap_or(25_000).min(8_000)),
+        target_drive: request.target_drive.clone(),
+        custom_roots: Vec::new(),
+    }
+}
+
+fn installed_app_scan_item(path: &Path, bytes: u64) -> ScanItem {
+    let age_days = path_age_days(path).unwrap_or(0);
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("installed app");
+    let recommendation = if bytes >= 1024 * 1024 * 1024 && age_days >= 45 {
+        "review"
+    } else {
+        "keep"
+    };
+    let kind = installed_app_kind(name, path);
+
+    ScanItem {
+        id: stable_item_id("installed-app-footprints", path),
+        name: name.to_string(),
+        path: path_to_string(path),
+        bytes,
+        age_days,
+        kind: kind.to_string(),
+        recommendation: recommendation.to_string(),
+        reason: if recommendation == "review" {
+            format!(
+                "Large app footprint last modified about {age_days} day(s) ago. Treat this as an uninstall review hint only; use Windows Settings or the vendor uninstaller."
+            )
+        } else {
+            "Recent, small, or ambiguous app footprint. Keep unless the user recognizes it as unused."
+                .to_string()
+        },
+    }
+}
+
+fn installed_app_kind(name: &str, path: &Path) -> &'static str {
+    let lower = name.to_ascii_lowercase();
+    let parent = path
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|name| name.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if lower.contains("steam")
+        || lower.contains("epic")
+        || lower.contains("riot")
+        || lower.contains("ubisoft")
+        || lower.contains("xbox")
+    {
+        return "game or launcher footprint";
+    }
+    if lower.contains("android")
+        || lower.contains("visual studio")
+        || lower.contains("jetbrains")
+        || lower.contains("unity")
+        || lower.contains("nodejs")
+        || lower.contains("docker")
+    {
+        return "developer tool footprint";
+    }
+    if parent == "programdata" {
+        return "shared app data footprint";
+    }
+    "installed app footprint"
+}
+
 fn measure_chromium_cache_roots(
     user_data_root: &Path,
     recipe_id: &'static str,
@@ -2668,6 +2851,7 @@ fn should_count_file(kind: MeasureKind, path: &Path) -> bool {
             .metadata()
             .map(|metadata| metadata.len() >= 1024 * 1024 * 1024)
             .unwrap_or(false),
+        MeasureKind::InstalledAppFootprints => true,
     }
 }
 
@@ -2683,6 +2867,7 @@ fn review_items_for_path(
         "large-user-files" => large_user_file_items(root, request, 15),
         "node-modules-old" => vec![project_dependency_scan_item(recipe_id, root, stats.bytes)],
         "android-studio" => top_child_items(recipe_id, root, request, 10),
+        "installed-app-footprints" => top_child_items(recipe_id, root, request, 10),
         _ => Vec::new(),
     }
 }

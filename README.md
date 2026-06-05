@@ -151,6 +151,7 @@ It currently scans or reports:
 - Android Studio cache roots
 - WSL `ext4.vhdx` files
 - `node_modules` folders under common project roots
+- Installed app footprints under Program Files, ProgramData, and LocalAppData\Programs
 - `hiberfil.sys` and `pagefile.sys` as advanced/blocked visibility
 
 The scanner returns explicit `missing`, `measured`, `limited`, `protected`, or `unsupported` statuses so native mode does not silently reuse demo sizes for unknown roots.
@@ -172,8 +173,9 @@ For review-gated roots, the scanner can also return item-level candidates:
 - Top large personal files under Downloads, Desktop, Documents, and Videos.
 - Individual `node_modules` roots under common project folders.
 - Top Android Studio cache or emulator entries.
+- Large installed app footprints for manual uninstall review.
 
-These candidates are metadata-only. Large personal files are discovery-only until the user makes per-file decisions. They are shown for review and report export; they are not executable cleanup commands.
+These candidates are metadata-only. Large personal files and installed app footprints are discovery-only until the user makes per-item decisions. Installed app folder modification age is a weak hint, not proof of usage. App cleanup stays manual through Windows Settings or the vendor uninstaller; SpaceGuard does not delete Program Files folders or run uninstallers.
 
 ## Product Shape
 
@@ -198,6 +200,7 @@ The demo also includes:
 - OpenAI cleanup agent panel for advisory ranking, next-step suggestions, blocked-action explanations, and user questions from real scan context.
 - First-safe temp executor panel for the only current real cleanup path: old files under allowlisted temp roots, feature-flagged in the Windows native runtime.
 - Reviewed project dependency executor panel for stale `node_modules` cleanup, including Expo/React Native project hints and item-level remove targets.
+- Installed app footprint review for large app folders, with manual uninstall guidance and no automated uninstall or Program Files deletion.
 - Demo rehearsal runbook that proves the browser demo can go from scan to gated plan, dry-run consent, simulated ledger, and report export without native data or real cleanup.
 - Product completion audit that maps the original product requirements to proven, partial, waiting, locked, or unsafe evidence so the app cannot overclaim real cleanup readiness.
 - Safety interlock that summarizes runtime write signals, native write signals, scan freshness, dry-run consent, task power leases, standing permission, run readiness, write-boundary evidence, release review, and write readiness into one stop/hold/dry-run state.
@@ -227,7 +230,7 @@ The demo also includes:
 - Storage strategy panel for manual app uninstall, archive, library move, drive upgrade, or partition planning when cleanup cannot hit the target.
 - Manual strategy checklist that lets the user track backup, archive, app-native move, uninstall, and partition-prep evidence without automation.
 - Review workbench that separates measured evidence, unresolved decisions, protected paths, and unsupported roots.
-- Item review panel for Downloads, large files, old project dependencies, and Android Studio roots, with per-item Remove, Move, Archive, or Keep decisions.
+- Item review panel for Downloads, large files, old project dependencies, Android Studio roots, and installed app footprints, with per-item decisions. For apps, Mark uninstall is manual follow-up only.
 - Decision log for source, scan, plan, gates, policy, and execution state.
 - Decision log and dry-run reports include the selected task powers, task grant receipts, waiting power gates, locked admin powers, and real-run-disabled boundary.
 - Power broker panel that turns selected task powers into current-plan power requests, preserves the active user question, refuses standing permission, and keeps each request dry-run only.
@@ -285,8 +288,11 @@ Requires item review:
 - Large personal files.
 - Old project artifacts.
 - Android emulator images and SDK packages.
+- Installed app footprints.
 
 Review-gated categories cannot execute from a broad category approval. The user must mark candidate items as `Remove`, `Move`, `Archive`, or `Keep`; only `Remove` item bytes are counted in selected recovery, executor previews, and the simulated ledger. `Move` and `Archive` are tracked as manual recovery intent.
+
+Installed app footprints are the exception to the selected-recovery rule: marking an app uninstall candidate records manual follow-up only. It does not count as executor recovery, dry-run bytes, or simulated ledger recovery.
 
 Requires typed acknowledgement:
 

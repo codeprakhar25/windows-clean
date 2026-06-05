@@ -4141,6 +4141,48 @@ const assert = require("assert");
     "preflight should allow simulation when only stale ledger entries exist"
   );
 
+  const appFootprintAction = guard.actions.find((action) => action.id === "installed-app-footprints");
+  assert(appFootprintAction, "installed app footprint action should exist");
+  const appReviewSeed = guard.buildReviewItemsByAction(guard.actions, null, [], {
+    groupConfirm: true,
+    permanentConfirm: true,
+    reviewed: {},
+    reviewItems: {},
+    typed: {}
+  })["installed-app-footprints"];
+  const appReviewApprovals = {
+    groupConfirm: true,
+    permanentConfirm: true,
+    reviewed: {},
+    typed: {},
+    reviewItems: {
+      "installed-app-footprints": Object.fromEntries(
+        appReviewSeed.items.map((item) => [item.id, item.recommendation === "review" ? "remove" : "keep"])
+      )
+    }
+  };
+  const appReviews = guard.buildReviewItemsByAction(guard.actions, null, [], appReviewApprovals);
+  assert(appReviews["installed-app-footprints"].removeBytes > 0, "app footprint review should show manual uninstall candidate bytes");
+  assert.strictEqual(appReviews["installed-app-footprints"].selectedBytes, 0, "manual app uninstall candidates must not become executor bytes");
+  assert.strictEqual(
+    guard.computeTotals(new Set(["installed-app-footprints"]), guard.actions, {
+      approvals: appReviewApprovals,
+      itemReviewsByAction: appReviews
+    }).selectedBytes,
+    0,
+    "manual app uninstall candidates must not count toward selected cleanup recovery"
+  );
+  const appExecutorPlan = guard.buildExecutorPlan({
+    selectedIds: new Set(["installed-app-footprints"]),
+    actionList: guard.actions,
+    approvals: appReviewApprovals,
+    itemReviewsByAction: appReviews
+  });
+  const appExecutorRow = appExecutorPlan.rows.find((row) => row.id === "installed-app-footprints");
+  assert.strictEqual(appExecutorRow.route, "manual-app-uninstall", "app footprint route should stay manual uninstall");
+  assert.strictEqual(appExecutorRow.canSimulate, false, "app footprint review must not create a dry-run executor route");
+  assert.strictEqual(appExecutorRow.bytes, 0, "app footprint executor row must not claim automated recovery bytes");
+
   const scopedProjectAi = guard.buildAIAgentIntegration({
     providerConfig: { connected: true, provider: "openai" },
     runtimeCapabilities: {

@@ -253,6 +253,38 @@ export const demoReviewItems = {
       recommendation: "review",
       reason: "Rebuildable cache, but may slow the next IDE launch."
     }
+  ],
+  "installed-app-footprints": [
+    {
+      id: "installed-app-footprints-unity",
+      name: "Unity Hub",
+      path: "C:\\Program Files\\Unity Hub",
+      bytes: 4.4 * GB,
+      ageDays: 121,
+      kind: "developer tool footprint",
+      recommendation: "review",
+      reason: "Large installed-app footprint with old filesystem changes; uninstall only through Windows Settings or the vendor uninstaller."
+    },
+    {
+      id: "installed-app-footprints-epic",
+      name: "Epic Games",
+      path: "C:\\Program Files (x86)\\Epic Games",
+      bytes: 18.6 * GB,
+      ageDays: 38,
+      kind: "game or launcher footprint",
+      recommendation: "keep",
+      reason: "Large app footprint, but modification age alone is not usage proof. Review manually if the user recognizes it as unused."
+    },
+    {
+      id: "installed-app-footprints-old-ide",
+      name: "Old IDE 2023",
+      path: "C:\\Program Files\\Old IDE 2023",
+      bytes: 6.8 * GB,
+      ageDays: 240,
+      kind: "developer tool footprint",
+      recommendation: "review",
+      reason: "Likely stale developer tool install. Confirm project needs before uninstalling."
+    }
   ]
 };
 
@@ -386,6 +418,16 @@ export const executorPolicies = {
     requiresNativeValidation: true,
     verification: "Rescan selected emulator/cache entries.",
     guardrails: ["Item-level review", "No unknown app data", "Keep current SDKs unless selected"]
+  },
+  "installed-app-footprints": {
+    route: "manual-app-uninstall",
+    lane: "advisory",
+    label: "Manual app uninstall review",
+    realRunEnabled: false,
+    dryRunSupported: false,
+    requiresNativeValidation: true,
+    verification: "Confirm the app was uninstalled through Windows Settings or the vendor uninstaller, then rescan.",
+    guardrails: ["Review app-by-app", "No automated uninstall", "No direct Program Files deletion", "Modification age is not usage proof"]
   },
   "wsl-vhdx": {
     route: "advanced-checklist",
@@ -548,6 +590,15 @@ export const restrictionPolicyRules = [
     forbiddenOperations: ["Create executor routes from custom roots.", "Bulk-delete custom folders or count manual archive as executor recovery."]
   },
   {
+    id: "app-uninstall",
+    title: "Installed app footprints",
+    lane: "manual-only",
+    actionIds: ["installed-app-footprints"],
+    reason: "Program Files and ProgramData footprints can identify large app installs, but folder age is not reliable enough for automation.",
+    allowedOperations: ["Measure app footprints read-only.", "Ask the user which apps they recognize as unused.", "Recommend Windows Settings or vendor uninstallers only."],
+    forbiddenOperations: ["Delete Program Files folders directly.", "Run uninstallers automatically.", "Treat modification age as proof that an app is unused."]
+  },
+  {
     id: "admin-system",
     title: "Admin/system cleanup routes",
     lane: "intake-gated",
@@ -560,7 +611,7 @@ export const restrictionPolicyRules = [
     id: "personal-review",
     title: "Personal and project data",
     lane: "review-gated",
-    actionIds: ["downloads-installers", "large-user-files", "node-modules-old", "android-studio"],
+    actionIds: ["downloads-installers", "large-user-files", "node-modules-old", "android-studio", "installed-app-footprints"],
     reason: "Downloads, media, project artifacts, and tooling entries may be valuable user data.",
     allowedOperations: ["Ask item-by-item Remove, Move, Archive, or Keep.", "Count only explicit Remove decisions in executor previews."],
     forbiddenOperations: ["Use broad folder approval for personal or project data.", "Count Move or Archive as automated cleanup bytes."]
@@ -856,12 +907,13 @@ export const windowsValidationFixtures = [
     id: "review-data-fixture",
     lane: "review",
     label: "Review-gated user and project data",
-    seedPaths: ["C:\\Users\\demo\\Downloads", "C:\\Users\\demo\\Desktop", "C:\\Users\\demo\\Videos", "C:\\Users\\demo\\Code\\old-project\\node_modules", "%UserProfile%\\.android\\avd"],
-    setup: "Seed old installers, archives, large personal files, project dependency folders, and Android emulator/cache entries.",
+    seedPaths: ["C:\\Users\\demo\\Downloads", "C:\\Users\\demo\\Desktop", "C:\\Users\\demo\\Videos", "C:\\Users\\demo\\Code\\old-project\\node_modules", "%UserProfile%\\.android\\avd", "C:\\Program Files\\Old IDE 2023"],
+    setup: "Seed old installers, archives, large personal files, project dependency folders, Android emulator/cache entries, and installed-app footprint folders.",
     assertions: [
       "Downloads are shown item-by-item and never auto-selected as arbitrary user files.",
       "Large personal files are discovery-only and require item review before any move/delete route.",
       "Project source files are not represented as cleanup candidates.",
+      "Installed-app footprints stay manual uninstall guidance and never direct Program Files deletion.",
       "Rollback or Recycle Bin behavior is documented before any reviewed-item executor can ship."
     ]
   }
@@ -1239,6 +1291,20 @@ export const actions = [
     recommendation: "Delete only old emulator images and unused SDK packages.",
     selectedByDefault: false,
     executableInDemo: true
+  },
+  {
+    id: "installed-app-footprints",
+    title: "Large installed app footprints",
+    family: "Applications",
+    path: "Program Files, ProgramData, LocalAppData\\Programs",
+    bytes: 29.8 * GB,
+    risk: "advisory",
+    gate: "review",
+    method: "Review large app footprints and uninstall manually through Windows Settings or the vendor uninstaller",
+    consequence: "Uninstalling apps can remove tools, games, SDKs, launchers, or shared app data the user still needs.",
+    recommendation: "Use folder size and age only as a hint; ask the user which apps are actually unused.",
+    selectedByDefault: false,
+    executableInDemo: false
   },
   {
     id: "node-modules-old",
@@ -4426,6 +4492,7 @@ export function buildItemReview(actionId, actionList = actions, nativeScan = nul
   const keepBytes = items.filter((item) => item.recommendation === "keep").reduce((sum, item) => sum + item.bytes, 0);
   const protectedBytes = items.filter((item) => item.protected).reduce((sum, item) => sum + item.bytes, 0);
   const decisionSummary = summarizeReviewItems(items);
+  const manualUninstallOnly = action.id === "installed-app-footprints";
 
   return {
     action,
@@ -4438,14 +4505,16 @@ export function buildItemReview(actionId, actionList = actions, nativeScan = nul
     moveBytes: decisionSummary.moveBytes,
     archiveBytes: decisionSummary.archiveBytes,
     manualDispositionBytes: decisionSummary.moveBytes + decisionSummary.archiveBytes,
-    selectedBytes: decisionSummary.removeBytes,
+    selectedBytes: manualUninstallOnly ? 0 : decisionSummary.removeBytes,
     removeCount: decisionSummary.removeCount,
     moveCount: decisionSummary.moveCount,
     archiveCount: decisionSummary.archiveCount,
     keepCount: decisionSummary.keepCount,
     undecidedCount: decisionSummary.undecidedCount,
     summary: items.length
-      ? `${items.length} candidate item(s), ${formatBytes(decisionSummary.removeBytes)} selected for cleanup and ${formatBytes(decisionSummary.moveBytes + decisionSummary.archiveBytes)} marked for manual move/archive.`
+      ? manualUninstallOnly
+        ? `${items.length} installed app footprint candidate(s), ${formatBytes(decisionSummary.removeBytes)} marked for manual uninstall review.`
+        : `${items.length} candidate item(s), ${formatBytes(decisionSummary.removeBytes)} selected for cleanup and ${formatBytes(decisionSummary.moveBytes + decisionSummary.archiveBytes)} marked for manual move/archive.`
       : "This root has no item-level candidates yet."
   };
 }
@@ -13873,6 +13942,8 @@ function getReviewDecisionSummary(action, approvals = {}, itemReview = null) {
 }
 
 function getPlannedActionBytes(action, approvals = {}, itemReviewsByAction = {}) {
+  const policy = getExecutorPolicy(action);
+  if (policy.route === "manual-app-uninstall") return 0;
   const itemReview = getItemReviewForAction(action, itemReviewsByAction);
   if (itemReview) return itemReview.selectedBytes || itemReview.removeBytes || 0;
   if (action.gate === "review" && !approvals.reviewed?.[action.id]) return 0;
@@ -13911,6 +13982,7 @@ function inferItemRecommendation(action, item, ageDays) {
   if (action.id === "downloads-installers") return ageDays >= 30 ? "review" : "keep";
   if (action.id === "large-user-files") return ageDays >= 90 ? "review" : "keep";
   if (action.id === "android-studio") return ageDays >= 30 ? "review" : "keep";
+  if (action.id === "installed-app-footprints") return item.bytes >= GB && ageDays >= 45 ? "review" : "keep";
   return item.bytes > 0 ? "review" : "keep";
 }
 
@@ -13920,6 +13992,7 @@ function inferItemReason(action, recommendation, ageDays) {
   if (action.id === "downloads-installers") return `Download candidate is about ${ageDays} day(s) old.`;
   if (action.id === "large-user-files") return `Large personal file last changed about ${ageDays} day(s) ago.`;
   if (action.id === "android-studio") return `Android tooling candidate is about ${ageDays} day(s) old.`;
+  if (action.id === "installed-app-footprints") return `Installed-app footprint last changed about ${ageDays} day(s) ago. Uninstall manually; do not delete the folder directly.`;
   return "Review before selecting this item.";
 }
 

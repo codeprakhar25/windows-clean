@@ -126,6 +126,25 @@ const assert = require("assert");
         files: 12,
         dirs: 2,
         note: "Advisory read-only custom root measurement; no executor route is created."
+      },
+      {
+        recipe_id: "installed-app-footprints",
+        title: "Installed app footprints",
+        path: "Program Files, ProgramData, LocalAppData\\Programs",
+        bytes: 6 * guard.GB,
+        status: "limited",
+        items: [
+          {
+            id: "app-old-ide",
+            name: "Old IDE 2023",
+            path: "C:\\Program Files\\Old IDE 2023",
+            bytes: 6 * guard.GB,
+            age_days: 180,
+            kind: "developer tool footprint",
+            recommendation: "review",
+            reason: "Manual uninstall candidate"
+          }
+        ]
       }
     ],
     drive_inventory: [
@@ -174,6 +193,7 @@ const assert = require("assert");
   const gradle = merged.find((action) => action.id === "gradle-cache");
   const docker = merged.find((action) => action.id === "docker-build-cache");
   const largeFiles = merged.find((action) => action.id === "large-user-files");
+  const appFootprints = merged.find((action) => action.id === "installed-app-footprints");
 
   assert.strictEqual(gradle.bytes, 42 * guard.GB, "real scan bytes should replace demo bytes");
   assert.strictEqual(gradle.scanStatus, "measured", "measured findings should be marked");
@@ -182,6 +202,8 @@ const assert = require("assert");
   assert.strictEqual(docker.scanStatus, "unsupported", "unsupported native findings should be explicit");
   assert.strictEqual(largeFiles.bytes, 3 * guard.GB, "native large-file discovery should replace demo bytes");
   assert.strictEqual(largeFiles.scanStatus, "measured", "native large-file discovery should be marked measured");
+  assert.strictEqual(appFootprints.bytes, 6 * guard.GB, "native app footprint discovery should replace demo bytes");
+  assert.strictEqual(appFootprints.scanStatus, "limited", "native app footprint discovery should preserve limited status");
 
   const scanCoverage = guard.buildScanCoverageSummary({
     actionList: merged,
@@ -214,6 +236,10 @@ const assert = require("assert");
   assert.strictEqual(largeFileReview.source, "native-readonly", "large-file item review should use native candidates when available");
   assert.strictEqual(largeFileReview.items[0].name, "old-export.mov", "native large-file candidate should be preserved");
   assert.strictEqual(largeFileReview.items[0].decision, "undecided", "native large-file candidate should require user decision");
+  const appFootprintReview = guard.buildItemReview("installed-app-footprints", merged, scan, []);
+  assert.strictEqual(appFootprintReview.source, "native-readonly", "app footprint item review should use native candidates when available");
+  assert.strictEqual(appFootprintReview.items[0].name, "Old IDE 2023", "native app footprint candidate should be preserved");
+  assert.strictEqual(appFootprintReview.selectedBytes, 0, "app footprint candidates should not become executor recovery bytes");
 
   const normalizedWithItems = native.normalizeNativeScan({
     findings: [

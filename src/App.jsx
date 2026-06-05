@@ -5863,6 +5863,7 @@ function ReviewWorkbenchPanel({ workbench, focusedId, onFocus }) {
 function ItemReviewPanel({ itemReview, selected, onSelectAction, onDecision, onApplyDecisions }) {
   const action = itemReview.action;
   const actionId = action?.id;
+  const manualUninstallReview = actionId === "installed-app-footprints";
 
   function recommendedDecision(item) {
     if (item.recommendation !== "review") return "keep";
@@ -5909,8 +5910,8 @@ function ItemReviewPanel({ itemReview, selected, onSelectAction, onDecision, onA
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="grid gap-2 md:grid-cols-4">
-          <ReviewStat label="Remove" value={formatBytes(itemReview.removeBytes)} />
-          <ReviewStat label="Move/archive" value={formatBytes(itemReview.manualDispositionBytes || 0)} />
+          <ReviewStat label={manualUninstallReview ? "Manual uninstall" : "Remove"} value={formatBytes(itemReview.removeBytes)} />
+          <ReviewStat label={manualUninstallReview ? "Executor bytes" : "Move/archive"} value={formatBytes(manualUninstallReview ? itemReview.selectedBytes : itemReview.manualDispositionBytes || 0)} />
           <ReviewStat label="Keep" value={String(itemReview.keepCount)} />
           <ReviewStat label="Undecided" value={String(itemReview.undecidedCount)} />
         </div>
@@ -5919,7 +5920,11 @@ function ItemReviewPanel({ itemReview, selected, onSelectAction, onDecision, onA
           <div className="flex flex-wrap gap-2 rounded-md border bg-muted/30 p-3">
             <div className="min-w-[160px] flex-1">
               <div className="text-sm font-medium">Item decisions</div>
-              <p className="text-sm text-muted-foreground">Only Remove enters executor preview. Move and Archive are manual follow-along decisions.</p>
+              <p className="text-sm text-muted-foreground">
+                {manualUninstallReview
+                  ? "Mark uninstall candidates for manual follow-up only. SpaceGuard will not delete Program Files folders or run uninstallers."
+                  : "Only Remove enters executor preview. Move and Archive are manual follow-along decisions."}
+              </p>
             </div>
             {!selected ? (
               <Button type="button" variant="secondary" size="sm" onClick={() => onSelectAction(action.id)}>
@@ -5961,7 +5966,7 @@ function ItemReviewPanel({ itemReview, selected, onSelectAction, onDecision, onA
                     disabled={item.protected}
                     onClick={() => onDecision(action.id, item.id, "remove")}
                   >
-                    Remove
+                    {manualUninstallReview ? "Mark uninstall" : "Remove"}
                   </Button>
                   <Button
                     type="button"
@@ -5971,24 +5976,28 @@ function ItemReviewPanel({ itemReview, selected, onSelectAction, onDecision, onA
                   >
                     Keep
                   </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={item.decision === "move" ? "secondary" : "outline"}
-                    disabled={item.protected}
-                    onClick={() => onDecision(action.id, item.id, "move")}
-                  >
-                    Move
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={item.decision === "archive" ? "secondary" : "outline"}
-                    disabled={item.protected}
-                    onClick={() => onDecision(action.id, item.id, "archive")}
-                  >
-                    Archive
-                  </Button>
+                  {!manualUninstallReview ? (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={item.decision === "move" ? "secondary" : "outline"}
+                        disabled={item.protected}
+                        onClick={() => onDecision(action.id, item.id, "move")}
+                      >
+                        Move
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={item.decision === "archive" ? "secondary" : "outline"}
+                        disabled={item.protected}
+                        onClick={() => onDecision(action.id, item.id, "archive")}
+                      >
+                        Archive
+                      </Button>
+                    </>
+                  ) : null}
                   <Button
                     type="button"
                     size="sm"
