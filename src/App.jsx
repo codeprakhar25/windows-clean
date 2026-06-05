@@ -840,9 +840,13 @@ export default function App() {
       }),
     [actionList, selectedIds, protectedPaths, intakePolicy, customRootTriage, taskRunbook, runtimeCapabilities.result]
   );
-  const nativeBetaDocumentationEvidence = useMemo(
-    () => buildNativeBetaDocumentationEvidence(nativeBetaEvidence),
+  const nativeBetaEvidenceLedger = useMemo(
+    () => buildNativeBetaEvidenceLedger(nativeBetaEvidence),
     [nativeBetaEvidence]
+  );
+  const nativeBetaDocumentationEvidence = useMemo(
+    () => buildNativeBetaDocumentationEvidence(nativeBetaEvidenceLedger),
+    [nativeBetaEvidenceLedger]
   );
   const nativeBetaDistributionReadiness = useMemo(
     () =>
@@ -1927,6 +1931,7 @@ export default function App() {
       rollbackPlan,
       publicBetaReadiness,
       nativeBetaDistributionReadiness,
+      nativeBetaEvidenceLedger,
       releaseReviewPacket,
       executorManifest,
       toolCommandInventory,
@@ -7264,12 +7269,47 @@ function RunHistoryPanel({ historySummary, onExport }) {
   );
 }
 
-function buildNativeBetaDocumentationEvidence(evidence = {}) {
+function buildNativeBetaEvidenceLedger(evidence = {}) {
+  const rows = nativeBetaEvidenceSpecs.map((spec) => {
+    const record = coerceNativeBetaEvidenceFormRecord(evidence?.[spec.id]);
+    const passed = isNativeBetaEvidenceRecordComplete(record);
+    const hasDetail = Boolean(String(record.evidencePath || record.reviewer || record.notes || "").trim());
+    return {
+      id: spec.id,
+      label: spec.label,
+      detail: spec.detail,
+      status: passed ? "complete" : record.status === "passed" ? "needs-detail" : hasDetail ? "draft" : "missing",
+      passed,
+      reviewer: String(record.reviewer || "").trim(),
+      evidencePath: String(record.evidencePath || "").trim(),
+      notes: String(record.notes || "").replace(/\s+/g, " ").trim(),
+      recordedAt: record.recordedAt || "",
+      updatedAt: record.updatedAt || record.recordedAt || ""
+    };
+  });
+  const complete = rows.filter((row) => row.passed).length;
+  const needsDetail = rows.filter((row) => row.status === "needs-detail").length;
+  const draft = rows.filter((row) => row.status === "draft").length;
+  const missing = rows.filter((row) => row.status === "missing").length;
+  return {
+    schemaVersion: "spaceguard-native-beta-evidence/v1",
+    status: complete === rows.length ? "complete" : complete || needsDetail || draft ? "partial" : "empty",
+    complete: complete === rows.length,
+    rows,
+    counts: {
+      total: rows.length,
+      complete,
+      needsDetail,
+      draft,
+      missing
+    }
+  };
+}
+
+function buildNativeBetaDocumentationEvidence(evidenceLedger = {}) {
+  const ledgerRows = Array.isArray(evidenceLedger.rows) ? evidenceLedger.rows : buildNativeBetaEvidenceLedger(evidenceLedger).rows;
   return Object.fromEntries(
-    nativeBetaEvidenceSpecs.map((spec) => {
-      const record = coerceNativeBetaEvidenceFormRecord(evidence?.[spec.id]);
-      return [spec.id, isNativeBetaEvidenceRecordComplete(record)];
-    })
+    nativeBetaEvidenceSpecs.map((spec) => [spec.id, Boolean(ledgerRows.find((row) => row.id === spec.id)?.passed)])
   );
 }
 

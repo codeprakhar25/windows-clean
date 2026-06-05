@@ -9114,6 +9114,7 @@ export function buildReport({
   rollbackPlan = null,
   publicBetaReadiness = null,
   nativeBetaDistributionReadiness = null,
+  nativeBetaEvidenceLedger = null,
   releaseReviewPacket = null,
   customRootTriage = null,
   executorManifest = null,
@@ -9819,6 +9820,23 @@ export function buildReport({
           nativeBetaDistributionReadiness.rows.map((row) => `- ${row.label}: ${row.status} | ${row.detail}`).join("\n")
         ].join("\n")
       : "- Not evaluated.",
+    "",
+    "## Native Beta Evidence Ledger",
+    nativeBetaEvidenceLedger
+      ? [
+          `- Status: ${nativeBetaEvidenceLedger.status}`,
+          `- Schema: ${nativeBetaEvidenceLedger.schemaVersion || "unknown"}`,
+          `- Complete evidence: ${nativeBetaEvidenceLedger.counts?.complete || 0}/${nativeBetaEvidenceLedger.counts?.total || 0}`,
+          `- Needs detail: ${nativeBetaEvidenceLedger.counts?.needsDetail || 0}`,
+          `- Drafts: ${nativeBetaEvidenceLedger.counts?.draft || 0}`,
+          `- Missing: ${nativeBetaEvidenceLedger.counts?.missing || 0}`,
+          nativeBetaEvidenceLedger.rows?.length
+            ? nativeBetaEvidenceLedger.rows
+                .map((row) => `- ${row.label || row.id}: ${row.status} | reviewer=${row.reviewer || "missing"} | artifact=${row.evidencePath || "missing"} | updated=${row.updatedAt || row.recordedAt || "missing"}${row.notes ? ` | notes=${row.notes}` : ""}`)
+                .join("\n")
+            : "- No beta evidence rows."
+        ].join("\n")
+      : "- Not recorded.",
     "",
     "## Real Data Launch Roadmap",
     realDataLaunchRoadmap

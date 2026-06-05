@@ -1338,6 +1338,22 @@ const assert = require("assert");
   });
   assert.strictEqual(signingOnlyDistributionReadiness.readyForNativeBeta, false, "signing alone should not satisfy native beta distribution");
   assert.strictEqual(signingOnlyPublicReadiness.readyForNativeBeta, false, "public beta should respect missing install/uninstall/support evidence when distribution gate is attached");
+  const nativeBetaEvidenceLedger = {
+    schemaVersion: "spaceguard-native-beta-evidence/v1",
+    status: "partial",
+    counts: { total: 5, complete: 1, needsDetail: 1, draft: 0, missing: 3 },
+    rows: [
+      {
+        id: "supportRunbook",
+        label: "Support runbook",
+        status: "complete",
+        reviewer: "Prakh",
+        evidencePath: "evidence/support-runbook.md",
+        updatedAt: "2026-06-05T00:00:00.000Z",
+        notes: "Redacted support flow reviewed."
+      }
+    ]
+  };
   const publicReadinessReport = guard.buildReport({
     scenario: guard.getScenario("developer"),
     profile: guard.getScenario("developer").profile,
@@ -1348,12 +1364,15 @@ const assert = require("assert");
     protectedPaths,
     goalBytes: 10 * guard.GB,
     publicBetaReadiness: demoPublicReadiness,
-    nativeBetaDistributionReadiness: demoDistributionReadiness
+    nativeBetaDistributionReadiness: demoDistributionReadiness,
+    nativeBetaEvidenceLedger
   });
   assert(publicReadinessReport.includes("## Public Beta Readiness"), "report should include public beta readiness");
   assert(publicReadinessReport.includes("Web demo ready: yes"), "public beta report should distinguish web demo readiness");
   assert(publicReadinessReport.includes("## Native Beta Distribution Readiness"), "report should include native beta distribution readiness");
   assert(publicReadinessReport.includes("Native beta ready: no"), "distribution report should keep native beta separate from web demo");
+  assert(publicReadinessReport.includes("## Native Beta Evidence Ledger"), "report should include native beta evidence ledger");
+  assert(publicReadinessReport.includes("Support runbook: complete | reviewer=Prakh | artifact=evidence/support-runbook.md"), "report should preserve native beta artifact evidence");
   const supportBundle = guard.buildSupportBundle({
     profile: guard.getScenario("developer").profile,
     scanMode: "native-readonly",
