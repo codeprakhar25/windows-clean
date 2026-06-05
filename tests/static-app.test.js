@@ -324,6 +324,7 @@ assert(app.includes("buildWorkflowHandoffMarkdown"), "workflow handoff export sh
 assert(model.includes("nativeBetaEvidenceStatus"), "workflow handoff should carry native beta evidence status");
 assert(model.includes("Complete native beta evidence ledger"), "workflow handoff should surface beta evidence as a resume action");
 assert(app.includes("WorkflowHandoffPanel"), "workflow handoff panel should be rendered");
+assert(app.includes("Beta evidence"), "workflow handoff panel should show beta evidence state");
 assert(app.includes("Export handoff"), "workflow handoff export action should be visible");
 assert(app.includes("buildRunReadiness"), "combined run readiness should be wired");
 assert(app.includes("buildLedgerRunRecord"), "ledger run records should be wired");

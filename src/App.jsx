@@ -3426,10 +3426,11 @@ function WorkflowHandoffPanel({ handoff, onExport }) {
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           <QueueStat label="Questions" value={handoff.counts.questions} tone={handoff.counts.questions ? "review" : "safe"} />
           <QueueStat label="Actionable" value={handoff.counts.actionableQuestions} tone={handoff.counts.actionableQuestions ? "advanced" : "safe"} />
           <QueueStat label="Proven" value={handoff.counts.provenRequirements} tone={handoff.counts.provenRequirements ? "safe" : "review"} />
+          <QueueStat label="Beta evidence" value={handoff.workflow.nativeBetaEvidenceComplete || "0/0"} tone={handoff.workflow.nativeBetaEvidenceStatus === "complete" ? "safe" : "review"} />
           <QueueStat label="Writes" value={handoff.realCleanupLocked ? "locked" : "ready"} tone={handoff.realCleanupLocked ? "restricted" : "safe"} />
         </div>
 
@@ -3473,6 +3474,7 @@ function WorkflowHandoffPanel({ handoff, onExport }) {
               <span>Scan: {handoff.workflow.scanStatus}</span>
               <span>Audit: {handoff.workflow.auditStatus}</span>
               <span>Setup: {handoff.workflow.setupStatus}</span>
+              <span>Beta evidence: {handoff.workflow.nativeBetaEvidenceStatus}</span>
               <span>Release: {handoff.workflow.releaseReviewStatus}</span>
             </div>
           </div>
