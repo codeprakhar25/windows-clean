@@ -7,12 +7,18 @@ import {
   buildDryRunLaunchGuard,
   buildExecutionConsentReceipt,
   buildExecutionPreflight,
+  buildExecutorManifest,
   buildExecutorPlan,
   buildExecutorReadiness,
+  buildFirstSafeExecutorContract,
+  buildFirstSafeImplementationWorkOrder,
+  buildFirstSafeValidationGate,
   buildIntakePolicy,
   buildLedgerRunRecord,
   buildPlanLock,
   buildPlanSnapshot,
+  buildRealExecutorCapsule,
+  buildReleaseGate,
   buildRestrictionPolicyMatrix,
   buildRiskBudget,
   buildRunReadiness,
@@ -22,6 +28,9 @@ import {
   buildTaskPowerBroker,
   buildTaskPowerCatalog,
   buildTaskPowerLeaseAudit,
+  buildValidationEvidencePack,
+  buildWriteBoundaryProbe,
+  buildWriteReadiness,
   buildWindowsSetupAssistant,
   buildScenarioActions,
   getExecutionReadinessForActions,
@@ -131,6 +140,68 @@ const consentReceipt = buildExecutionConsentReceipt({
   runReadiness,
   consent,
   planLock
+});
+const releaseGate = buildReleaseGate({
+  scanMode: "demo",
+  nativeCapability: { available: false },
+  executorPlan
+});
+const writeReadiness = buildWriteReadiness({
+  releaseGate,
+  runtimeCapabilities,
+  executorPlan,
+  consentReceipt,
+  runReadiness
+});
+const executorManifest = buildExecutorManifest({
+  actionList,
+  executorPlan,
+  releaseGate
+});
+const realExecutorCapsule = buildRealExecutorCapsule({
+  executorManifest,
+  executorPlan,
+  releaseGate,
+  writeReadiness,
+  runtimeCapabilities
+});
+const firstSafeExecutorContract = buildFirstSafeExecutorContract({
+  realExecutorCapsule,
+  executorPlan,
+  planSnapshot,
+  scanSession,
+  consentReceipt,
+  releaseGate,
+  runtimeCapabilities
+});
+const writeBoundaryProbe = buildWriteBoundaryProbe({
+  realExecutorCapsule,
+  firstSafeExecutorContract,
+  runtimeCapabilities
+});
+const validationPack = buildValidationEvidencePack({
+  releaseGate,
+  executorPlan,
+  executorManifest,
+  scanMode: "demo",
+  runtimeCapabilities,
+  nativeScan: null
+});
+const firstSafeValidationGate = buildFirstSafeValidationGate({
+  executorManifest,
+  validationPack,
+  releaseGate,
+  realExecutorCapsule,
+  firstSafeExecutorContract,
+  writeBoundaryProbe,
+  runtimeCapabilities
+});
+const firstSafeImplementationWorkOrder = buildFirstSafeImplementationWorkOrder({
+  firstSafeValidationGate,
+  realExecutorCapsule,
+  firstSafeExecutorContract,
+  writeBoundaryProbe,
+  runtimeCapabilities
 });
 const taskPowerCatalog = buildTaskPowerCatalog({
   actionList,
@@ -268,6 +339,8 @@ const failures = [
   ["public demo safe", demoRehearsalRunbook.safeForPublicDemo],
   ["no native data required", !demoRehearsalRunbook.requiresNativeData],
   ["real cleanup locked", !demoRehearsalRunbook.realCleanupEnabled],
+  ["first-safe work order validation-blocked", firstSafeImplementationWorkOrder.status === "validation-blocked"],
+  ["first-safe work order keeps real run locked", !firstSafeImplementationWorkOrder.realRunAllowed && !firstSafeImplementationWorkOrder.destructiveActionAvailable],
   ["zero real-run routes", demoRehearsalRunbook.counts.realRun === 0 && planLock.counts.realRun === 0],
   ["history current", runHistory.length === 1 && runHistory[0].planId === planSnapshot.id]
 ].filter(([, passed]) => !passed);
@@ -285,6 +358,7 @@ const summary = {
   runbookStatus: demoRehearsalRunbook.status,
   safetyStatus: safetyInterlock.status,
   launchStatus: dryRunLaunchGuard.status,
+  workOrderStatus: firstSafeImplementationWorkOrder.status,
   realRunEnabled: false,
   destructiveCommands: false,
   failures: failures.map(([label]) => label)

@@ -12,6 +12,7 @@ assert.strictEqual(summary.setupStatus, "native-scan-ready", "setup assistant sh
 assert.strictEqual(summary.privacyStatus, "native-local-only", "native rehearsal should stay local-only");
 assert.strictEqual(summary.safetyStatus, "dry-run-interlocked", "native rehearsal should be dry-run interlocked");
 assert.strictEqual(summary.launchStatus, "dry-run-launch-ready", "native rehearsal should be launch-ready for dry-run only");
+assert.strictEqual(summary.workOrderStatus, "validation-blocked", "native rehearsal should keep first-safe work order blocked by missing Windows validation evidence");
 assert.strictEqual(summary.realRunEnabled, false, "native rehearsal must not enable real execution");
 assert.strictEqual(summary.destructiveCommands, false, "native rehearsal must not expose destructive commands");
 assert(summary.planId.startsWith("plan-"), "native rehearsal should bind a plan id");

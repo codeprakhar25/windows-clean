@@ -2814,6 +2814,30 @@ const assert = require("assert");
   assert.strictEqual(readyFirstSafeValidationGate.status, "implementation-planning-ready", "completed route evidence should make first-safe implementation planning ready");
   assert.strictEqual(readyFirstSafeValidationGate.counts.missingChecks, 0, "ready first-safe validation gate should have no missing route checks");
   assert.strictEqual(readyFirstSafeValidationGate.realRunAllowed, false, "ready validation gate still must not allow real execution");
+  const blockedFirstSafeWorkOrder = guard.buildFirstSafeImplementationWorkOrder({
+    firstSafeValidationGate: blockedFirstSafeValidationGate,
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    firstSafeExecutorContract: firstSafeContract,
+    runtimeCapabilities: { available: false, realRunEnabled: false, destructiveCommands: false, safeExecutorsEnabled: false }
+  });
+  assert.strictEqual(blockedFirstSafeWorkOrder.schemaVersion, "spaceguard-first-safe-work-order/v1", "first-safe work order should expose a schema version");
+  assert.strictEqual(blockedFirstSafeWorkOrder.status, "validation-blocked", "missing route evidence should block the implementation work order");
+  assert.strictEqual(blockedFirstSafeWorkOrder.realRunAllowed, false, "blocked work order must not allow real cleanup");
+  assert(blockedFirstSafeWorkOrder.workItems.some((item) => item.id === "validation-evidence" && item.status === "blocked"), "blocked work order should surface validation evidence blockers");
+  const readyFirstSafeWorkOrder = guard.buildFirstSafeImplementationWorkOrder({
+    firstSafeValidationGate: readyFirstSafeValidationGate,
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    firstSafeExecutorContract: firstSafeContract,
+    writeBoundaryProbe: { status: "rejected", rejectionEvidence: true, counts: { bytes: 0 } },
+    runtimeCapabilities: { available: true, realRunEnabled: false, destructiveCommands: false, safeExecutorsEnabled: false }
+  });
+  assert.strictEqual(readyFirstSafeWorkOrder.status, "implementation-work-order-ready", "ready validation gate should produce an implementation work order");
+  assert.strictEqual(readyFirstSafeWorkOrder.implementationWorkAllowed, true, "ready work order should allow implementation planning");
+  assert.strictEqual(readyFirstSafeWorkOrder.realRunAllowed, false, "ready work order still must not allow real execution");
+  assert.strictEqual(readyFirstSafeWorkOrder.destructiveActionAvailable, false, "ready work order must keep destructive actions hidden");
+  assert(readyFirstSafeWorkOrder.route.implementation.includes("allowlisted temp roots"), "work order should carry the route implementation boundary");
+  assert(readyFirstSafeWorkOrder.workItems.some((item) => item.id === "native-executor" && item.status === "ready-to-build"), "ready work order should include the native executor build item");
+  assert(readyFirstSafeWorkOrder.acceptanceTests.some((test) => test.id === "target-allowlist"), "work order should include target allowlist acceptance tests");
   const unsafeFirstSafeValidationGate = guard.buildFirstSafeValidationGate({
     executorManifest: completedFirstSafeExecutorManifest,
     validationPack: completedFirstSafeValidationPack,
@@ -2824,6 +2848,14 @@ const assert = require("assert");
   });
   assert.strictEqual(unsafeFirstSafeValidationGate.status, "unsafe-runtime", "runtime write flags should stop first-safe implementation planning");
   assert(unsafeFirstSafeValidationGate.blockers.some((blocker) => blocker.id === "runtime-write-capability"), "unsafe runtime should be listed as a blocker");
+  const unsafeFirstSafeWorkOrder = guard.buildFirstSafeImplementationWorkOrder({
+    firstSafeValidationGate: readyFirstSafeValidationGate,
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    firstSafeExecutorContract: firstSafeContract,
+    runtimeCapabilities: { available: true, realRunEnabled: true, destructiveCommands: true, safeExecutorsEnabled: true }
+  });
+  assert.strictEqual(unsafeFirstSafeWorkOrder.status, "unsafe-runtime", "unsafe runtime should stop the first-safe implementation work order");
+  assert(unsafeFirstSafeWorkOrder.workItems.every((item) => item.status !== "ready-to-build"), "unsafe work order must not expose ready-to-build items");
   const forgedCapsule = {
     ...currentBuildExecutorCapsule,
     selectedRows: [
@@ -3142,6 +3174,9 @@ const assert = require("assert");
     goalBytes: 10 * guard.GB,
     writeReadiness: currentBuildWriteReadiness,
     realExecutorCapsule: currentBuildExecutorCapsule,
+    firstSafeExecutorContract: firstSafeContract,
+    firstSafeValidationGate: readyFirstSafeValidationGate,
+    firstSafeImplementationWorkOrder: readyFirstSafeWorkOrder,
     writeBoundaryProbe: rejectedWriteBoundaryProbe
   });
   assert(writeReadinessReport.includes("## Write Readiness"), "dry-run report should include write readiness");
@@ -3151,6 +3186,8 @@ const assert = require("assert");
   assert(writeReadinessReport.includes("## Write Boundary Probe"), "dry-run report should include write boundary probe");
   assert(writeReadinessReport.includes("Rejection evidence: yes"), "write boundary probe report should record rejection evidence");
   assert(writeReadinessReport.includes("Bytes reclaimed: 0 GB"), "write boundary probe report should not count recovered bytes");
+  assert(writeReadinessReport.includes("## First-Safe Implementation Work Order"), "dry-run report should include the first-safe implementation work order");
+  assert(writeReadinessReport.includes("Real run allowed: no"), "implementation work order report should keep real execution blocked");
   const hypotheticalRealExecutorPlan = {
     ...tempExecutorPlan,
     realRunEnabled: true,

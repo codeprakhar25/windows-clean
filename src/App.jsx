@@ -36,6 +36,7 @@ import {
   buildExecutionPreflight,
   buildExecutionConsentReceipt,
   buildFirstSafeExecutorContract,
+  buildFirstSafeImplementationWorkOrder,
   buildFirstSafeValidationGate,
   buildFixtureEvidenceImport,
   buildIntakePolicy,
@@ -655,6 +656,17 @@ export default function App() {
         runtimeCapabilities: runtimeCapabilities.result
       }),
     [executorManifest, validationPack, releaseGate, realExecutorCapsule, firstSafeExecutorContract, writeBoundaryProbe, runtimeCapabilities.result]
+  );
+  const firstSafeImplementationWorkOrder = useMemo(
+    () =>
+      buildFirstSafeImplementationWorkOrder({
+        firstSafeValidationGate,
+        realExecutorCapsule,
+        firstSafeExecutorContract,
+        writeBoundaryProbe,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [firstSafeValidationGate, realExecutorCapsule, firstSafeExecutorContract, writeBoundaryProbe, runtimeCapabilities.result]
   );
   const baseAgentQuestionQueue = useMemo(
     () =>
@@ -1736,6 +1748,7 @@ export default function App() {
       realExecutorCapsule,
       firstSafeExecutorContract,
       firstSafeValidationGate,
+      firstSafeImplementationWorkOrder,
       writeBoundaryProbe,
       ledgerHistorySummary,
       storageStrategy,
@@ -2245,6 +2258,7 @@ export default function App() {
             <RealExecutorCapsulePanel capsule={realExecutorCapsule} />
             <FirstSafeExecutorContractPanel contract={firstSafeExecutorContract} />
             <FirstSafeValidationGatePanel gate={firstSafeValidationGate} />
+            <FirstSafeImplementationWorkOrderPanel workOrder={firstSafeImplementationWorkOrder} />
             <WriteBoundaryProbePanel
               probe={writeBoundaryProbe}
               nativeWriteBoundary={nativeWriteBoundary}
@@ -5426,6 +5440,73 @@ function FirstSafeValidationGatePanel({ gate }) {
             <div className="flex flex-wrap gap-1">
               {fixtureRows.map((fixture) => (
                 <Badge key={fixture.id} variant={fixture.passed ? "safe" : "outline"}>{fixture.label}</Badge>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function FirstSafeImplementationWorkOrderPanel({ workOrder }) {
+  const visibleItems = workOrder.workItems.slice(0, 5);
+  const visibleTests = workOrder.acceptanceTests.slice(0, 4);
+
+  return (
+    <Card id="first-safe-work-order-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          First-safe work order
+          <Badge variant={workOrder.tone}>{workOrder.status}</Badge>
+        </CardTitle>
+        <CardDescription>{workOrder.primary}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <QueueStat label="Items" value={workOrder.counts.workItems} tone="review" />
+          <QueueStat label="Buildable" value={workOrder.counts.readyToBuild} tone={workOrder.implementationWorkAllowed ? "safe" : "review"} />
+          <QueueStat label="Tests" value={workOrder.counts.acceptanceTests} tone="review" />
+          <QueueStat label="Real run" value={workOrder.realRunAllowed ? "allowed" : "locked"} tone={workOrder.realRunAllowed ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">{workOrder.route?.title || "No first-safe route"}</span>
+            <Badge variant={workOrder.implementationWorkAllowed ? "safe" : "review"}>
+              {workOrder.implementationWorkAllowed ? "implementation allowed" : "blocked"}
+            </Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Command: {workOrder.contract.command || "none"}</span>
+            <span>Feature flag: {workOrder.contract.featureFlag || "none"}</span>
+            <span>Gate: {workOrder.gate.status}</span>
+            <span>Boundary: {workOrder.boundary.status}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {visibleItems.map((item) => (
+            <div key={item.id} className="rounded-md border bg-card p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 text-sm font-medium">{item.label}</div>
+                <Badge variant={item.status === "ready-to-build" ? "safe" : item.status === "blocked" ? "restricted" : "review"}>{item.status}</Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">{item.detail}</p>
+              <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{item.evidence}</p>
+            </div>
+          ))}
+        </div>
+
+        {visibleTests.length ? (
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 text-sm font-medium">Acceptance tests</div>
+            <div className="grid gap-2">
+              {visibleTests.map((test) => (
+                <div key={test.id} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">{test.label}: {test.detail}</span>
+                </div>
               ))}
             </div>
           </div>

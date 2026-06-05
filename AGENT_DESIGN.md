@@ -280,6 +280,13 @@ First-safe validation gate invariant:
 - Passing the gate cannot unlock cleanup. `realRunAllowed`, `realRunEnabled`, and `destructiveActionAvailable` remain `false`.
 - Runtime `realRunEnabled`, `destructiveCommands`, `safeExecutorsEnabled`, capsule destructive availability, contract write availability, or non-zero/accepted probe evidence must force `unsafe-runtime`.
 
+First-safe implementation work-order invariant:
+
+- The work order can be ready only after the first-safe validation gate is ready and runtime write signals are still disabled.
+- It must list native executor work, target-scope enforcement, disposable fixture tests, rollback/rescan proof, feature flag, kill-switch, and rejecting-boundary reprobe requirements.
+- A ready work order allows implementation planning only. It cannot expose run buttons, write capability, reclaimed bytes, or release readiness.
+- Unsafe runtime or probe signals must block every work item from being marked `ready-to-build`.
+
 Write boundary probe invariant:
 
 - The probe can call `execute_cleanup_plan` only to prove the native boundary rejects the current request shape.

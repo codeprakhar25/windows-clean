@@ -6304,6 +6304,116 @@ export function buildFirstSafeValidationGate({
   };
 }
 
+export function buildFirstSafeImplementationWorkOrder({
+  firstSafeValidationGate = null,
+  realExecutorCapsule = null,
+  firstSafeExecutorContract = null,
+  writeBoundaryProbe = null,
+  runtimeCapabilities = {}
+} = {}) {
+  const routeId = firstSafeValidationGate?.route?.id || realExecutorCapsule?.route?.id || firstSafeExecutorContract?.route?.id || "";
+  const requirement = routeId ? getExecutorRouteRequirement(routeId) : null;
+  const contract = routeId ? firstSafeExecutorContracts[routeId] || null : null;
+  const unsafeRuntime = Boolean(
+    runtimeCapabilities?.realRunEnabled ||
+      runtimeCapabilities?.destructiveCommands ||
+      runtimeCapabilities?.safeExecutorsEnabled ||
+      firstSafeValidationGate?.status === "unsafe-runtime" ||
+      firstSafeValidationGate?.destructiveActionAvailable ||
+      realExecutorCapsule?.destructiveActionAvailable ||
+      firstSafeExecutorContract?.realRunEnabled ||
+      firstSafeExecutorContract?.destructiveActionAvailable ||
+      writeBoundaryProbe?.accepted ||
+      writeBoundaryProbe?.realRunEnabled ||
+      writeBoundaryProbe?.destructiveCommands ||
+      Number(writeBoundaryProbe?.counts?.bytes || 0) > 0 ||
+      writeBoundaryProbe?.status === "unsafe-signal"
+  );
+  const routeMissing = !routeId || !requirement || requirement.phase !== "first-safe";
+  const gateReady = Boolean(firstSafeValidationGate?.implementationPlanningReady);
+  const validationBlocked = Boolean(!gateReady && !unsafeRuntime && !routeMissing);
+  const implementationWorkAllowed = Boolean(gateReady && !unsafeRuntime && !routeMissing);
+  const acceptanceTests = buildFirstSafeImplementationAcceptanceTests(requirement, contract);
+  const workItems = buildFirstSafeImplementationWorkItems({
+    requirement,
+    contract,
+    firstSafeValidationGate,
+    writeBoundaryProbe,
+    implementationWorkAllowed,
+    validationBlocked,
+    routeMissing,
+    unsafeRuntime
+  });
+  const status = unsafeRuntime
+    ? "unsafe-runtime"
+    : routeMissing
+      ? "route-missing"
+      : validationBlocked
+        ? "validation-blocked"
+        : "implementation-work-order-ready";
+
+  return {
+    schemaVersion: "spaceguard-first-safe-work-order/v1",
+    status,
+    tone: status === "implementation-work-order-ready" ? "safe" : status === "unsafe-runtime" || status === "route-missing" ? "restricted" : "review",
+    implementationWorkAllowed,
+    realRunAllowed: false,
+    realRunEnabled: false,
+    destructiveActionAvailable: false,
+    route: requirement
+      ? {
+          id: routeId,
+          title: requirement.title,
+          phase: requirement.phase,
+          lane: requirement.lane,
+          implementation: requirement.implementation,
+          rollback: requirement.rollback,
+          proof: requirement.proof,
+          preconditions: requirement.preconditions || [],
+          fixtureIds: requirement.fixtureIds || [],
+          requiredValidationIds: requirement.requiredValidationIds || []
+        }
+      : null,
+    contract: {
+      defined: Boolean(contract),
+      command: contract?.command || "",
+      featureFlag: contract?.featureFlag || "",
+      mutationBoundary: contract?.mutationBoundary || "",
+      allowedTargets: contract?.allowedTargets || [],
+      forbiddenTargets: contract?.forbiddenTargets || []
+    },
+    gate: {
+      status: firstSafeValidationGate?.status || "missing",
+      ready: Boolean(firstSafeValidationGate?.implementationPlanningReady),
+      missingChecks: firstSafeValidationGate?.counts?.missingChecks || 0,
+      blockers: firstSafeValidationGate?.blockers || []
+    },
+    boundary: {
+      status: writeBoundaryProbe?.status || "not-run",
+      rejectionEvidence: Boolean(writeBoundaryProbe?.rejectionEvidence),
+      zeroBytes: Number(writeBoundaryProbe?.counts?.bytes || 0) === 0
+    },
+    workItems,
+    acceptanceTests,
+    blockers: buildFirstSafeImplementationBlockers({
+      routeMissing,
+      unsafeRuntime,
+      validationBlocked,
+      firstSafeValidationGate,
+      requirement
+    }),
+    counts: {
+      workItems: workItems.length,
+      readyToBuild: workItems.filter((item) => item.status === "ready-to-build").length,
+      blocked: workItems.filter((item) => item.status === "blocked").length,
+      acceptanceTests: acceptanceTests.length,
+      realRun: 0
+    },
+    primary: getFirstSafeImplementationWorkOrderPrimary(status, requirement, firstSafeValidationGate),
+    steps: buildFirstSafeImplementationWorkOrderSteps(status, requirement, workItems)
+  };
+}
+
 export function buildToolCommandInventory({
   actionList = actions,
   executorPlan = null,
@@ -8080,6 +8190,7 @@ export function buildReport({
   realExecutorCapsule = null,
   firstSafeExecutorContract = null,
   firstSafeValidationGate = null,
+  firstSafeImplementationWorkOrder = null,
   writeBoundaryProbe = null,
   ledgerHistorySummary = null,
   storageStrategy = null,
@@ -8857,6 +8968,26 @@ export function buildReport({
           firstSafeValidationGate.blockers.length
             ? firstSafeValidationGate.blockers.map((blocker) => `- Blocker: ${blocker.label} | ${blocker.detail}`).join("\n")
             : "- No first-safe validation blockers."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## First-Safe Implementation Work Order",
+    firstSafeImplementationWorkOrder
+      ? [
+          `- Status: ${firstSafeImplementationWorkOrder.status}`,
+          `- Route: ${firstSafeImplementationWorkOrder.route ? `${firstSafeImplementationWorkOrder.route.title} (${firstSafeImplementationWorkOrder.route.id})` : "none"}`,
+          `- Implementation work allowed: ${firstSafeImplementationWorkOrder.implementationWorkAllowed ? "yes" : "no"}`,
+          `- Real run allowed: ${firstSafeImplementationWorkOrder.realRunAllowed ? "yes" : "no"}`,
+          `- Destructive action available: ${firstSafeImplementationWorkOrder.destructiveActionAvailable ? "yes" : "no"}`,
+          `- Work items: ${firstSafeImplementationWorkOrder.counts.readyToBuild}/${firstSafeImplementationWorkOrder.counts.workItems} ready to build`,
+          `- Acceptance tests: ${firstSafeImplementationWorkOrder.counts.acceptanceTests}`,
+          `- Feature flag: ${firstSafeImplementationWorkOrder.contract.featureFlag || "none"}`,
+          firstSafeImplementationWorkOrder.workItems.length
+            ? firstSafeImplementationWorkOrder.workItems.map((item) => `- ${item.label}: ${item.status} | ${item.detail}`).join("\n")
+            : "- No implementation work items.",
+          firstSafeImplementationWorkOrder.acceptanceTests.length
+            ? firstSafeImplementationWorkOrder.acceptanceTests.map((test) => `- Test: ${test.label} | ${test.detail}`).join("\n")
+            : "- No acceptance tests."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -11246,6 +11377,208 @@ function buildFirstSafeValidationGateSteps(status, requirement, blockers = []) {
   return blockerSteps.length
     ? blockerSteps
     : ["Capture route-specific Windows validation evidence.", "Keep destructive actions hidden.", "Review the route gate again."];
+}
+
+function buildFirstSafeImplementationWorkItems({
+  requirement = null,
+  contract = null,
+  firstSafeValidationGate = null,
+  writeBoundaryProbe = null,
+  implementationWorkAllowed = false,
+  validationBlocked = false,
+  routeMissing = false,
+  unsafeRuntime = false
+} = {}) {
+  const blockedStatus = unsafeRuntime || routeMissing || validationBlocked ? "blocked" : "waiting";
+  const readyStatus = implementationWorkAllowed ? "ready-to-build" : blockedStatus;
+  const routeTitle = requirement?.title || "first-safe route";
+  const validationDetail = validationBlocked
+    ? `${firstSafeValidationGate?.counts?.missingChecks || 0} route validation check(s) are still missing.`
+    : implementationWorkAllowed
+      ? "Route validation gate is ready for implementation planning."
+      : "Route validation gate is not ready.";
+
+  return [
+    {
+      id: "validation-evidence",
+      lane: "evidence",
+      label: "Route validation evidence",
+      status: implementationWorkAllowed ? "ready-to-build" : "blocked",
+      detail: validationDetail,
+      evidence: firstSafeValidationGate?.status || "missing"
+    },
+    {
+      id: "native-executor",
+      lane: "native",
+      label: "Native executor implementation",
+      status: readyStatus,
+      detail: requirement
+        ? requirement.implementation
+        : "Select a first-safe route before drafting native executor code.",
+      evidence: contract?.command || "execute_cleanup_plan"
+    },
+    {
+      id: "target-scope",
+      lane: "guardrail",
+      label: "Target scope enforcement",
+      status: readyStatus,
+      detail: contract
+        ? `Allow ${contract.allowedTargets.join(", ")} and reject ${contract.forbiddenTargets.join(", ")}.`
+        : "A first-safe disabled contract must define allowed and forbidden targets.",
+      evidence: contract?.mutationBoundary || "missing-contract"
+    },
+    {
+      id: "fixture-tests",
+      lane: "test",
+      label: "Disposable fixture tests",
+      status: readyStatus,
+      detail: requirement?.fixtureIds?.length
+        ? `Run and record fixtures: ${requirement.fixtureIds.join(", ")}.`
+        : "Route fixtures must be defined before implementation tests.",
+      evidence: requirement?.requiredValidationIds?.join(", ") || "missing-validation-ids"
+    },
+    {
+      id: "rollback-rescan",
+      lane: "verification",
+      label: "Rollback and rescan proof",
+      status: readyStatus,
+      detail: requirement
+        ? `${requirement.rollback} ${requirement.proof}`
+        : "Rollback and rescan evidence must be route-specific.",
+      evidence: "ledger-rescan-parity"
+    },
+    {
+      id: "feature-flag",
+      lane: "release",
+      label: "Feature flag and kill switch",
+      status: readyStatus,
+      detail: contract
+        ? `Keep ${contract.featureFlag} disabled until release review and post-run rescan proof pass.`
+        : "Feature flag must be route-specific and default off.",
+      evidence: contract?.featureFlag || "missing-feature-flag"
+    },
+    {
+      id: "write-boundary-reprobe",
+      lane: "release",
+      label: "Rejecting boundary reprobe",
+      status: unsafeRuntime || routeMissing || validationBlocked
+        ? "blocked"
+        : writeBoundaryProbe?.rejectionEvidence && Number(writeBoundaryProbe?.counts?.bytes || 0) === 0
+        ? "ready-to-build"
+        : implementationWorkAllowed
+          ? "waiting"
+          : blockedStatus,
+      detail: writeBoundaryProbe?.rejectionEvidence
+        ? "Rejecting write-boundary evidence is attached with zero bytes."
+        : `Probe ${routeTitle} again after implementation while the feature flag remains disabled.`,
+      evidence: writeBoundaryProbe?.status || "not-run"
+    }
+  ];
+}
+
+function buildFirstSafeImplementationAcceptanceTests(requirement = null, contract = null) {
+  if (!requirement || !contract) return [];
+  return [
+    {
+      id: "target-allowlist",
+      label: "Target allowlist",
+      status: "required",
+      detail: `Only ${contract.allowedTargets.join(", ")} may be enumerated for ${requirement.title}.`
+    },
+    {
+      id: "forbidden-target-rejection",
+      label: "Forbidden target rejection",
+      status: "required",
+      detail: `Reject ${contract.forbiddenTargets.join(", ")} before enumeration and return zero candidates.`
+    },
+    {
+      id: "no-reparse-follow",
+      label: "No reparse traversal",
+      status: "required",
+      detail: "Native executor must not follow junctions, symlinks, or reparse point targets outside the allowlist."
+    },
+    {
+      id: "locked-file-skip",
+      label: "Skip locked files",
+      status: "required",
+      detail: "Locked or denied entries must be skipped and recorded without failing the whole route."
+    },
+    {
+      id: "ledger-rescan-parity",
+      label: "Ledger and rescan parity",
+      status: "required",
+      detail: "Every removed byte must have a ledger entry and a newer native rescan comparison."
+    },
+    {
+      id: "feature-flag-default-off",
+      label: "Feature flag default off",
+      status: "required",
+      detail: `${contract.featureFlag} must default off and must not expose a destructive action in normal builds.`
+    }
+  ];
+}
+
+function buildFirstSafeImplementationBlockers({
+  routeMissing = false,
+  unsafeRuntime = false,
+  validationBlocked = false,
+  firstSafeValidationGate = null,
+  requirement = null
+} = {}) {
+  return dedupeBlockers([
+    routeMissing
+      ? {
+          id: "first-safe-route",
+          label: "First-safe route missing",
+          detail: "Select a first-safe route before drafting implementation work."
+        }
+      : null,
+    unsafeRuntime
+      ? {
+          id: "unsafe-runtime",
+          label: "Unsafe runtime",
+          detail: "Runtime or probe exposes write capability; implementation work order is blocked until dry-run lock is restored."
+        }
+      : null,
+    validationBlocked
+      ? {
+          id: "validation-gate",
+          label: "Validation gate blocked",
+          detail: firstSafeValidationGate?.primary || `${requirement?.title || "First-safe route"} still needs validation evidence.`
+        }
+      : null,
+    ...(firstSafeValidationGate?.blockers || []).map((blocker) => ({
+      id: `gate-${blocker.id}`,
+      label: blocker.label,
+      detail: blocker.detail
+    }))
+  ].filter(Boolean));
+}
+
+function getFirstSafeImplementationWorkOrderPrimary(status, requirement, firstSafeValidationGate = null) {
+  if (status === "implementation-work-order-ready") {
+    return `${requirement?.title || "First-safe route"} has an implementation work order. Real cleanup remains locked.`;
+  }
+  if (status === "unsafe-runtime") return "Implementation work order is stopped because runtime write capability is visible.";
+  if (status === "route-missing") return "Select a first-safe route before generating an implementation work order.";
+  return firstSafeValidationGate?.primary || "Route validation evidence must pass before implementation work starts.";
+}
+
+function buildFirstSafeImplementationWorkOrderSteps(status, requirement, workItems = []) {
+  if (status === "implementation-work-order-ready") {
+    return [
+      `Implement ${requirement?.title || "the first-safe route"} behind the disabled route feature flag.`,
+      "Add native fixture tests for allowlist, forbidden targets, locked files, and no reparse traversal.",
+      "Repeat the rejecting write-boundary probe and keep real cleanup hidden until final release review."
+    ];
+  }
+  if (status === "unsafe-runtime") {
+    return ["Stop implementation review.", "Restore dry-run-only runtime signals.", "Regenerate the work order after the validation gate is safe."];
+  }
+  const blocked = workItems.filter((item) => item.status === "blocked").slice(0, 3);
+  return blocked.length
+    ? blocked.map((item) => `${item.label}: ${item.detail}`)
+    : ["Complete first-safe validation evidence.", "Keep real cleanup locked.", "Regenerate the implementation work order."];
 }
 
 function getRealExecutorCapsulePrimary(status, route, blockers = []) {
