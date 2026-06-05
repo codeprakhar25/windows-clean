@@ -11112,6 +11112,104 @@ export function buildRescanComparisonMarkdown(comparison) {
   ].join("\n");
 }
 
+export function buildExecutionProofHandoff({
+  ledger = [],
+  verificationSummary = null,
+  postRunVerification = null,
+  rescanComparison = null,
+  nativeCapability = null,
+  scanning = false
+} = {}) {
+  const ledgerEntries = Array.isArray(ledger) ? ledger : [];
+  const source = normalizeLedgerSource(
+    verificationSummary?.source ||
+      postRunVerification?.source ||
+      rescanComparison?.source ||
+      inferLedgerSourceFromEntries(ledgerEntries, "")
+  );
+  const runKind = ledgerEntries.length ? getLedgerRunKind(source) : "not-run";
+  const runLabel = ledgerEntries.length ? getLedgerRunLabel(source) : "Not run";
+  const reclaimedBytes = ledgerEntries.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+  const checkpointCount = Number(postRunVerification?.checkpoints?.length || rescanComparison?.counts?.rows || 0);
+  const matched = Number(rescanComparison?.counts?.matched || 0);
+  const mismatch = Number(rescanComparison?.counts?.mismatch || 0) + Number(rescanComparison?.counts?.noFinding || 0);
+  const waiting = Number(rescanComparison?.counts?.waiting || 0);
+  const nativeAvailable = Boolean(nativeCapability?.available);
+  const postRunScanEvidence = Boolean(rescanComparison?.postRunScanEvidence);
+  const scopedNativeExecution = Boolean(
+    verificationSummary?.scopedNativeExecution ||
+      postRunVerification?.scopedNativeExecution ||
+      rescanComparison?.scopedNativeExecution ||
+      isScopedNativeExecutionSource(source)
+  );
+  const baseCanRunRescan = Boolean(nativeAvailable && ledgerEntries.length && checkpointCount && !scanning);
+
+  let status = "waiting-for-execution";
+  let tone = "review";
+  let primary = "Run a dry-run simulation or scoped executor before collecting proof.";
+  let actionLabel = "Run execution first";
+  let steps = ["Run a dry-run simulation or scoped executor.", "Keep the ledger visible.", "Use the post-run rescan action after execution."];
+
+  if (ledgerEntries.length) {
+    status = "proof-required";
+    tone = scopedNativeExecution ? "restricted" : "review";
+    primary = `${runLabel} ledger recorded ${formatBytes(reclaimedBytes)}. Run a native read-only rescan after the ledger timestamp before claiming recovered space.`;
+    actionLabel = "Run post-run rescan";
+    steps = [
+      "Run the ledger-preserving post-run native rescan.",
+      "Compare each affected root against the recorded ledger.",
+      "Do not run another scoped executor until parity is reviewed."
+    ];
+  }
+
+  if (rescanComparison?.status === "matched") {
+    status = "proof-complete";
+    tone = "safe";
+    primary = `${matched} affected route(s) match the post-run native rescan.`;
+    actionLabel = "Rescan proof complete";
+    steps = ["Export the rescan comparison.", "Attach it to release or beta evidence.", "Keep the run ledger with the proof packet."];
+  } else if (rescanComparison?.status === "mismatch") {
+    status = "proof-mismatch";
+    tone = "restricted";
+    primary = `${mismatch} affected route(s) failed parity. Inspect the remaining bytes before another cleanup run.`;
+    actionLabel = "Rerun post-run rescan";
+    steps = ["Inspect mismatched affected roots.", "Check skipped files, locks, and scanner limits.", "Do not treat this run as recovered-space proof."];
+  } else if (postRunScanEvidence && rescanComparison?.status !== "matched") {
+    status = "proof-review";
+    tone = "review";
+    primary = "A post-run native scan exists, but parity still needs review.";
+    actionLabel = "Rerun post-run rescan";
+  }
+
+  if (ledgerEntries.length && !nativeAvailable) {
+    primary = "A ledger exists, but post-run proof requires the Tauri desktop shell native scanner.";
+    actionLabel = "Desktop shell required";
+  }
+
+  return {
+    schemaVersion: "spaceguard-execution-proof-handoff/v1",
+    status,
+    tone,
+    source,
+    runKind,
+    runLabel,
+    scopedNativeExecution,
+    ledgerEntries: ledgerEntries.length,
+    reclaimedBytes,
+    checkpointCount,
+    matched,
+    mismatch,
+    waiting,
+    postRunScanEvidence,
+    nativeAvailable,
+    scanning: Boolean(scanning),
+    canRunRescan: Boolean(baseCanRunRescan && status !== "proof-complete" && status !== "waiting-for-execution"),
+    actionLabel,
+    primary,
+    steps
+  };
+}
+
 export function buildPostRunVerificationMarkdown(plan) {
   const checkpoints = plan?.checkpoints?.length
     ? plan.checkpoints

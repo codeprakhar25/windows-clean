@@ -57,6 +57,7 @@ import {
   buildExecutorManifest,
   buildExecutorPlan,
   buildExecutorReadiness,
+  buildExecutionProofHandoff,
   buildLedgerHistoryMarkdown,
   buildLedgerHistorySummary,
   buildLedgerRunRecord,
@@ -721,6 +722,18 @@ export default function App() {
         planSnapshot: verificationPlanSnapshot
       }),
     [postRunVerification, nativeScan.result, verificationScanMode, activeLedger, verificationPlanSnapshot]
+  );
+  const executionProofHandoff = useMemo(
+    () =>
+      buildExecutionProofHandoff({
+        ledger: activeLedger,
+        verificationSummary,
+        postRunVerification,
+        rescanComparison,
+        nativeCapability,
+        scanning
+      }),
+    [activeLedger, verificationSummary, postRunVerification, rescanComparison, nativeCapability, scanning]
   );
   const rollbackPlan = useMemo(
     () =>
@@ -3696,6 +3709,7 @@ export default function App() {
               consentReceipt={consentReceipt}
               onExecute={executeBrowserCacheCleanup}
             />
+            <ExecutionProofHandoffPanel handoff={executionProofHandoff} onRescan={runPostRunReadonlyScan} />
             <ValidationEvidencePanel
               validationPack={validationPack}
               fixtureImportText={fixtureImportText}
@@ -9212,6 +9226,66 @@ function ToolCommandInventoryPanel({ inventory }) {
             </div>
           ))}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ExecutionProofHandoffPanel({ handoff, onRescan }) {
+  const complete = handoff.status === "proof-complete";
+  const blocked = handoff.status === "proof-mismatch";
+  const waiting = handoff.status === "waiting-for-execution";
+  const buttonDisabled = !handoff.canRunRescan || complete || waiting;
+
+  return (
+    <Card id="execution-proof-handoff-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Execution proof handoff
+          <Badge variant={handoff.tone}>{handoff.status}</Badge>
+        </CardTitle>
+        <CardDescription>{handoff.primary}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Run" value={handoff.runLabel} tone={handoff.scopedNativeExecution ? "restricted" : "review"} />
+          <QueueStat label="Reclaimed" value={formatBytes(handoff.reclaimedBytes)} tone={handoff.reclaimedBytes ? "safe" : "review"} />
+          <QueueStat label="Checkpoints" value={handoff.checkpointCount} tone={handoff.checkpointCount ? "advanced" : "review"} />
+          <QueueStat label="Post scan" value={handoff.postRunScanEvidence ? "yes" : "no"} tone={handoff.postRunScanEvidence ? "safe" : "review"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Proof state</span>
+            <Badge variant={complete ? "safe" : blocked ? "restricted" : "review"}>
+              {complete ? "parity matched" : blocked ? "parity blocked" : "needs rescan"}
+            </Badge>
+            <Badge variant="outline">{handoff.ledgerEntries} ledger row(s)</Badge>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <QueueStat label="Matched" value={handoff.matched} tone={handoff.matched ? "safe" : "review"} />
+            <QueueStat label="Mismatch" value={handoff.mismatch} tone={handoff.mismatch ? "restricted" : "safe"} />
+            <QueueStat label="Waiting" value={handoff.waiting} tone={handoff.waiting ? "review" : "safe"} />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {handoff.steps.slice(0, 3).map((step) => (
+            <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+              {complete ? (
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+              ) : (
+                <ShieldCheck className="mt-0.5 h-4 w-4 text-muted-foreground" />
+              )}
+              <span className="text-muted-foreground">{step}</span>
+            </div>
+          ))}
+        </div>
+
+        <Button type="button" variant={blocked ? "default" : "outline"} size="sm" onClick={onRescan} disabled={buttonDisabled}>
+          <RefreshCcw className={`h-4 w-4 ${handoff.scanning ? "animate-spin" : ""}`} />
+          {handoff.scanning ? "Rescanning" : handoff.actionLabel}
+        </Button>
       </CardContent>
     </Card>
   );

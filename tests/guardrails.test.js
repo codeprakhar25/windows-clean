@@ -2325,6 +2325,17 @@ const assert = require("assert");
   assert.strictEqual(demoRescanComparison.schemaVersion, "spaceguard-rescan-comparison/v1", "rescan comparison should have a schema version");
   assert.strictEqual(demoRescanComparison.status, "needs-native-rescan", "demo comparison should require native scan evidence");
   assert.strictEqual(demoRescanComparison.rows[0].state, "needs-native-rescan", "demo row should wait for native rescan evidence");
+  const proofRequiredHandoff = guard.buildExecutionProofHandoff({
+    ledger: taggedItemLedger,
+    verificationSummary: currentVerification,
+    postRunVerification,
+    rescanComparison: demoRescanComparison,
+    nativeCapability: { available: false }
+  });
+  assert.strictEqual(proofRequiredHandoff.schemaVersion, "spaceguard-execution-proof-handoff/v1", "execution proof handoff should have a schema version");
+  assert.strictEqual(proofRequiredHandoff.status, "proof-required", "ledgered execution should require post-run proof");
+  assert.strictEqual(proofRequiredHandoff.canRunRescan, false, "handoff should not offer post-run rescan outside the native shell");
+  assert.strictEqual(proofRequiredHandoff.ledgerEntries, taggedItemLedger.length, "handoff should count ledger rows");
 
   const tempPlanSnapshot = guard.buildPlanSnapshot({
     selectedIds: new Set(["windows-temp"]),
@@ -2388,6 +2399,22 @@ const assert = require("assert");
     }
   });
   assert.strictEqual(matchedComparison.status, "matched", "zero remaining bytes after a full temp cleanup should match within tolerance");
+  const matchedHandoff = guard.buildExecutionProofHandoff({
+    ledger: tempLedger,
+    postRunVerification: tempPostRunVerification,
+    rescanComparison: matchedComparison,
+    nativeCapability: { available: true }
+  });
+  assert.strictEqual(matchedHandoff.status, "proof-complete", "matched rescan comparison should complete proof handoff");
+  assert.strictEqual(matchedHandoff.canRunRescan, false, "completed proof handoff should not ask for another rescan");
+  const mismatchHandoff = guard.buildExecutionProofHandoff({
+    ledger: tempLedger,
+    postRunVerification: tempPostRunVerification,
+    rescanComparison: mismatchComparison,
+    nativeCapability: { available: true }
+  });
+  assert.strictEqual(mismatchHandoff.status, "proof-mismatch", "mismatched rescan comparison should block proof handoff");
+  assert.strictEqual(mismatchHandoff.canRunRescan, true, "mismatched proof handoff should allow a repeat post-run rescan");
   const unixTimestampComparison = guard.buildRescanComparison({
     postRunVerification: tempPostRunVerification,
     ledger: tempLedger,
