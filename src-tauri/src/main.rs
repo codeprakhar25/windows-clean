@@ -5514,19 +5514,28 @@ fn project_dependency_scan_item(recipe_id: &str, node_modules: &Path, bytes: u64
         .unwrap_or("project");
     let package_json = project_root.join("package.json");
     let package_text = fs::read_to_string(&package_json).unwrap_or_default();
+    let package_value = serde_json::from_str::<Value>(&package_text).ok();
     let package_lower = package_text.to_ascii_lowercase();
     let has_package_json = package_json.exists();
-    let has_lockfile = [
-        "package-lock.json",
-        "pnpm-lock.yaml",
-        "yarn.lock",
-        "bun.lockb",
-    ]
-    .iter()
-    .any(|name| project_root.join(name).exists());
-    let expo_hint = package_lower.contains("\"expo\"") || package_lower.contains("expo-router");
-    let react_native_hint = package_lower.contains("react-native");
-    let recommendation = if has_package_json && age_days >= 60 {
+    let package_name = package_value
+        .as_ref()
+        .and_then(|value| value.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let dependency_names = package_dependency_names(package_value.as_ref());
+    let lockfile = project_lockfile(project_root);
+    let has_lockfile = lockfile.is_some();
+    let package_manager =
+        package_manager_signal(project_root, package_value.as_ref(), lockfile.as_deref());
+    let framework_signals = project_framework_signals(&dependency_names, &package_lower);
+    let script_signals = package_script_signals(package_value.as_ref());
+    let expo_hint = framework_signals.iter().any(|signal| *signal == "expo");
+    let react_native_hint = framework_signals
+        .iter()
+        .any(|signal| *signal == "react-native");
+    let rebuildable = has_package_json && has_lockfile;
+    let recommendation = if (rebuildable && age_days >= 45) || (has_package_json && age_days >= 75)
+    {
         "review"
     } else {
         "keep"
@@ -5540,17 +5549,23 @@ fn project_dependency_scan_item(recipe_id: &str, node_modules: &Path, bytes: u64
     };
     let mut signals = Vec::new();
     signals.push(format!("project={project_name}"));
+    if !package_name.trim().is_empty() {
+        signals.push(format!("package={package_name}"));
+    }
     if has_package_json {
         signals.push("package.json".to_string());
     }
-    if has_lockfile {
-        signals.push("lockfile".to_string());
+    if let Some(lockfile) = lockfile.as_deref() {
+        signals.push(format!("lockfile={lockfile}"));
     }
-    if expo_hint {
-        signals.push("expo".to_string());
+    if let Some(package_manager) = package_manager {
+        signals.push(format!("manager={package_manager}"));
     }
-    if react_native_hint {
-        signals.push("react-native".to_string());
+    if !framework_signals.is_empty() {
+        signals.push(format!("frameworks={}", framework_signals.join("+")));
+    }
+    if !script_signals.is_empty() {
+        signals.push(format!("scripts={}", script_signals.join(",")));
     }
 
     ScanItem {
@@ -5563,18 +5578,151 @@ fn project_dependency_scan_item(recipe_id: &str, node_modules: &Path, bytes: u64
         recommendation: recommendation.to_string(),
         reason: if recommendation == "review" {
             format!(
-                "Rebuildable dependency folder is about {age_days} day(s) old; signals: {}.",
+                "Rebuildable dependency folder is about {age_days} day(s) old; signals: {}. Source files are not selected; reinstall dependencies with the detected package manager if needed.",
                 signals.join(", ")
             )
         } else if !has_package_json {
             "Dependency folder has no readable parent package.json; keep until the project is inspected.".to_string()
         } else {
             format!(
-                "Project dependency folder is recent or ambiguous; signals: {}.",
+                "Project dependency folder is recent, missing rebuild proof, or ambiguous; signals: {}.",
                 signals.join(", ")
             )
         },
     }
+}
+
+fn package_dependency_names(package_value: Option<&Value>) -> Vec<String> {
+    let mut names = Vec::new();
+    let Some(package_value) = package_value else {
+        return names;
+    };
+
+    for section in [
+        "dependencies",
+        "devDependencies",
+        "peerDependencies",
+        "optionalDependencies",
+    ] {
+        let Some(object) = package_value.get(section).and_then(Value::as_object) else {
+            continue;
+        };
+        for key in object.keys() {
+            if names.len() >= 96 {
+                return names;
+            }
+            if !names.iter().any(|name| name == key) {
+                names.push(key.to_string());
+            }
+        }
+    }
+
+    names
+}
+
+fn project_lockfile(project_root: &Path) -> Option<String> {
+    [
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        "bun.lockb",
+        "package-lock.json",
+    ]
+    .iter()
+    .find(|name| project_root.join(name).exists())
+    .map(|name| (*name).to_string())
+}
+
+fn package_manager_signal(
+    project_root: &Path,
+    package_value: Option<&Value>,
+    lockfile: Option<&str>,
+) -> Option<String> {
+    if let Some(package_manager) = package_value
+        .and_then(|value| value.get("packageManager"))
+        .and_then(Value::as_str)
+        .map(package_manager_name)
+        .filter(|value| !value.trim().is_empty())
+    {
+        return Some(package_manager);
+    }
+
+    match lockfile {
+        Some("pnpm-lock.yaml") => Some("pnpm".to_string()),
+        Some("yarn.lock") => Some("yarn".to_string()),
+        Some("bun.lockb") => Some("bun".to_string()),
+        Some("package-lock.json") => Some("npm".to_string()),
+        _ if project_root.join("pnpm-workspace.yaml").exists() => Some("pnpm".to_string()),
+        _ => None,
+    }
+}
+
+fn package_manager_name(value: &str) -> String {
+    value.split('@').next().unwrap_or(value).trim().to_string()
+}
+
+fn project_framework_signals(
+    dependency_names: &[String],
+    package_lower: &str,
+) -> Vec<&'static str> {
+    let mut signals = Vec::new();
+    if has_dependency(dependency_names, "expo")
+        || has_dependency_prefix(dependency_names, "expo-")
+        || package_lower.contains("expo-router")
+    {
+        signals.push("expo");
+    }
+    if has_dependency(dependency_names, "react-native") || package_lower.contains("react-native") {
+        signals.push("react-native");
+    }
+    if has_dependency(dependency_names, "next") {
+        signals.push("next");
+    }
+    if has_dependency(dependency_names, "vite")
+        || has_dependency_prefix(dependency_names, "@vitejs/")
+    {
+        signals.push("vite");
+    }
+    if has_dependency(dependency_names, "electron") {
+        signals.push("electron");
+    }
+    if has_dependency(dependency_names, "@tauri-apps/api") {
+        signals.push("tauri");
+    }
+    if has_dependency(dependency_names, "vue") {
+        signals.push("vue");
+    }
+    if has_dependency(dependency_names, "svelte")
+        || has_dependency(dependency_names, "@sveltejs/kit")
+    {
+        signals.push("svelte");
+    }
+    signals
+}
+
+fn has_dependency(dependency_names: &[String], expected: &str) -> bool {
+    dependency_names.iter().any(|name| name == expected)
+}
+
+fn has_dependency_prefix(dependency_names: &[String], expected_prefix: &str) -> bool {
+    dependency_names
+        .iter()
+        .any(|name| name.starts_with(expected_prefix))
+}
+
+fn package_script_signals(package_value: Option<&Value>) -> Vec<String> {
+    let Some(scripts) = package_value
+        .and_then(|value| value.get("scripts"))
+        .and_then(Value::as_object)
+    else {
+        return Vec::new();
+    };
+
+    ["dev", "start", "build", "test", "android", "ios", "web"]
+        .iter()
+        .filter(|name| scripts.contains_key(*name))
+        .take(5)
+        .map(|name| (*name).to_string())
+        .collect()
 }
 
 fn top_file_items(

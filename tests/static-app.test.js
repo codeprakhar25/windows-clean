@@ -760,6 +760,11 @@ assert(rustScanner.includes("LargeUserFiles"), "Rust scanner should include larg
 assert(rustScanner.includes("large_user_file_items"), "Rust scanner should return large-file review candidates");
 assert(rustScanner.includes("struct ScanItem"), "Rust scanner should expose item-level review candidates");
 assert(rustScanner.includes("struct VolumeInfo"), "Rust scanner should expose read-only volume info");
+assert(rustScanner.includes("package_dependency_names"), "Rust scanner should parse package dependency metadata for project review");
+assert(rustScanner.includes("packageManager"), "Rust scanner should capture package manager metadata from package.json");
+assert(rustScanner.includes("project_framework_signals"), "Rust scanner should classify project framework hints");
+assert(rustScanner.includes("frameworks="), "Rust scanner should include framework signals in project dependency review reasons");
+assert(rustScanner.includes("scripts="), "Rust scanner should include script signals in project dependency review reasons");
 assert(rustScanner.includes("real_run_enabled: false"), "native dry-run should report real run disabled");
 assert(rustScanner.includes("write_capability: false"), "native scanner should report write capability disabled");
 assert(rustScanner.includes("destructive_commands: false"), "native scanner should report destructive commands disabled");
