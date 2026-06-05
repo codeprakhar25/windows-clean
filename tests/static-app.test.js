@@ -321,6 +321,7 @@ assert(openAiAgent.includes("spaceguard_cleanup_agent_advice"), "OpenAI adapter 
 assert(openAiAgent.includes("reviewedProjectTargets"), "OpenAI context should include reviewed project targets");
 assert(openAiAgent.includes("gradleCacheTargets"), "OpenAI context should include scanned Gradle cache targets");
 assert(openAiAgent.includes("userCacheTargets"), "OpenAI context should include scanned user .cache targets");
+assert(openAiAgent.includes("androidCacheTargets"), "OpenAI context should include scanned Android cache targets");
 assert(openAiAgent.includes("npmCacheTargets"), "OpenAI context should include scanned npm cache targets");
 assert(openAiAgent.includes("recycleBinTargets"), "OpenAI context should include scanned Recycle Bin targets");
 assert(openAiAgent.includes("browserCacheTargets"), "OpenAI context should include scanned browser cache targets");
@@ -344,6 +345,7 @@ assert(openAiAgent.includes("driveInventoryRows"), "OpenAI context should includ
 assert(openAiAgent.includes("customRootRows"), "OpenAI context should include custom root triage rows");
 assert(openAiAgent.includes("run-gradle-cache-executor"), "OpenAI schema should allow Gradle cache executor recommendations");
 assert(openAiAgent.includes("run-user-cache-executor"), "OpenAI schema should allow user .cache executor recommendations");
+assert(openAiAgent.includes("run-android-cache-executor"), "OpenAI schema should allow Android cache executor recommendations");
 assert(openAiAgent.includes("run-downloads-cleanup-executor"), "OpenAI schema should allow reviewed Downloads executor recommendations");
 assert(openAiAgent.includes("run-large-file-archive-executor"), "OpenAI schema should allow reviewed large-file archive recommendations");
 assert(openAiAgent.includes("run-npm-cache-executor"), "OpenAI schema should allow npm cache executor recommendations");
@@ -357,6 +359,7 @@ assert(app.includes("manualReviewTargets"), "OpenAI manual-only recommendations 
 assert(app.includes("Project targets"), "OpenAI panel should show reviewed project target count");
 assert(app.includes("Gradle root"), "OpenAI panel should show Gradle cache target count");
 assert(app.includes(".cache root"), "OpenAI panel should show user .cache target count");
+assert(app.includes("Android roots"), "OpenAI panel should show Android cache target count");
 assert(app.includes("npm root"), "OpenAI panel should show npm cache target count");
 assert(app.includes("pnpm root"), "OpenAI panel should show pnpm store target count");
 assert(openAiAgent.includes("pnpmStoreTargets"), "OpenAI context should include scanned pnpm store targets");
@@ -501,6 +504,20 @@ assert(rustScanner.includes("user_cache_target_reject_code"), "Rust native shell
 assert(rustScanner.includes("target-not-user-cache"), "Rust native shell should reject non-user .cache targets");
 assert(rustScanner.includes("file_old_enough_for_user_cache_delete"), "Rust user .cache cleanup should enforce the age threshold");
 assert(rustScanner.includes("user_cache_file_forbidden"), "Rust user .cache cleanup should skip config and identity-like files");
+assert(app.includes("AndroidCacheExecutorPanel"), "Android cache executor panel should be rendered");
+assert(app.includes("android-cache-executor-panel"), "Android cache executor panel should be focusable");
+assert(app.includes("Run Android cache cleanup"), "Android cache executor should expose a user-triggered cleanup button");
+assert(app.includes("Android executor boundary"), "Android cache executor should show the route boundary");
+assert(app.includes("runNativeAndroidCacheExecutor"), "Android cache executor should be wired through the native adapter");
+assert(nativeAdapter.includes("requestMode: \"execute-android-cache\""), "native adapter should send the execute-android-cache request mode");
+assert(nativeAdapter.includes("spaceguard-android-cache-request/v1"), "native adapter should send the Android cache request schema");
+assert(nativeAdapter.includes("androidCacheExecutor"), "native adapter should normalize Android cache executor flag");
+assert(rustScanner.includes("execute_android_cache_cleanup"), "Rust native shell should implement Android cache cleanup");
+assert(rustScanner.includes("SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR"), "Rust native shell should require the Android cache executor feature flag");
+assert(rustScanner.includes("android_cache_target_reject_code"), "Rust native shell should validate Android cache targets");
+assert(rustScanner.includes("target-not-android-cache"), "Rust native shell should reject non-Android cache targets");
+assert(rustScanner.includes("file_old_enough_for_android_cache_delete"), "Rust Android cache cleanup should enforce the age threshold");
+assert(rustScanner.includes("android_cache_file_forbidden"), "Rust Android cache cleanup should skip config and identity-like files");
 assert(app.includes("NpmCacheExecutorPanel"), "npm cache executor panel should be rendered");
 assert(app.includes("npm-cache-executor-panel"), "npm cache executor panel should be focusable");
 assert(app.includes("Run npm cache cleanup"), "npm cache executor should expose a user-triggered cleanup button");

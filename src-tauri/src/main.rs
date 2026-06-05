@@ -298,6 +298,7 @@ struct ExecutorFeatureFlags {
     large_file_archive_executor: bool,
     gradle_cache_executor: bool,
     user_cache_executor: bool,
+    android_cache_executor: bool,
     npm_cache_executor: bool,
     pnpm_store_executor: bool,
     recycle_bin_executor: bool,
@@ -698,6 +699,9 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
     }
     if request.request_mode.as_deref() == Some("execute-user-cache") {
         return execute_user_cache_cleanup(request);
+    }
+    if request.request_mode.as_deref() == Some("execute-android-cache") {
+        return execute_android_cache_cleanup(request);
     }
     if request.request_mode.as_deref() == Some("execute-npm-cache") {
         return execute_npm_cache_cleanup(request);
@@ -2197,6 +2201,174 @@ fn execute_user_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionR
     }
 }
 
+fn execute_android_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let flag_enabled = android_cache_executor_enabled();
+    let rejections = android_cache_execution_rejections(&request, flag_enabled);
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-android-cache-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-android-cache".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+
+    let entries = request
+        .actions
+        .into_iter()
+        .map(|action| {
+            let target_path = action.target_path.clone().unwrap_or_default();
+            let target_reject = android_cache_target_reject_code(&target_path);
+            let route_match = action.route == route && route == "bounded-android-cache-delete";
+            let can_execute = rejections.is_empty() && route_match && target_reject.is_none();
+
+            if can_execute {
+                let deleted = delete_android_cache_target(&resolve_dry_run_target(&target_path));
+                return WriteExecutionEntry {
+                    id: action.id,
+                    title: action.title,
+                    route: action.route,
+                    result: if deleted.deleted_files > 0 || deleted.deleted_dirs > 0 {
+                        "executed".to_string()
+                    } else {
+                        "no-op".to_string()
+                    },
+                    reject_code: String::new(),
+                    bytes: deleted.deleted_bytes,
+                    preflight_status: "executed".to_string(),
+                    preflight_checks: vec![
+                        write_preflight_check(
+                            "route-bounded-android-cache",
+                            "Bounded Android cache route",
+                            "passed",
+                            "Action route is bounded-android-cache-delete.",
+                        ),
+                        write_preflight_check(
+                            "target-android-cache",
+                            "Android cache target",
+                            "passed",
+                            "Target is a scanned Android Studio cache or .android build-cache directory.",
+                        ),
+                        write_preflight_check(
+                            "feature-flag",
+                            "Executor feature flag",
+                            "passed",
+                            "SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR enabled Android cache cleanup.",
+                        ),
+                    ],
+                    note: format!(
+                        "Android cache executor deleted {} old cache file(s), {} empty cache dir(s), reclaimed {} byte(s), and skipped {} item(s).",
+                        deleted.deleted_files,
+                        deleted.deleted_dirs,
+                        deleted.deleted_bytes,
+                        deleted.skipped_count
+                    ),
+                };
+            }
+
+            let reject_code = if !route_match {
+                "route-not-bounded-android-cache"
+            } else {
+                target_reject
+                    .or_else(|| rejections.first().copied())
+                    .unwrap_or("android-cache-executor-disabled")
+            };
+
+            WriteExecutionEntry {
+                id: action.id,
+                title: action.title,
+                route: action.route,
+                result: "rejected".to_string(),
+                reject_code: reject_code.to_string(),
+                bytes: 0,
+                preflight_status: "target-blocked".to_string(),
+                preflight_checks: vec![
+                    write_preflight_check(
+                        "route-bounded-android-cache",
+                        "Bounded Android cache route",
+                        if route_match { "passed" } else { "blocked" },
+                        if route_match {
+                            "Action route is bounded-android-cache-delete."
+                        } else {
+                            "Only bounded-android-cache-delete can use this executor."
+                        },
+                    ),
+                    write_preflight_check(
+                        "target-android-cache",
+                        "Android cache target",
+                        if target_reject.is_none() { "passed" } else { "blocked" },
+                        if target_reject.is_none() {
+                            "Target is a scanned Android cache directory."
+                        } else {
+                            "Target is missing, forbidden, not a scanned Android cache directory, or link-like."
+                        },
+                    ),
+                    write_preflight_check(
+                        "feature-flag",
+                        "Executor feature flag",
+                        if flag_enabled { "passed" } else { "blocked" },
+                        if flag_enabled {
+                            "Android cache executor feature flag is enabled."
+                        } else {
+                            "SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR is not enabled."
+                        },
+                    ),
+                ],
+                note: format!(
+                    "Android cache cleanup rejected with code {reject_code}. Plan {plan_id}; no bytes were removed for this action."
+                ),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let accepted = rejections.is_empty()
+        && entries
+            .iter()
+            .all(|entry| entry.result == "executed" || entry.result == "no-op");
+    let reclaimed = entries.iter().map(|entry| entry.bytes).sum::<u64>();
+    let mut warnings = android_cache_execution_warnings(&rejections);
+    if accepted {
+        warnings.push(format!(
+            "Android cache cleanup completed for plan {plan_id}; reclaimed {reclaimed} byte(s). Run a fresh native scan and reopen Android Studio if you need cache rebuild proof."
+        ));
+    }
+
+    WriteExecutionResponse {
+        mode: if accepted {
+            "native-android-cache-executor"
+        } else {
+            "native-android-cache-executor-rejected"
+        },
+        real_run_enabled: flag_enabled,
+        destructive_commands: flag_enabled,
+        accepted,
+        reason: if accepted {
+            format!("Android cache executor accepted bounded cache target(s) and reclaimed {reclaimed} byte(s).")
+        } else {
+            "Android cache executor rejected the request before mutation.".to_string()
+        },
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
+        entries,
+        warnings,
+    }
+}
+
 fn execute_pnpm_store_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
     let route = request.route.clone();
     let plan_id = request.plan_id.clone();
@@ -2730,6 +2902,7 @@ fn is_first_safe_write_route(route: &str) -> bool {
             | "item-review-project-cache"
             | "bounded-cache-delete"
             | "bounded-user-cache-delete"
+            | "bounded-android-cache-delete"
             | "bounded-npm-cache-delete"
             | "bounded-pnpm-store-delete"
     )
@@ -2930,6 +3103,30 @@ fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
                 },
             })
         }
+        "bounded-android-cache-delete" => {
+            let enabled = cfg!(target_os = "windows") && android_cache_executor_enabled();
+            Some(WriteExecutorScaffold {
+                route: "bounded-android-cache-delete".to_string(),
+                title: "Bounded Android Studio cache".to_string(),
+                feature_flag: "androidCacheExecutor".to_string(),
+                status: if enabled {
+                    "feature-flag-enabled".to_string()
+                } else {
+                    "feature-flag-disabled".to_string()
+                },
+                validation_status: if enabled {
+                    "android-cache-only".to_string()
+                } else {
+                    "validation-required".to_string()
+                },
+                mutation_enabled: enabled,
+                reason: if enabled {
+                    "Android cache executor can remove old files and empty dirs under scanned Android Studio cache roots only.".to_string()
+                } else {
+                    "Android cache executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR is enabled on Windows.".to_string()
+                },
+            })
+        }
         "bounded-npm-cache-delete" => {
             let enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
             Some(WriteExecutorScaffold {
@@ -2992,6 +3189,7 @@ fn write_executor_scaffold_reject_code(route: &str) -> &'static str {
         "browser-cache-only" => "browser-cache-executor-disabled",
         "bounded-cache-delete" => "gradle-cache-executor-disabled",
         "bounded-user-cache-delete" => "user-cache-executor-disabled",
+        "bounded-android-cache-delete" => "android-cache-executor-disabled",
         "bounded-npm-cache-delete" => "npm-cache-executor-disabled",
         "bounded-pnpm-store-delete" => "pnpm-store-executor-disabled",
         _ => "real-executor-disabled",
@@ -3011,6 +3209,9 @@ fn write_action_target_reject_code(
     }
     if route == "bounded-user-cache-delete" {
         return user_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
+    }
+    if route == "bounded-android-cache-delete" {
+        return android_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
     }
     if route == "bounded-npm-cache-delete" {
         return npm_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
@@ -3127,6 +3328,34 @@ fn write_target_forbidden(route: &str, target: &str) -> bool {
                 || target.contains("\\identity")
                 || target.contains("\\history")
         }
+        "bounded-android-cache-delete" => {
+            target.contains("downloads")
+                || target.contains("documents")
+                || target.contains("desktop")
+                || target.contains("pictures")
+                || target.contains("videos")
+                || target.contains("music")
+                || target.contains("node_modules")
+                || target.contains("\\.git")
+                || target.contains("\\windows\\")
+                || target.contains("\\program files")
+                || target.contains("\\programdata\\")
+                || target.contains("\\appdata\\roaming")
+                || target.contains("\\.android\\avd")
+                || target.ends_with("\\.android")
+                || target.contains("\\android\\sdk")
+                || target.contains("\\android-sdk")
+                || target.contains("\\sdk\\")
+                || target.contains("\\emulator")
+                || target.contains("\\system-images")
+                || target.contains("\\platforms")
+                || target.contains("\\build-tools")
+                || target.contains("\\cmdline-tools")
+                || target.contains("\\platform-tools")
+                || target.contains("\\sources")
+                || target.contains("\\gradle")
+                || target.contains("\\projects")
+        }
         "bounded-npm-cache-delete" => {
             target.contains("downloads")
                 || target.contains("documents")
@@ -3189,6 +3418,12 @@ fn write_target_allowed(route: &str, target: &str) -> bool {
         "bounded-user-cache-delete" => {
             target.ends_with("\\.cache") || target.contains("\\.cache\\")
         }
+        "bounded-android-cache-delete" => {
+            target.ends_with("\\.android\\build-cache")
+                || target.contains("\\.android\\build-cache\\")
+                || (target.contains("\\appdata\\local\\google\\androidstudio")
+                    && (target.ends_with("\\caches") || target.contains("\\caches\\")))
+        }
         "bounded-npm-cache-delete" => {
             target.ends_with("\\npm-cache\\_cacache") || target.contains("\\npm-cache\\_cacache\\")
         }
@@ -3248,6 +3483,9 @@ fn write_boundary_warning(code: &str) -> &'static str {
         }
         "user-cache-executor-disabled" => {
             "Write request rejected: userCacheExecutor scaffold is feature-flag disabled."
+        }
+        "android-cache-executor-disabled" => {
+            "Write request rejected: androidCacheExecutor scaffold is feature-flag disabled."
         }
         "npm-cache-executor-disabled" => {
             "Write request rejected: npmCacheExecutor scaffold is feature-flag disabled."
@@ -3324,6 +3562,12 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "route-not-bounded-user-cache" => {
             "Write request rejected: user .cache cleanup requires route bounded-user-cache-delete."
         }
+        "target-not-android-cache" => {
+            "Write request rejected: Android cache target is not a scanned Android Studio cache or .android build-cache directory."
+        }
+        "route-not-bounded-android-cache" => {
+            "Write request rejected: Android cache cleanup requires route bounded-android-cache-delete."
+        }
         "target-not-npm-cache" => {
             "Write request rejected: npm cache target is not the current user's npm-cache\\_cacache directory."
         }
@@ -3371,6 +3615,10 @@ fn gradle_cache_executor_enabled() -> bool {
 
 fn user_cache_executor_enabled() -> bool {
     runtime_feature_flag_enabled("SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR")
+}
+
+fn android_cache_executor_enabled() -> bool {
+    runtime_feature_flag_enabled("SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR")
 }
 
 fn npm_cache_executor_enabled() -> bool {
@@ -4004,6 +4252,85 @@ fn user_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
         .collect()
 }
 
+fn android_cache_execution_rejections(
+    request: &WriteExecutionRequest,
+    flag_enabled: bool,
+) -> Vec<&'static str> {
+    let mut codes = Vec::new();
+    if !cfg!(target_os = "windows") {
+        codes.push("windows-required");
+    }
+    if !flag_enabled {
+        codes.push("android-cache-executor-disabled");
+    }
+    if request.plan_id.trim().is_empty() {
+        codes.push("missing-plan-id");
+    }
+    if request
+        .scan_fingerprint
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-scan-fingerprint");
+    }
+    if request
+        .consent_plan_id
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-consent-plan-id");
+    }
+    if request.request_mode.as_deref() != Some("execute-android-cache") {
+        codes.push("request-mode-invalid");
+    }
+    if request.route != "bounded-android-cache-delete" {
+        codes.push("route-not-bounded-android-cache");
+    }
+    if request.dry_run_only != Some(false) {
+        codes.push("dry-run-disabled-required");
+    }
+    if request.mutation_attempted != Some(true) {
+        codes.push("mutation-confirmation-required");
+    }
+    if request.actions.is_empty() {
+        codes.push("no-actions");
+    }
+    codes
+}
+
+fn android_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
+    if codes.is_empty() {
+        return vec![
+            "Android cache executor removes old files and empty cache subdirectories under scanned Android Studio cache roots only; AVDs, SDKs, project files, Gradle data, and identity/config files remain forbidden.".to_string(),
+        ];
+    }
+    codes
+        .iter()
+        .map(|code| match *code {
+            "windows-required" => "Android cache cleanup is Windows-only in this build.",
+            "android-cache-executor-disabled" => {
+                "Set SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR=1 before launching the Tauri app to enable Android cache cleanup."
+            }
+            "dry-run-disabled-required" => {
+                "Android cache cleanup requires dryRunOnly=false on the execute-android-cache request."
+            }
+            "mutation-confirmation-required" => {
+                "Android cache cleanup requires mutationAttempted=true on the execute-android-cache request."
+            }
+            "request-mode-invalid" => "Android cache cleanup requires requestMode=execute-android-cache.",
+            "route-not-bounded-android-cache" => {
+                "Android cache cleanup requires route bounded-android-cache-delete."
+            }
+            _ => write_boundary_warning(code),
+        })
+        .map(String::from)
+        .collect()
+}
+
 fn npm_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
     if codes.is_empty() {
         return vec![
@@ -4375,6 +4702,80 @@ fn user_cache_target_reject_code(value: &str) -> Option<&'static str> {
     None
 }
 
+fn android_cache_target_reject_code(value: &str) -> Option<&'static str> {
+    let path = resolve_dry_run_target(value);
+    if path.as_os_str().is_empty() {
+        return Some("target-missing");
+    }
+
+    let original = normalize_write_target(value);
+    let resolved = normalize_write_target(&path_to_string(&path));
+    if write_target_forbidden("bounded-android-cache-delete", &original)
+        || write_target_forbidden("bounded-android-cache-delete", &resolved)
+    {
+        return Some("target-forbidden");
+    }
+    if !write_target_allowed("bounded-android-cache-delete", &original)
+        && !write_target_allowed("bounded-android-cache-delete", &resolved)
+    {
+        return Some("target-not-android-cache");
+    }
+
+    if !android_cache_path_matches_current_user_roots(&path) {
+        return Some("target-not-android-cache");
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(&path) else {
+        return Some("target-missing");
+    };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Some("target-link-or-not-directory");
+    }
+    None
+}
+
+fn android_cache_path_matches_current_user_roots(path: &Path) -> bool {
+    if let Some(profile) = env_path("USERPROFILE").or_else(|| env_path("HOME")) {
+        if same_normalized_path(path, &profile.join(".android").join("build-cache")) {
+            return true;
+        }
+    }
+
+    let Some(local_app_data) = env_path("LOCALAPPDATA").or_else(|| {
+        env_path("USERPROFILE")
+            .or_else(|| env_path("HOME"))
+            .map(|profile| profile.join("AppData").join("Local"))
+    }) else {
+        return false;
+    };
+
+    android_studio_cache_path_matches(path, &local_app_data.join("Google"))
+}
+
+fn android_studio_cache_path_matches(path: &Path, google_dir: &Path) -> bool {
+    let clean = normalize_path(&path_to_string(path));
+    let google = normalize_path(&path_to_string(google_dir));
+    let Some(rest) = clean
+        .strip_prefix(google.trim_end_matches('\\'))
+        .and_then(|value| value.strip_prefix('\\'))
+    else {
+        return false;
+    };
+    let parts = rest
+        .split('\\')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    if parts.len() == 2 {
+        return parts[0].starts_with("androidstudio") && parts[1] == "caches";
+    }
+    if parts.len() == 3 {
+        return parts[0].starts_with("androidstudio")
+            && parts[1] == "system"
+            && parts[2] == "caches";
+    }
+    false
+}
+
 fn pnpm_store_target_reject_code(value: &str) -> Option<&'static str> {
     let path = resolve_dry_run_target(value);
     if path.as_os_str().is_empty() {
@@ -4638,6 +5039,14 @@ struct GradleCacheDeleteResult {
 
 #[derive(Default)]
 struct UserCacheDeleteResult {
+    deleted_bytes: u64,
+    deleted_files: u64,
+    deleted_dirs: u64,
+    skipped_count: u64,
+}
+
+#[derive(Default)]
+struct AndroidCacheDeleteResult {
     deleted_bytes: u64,
     deleted_files: u64,
     deleted_dirs: u64,
@@ -5008,6 +5417,149 @@ fn user_cache_file_forbidden(path: &Path) -> bool {
         || file_name.contains("token")
         || file_name.contains("credential")
         || file_name.contains("password")
+        || file_name.contains("history")
+}
+
+fn delete_android_cache_target(root: &Path) -> AndroidCacheDeleteResult {
+    let mut result = AndroidCacheDeleteResult::default();
+    if android_cache_target_reject_code(&path_to_string(root)).is_some() {
+        result.skipped_count += 1;
+        return result;
+    }
+
+    let mut queue = VecDeque::from([root.to_path_buf()]);
+    let mut dirs = Vec::new();
+    let mut visited = 0usize;
+    while let Some(path) = queue.pop_front() {
+        if visited >= 250_000 || result.deleted_files >= 120_000 {
+            result.skipped_count += 1;
+            break;
+        }
+        visited += 1;
+
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            result.skipped_count += 1;
+            continue;
+        };
+        if metadata.file_type().is_symlink() {
+            result.skipped_count += 1;
+            continue;
+        }
+        if metadata.is_file() {
+            delete_single_android_cache_file(&path, &metadata, &mut result);
+            continue;
+        }
+        if metadata.is_dir() {
+            if android_cache_dir_forbidden(&path, root) {
+                result.skipped_count += 1;
+                continue;
+            }
+            dirs.push(path.clone());
+            match fs::read_dir(&path) {
+                Ok(entries) => {
+                    for entry in entries.flatten() {
+                        queue.push_back(entry.path());
+                    }
+                }
+                Err(_) => result.skipped_count += 1,
+            }
+        }
+    }
+
+    dirs.sort_by(|left, right| right.components().count().cmp(&left.components().count()));
+    for dir in dirs {
+        if dir == root || android_cache_dir_forbidden(&dir, root) {
+            continue;
+        }
+        match fs::remove_dir(&dir) {
+            Ok(_) => result.deleted_dirs = result.deleted_dirs.saturating_add(1),
+            Err(_) => result.skipped_count += 1,
+        }
+    }
+
+    result
+}
+
+fn delete_single_android_cache_file(
+    path: &Path,
+    metadata: &fs::Metadata,
+    result: &mut AndroidCacheDeleteResult,
+) {
+    if !file_old_enough_for_android_cache_delete(metadata) || android_cache_file_forbidden(path) {
+        result.skipped_count += 1;
+        return;
+    }
+    let bytes = metadata.len();
+    match fs::remove_file(path) {
+        Ok(_) => {
+            result.deleted_bytes = result.deleted_bytes.saturating_add(bytes);
+            result.deleted_files = result.deleted_files.saturating_add(1);
+        }
+        Err(_) => result.skipped_count += 1,
+    }
+}
+
+fn file_old_enough_for_android_cache_delete(metadata: &fs::Metadata) -> bool {
+    let Ok(modified) = metadata.modified() else {
+        return false;
+    };
+    let Ok(age) = SystemTime::now().duration_since(modified) else {
+        return false;
+    };
+    age.as_secs() >= 30 * 24 * 60 * 60
+}
+
+fn android_cache_dir_forbidden(path: &Path, root: &Path) -> bool {
+    if path == root {
+        return false;
+    }
+    let clean = normalize_path(&path_to_string(path));
+    clean.contains("\\node_modules")
+        || clean.contains("\\.git")
+        || clean.contains("\\.android\\avd")
+        || clean.contains("\\android\\sdk")
+        || clean.contains("\\android-sdk")
+        || clean.contains("\\emulator")
+        || clean.contains("\\system-images")
+        || clean.contains("\\platforms")
+        || clean.contains("\\build-tools")
+        || clean.contains("\\cmdline-tools")
+        || clean.contains("\\platform-tools")
+        || clean.contains("\\gradle")
+        || clean.ends_with("\\config")
+        || clean.ends_with("\\options")
+        || clean.ends_with("\\projects")
+}
+
+fn android_cache_file_forbidden(path: &Path) -> bool {
+    let clean_path = normalize_path(&path_to_string(path));
+    if !clean_path.contains("\\.android\\build-cache\\")
+        && !(clean_path.contains("\\androidstudio") && clean_path.contains("\\caches\\"))
+    {
+        return true;
+    }
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.to_ascii_lowercase())
+        .unwrap_or_default();
+    file_name.is_empty()
+        || file_name.ends_with(".lock")
+        || file_name.ends_with(".db")
+        || file_name.ends_with(".sqlite")
+        || file_name.ends_with(".sqlite3")
+        || file_name.ends_with(".json")
+        || file_name.ends_with(".xml")
+        || file_name.ends_with(".properties")
+        || file_name.ends_with(".ini")
+        || file_name.ends_with(".conf")
+        || file_name.ends_with(".key")
+        || file_name.ends_with(".keystore")
+        || file_name.ends_with(".jks")
+        || file_name.contains("credential")
+        || file_name.contains("password")
+        || file_name.contains("token")
+        || file_name.contains("session")
         || file_name.contains("history")
 }
 
@@ -5613,7 +6165,7 @@ fn openai_advice_row_schema() -> Value {
             "priority": { "type": "string", "enum": ["high", "medium", "low"] },
             "actionType": {
                 "type": "string",
-                "enum": ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+                "enum": ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-android-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             "targetId": { "type": "string" },
             "route": { "type": "string" }
@@ -5776,6 +6328,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
     let browser_cache_enabled = cfg!(target_os = "windows") && browser_cache_executor_enabled();
     let gradle_cache_enabled = cfg!(target_os = "windows") && gradle_cache_executor_enabled();
     let user_cache_enabled = cfg!(target_os = "windows") && user_cache_executor_enabled();
+    let android_cache_enabled = cfg!(target_os = "windows") && android_cache_executor_enabled();
     let npm_cache_enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
     let pnpm_store_enabled = cfg!(target_os = "windows") && pnpm_store_executor_enabled();
     let recycle_bin_enabled = cfg!(target_os = "windows") && recycle_bin_executor_enabled();
@@ -5790,6 +6343,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         || browser_cache_enabled
         || gradle_cache_enabled
         || user_cache_enabled
+        || android_cache_enabled
         || npm_cache_enabled
         || pnpm_store_enabled
         || recycle_bin_enabled;
@@ -5819,6 +6373,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
             large_file_archive_executor: large_file_archive_enabled,
             gradle_cache_executor: gradle_cache_enabled,
             user_cache_executor: user_cache_enabled,
+            android_cache_executor: android_cache_enabled,
             npm_cache_executor: npm_cache_enabled,
             pnpm_store_executor: pnpm_store_enabled,
             recycle_bin_executor: recycle_bin_enabled,
@@ -6201,7 +6756,8 @@ fn installed_app_registry_inventory() -> Vec<InstalledAppMetadata> {
 
 #[cfg(target_os = "windows")]
 fn installed_app_usage_inventory() -> Vec<String> {
-    const USER_ASSIST_KEY: &str = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\UserAssist";
+    const USER_ASSIST_KEY: &str =
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\UserAssist";
     let Some(base_key) = registry_open_key(HKEY_CURRENT_USER, USER_ASSIST_KEY, KEY_READ) else {
         return Vec::new();
     };
@@ -6703,6 +7259,12 @@ fn exact_specs(target_drive: &str) -> Vec<ExactSpec> {
             kind: MeasureKind::FullTree,
         });
         specs.push(ExactSpec {
+            recipe_id: "android-cache",
+            title: "Android .android build cache",
+            path: profile.join(".android").join("build-cache"),
+            kind: MeasureKind::FullTree,
+        });
+        specs.push(ExactSpec {
             recipe_id: "downloads-installers",
             title: "Old installers and archives in Downloads",
             path: profile.join("Downloads"),
@@ -6949,6 +7511,17 @@ fn measure_android_studio_roots(request: &ScanRequest) -> Vec<ScanFinding> {
                     MeasureKind::FullTree,
                     request,
                 ));
+                for cache_path in [path.join("caches"), path.join("system").join("caches")] {
+                    if cache_path.exists() {
+                        findings.push(measure_path(
+                            "android-cache",
+                            "Android Studio cache folders",
+                            &cache_path,
+                            MeasureKind::FullTree,
+                            request,
+                        ));
+                    }
+                }
             }
         }
     }
@@ -7184,17 +7757,31 @@ fn installed_app_scan_item(
         .map(|item| item.display_name.as_str())
         .filter(|value| !value.trim().is_empty())
         .unwrap_or(folder_name);
-    let usage_evidence = find_installed_app_usage_evidence(path, folder_name, name, usage_inventory);
-    let recommendation = if bytes >= 1024 * 1024 * 1024 && age_days >= 45 && usage_evidence.is_none() {
-        "review"
-    } else {
-        "keep"
-    };
+    let usage_evidence =
+        find_installed_app_usage_evidence(path, folder_name, name, usage_inventory);
+    let recommendation =
+        if bytes >= 1024 * 1024 * 1024 && age_days >= 45 && usage_evidence.is_none() {
+            "review"
+        } else {
+            "keep"
+        };
     let kind = installed_app_kind(folder_name, path);
-    let reason =
-        installed_app_review_reason(path, bytes, age_days, recommendation, metadata.as_ref(), usage_evidence.as_ref());
-    let signals =
-        installed_app_review_signals(bytes, age_days, recommendation, kind, metadata.as_ref(), usage_evidence.as_ref());
+    let reason = installed_app_review_reason(
+        path,
+        bytes,
+        age_days,
+        recommendation,
+        metadata.as_ref(),
+        usage_evidence.as_ref(),
+    );
+    let signals = installed_app_review_signals(
+        bytes,
+        age_days,
+        recommendation,
+        kind,
+        metadata.as_ref(),
+        usage_evidence.as_ref(),
+    );
 
     ScanItem {
         id: stable_item_id("installed-app-footprints", path),
@@ -7236,7 +7823,11 @@ fn installed_app_review_signals(
             usage_evidence
                 .map(|evidence| evidence.source)
                 .unwrap_or("not proven"),
-            if usage_evidence.is_some() { "safe" } else { "restricted" },
+            if usage_evidence.is_some() {
+                "safe"
+            } else {
+                "restricted"
+            },
         ),
         review_signal("kind", kind, "review"),
         review_signal(
@@ -7257,9 +7848,17 @@ fn installed_app_review_signals(
     ];
 
     if let Some(evidence) = usage_evidence {
-        signals.push(review_signal("usage match", evidence.match_label.as_str(), "safe"));
+        signals.push(review_signal(
+            "usage match",
+            evidence.match_label.as_str(),
+            "safe",
+        ));
     } else {
-        signals.push(review_signal("usage evidence", "no UserAssist match", "review"));
+        signals.push(review_signal(
+            "usage evidence",
+            "no UserAssist match",
+            "review",
+        ));
     }
 
     if let Some(metadata) = metadata {

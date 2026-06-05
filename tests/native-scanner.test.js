@@ -609,6 +609,57 @@ const assert = require("assert");
   assert.strictEqual(userCacheExecutionInvocation.payload.request.actions[0].targetPath.endsWith("\\.cache"), true, "user .cache executor should pass concrete .cache root path");
   assert.strictEqual(userCacheExecution.accepted, true, "user .cache executor should normalize accepted responses");
   assert.strictEqual(userCacheExecution.entries[0].route, "bounded-user-cache-delete", "user .cache executor should normalize executed route");
+  let androidCacheExecutionInvocation = null;
+  const androidCacheExecution = await native.runNativeAndroidCacheExecutor(
+    {
+      rows: [
+        { id: "android-cache-1", title: "Android Studio cache", path: "C:\\Users\\real\\AppData\\Local\\Google\\AndroidStudio2025.1\\caches", bytes: 333 },
+        { id: "android-cache-2", title: "Android .android build cache", path: "C:\\Users\\real\\.android\\build-cache", bytes: 111 }
+      ],
+      planId: "plan-android-cache",
+      scanFingerprint: "scan-android-cache",
+      consentPlanId: "plan-android-cache",
+      expectedBytes: 444
+    },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            androidCacheExecutionInvocation = { command, payload };
+            return Promise.resolve({
+              mode: "native-android-cache-executor",
+              real_run_enabled: true,
+              destructive_commands: true,
+              accepted: true,
+              reason: "accepted",
+              contract_echo: {
+                schema_version: payload.request.schemaVersion,
+                request_mode: payload.request.requestMode,
+                plan_id: payload.request.planId,
+                route: payload.request.route,
+                scan_fingerprint: payload.request.scanFingerprint,
+                consent_plan_id: payload.request.consentPlanId,
+                expected_bytes: payload.request.expectedBytes,
+                dry_run_only: payload.request.dryRunOnly,
+                mutation_attempted: payload.request.mutationAttempted,
+                action_count: payload.request.actions.length
+              },
+              entries: [{ id: "android-cache-1", title: "Android Studio cache", route: "bounded-android-cache-delete", result: "executed", reject_code: "", bytes: 333, note: "deleted old android cache" }],
+              warnings: ["android cache done"]
+            });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(androidCacheExecutionInvocation.command, "execute_cleanup_plan", "Android cache executor should invoke execute_cleanup_plan");
+  assert.strictEqual(androidCacheExecutionInvocation.payload.request.schemaVersion, "spaceguard-android-cache-request/v1", "Android cache executor should use its schema");
+  assert.strictEqual(androidCacheExecutionInvocation.payload.request.requestMode, "execute-android-cache", "Android cache executor should send execute-android-cache mode");
+  assert.strictEqual(androidCacheExecutionInvocation.payload.request.route, "bounded-android-cache-delete", "Android cache executor should stay on bounded-android-cache-delete route");
+  assert.strictEqual(androidCacheExecutionInvocation.payload.request.actions.length, 2, "Android cache executor should pass every scanned cache root");
+  assert.strictEqual(androidCacheExecutionInvocation.payload.request.actions[0].targetPath.includes("AndroidStudio2025.1\\caches"), true, "Android cache executor should pass concrete Android Studio cache root path");
+  assert.strictEqual(androidCacheExecution.accepted, true, "Android cache executor should normalize accepted responses");
+  assert.strictEqual(androidCacheExecution.entries[0].route, "bounded-android-cache-delete", "Android cache executor should normalize executed route");
   let npmExecutionInvocation = null;
   const npmExecution = await native.runNativeNpmCacheExecutor(
     {
@@ -975,6 +1026,7 @@ const assert = require("assert");
       largeFileArchiveExecutor: true,
       gradleCacheExecutor: true,
       userCacheExecutor: true,
+      androidCacheExecutor: false,
       npmCacheExecutor: true,
       pnpmStoreExecutor: true,
       recycleBinExecutor: true,

@@ -594,6 +594,51 @@ export async function runNativeUserCacheExecutor(boundary = {}, host = globalThi
   return normalizeNativeWriteBoundary(result);
 }
 
+export async function runNativeAndroidCacheExecutor(boundary = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      accepted: false,
+      reason: "Native Android cache executor is not available in the browser demo.",
+      entries: [],
+      warnings: ["Run the Tauri desktop shell before executing Android cache cleanup."]
+    };
+  }
+
+  const rows = Array.isArray(boundary.rows) && boundary.rows.length
+    ? boundary.rows
+    : [boundary.row || boundary.selectedRow || {}];
+  const actions = rows.map((row, index) => ({
+    id: row.id || `android-cache-${index + 1}`,
+    title: row.title || "Android Studio cache folder",
+    bytes: Number(row.bytes || 0),
+    route: "bounded-android-cache-delete",
+    targetPath: row.targetPath || row.target || row.path || ""
+  }));
+  const expectedBytes = Number(boundary.expectedBytes ?? actions.reduce((sum, action) => sum + Number(action.bytes || 0), 0));
+
+  const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
+    request: {
+      schemaVersion: "spaceguard-android-cache-request/v1",
+      requestMode: "execute-android-cache",
+      planId: boundary.planId || "",
+      route: "bounded-android-cache-delete",
+      scanFingerprint: boundary.scanFingerprint || "",
+      consentPlanId: boundary.consentPlanId || "",
+      expectedBytes,
+      dryRunOnly: false,
+      mutationAttempted: true,
+      actions
+    }
+  });
+
+  return normalizeNativeWriteBoundary(result);
+}
+
 export async function runNativePnpmStoreExecutor(boundary = {}, host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {
@@ -985,6 +1030,7 @@ function normalizeExecutorFlags(value = {}) {
     largeFileArchiveExecutor: Boolean(value.largeFileArchiveExecutor || value.large_file_archive_executor),
     gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
     userCacheExecutor: Boolean(value.userCacheExecutor || value.user_cache_executor),
+    androidCacheExecutor: Boolean(value.androidCacheExecutor || value.android_cache_executor),
     npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
     pnpmStoreExecutor: Boolean(value.pnpmStoreExecutor || value.pnpm_store_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),

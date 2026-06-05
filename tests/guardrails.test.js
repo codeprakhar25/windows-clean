@@ -3243,6 +3243,40 @@ const assert = require("assert");
   assert.strictEqual(userCacheSmokePacket.rows[0].envVar, "SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR", "user .cache smoke packet should name the executor env var");
   assert.strictEqual(userCacheSmokePacket.rows[0].requestMode, "execute-user-cache", "user .cache smoke packet should name the native request mode");
   assert.strictEqual(userCacheSmokePacket.rows[0].panelId, "user-cache-executor-panel", "user .cache smoke packet should point to the executor panel");
+  const androidCacheSmokePacket = guard.buildExecutorSmokeRunPacket({
+    executorPlan: guard.buildExecutorPlan({
+      selectedIds: new Set(["android-cache"]),
+      actionList: guard.actions,
+      approvals: { groupConfirm: true, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
+      scanMode: "native-readonly"
+    }),
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      platform: "windows",
+      realRunEnabled: true,
+      destructiveCommands: true,
+      executorFlags: { androidCacheExecutor: true }
+    },
+    scanSession: { currentFingerprint: "scan-android-cache-smoke" },
+    consentReceipt: { planId: "plan-android-cache-smoke" },
+    executionProofHandoff: { status: "waiting-for-execution" },
+    planSnapshot: { id: "plan-android-cache-smoke" },
+    nativeScan: {
+      findings: [
+        {
+          recipeId: "android-cache",
+          status: "measured",
+          path: "C:\\Users\\qa\\AppData\\Local\\Google\\AndroidStudio2025.1\\caches",
+          bytes: 1024 * 1024 * 384
+        }
+      ]
+    }
+  });
+  assert.strictEqual(androidCacheSmokePacket.status, "ready-for-smoke", "enabled Android cache route should be ready for a smoke run");
+  assert.strictEqual(androidCacheSmokePacket.rows[0].envVar, "SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR", "Android cache smoke packet should name the executor env var");
+  assert.strictEqual(androidCacheSmokePacket.rows[0].requestMode, "execute-android-cache", "Android cache smoke packet should name the native request mode");
+  assert.strictEqual(androidCacheSmokePacket.rows[0].panelId, "android-cache-executor-panel", "Android cache smoke packet should point to the executor panel");
   const proofBlockedSmokePacket = guard.buildExecutorSmokeRunPacket({
     executorPlan: npmSmokeExecutorPlan,
     runtimeCapabilities: {

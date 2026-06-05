@@ -339,6 +339,16 @@ export const executorPolicies = {
     verification: "Rescan current-user .cache and verify protected config/database/session-like files stayed untouched.",
     guardrails: ["Age threshold", "Exact current-user .cache root only", "No project source directories", "No config/database/session files"]
   },
+  "android-cache": {
+    route: "bounded-android-cache-delete",
+    lane: "rebuildable",
+    label: "Bounded Android cache cleanup",
+    realRunEnabled: false,
+    dryRunSupported: true,
+    requiresNativeValidation: true,
+    verification: "Rescan Android cache roots and verify AVDs, SDKs, emulator images, Gradle data, and project folders stayed untouched.",
+    guardrails: ["Age threshold", "Scanned Android cache roots only", "No AVD or SDK deletion", "No project source directories"]
+  },
   "npm-cache": {
     route: "bounded-npm-cache-delete",
     lane: "rebuildable",
@@ -672,6 +682,8 @@ export const releaseFeatureFlags = {
   largeFileArchiveExecutor: false,
   projectDependencyExecutor: false,
   gradleCacheExecutor: false,
+  userCacheExecutor: false,
+  androidCacheExecutor: false,
   npmCacheExecutor: false,
   pnpmStoreExecutor: false,
   recycleBinExecutor: false,
@@ -741,6 +753,18 @@ export const toolNativeCommandSpecs = [
     status: "manual-boundary",
     evidence: "Use native scan evidence for the exact current-user .cache root; compare root size before and after.",
     guardrails: ["No project source directories", "No config/database/session files", "No shell execution in current build", "Current-user root only"]
+  },
+  {
+    id: "android-cache",
+    tool: "filesystem",
+    actionId: "android-cache",
+    route: "bounded-android-cache-delete",
+    title: "Android Studio cache",
+    inspectCommand: "native scan Android Studio caches",
+    futureCommand: "bounded Android cache cleanup only",
+    status: "manual-boundary",
+    evidence: "Use native scan evidence for Android Studio caches and %UserProfile%\\.android\\build-cache; compare cache roots before and after.",
+    guardrails: ["No AVD deletion", "No SDK deletion", "No project folder deletion", "No shell execution in current build"]
   },
   {
     id: "windows-cleanup-api",
@@ -1029,6 +1053,17 @@ export const executorRouteRequirements = {
     fixtureIds: ["developer-tooling-fixture", "protected-path-fixture"],
     preconditions: ["Native Windows scan", "Current-user .cache root", "Age threshold", "No project, config, database, or identity file match"]
   },
+  "bounded-android-cache-delete": {
+    title: "Bounded Android cache",
+    lane: "rebuildable",
+    phase: "second-safe",
+    implementation: "Delete only old files and empty cache dirs under scanned Android Studio cache roots or the current user's .android build-cache root.",
+    rollback: "Android Studio recreates cache data; emulators and SDK packages remain in place.",
+    proof: "Developer-tool fixture must show AVDs, SDK roots, emulator images, Gradle data, and projects are not touched.",
+    requiredValidationIds: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "tool-native-dry-runs", "ledger-rescan-parity"],
+    fixtureIds: ["developer-tooling-fixture", "protected-path-fixture"],
+    preconditions: ["Native Windows scan", "Current-user Android cache root", "Age threshold", "No AVD, SDK, emulator, Gradle, or project path"]
+  },
   "bounded-npm-cache-delete": {
     title: "Bounded npm cache",
     lane: "rebuildable",
@@ -1278,6 +1313,20 @@ export const actions = [
     method: "Remove old cache files under the exact current-user .cache root",
     consequence: "Some developer tools may rebuild local cache data on next launch.",
     recommendation: "Clean old disposable cache files when .cache is a top space source.",
+    selectedByDefault: true,
+    executableInDemo: true
+  },
+  {
+    id: "android-cache",
+    title: "Android Studio cache folders",
+    family: "Developer caches",
+    path: "%LocalAppData%\\Google\\AndroidStudio*\\caches, %UserProfile%\\.android\\build-cache",
+    bytes: 2.4 * GB,
+    risk: "rebuildable",
+    gate: "groupConfirm",
+    method: "Remove old Android Studio cache files from scanned cache roots only",
+    consequence: "Android Studio may rebuild IDE indexes and cache data on next launch.",
+    recommendation: "Clean cache folders before considering emulator images or SDK packages.",
     selectedByDefault: true,
     executableInDemo: true
   },
@@ -3881,6 +3930,8 @@ export function buildAIAgentIntegration({
         || runtimeCapabilities?.executorFlags?.projectDependencyExecutor
         || runtimeCapabilities?.executorFlags?.browserCacheExecutor
         || runtimeCapabilities?.executorFlags?.gradleCacheExecutor
+        || runtimeCapabilities?.executorFlags?.userCacheExecutor
+        || runtimeCapabilities?.executorFlags?.androidCacheExecutor
         || runtimeCapabilities?.executorFlags?.npmCacheExecutor
         || runtimeCapabilities?.executorFlags?.pnpmStoreExecutor
         || runtimeCapabilities?.executorFlags?.recycleBinExecutor
@@ -9175,6 +9226,7 @@ export function buildToolCommandInventory({
       spec.route === "tool-native-prune" ||
       spec.route === "bounded-cache-delete" ||
       spec.route === "bounded-user-cache-delete" ||
+      spec.route === "bounded-android-cache-delete" ||
       spec.route === "bounded-npm-cache-delete" ||
       spec.route === "bounded-pnpm-store-delete" ||
       spec.route === "windows-cleanup-api";
@@ -13272,6 +13324,7 @@ function getTaskCapabilityForbiddenOperations(row, power) {
     row.route === "tool-native-prune" ||
     row.route === "item-review-project-cache" ||
     row.route === "bounded-user-cache-delete" ||
+    row.route === "bounded-android-cache-delete" ||
     row.route === "bounded-npm-cache-delete" ||
     row.route === "bounded-pnpm-store-delete"
   ) {
@@ -15294,6 +15347,13 @@ const executorSmokeRouteSpecs = {
     panelId: "user-cache-executor-panel",
     actionLabel: "Run user .cache cleanup"
   },
+  "bounded-android-cache-delete": {
+    flag: "androidCacheExecutor",
+    envVar: "SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR",
+    requestMode: "execute-android-cache",
+    panelId: "android-cache-executor-panel",
+    actionLabel: "Run Android cache cleanup"
+  },
   "bounded-npm-cache-delete": {
     flag: "npmCacheExecutor",
     envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
@@ -15423,6 +15483,7 @@ function getExecutorSmokeNativeTargetCount(route, nativeScan = null) {
     "browser-cache-only": ["browser-cache"],
     "bounded-cache-delete": ["gradle-cache"],
     "bounded-user-cache-delete": ["user-cache"],
+    "bounded-android-cache-delete": ["android-cache"],
     "bounded-npm-cache-delete": ["npm-cache"],
     "bounded-pnpm-store-delete": ["pnpm-store"],
     "shell-recycle-bin": ["recycle-bin"]
@@ -16230,6 +16291,7 @@ function normalizeExecutorFeatureFlags(value = {}) {
     largeFileArchiveExecutor: Boolean(value.largeFileArchiveExecutor || value.large_file_archive_executor),
     gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
     userCacheExecutor: Boolean(value.userCacheExecutor || value.user_cache_executor),
+    androidCacheExecutor: Boolean(value.androidCacheExecutor || value.android_cache_executor),
     npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
     pnpmStoreExecutor: Boolean(value.pnpmStoreExecutor || value.pnpm_store_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
@@ -16247,6 +16309,7 @@ function getScopedRealExecutorRoutes(runtimeCapabilities = {}) {
     flags.projectDependencyExecutor ? "item-review-project-cache" : "",
     flags.gradleCacheExecutor ? "bounded-cache-delete" : "",
     flags.userCacheExecutor ? "bounded-user-cache-delete" : "",
+    flags.androidCacheExecutor ? "bounded-android-cache-delete" : "",
     flags.npmCacheExecutor ? "bounded-npm-cache-delete" : "",
     flags.pnpmStoreExecutor ? "bounded-pnpm-store-delete" : "",
     flags.recycleBinExecutor ? "shell-recycle-bin" : "",
@@ -16381,6 +16444,10 @@ function getFirstSafeAllowedRule(route, path) {
   if (route === "bounded-user-cache-delete") {
     if (text.endsWith("\\.cache") || text.includes("\\.cache\\")) return "%USERPROFILE%\\.cache";
   }
+  if (route === "bounded-android-cache-delete") {
+    if (text.includes("\\androidstudio") && text.includes("\\caches")) return "Android Studio cache folder";
+    if (text.endsWith("\\.android\\build-cache") || text.includes("\\.android\\build-cache\\")) return "%USERPROFILE%\\.android\\build-cache";
+  }
   return "";
 }
 
@@ -16412,6 +16479,12 @@ function getFirstSafeForbiddenRule(route, path) {
     if (text.includes("documents") || text.includes("desktop")) return "Personal folders are not user .cache executor targets";
     if (text.includes("node_modules") || text.includes("\\.git")) return "Project folders are forbidden";
     if (text.includes("session") || text.includes("cookie") || text.includes("credential") || text.includes("password")) return "Identity-like cache files are forbidden";
+  }
+  if (route === "bounded-android-cache-delete") {
+    if (text.includes("\\.android\\avd")) return "Android virtual devices are forbidden";
+    if (text.includes("\\android\\sdk") || text.includes("\\system-images") || text.includes("\\platforms") || text.includes("\\build-tools")) return "Android SDK content is forbidden";
+    if (text.includes("\\emulator") || text.includes("\\platform-tools")) return "Android tool binaries are forbidden";
+    if (text.includes("node_modules") || text.includes("\\.git") || text.includes("\\projects")) return "Project folders are forbidden";
   }
   return "";
 }

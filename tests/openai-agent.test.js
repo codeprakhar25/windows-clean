@@ -70,6 +70,13 @@ const assert = require("assert");
           path: "C:\\Users\\real\\.cache",
           bytes: 3 * 1024 ** 3,
           status: "measured"
+        },
+        {
+          recipeId: "android-cache",
+          title: "Android Studio cache folders",
+          path: "C:\\Users\\real\\AppData\\Local\\Google\\AndroidStudio2025.1\\caches",
+          bytes: 2 * 1024 ** 3,
+          status: "measured"
         }
       ]
     },
@@ -177,6 +184,7 @@ const assert = require("assert");
   assert.strictEqual(manualContext.largeFileArchiveTargets[0].route, "item-review-large-files", "OpenAI context should include reviewed large-file archive targets");
   assert.strictEqual(manualContext.largeFileArchiveTargets[0].decision, "archive", "OpenAI context should preserve archive decisions");
   assert.strictEqual(manualContext.userCacheTargets[0].route, "bounded-user-cache-delete", "OpenAI context should include scanned user .cache targets");
+  assert.strictEqual(manualContext.androidCacheTargets[0].route, "bounded-android-cache-delete", "OpenAI context should include scanned Android cache targets");
   assert.strictEqual(manualContext.driveInventoryRows[0].canCreateExecutor, false, "drive inventory rows should be advisory-only in OpenAI context");
   assert.strictEqual(manualContext.customRootRows[0].manualOnly, true, "custom root rows should be manual-only in OpenAI context");
 
@@ -477,6 +485,34 @@ const assert = require("assert");
   assert.strictEqual(userCacheBroker.rows[0].targetPanel, "user-cache-executor-panel", "broker should route user .cache recommendations to the user .cache panel");
   assert.strictEqual(userCacheBroker.rows[0].canAct, true, "broker should allow user .cache executor only when deterministic gates pass");
   assert.strictEqual(userCacheBroker.rows[0].buttonLabel, "Run .cache cleanup", "broker should label user .cache executor recommendations");
+  const androidCacheBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "android-cache",
+          title: "Clean Android Studio cache",
+          reason: "The scanned Android cache roots have a scoped executor.",
+          priority: "medium",
+          actionType: "run-android-cache-executor",
+          targetId: "android-cache",
+          route: "bounded-android-cache-delete"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-android-cache" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, androidCacheExecutor: true },
+      androidCacheTargets: [{ id: "android-cache-1", route: "bounded-android-cache-delete", bytes: 2048 }]
+    },
+    executionState: {
+      planId: "plan-android-cache",
+      scanFingerprint: "scan-android-cache",
+      consentPlanId: "plan-android-cache"
+    }
+  });
+  assert.strictEqual(androidCacheBroker.rows[0].targetPanel, "android-cache-executor-panel", "broker should route Android cache recommendations to the Android cache panel");
+  assert.strictEqual(androidCacheBroker.rows[0].canAct, true, "broker should allow Android cache executor only when deterministic gates pass");
+  assert.strictEqual(androidCacheBroker.rows[0].buttonLabel, "Run Android cache", "broker should label Android cache executor recommendations");
 
   console.log("openai agent adapter ok");
 })();
