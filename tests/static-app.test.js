@@ -486,6 +486,7 @@ assert(rustScanner.includes("SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR"), "Rust nati
 assert(rustScanner.includes("pnpm_store_target_reject_code"), "Rust native shell should validate pnpm store targets");
 assert(rustScanner.includes("target-not-pnpm-store"), "Rust native shell should reject non-pnpm store targets");
 assert(rustScanner.includes("file_old_enough_for_pnpm_store_delete"), "Rust pnpm store cleanup should enforce the age threshold");
+assert(rustScanner.includes("versioned_content"), "Rust pnpm store cleanup should support versioned store file roots");
 assert(app.includes("RecycleBinExecutorPanel"), "Recycle Bin executor panel should be rendered");
 assert(app.includes("recycle-bin-executor-panel"), "Recycle Bin executor panel should be focusable");
 assert(app.includes("Empty Recycle Bin"), "Recycle Bin executor should expose a user-triggered cleanup button");

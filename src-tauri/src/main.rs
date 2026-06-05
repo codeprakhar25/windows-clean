@@ -4744,7 +4744,9 @@ fn file_old_enough_for_pnpm_store_delete(metadata: &fs::Metadata) -> bool {
 
 fn pnpm_store_file_forbidden(path: &Path) -> bool {
     let clean_path = normalize_path(&path_to_string(path));
-    let allowed_content = clean_path.contains("\\pnpm\\store\\v3\\files\\")
+    let versioned_content =
+        clean_path.contains("\\pnpm\\store\\v") && clean_path.contains("\\files\\");
+    let allowed_content = versioned_content
         || clean_path.contains("\\pnpm\\store\\files\\")
         || clean_path.contains("\\pnpm\\store\\tmp\\")
         || clean_path.contains("\\pnpm\\store\\temp\\");
