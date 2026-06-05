@@ -181,6 +181,11 @@ const assert = require("assert");
   assert.strictEqual(manualContext.installedAppReview.rows[0].usageProof, "not proven", "installed app review context should preserve missing usage proof");
   assert.strictEqual(manualContext.installedAppReview.rows[0].uninstallEntry, "present", "installed app review context should preserve uninstall-entry evidence");
   assert(manualContext.installedAppReview.forbiddenActions.includes("automated-uninstall"), "installed app review context should forbid automated uninstall");
+  assert.strictEqual(manualContext.installedAppUninstallWorkOrder.status, "ready-for-manual-uninstall", "OpenAI context should expose selected app uninstall work-order state");
+  assert.strictEqual(manualContext.installedAppUninstallWorkOrder.manualOnly, true, "OpenAI app uninstall work order should stay manual-only");
+  assert.strictEqual(manualContext.installedAppUninstallWorkOrder.canRunUninstaller, false, "OpenAI app uninstall work order must not run uninstallers");
+  assert.strictEqual(manualContext.installedAppUninstallWorkOrder.rows[0].route, "manual-app-uninstall", "OpenAI app uninstall work order should route manual app follow-up explicitly");
+  assert(manualContext.installedAppUninstallWorkOrder.forbiddenActions.includes("run-uninstall-string"), "OpenAI app uninstall work order should forbid uninstall-string execution");
   assert.strictEqual(manualContext.largeFileArchiveTargets[0].route, "item-review-large-files", "OpenAI context should include reviewed large-file archive targets");
   assert.strictEqual(manualContext.largeFileArchiveTargets[0].decision, "archive", "OpenAI context should preserve archive decisions");
   assert.strictEqual(manualContext.userCacheTargets[0].route, "bounded-user-cache-delete", "OpenAI context should include scanned user .cache targets");
@@ -271,6 +276,7 @@ const assert = require("assert");
   assert.strictEqual(nativeRunRecord.planId, "plan-openai-manual", "OpenAI run records should bind advice to a plan id");
   assert.strictEqual(nativeRunRecord.context.counts.manualReviewTargets, 1, "OpenAI run records should retain compact context counts");
   assert.strictEqual(nativeRunRecord.context.counts.installedAppReviewRows, 1, "OpenAI run records should retain compact installed app review counts");
+  assert.strictEqual(nativeRunRecord.context.counts.installedAppWorkOrderRows, 1, "OpenAI run records should retain compact app uninstall work-order counts");
   assert.strictEqual(nativeRunRecord.context.execution.scanFingerprintPresent, true, "OpenAI run records should retain compact scan proof presence");
   assert.strictEqual(nativeRunRecord.context.execution.proofStatus, "waiting-for-execution", "OpenAI run records should retain compact proof status");
   assert.strictEqual(nativeRunRecord.context.privacy.storesFullContext, false, "OpenAI run records should not persist the full path-level context");
@@ -381,6 +387,26 @@ const assert = require("assert");
   assert.strictEqual(readyBroker.rows[0].canAct, true, "ready broker row should be actionable");
   assert.strictEqual(readyBroker.rows[0].directToolAccess, false, "brokered recommendations should not grant direct tool access");
   assert.strictEqual(readyBroker.counts.ready, 1, "broker should count ready recommendations");
+  const manualAppBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "manual-app-uninstall",
+          title: "Review selected app uninstall work order",
+          reason: "Selected app candidates need user-owned uninstall follow-up.",
+          priority: "medium",
+          actionType: "manual-only",
+          targetId: "installed-app-footprints",
+          route: "manual-app-uninstall"
+        }
+      ]
+    },
+    context: manualContext
+  });
+  assert.strictEqual(manualAppBroker.rows[0].kind, "manual", "manual app recommendations should stay manual broker rows");
+  assert.strictEqual(manualAppBroker.rows[0].targetPanel, "app-uninstall-work-order-panel", "broker should route manual app recommendations to the app uninstall work-order panel");
+  assert.strictEqual(manualAppBroker.rows[0].canAct, true, "manual app recommendations should be actionable as UI focus only");
+  assert.strictEqual(manualAppBroker.rows[0].directToolAccess, false, "manual app recommendations must not grant tool access");
   const contextOnlyBroker = openai.buildOpenAIAgentRecommendationBroker({
     advice: result.advice,
     context: {

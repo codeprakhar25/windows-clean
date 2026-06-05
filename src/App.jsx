@@ -40,6 +40,8 @@ import {
   buildFirstSafeValidationGate,
   buildFixtureEvidenceImport,
   buildInstalledAppReviewDossier,
+  buildInstalledAppUninstallWorkOrder,
+  buildInstalledAppUninstallWorkOrderMarkdown,
   buildIntakePolicy,
   buildCustomRootTriage,
   buildPlanReview,
@@ -732,6 +734,16 @@ export default function App() {
         planSnapshot: verificationPlanSnapshot
       }),
     [postRunVerification, nativeScan.result, verificationScanMode, activeLedger, verificationPlanSnapshot]
+  );
+  const installedAppUninstallWorkOrder = useMemo(
+    () =>
+      buildInstalledAppUninstallWorkOrder({
+        dossier: installedAppReviewDossier,
+        planSnapshot,
+        scanSession,
+        rescanComparison
+      }),
+    [installedAppReviewDossier, planSnapshot, scanSession, rescanComparison]
   );
   const executionProofHandoff = useMemo(
     () =>
@@ -2209,6 +2221,11 @@ export default function App() {
         focusWorkflowPanel("drive-inventory-panel");
         return;
       }
+      if (targetId.includes("installed-app") || route.includes("manual-app-uninstall")) {
+        setFocusedReviewId("installed-app-footprints");
+        focusWorkflowPanel("app-uninstall-work-order-panel");
+        return;
+      }
       setFocusedReviewId("installed-app-footprints");
       focusWorkflowPanel("item-review-panel");
       return;
@@ -3310,6 +3327,23 @@ export default function App() {
     downloadTextFile("spaceguard-rescan-comparison.md", buildRescanComparisonMarkdown(rescanComparison), "text/markdown;charset=utf-8");
   }
 
+  function exportInstalledAppUninstallWorkOrder() {
+    const exportedOrder = { ...installedAppUninstallWorkOrder, generatedAt: new Date().toISOString() };
+    const markdown = buildInstalledAppUninstallWorkOrderMarkdown(exportedOrder);
+    const body = [
+      markdown,
+      "",
+      "---",
+      "",
+      "## Structured App Uninstall Work Order JSON",
+      "",
+      "```json",
+      JSON.stringify(exportedOrder, null, 2),
+      "```"
+    ].join("\n");
+    downloadTextFile("spaceguard-app-uninstall-work-order.md", body, "text/markdown;charset=utf-8");
+  }
+
   function exportValidationPack() {
     const exportedPack = { ...validationPack, generatedAt: new Date().toISOString() };
     const markdown = buildValidationPackMarkdown(exportedPack);
@@ -3821,6 +3855,13 @@ export default function App() {
             <InstalledAppReviewDossierPanel
               dossier={installedAppReviewDossier}
               onFocusReview={() => setFocusedReviewId("installed-app-footprints")}
+            />
+
+            <InstalledAppUninstallWorkOrderPanel
+              workOrder={installedAppUninstallWorkOrder}
+              onFocusReview={() => setFocusedReviewId("installed-app-footprints")}
+              onExport={exportInstalledAppUninstallWorkOrder}
+              onRescan={nativeCapability.available ? runRealReadonlyScan : runScan}
             />
 
             <Card>
@@ -7386,6 +7427,95 @@ function InstalledAppReviewDossierPanel({ dossier, onFocusReview }) {
           )) : (
             <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
               No installed app footprint candidates are available.
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function InstalledAppUninstallWorkOrderPanel({ workOrder, onFocusReview, onExport, onRescan }) {
+  const rows = workOrder.rows || [];
+  const ready = workOrder.status === "ready-for-manual-uninstall";
+  return (
+    <Card id="app-uninstall-work-order-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              App uninstall work order
+            </CardTitle>
+            <CardDescription>{workOrder.nextStep}</CardDescription>
+          </div>
+          <Badge variant={ready ? "review" : workOrder.status === "needs-user-selection" ? "advanced" : "outline"}>
+            {workOrder.status}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid gap-2 md:grid-cols-4">
+          <ReviewStat label="Selected apps" value={String(workOrder.counts.selected)} />
+          <ReviewStat label="Footprint" value={formatBytes(workOrder.selectedBytes)} />
+          <ReviewStat label="Uninstall entry" value={String(workOrder.counts.uninstallEntry)} />
+          <ReviewStat label="Usage missing" value={String(workOrder.counts.usageProofMissing)} />
+        </div>
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="restricted">manual only</Badge>
+            <Badge variant="outline">no uninstall strings</Badge>
+            <Badge variant="outline">no folder deletion</Badge>
+            <Badge variant="outline">rescan required</Badge>
+            <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={onFocusReview}>
+              <Eye className="h-4 w-4" />
+              Review apps
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={onExport} disabled={!rows.length}>
+              <Download className="h-4 w-4" />
+              Export work order
+            </Button>
+            <Button type="button" variant="secondary" size="sm" onClick={onRescan}>
+              <RefreshCcw className="h-4 w-4" />
+              Run rescan
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-5">
+          {(workOrder.steps || []).map((step) => (
+            <div key={step.id} className="rounded-md border bg-card p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-medium">{step.label}</div>
+                <Badge variant={step.status === "complete" ? "safe" : step.status === "ready" ? "review" : step.status === "pending" ? "outline" : "restricted"}>
+                  {step.status}
+                </Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{step.detail}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-2">
+          {rows.length ? rows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="mr-auto min-w-0 text-sm font-medium">{row.name}</div>
+                <Badge variant={row.uninstallEntry === "present" ? "safe" : "review"}>{row.uninstallEntry}</Badge>
+                <Badge variant={row.usageProof === "not proven" ? "restricted" : "safe"}>{row.usageProof}</Badge>
+                <span className="text-sm font-medium text-muted-foreground">{formatBytes(row.bytes)}</span>
+              </div>
+              <div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
+                <div>Publisher: {row.publisher || "unknown"}</div>
+                <div>Version: {row.version || "unknown"}</div>
+                <div>Install date: {row.installDate || "unknown"}</div>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">{row.reason}</p>
+              <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{row.path}</p>
+            </div>
+          )) : (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              No app is selected for manual uninstall follow-up. Mark a recognized unused app in item review to create a work order.
             </div>
           )}
         </div>

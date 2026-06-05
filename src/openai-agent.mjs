@@ -260,6 +260,11 @@ export function buildOpenAIAgentContext({
     .slice(0, 1);
   const manualReviewTargets = buildManualReviewTargets({ nativeScan, itemReviewsByAction });
   const installedAppReview = buildInstalledAppReviewContext(manualReviewTargets);
+  const installedAppUninstallWorkOrder = buildInstalledAppUninstallWorkOrderContext(installedAppReview, {
+    planId: planSnapshot?.id || "",
+    scanFingerprint: scanSession?.currentFingerprint || "",
+    rescanComparisonStatus: rescanComparison?.status || "not-run"
+  });
   const driveInventoryRows = (driveInventorySummary?.topRows || driveInventorySummary?.rows || [])
     .slice(0, 8)
     .map((row) => ({
@@ -383,6 +388,7 @@ export function buildOpenAIAgentContext({
     browserCacheTargets,
     manualReviewTargets,
     installedAppReview,
+    installedAppUninstallWorkOrder,
     driveInventoryRows,
     customRootRows,
     candidateSamples: (candidateSafetyManifest?.rows || []).slice(0, 12).map((row) => ({
@@ -789,6 +795,7 @@ function getManualRecommendationPanel(row = {}) {
   const route = String(row.route || "").toLowerCase();
   if (targetId.startsWith("custom-root") || route.includes("custom-root")) return "custom-root-triage-panel";
   if (targetId.startsWith("drive-") || route.includes("drive-inventory")) return "drive-inventory-panel";
+  if (targetId.includes("installed-app") || route.includes("manual-app-uninstall")) return "app-uninstall-work-order-panel";
   return "item-review-panel";
 }
 
@@ -895,6 +902,7 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
       browserCacheTargets: Array.isArray(context?.browserCacheTargets) ? context.browserCacheTargets.length : 0,
       manualReviewTargets: Array.isArray(context?.manualReviewTargets) ? context.manualReviewTargets.length : 0,
       installedAppReviewRows: Array.isArray(context?.installedAppReview?.rows) ? context.installedAppReview.rows.length : 0,
+      installedAppWorkOrderRows: Array.isArray(context?.installedAppUninstallWorkOrder?.rows) ? context.installedAppUninstallWorkOrder.rows.length : 0,
       driveInventoryRows: Array.isArray(context?.driveInventoryRows) ? context.driveInventoryRows.length : 0,
       customRootRows: Array.isArray(context?.customRootRows) ? context.customRootRows.length : 0,
       candidateSamples: Array.isArray(context?.candidateSamples) ? context.candidateSamples.length : 0
@@ -1102,6 +1110,60 @@ function buildInstalledAppReviewContext(manualReviewTargets = []) {
       uninstallEntry: rows.filter((row) => row.uninstallEntry === "present").length,
       usageProofMissing: rows.filter((row) => row.usageProof === "not proven").length
     },
+    forbiddenActions: ["automated-uninstall", "delete-program-files", "run-uninstall-string", "edit-registry"]
+  };
+}
+
+function buildInstalledAppUninstallWorkOrderContext(installedAppReview = null, {
+  planId = "",
+  scanFingerprint = "",
+  rescanComparisonStatus = "not-run"
+} = {}) {
+  const rows = (installedAppReview?.rows || [])
+    .filter((row) => row.status === "manual-uninstall-selected")
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      route: "manual-app-uninstall",
+      path: row.path,
+      bytes: Number(row.bytes || 0),
+      ageDays: Number(row.ageDays || 0),
+      usageProof: row.usageProof || "not proven",
+      uninstallEntry: row.uninstallEntry || "unknown",
+      registryMatch: row.registryMatch || "none",
+      officialAction: row.officialAction || "Use Windows Settings or the vendor uninstaller only.",
+      manualOnly: true,
+      canCreateExecutor: false
+    }))
+    .slice(0, 12);
+  const status = rows.length
+    ? "ready-for-manual-uninstall"
+    : installedAppReview?.counts?.review
+      ? "needs-user-selection"
+      : "no-selected-apps";
+  return {
+    schemaVersion: "spaceguard-app-uninstall-work-order-context/v1",
+    status,
+    manualOnly: true,
+    canCreateExecutor: false,
+    directDeleteAuthority: false,
+    canRunUninstaller: false,
+    planId,
+    scanFingerprintPresent: Boolean(scanFingerprint),
+    rescanComparisonStatus,
+    selectedBytes: rows.reduce((sum, row) => sum + Number(row.bytes || 0), 0),
+    rows,
+    counts: {
+      selected: rows.length,
+      uninstallEntry: rows.filter((row) => row.uninstallEntry === "present").length,
+      usageProofMissing: rows.filter((row) => row.usageProof === "not proven").length
+    },
+    requiredUserSteps: [
+      "Confirm the selected app is recognized and unused.",
+      "Use Windows Settings or the vendor uninstaller.",
+      "Do not delete Program Files folders.",
+      "Run a native rescan after uninstall."
+    ],
     forbiddenActions: ["automated-uninstall", "delete-program-files", "run-uninstall-string", "edit-registry"]
   };
 }

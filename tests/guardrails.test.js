@@ -4542,6 +4542,23 @@ const assert = require("assert");
   assert.strictEqual(appDossier.status, "manual-uninstall-follow-up", "selected app reviews should become manual uninstall follow-up");
   assert(appDossier.manualSelectedBytes > 0, "installed app review dossier should show manual follow-up bytes");
   assert(appDossier.rows.every((row) => row.usageProof === "not proven" || row.usageProof), "installed app review rows should expose usage-proof state");
+  const appWorkOrder = guard.buildInstalledAppUninstallWorkOrder({
+    dossier: appDossier,
+    planSnapshot: { id: "plan-app-uninstall" },
+    scanSession: { currentFingerprint: "scan-app-before" },
+    rescanComparison: { status: "not-run" }
+  });
+  assert.strictEqual(appWorkOrder.schemaVersion, "spaceguard-app-uninstall-work-order/v1", "app uninstall work order should expose a stable schema");
+  assert.strictEqual(appWorkOrder.status, "ready-for-manual-uninstall", "selected app reviews should produce a manual uninstall work order");
+  assert.strictEqual(appWorkOrder.manualOnly, true, "app uninstall work order should stay manual-only");
+  assert.strictEqual(appWorkOrder.canCreateExecutor, false, "app uninstall work order must not create executor authority");
+  assert.strictEqual(appWorkOrder.canRunUninstaller, false, "app uninstall work order must not run uninstallers");
+  assert(appWorkOrder.selectedBytes > 0, "app uninstall work order should show manually selected footprint bytes");
+  assert(appWorkOrder.guardrails.includes("No uninstall-string execution."), "app uninstall work order should forbid uninstall-string execution");
+  assert(appWorkOrder.steps.some((step) => step.id === "post-uninstall-rescan" && step.status === "ready"), "app uninstall work order should require post-uninstall rescan evidence");
+  const appWorkOrderMarkdown = guard.buildInstalledAppUninstallWorkOrderMarkdown(appWorkOrder);
+  assert(appWorkOrderMarkdown.includes("SpaceGuard App Uninstall Work Order"), "app uninstall work order should export markdown");
+  assert(appWorkOrderMarkdown.includes("No direct Program Files deletion."), "app uninstall work order export should preserve guardrails");
   assert.strictEqual(
     guard.computeTotals(new Set(["installed-app-footprints"]), guard.actions, {
       approvals: appReviewApprovals,

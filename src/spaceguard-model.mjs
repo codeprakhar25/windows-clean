@@ -4789,6 +4789,201 @@ export function buildInstalledAppReviewDossier({ itemReviewsByAction = null, nat
   };
 }
 
+export function buildInstalledAppUninstallWorkOrder({
+  dossier = null,
+  planSnapshot = null,
+  scanSession = null,
+  rescanComparison = null,
+  generatedAt = null
+} = {}) {
+  const sourceDossier = dossier && typeof dossier === "object"
+    ? dossier
+    : buildInstalledAppReviewDossier();
+  const rows = (sourceDossier.rows || [])
+    .filter((row) => row.status === "manual-uninstall-selected")
+    .map(normalizeInstalledAppWorkOrderRow)
+    .slice(0, 16);
+  const reviewRows = (sourceDossier.rows || []).filter((row) => row.status === "needs-user-confirmation");
+  const status = rows.length
+    ? "ready-for-manual-uninstall"
+    : reviewRows.length
+      ? "needs-user-selection"
+      : sourceDossier.rows?.length
+        ? "no-selected-apps"
+        : "no-app-footprints";
+  const totalBytes = rows.reduce((sum, row) => sum + row.bytes, 0);
+  const currentFingerprint = scanSession?.currentFingerprint || scanSession?.fingerprint || "";
+  const rescanStatus = rescanComparison?.status || "not-run";
+
+  return {
+    schemaVersion: "spaceguard-app-uninstall-work-order/v1",
+    generatedAt: generatedAt || new Date().toISOString(),
+    status,
+    manualOnly: true,
+    canCreateExecutor: false,
+    directDeleteAuthority: false,
+    canRunUninstaller: false,
+    planId: planSnapshot?.id || "",
+    scanFingerprint: currentFingerprint,
+    selectedBytes: totalBytes,
+    rows,
+    counts: {
+      selected: rows.length,
+      reviewRemaining: reviewRows.length,
+      uninstallEntry: rows.filter((row) => row.uninstallEntry === "present").length,
+      usageProofMissing: rows.filter((row) => row.usageProof === "not proven").length
+    },
+    steps: buildInstalledAppWorkOrderSteps(status, rows, currentFingerprint, rescanStatus),
+    guardrails: [
+      "No automated uninstall.",
+      "No direct Program Files deletion.",
+      "No uninstall-string execution.",
+      "No registry edits.",
+      "No cleanup claim until a post-uninstall native rescan verifies the footprint changed."
+    ],
+    verification: {
+      required: rows.length > 0,
+      method: "Manual uninstall through Windows Settings or vendor uninstaller, then native rescan.",
+      rescanComparisonStatus: rescanStatus,
+      evidenceNeeded: [
+        "Current native scan fingerprint before uninstall.",
+        "User confirmation that the app was uninstalled manually.",
+        "Post-uninstall native scan showing the selected footprint is gone or smaller."
+      ]
+    },
+    nextStep: getInstalledAppWorkOrderNextStep(status)
+  };
+}
+
+function normalizeInstalledAppWorkOrderRow(row = {}) {
+  const signals = normalizeReviewSignals(row.signals || []);
+  return {
+    id: row.id || row.path || row.name || "installed-app",
+    name: row.name || "Installed app",
+    path: row.path || "",
+    bytes: Number(row.bytes || 0),
+    ageDays: Number(row.ageDays || 0),
+    kind: row.kind || "installed app footprint",
+    usageProof: row.usageProof || getReviewSignalValue(signals, "usage proof") || "not proven",
+    registryMatch: row.registryMatch || getReviewSignalValue(signals, "registry match") || "none",
+    uninstallEntry: row.uninstallEntry || getReviewSignalValue(signals, "uninstall entry") || "unknown",
+    publisher: row.publisher || getReviewSignalValue(signals, "publisher") || "",
+    version: row.version || getReviewSignalValue(signals, "version") || "",
+    installDate: row.installDate || getReviewSignalValue(signals, "install date") || "",
+    officialAction: row.officialAction || getReviewSignalValue(signals, "official action") || "Windows Settings or vendor uninstaller",
+    reason: row.reason || "Selected for manual uninstall follow-up.",
+    checklist: [
+      "Confirm the user recognizes this app and agrees it is unused.",
+      "Open Windows Settings > Apps > Installed apps or the vendor uninstaller.",
+      "Uninstall only this app; do not delete its folder directly.",
+      "Run a native rescan and compare this footprint."
+    ]
+  };
+}
+
+function buildInstalledAppWorkOrderSteps(status, rows, scanFingerprint, rescanStatus) {
+  return [
+    {
+      id: "select-candidates",
+      label: "Select uninstall candidates",
+      status: rows.length ? "complete" : status === "needs-user-selection" ? "needs-user" : "blocked",
+      detail: rows.length
+        ? `${rows.length} app candidate(s) selected for manual uninstall follow-up.`
+        : "Mark recognized unused app candidates in item review first."
+    },
+    {
+      id: "verify-identity",
+      label: "Verify app identity",
+      status: rows.length ? "ready" : "blocked",
+      detail: rows.length
+        ? "Review publisher, version, install date, path, usage proof, and uninstall-entry evidence before acting."
+        : "No selected app candidate is available to verify."
+    },
+    {
+      id: "manual-uninstall",
+      label: "Manual uninstall only",
+      status: rows.length ? "ready" : "blocked",
+      detail: "Use Windows Settings or the vendor uninstaller. SpaceGuard must not run uninstall strings or delete Program Files folders."
+    },
+    {
+      id: "post-uninstall-rescan",
+      label: "Post-uninstall rescan",
+      status: rows.length && scanFingerprint ? "ready" : "blocked",
+      detail: scanFingerprint
+        ? `Use native rescan evidence after uninstall. Current scan fingerprint: ${scanFingerprint}.`
+        : "Run a native read-only scan first so the app has a before fingerprint."
+    },
+    {
+      id: "verify-recovery",
+      label: "Verify recovered space",
+      status: rescanStatus === "proof-complete" || rescanStatus === "verified" ? "complete" : "pending",
+      detail: `Rescan comparison status: ${rescanStatus}.`
+    }
+  ];
+}
+
+function getInstalledAppWorkOrderNextStep(status) {
+  if (status === "ready-for-manual-uninstall") return "Follow the selected app rows through Windows Settings or vendor uninstallers, then run a native rescan.";
+  if (status === "needs-user-selection") return "Ask the user which app candidates they recognize as unused, then mark them for manual uninstall follow-up.";
+  if (status === "no-selected-apps") return "Keep app candidates unless the user explicitly marks one for manual uninstall follow-up.";
+  return "Run a native read-only scan to discover installed app footprints.";
+}
+
+export function buildInstalledAppUninstallWorkOrderMarkdown(workOrder = null) {
+  const order = workOrder && typeof workOrder === "object"
+    ? workOrder
+    : buildInstalledAppUninstallWorkOrder();
+  const lines = [
+    "# SpaceGuard App Uninstall Work Order",
+    "",
+    `- Schema: ${order.schemaVersion}`,
+    `- Status: ${order.status}`,
+    `- Plan: ${order.planId || "not recorded"}`,
+    `- Scan fingerprint: ${order.scanFingerprint || "missing"}`,
+    `- Selected apps: ${order.counts?.selected || 0}`,
+    `- Selected footprint bytes: ${formatBytes(order.selectedBytes || 0)}`,
+    "",
+    "## Guardrails",
+    ...((order.guardrails || []).map((item) => `- ${item}`)),
+    "",
+    "## Steps",
+    ...((order.steps || []).map((step) => `- [${step.status}] ${step.label}: ${step.detail}`)),
+    "",
+    "## Selected Apps"
+  ];
+
+  if (order.rows?.length) {
+    for (const row of order.rows) {
+      lines.push(
+        "",
+        `### ${row.name}`,
+        `- Path: ${row.path || "not recorded"}`,
+        `- Footprint: ${formatBytes(row.bytes || 0)}`,
+        `- Age: ${row.ageDays || 0} day(s)`,
+        `- Publisher: ${row.publisher || "unknown"}`,
+        `- Version: ${row.version || "unknown"}`,
+        `- Usage proof: ${row.usageProof || "not proven"}`,
+        `- Registry match: ${row.registryMatch || "none"}`,
+        `- Uninstall entry: ${row.uninstallEntry || "unknown"}`,
+        `- Official action: ${row.officialAction || "Windows Settings or vendor uninstaller"}`,
+        `- Reason: ${row.reason || "Manual uninstall follow-up."}`
+      );
+    }
+  } else {
+    lines.push("", "No app candidates are selected for manual uninstall follow-up.");
+  }
+
+  lines.push(
+    "",
+    "## Verification",
+    `- Required: ${order.verification?.required ? "yes" : "no"}`,
+    `- Method: ${order.verification?.method || "Manual uninstall, then native rescan."}`,
+    `- Rescan comparison: ${order.verification?.rescanComparisonStatus || "not-run"}`
+  );
+
+  return lines.join("\n");
+}
+
 export function buildItemReview(actionId, actionList = actions, nativeScan = null, protectedPaths = [], approvals = {}) {
   const action = actionList.find((item) => item.id === actionId) || actionList.find((item) => item.gate === "review") || actionList[0];
   if (!action) {
