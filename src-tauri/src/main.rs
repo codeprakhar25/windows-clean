@@ -297,6 +297,7 @@ struct ExecutorFeatureFlags {
     downloads_cleanup_executor: bool,
     large_file_archive_executor: bool,
     gradle_cache_executor: bool,
+    user_cache_executor: bool,
     npm_cache_executor: bool,
     pnpm_store_executor: bool,
     recycle_bin_executor: bool,
@@ -694,6 +695,9 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
     }
     if request.request_mode.as_deref() == Some("execute-gradle-cache") {
         return execute_gradle_cache_cleanup(request);
+    }
+    if request.request_mode.as_deref() == Some("execute-user-cache") {
+        return execute_user_cache_cleanup(request);
     }
     if request.request_mode.as_deref() == Some("execute-npm-cache") {
         return execute_npm_cache_cleanup(request);
@@ -2025,6 +2029,174 @@ fn execute_npm_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionRe
     }
 }
 
+fn execute_user_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let flag_enabled = user_cache_executor_enabled();
+    let rejections = user_cache_execution_rejections(&request, flag_enabled);
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-user-cache-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-user-cache".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+
+    let entries = request
+        .actions
+        .into_iter()
+        .map(|action| {
+            let target_path = action.target_path.clone().unwrap_or_default();
+            let target_reject = user_cache_target_reject_code(&target_path);
+            let route_match = action.route == route && route == "bounded-user-cache-delete";
+            let can_execute = rejections.is_empty() && route_match && target_reject.is_none();
+
+            if can_execute {
+                let deleted = delete_user_cache_target(&resolve_dry_run_target(&target_path));
+                return WriteExecutionEntry {
+                    id: action.id,
+                    title: action.title,
+                    route: action.route,
+                    result: if deleted.deleted_files > 0 || deleted.deleted_dirs > 0 {
+                        "executed".to_string()
+                    } else {
+                        "no-op".to_string()
+                    },
+                    reject_code: String::new(),
+                    bytes: deleted.deleted_bytes,
+                    preflight_status: "executed".to_string(),
+                    preflight_checks: vec![
+                        write_preflight_check(
+                            "route-bounded-user-cache",
+                            "Bounded user cache route",
+                            "passed",
+                            "Action route is bounded-user-cache-delete.",
+                        ),
+                        write_preflight_check(
+                            "target-user-cache",
+                            "User .cache target",
+                            "passed",
+                            "Target is the current user's .cache directory.",
+                        ),
+                        write_preflight_check(
+                            "feature-flag",
+                            "Executor feature flag",
+                            "passed",
+                            "SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR enabled user .cache cleanup.",
+                        ),
+                    ],
+                    note: format!(
+                        "User .cache executor deleted {} old cache file(s), {} empty cache dir(s), reclaimed {} byte(s), and skipped {} item(s).",
+                        deleted.deleted_files,
+                        deleted.deleted_dirs,
+                        deleted.deleted_bytes,
+                        deleted.skipped_count
+                    ),
+                };
+            }
+
+            let reject_code = if !route_match {
+                "route-not-bounded-user-cache"
+            } else {
+                target_reject
+                    .or_else(|| rejections.first().copied())
+                    .unwrap_or("user-cache-executor-disabled")
+            };
+
+            WriteExecutionEntry {
+                id: action.id,
+                title: action.title,
+                route: action.route,
+                result: "rejected".to_string(),
+                reject_code: reject_code.to_string(),
+                bytes: 0,
+                preflight_status: "target-blocked".to_string(),
+                preflight_checks: vec![
+                    write_preflight_check(
+                        "route-bounded-user-cache",
+                        "Bounded user cache route",
+                        if route_match { "passed" } else { "blocked" },
+                        if route_match {
+                            "Action route is bounded-user-cache-delete."
+                        } else {
+                            "Only bounded-user-cache-delete can use this executor."
+                        },
+                    ),
+                    write_preflight_check(
+                        "target-user-cache",
+                        "User .cache target",
+                        if target_reject.is_none() { "passed" } else { "blocked" },
+                        if target_reject.is_none() {
+                            "Target is the current user's .cache directory."
+                        } else {
+                            "Target is missing, forbidden, not the current user's .cache directory, or link-like."
+                        },
+                    ),
+                    write_preflight_check(
+                        "feature-flag",
+                        "Executor feature flag",
+                        if flag_enabled { "passed" } else { "blocked" },
+                        if flag_enabled {
+                            "User .cache executor feature flag is enabled."
+                        } else {
+                            "SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR is not enabled."
+                        },
+                    ),
+                ],
+                note: format!(
+                    "User .cache cleanup rejected with code {reject_code}. Plan {plan_id}; no bytes were removed for this action."
+                ),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let accepted = rejections.is_empty()
+        && entries
+            .iter()
+            .all(|entry| entry.result == "executed" || entry.result == "no-op");
+    let reclaimed = entries.iter().map(|entry| entry.bytes).sum::<u64>();
+    let mut warnings = user_cache_execution_warnings(&rejections);
+    if accepted {
+        warnings.push(format!(
+            "User .cache cleanup completed for plan {plan_id}; reclaimed {reclaimed} byte(s). Run a fresh native scan and reopen affected dev tools if you need cache rebuild proof."
+        ));
+    }
+
+    WriteExecutionResponse {
+        mode: if accepted {
+            "native-user-cache-executor"
+        } else {
+            "native-user-cache-executor-rejected"
+        },
+        real_run_enabled: flag_enabled,
+        destructive_commands: flag_enabled,
+        accepted,
+        reason: if accepted {
+            format!("User .cache executor accepted the bounded cache target and reclaimed {reclaimed} byte(s).")
+        } else {
+            "User .cache executor rejected the request before mutation.".to_string()
+        },
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
+        entries,
+        warnings,
+    }
+}
+
 fn execute_pnpm_store_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
     let route = request.route.clone();
     let plan_id = request.plan_id.clone();
@@ -2557,6 +2729,7 @@ fn is_first_safe_write_route(route: &str) -> bool {
             | "browser-cache-only"
             | "item-review-project-cache"
             | "bounded-cache-delete"
+            | "bounded-user-cache-delete"
             | "bounded-npm-cache-delete"
             | "bounded-pnpm-store-delete"
     )
@@ -2733,6 +2906,30 @@ fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
                 },
             })
         }
+        "bounded-user-cache-delete" => {
+            let enabled = cfg!(target_os = "windows") && user_cache_executor_enabled();
+            Some(WriteExecutorScaffold {
+                route: "bounded-user-cache-delete".to_string(),
+                title: "Bounded user .cache".to_string(),
+                feature_flag: "userCacheExecutor".to_string(),
+                status: if enabled {
+                    "feature-flag-enabled".to_string()
+                } else {
+                    "feature-flag-disabled".to_string()
+                },
+                validation_status: if enabled {
+                    "user-cache-only".to_string()
+                } else {
+                    "validation-required".to_string()
+                },
+                mutation_enabled: enabled,
+                reason: if enabled {
+                    "User .cache executor can remove old cache files and empty dirs under the current user's .cache root only.".to_string()
+                } else {
+                    "User .cache executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR is enabled on Windows.".to_string()
+                },
+            })
+        }
         "bounded-npm-cache-delete" => {
             let enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
             Some(WriteExecutorScaffold {
@@ -2794,6 +2991,7 @@ fn write_executor_scaffold_reject_code(route: &str) -> &'static str {
         "item-review-project-cache" => "project-deps-executor-disabled",
         "browser-cache-only" => "browser-cache-executor-disabled",
         "bounded-cache-delete" => "gradle-cache-executor-disabled",
+        "bounded-user-cache-delete" => "user-cache-executor-disabled",
         "bounded-npm-cache-delete" => "npm-cache-executor-disabled",
         "bounded-pnpm-store-delete" => "pnpm-store-executor-disabled",
         _ => "real-executor-disabled",
@@ -2810,6 +3008,9 @@ fn write_action_target_reject_code(
     }
     if route == "bounded-cache-delete" {
         return gradle_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
+    }
+    if route == "bounded-user-cache-delete" {
+        return user_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
     }
     if route == "bounded-npm-cache-delete" {
         return npm_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
@@ -2907,6 +3108,25 @@ fn write_target_forbidden(route: &str, target: &str) -> bool {
                 || target.contains("\\windows\\")
                 || target.contains("\\program files")
         }
+        "bounded-user-cache-delete" => {
+            target.contains("downloads")
+                || target.contains("documents")
+                || target.contains("desktop")
+                || target.contains("pictures")
+                || target.contains("videos")
+                || target.contains("music")
+                || target.contains("node_modules")
+                || target.contains("\\.git")
+                || target.contains("\\windows\\")
+                || target.contains("\\program files")
+                || target.contains("\\programdata\\")
+                || target.contains("\\appdata\\roaming\\microsoft")
+                || target.contains("cookie")
+                || target.contains("\\sessions")
+                || target.contains("\\saved")
+                || target.contains("\\identity")
+                || target.contains("\\history")
+        }
         "bounded-npm-cache-delete" => {
             target.contains("downloads")
                 || target.contains("documents")
@@ -2966,6 +3186,9 @@ fn write_target_allowed(route: &str, target: &str) -> bool {
         "bounded-cache-delete" => {
             target.ends_with("\\.gradle\\caches") || target.contains("\\.gradle\\caches\\")
         }
+        "bounded-user-cache-delete" => {
+            target.ends_with("\\.cache") || target.contains("\\.cache\\")
+        }
         "bounded-npm-cache-delete" => {
             target.ends_with("\\npm-cache\\_cacache") || target.contains("\\npm-cache\\_cacache\\")
         }
@@ -3022,6 +3245,9 @@ fn write_boundary_warning(code: &str) -> &'static str {
         }
         "gradle-cache-executor-disabled" => {
             "Write request rejected: gradleCacheExecutor scaffold is feature-flag disabled."
+        }
+        "user-cache-executor-disabled" => {
+            "Write request rejected: userCacheExecutor scaffold is feature-flag disabled."
         }
         "npm-cache-executor-disabled" => {
             "Write request rejected: npmCacheExecutor scaffold is feature-flag disabled."
@@ -3092,6 +3318,12 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "route-not-bounded-cache" => {
             "Write request rejected: Gradle cache cleanup requires route bounded-cache-delete."
         }
+        "target-not-user-cache" => {
+            "Write request rejected: user .cache target is not the current user's .cache directory."
+        }
+        "route-not-bounded-user-cache" => {
+            "Write request rejected: user .cache cleanup requires route bounded-user-cache-delete."
+        }
         "target-not-npm-cache" => {
             "Write request rejected: npm cache target is not the current user's npm-cache\\_cacache directory."
         }
@@ -3135,6 +3367,10 @@ fn browser_cache_executor_enabled() -> bool {
 
 fn gradle_cache_executor_enabled() -> bool {
     runtime_feature_flag_enabled("SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR")
+}
+
+fn user_cache_executor_enabled() -> bool {
+    runtime_feature_flag_enabled("SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR")
 }
 
 fn npm_cache_executor_enabled() -> bool {
@@ -3689,6 +3925,85 @@ fn npm_cache_execution_rejections(
     codes
 }
 
+fn user_cache_execution_rejections(
+    request: &WriteExecutionRequest,
+    flag_enabled: bool,
+) -> Vec<&'static str> {
+    let mut codes = Vec::new();
+    if !cfg!(target_os = "windows") {
+        codes.push("windows-required");
+    }
+    if !flag_enabled {
+        codes.push("user-cache-executor-disabled");
+    }
+    if request.plan_id.trim().is_empty() {
+        codes.push("missing-plan-id");
+    }
+    if request
+        .scan_fingerprint
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-scan-fingerprint");
+    }
+    if request
+        .consent_plan_id
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-consent-plan-id");
+    }
+    if request.request_mode.as_deref() != Some("execute-user-cache") {
+        codes.push("request-mode-invalid");
+    }
+    if request.route != "bounded-user-cache-delete" {
+        codes.push("route-not-bounded-user-cache");
+    }
+    if request.dry_run_only != Some(false) {
+        codes.push("dry-run-disabled-required");
+    }
+    if request.mutation_attempted != Some(true) {
+        codes.push("mutation-confirmation-required");
+    }
+    if request.actions.is_empty() {
+        codes.push("no-actions");
+    }
+    codes
+}
+
+fn user_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
+    if codes.is_empty() {
+        return vec![
+            "User .cache executor removes old cache files and empty cache subdirectories under the current user's .cache root only; config, database, lock, log, project, and identity-like files remain forbidden.".to_string(),
+        ];
+    }
+    codes
+        .iter()
+        .map(|code| match *code {
+            "windows-required" => "User .cache cleanup is Windows-only in this build.",
+            "user-cache-executor-disabled" => {
+                "Set SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR=1 before launching the Tauri app to enable user .cache cleanup."
+            }
+            "dry-run-disabled-required" => {
+                "User .cache cleanup requires dryRunOnly=false on the execute-user-cache request."
+            }
+            "mutation-confirmation-required" => {
+                "User .cache cleanup requires mutationAttempted=true on the execute-user-cache request."
+            }
+            "request-mode-invalid" => "User .cache cleanup requires requestMode=execute-user-cache.",
+            "route-not-bounded-user-cache" => {
+                "User .cache cleanup requires route bounded-user-cache-delete."
+            }
+            _ => write_boundary_warning(code),
+        })
+        .map(String::from)
+        .collect()
+}
+
 fn npm_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
     if codes.is_empty() {
         return vec![
@@ -4024,6 +4339,42 @@ fn npm_cache_target_reject_code(value: &str) -> Option<&'static str> {
     None
 }
 
+fn user_cache_target_reject_code(value: &str) -> Option<&'static str> {
+    let path = resolve_dry_run_target(value);
+    if path.as_os_str().is_empty() {
+        return Some("target-missing");
+    }
+
+    let original = normalize_write_target(value);
+    let resolved = normalize_write_target(&path_to_string(&path));
+    if write_target_forbidden("bounded-user-cache-delete", &original)
+        || write_target_forbidden("bounded-user-cache-delete", &resolved)
+    {
+        return Some("target-forbidden");
+    }
+    if !write_target_allowed("bounded-user-cache-delete", &original)
+        && !write_target_allowed("bounded-user-cache-delete", &resolved)
+    {
+        return Some("target-not-user-cache");
+    }
+
+    let Some(profile) = env_path("USERPROFILE").or_else(|| env_path("HOME")) else {
+        return Some("target-not-user-cache");
+    };
+    let expected = profile.join(".cache");
+    if !same_normalized_path(&path, &expected) {
+        return Some("target-not-user-cache");
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(&path) else {
+        return Some("target-missing");
+    };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Some("target-link-or-not-directory");
+    }
+    None
+}
+
 fn pnpm_store_target_reject_code(value: &str) -> Option<&'static str> {
     let path = resolve_dry_run_target(value);
     if path.as_os_str().is_empty() {
@@ -4286,6 +4637,14 @@ struct GradleCacheDeleteResult {
 }
 
 #[derive(Default)]
+struct UserCacheDeleteResult {
+    deleted_bytes: u64,
+    deleted_files: u64,
+    deleted_dirs: u64,
+    skipped_count: u64,
+}
+
+#[derive(Default)]
 struct NpmCacheDeleteResult {
     deleted_bytes: u64,
     deleted_files: u64,
@@ -4516,6 +4875,140 @@ fn gradle_cache_file_forbidden(path: &Path) -> bool {
             clean.ends_with(".lock") || clean == "gc.properties"
         })
         .unwrap_or(true)
+}
+
+fn delete_user_cache_target(root: &Path) -> UserCacheDeleteResult {
+    let mut result = UserCacheDeleteResult::default();
+    if user_cache_target_reject_code(&path_to_string(root)).is_some() {
+        result.skipped_count += 1;
+        return result;
+    }
+
+    let mut queue = VecDeque::from([root.to_path_buf()]);
+    let mut dirs = Vec::new();
+    let mut visited = 0usize;
+    while let Some(path) = queue.pop_front() {
+        if visited >= 250_000 || result.deleted_files >= 120_000 {
+            result.skipped_count += 1;
+            break;
+        }
+        visited += 1;
+
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            result.skipped_count += 1;
+            continue;
+        };
+        if metadata.file_type().is_symlink() {
+            result.skipped_count += 1;
+            continue;
+        }
+        if metadata.is_file() {
+            delete_single_user_cache_file(&path, &metadata, &mut result);
+            continue;
+        }
+        if metadata.is_dir() {
+            if user_cache_dir_forbidden(&path, root) {
+                result.skipped_count += 1;
+                continue;
+            }
+            dirs.push(path.clone());
+            match fs::read_dir(&path) {
+                Ok(entries) => {
+                    for entry in entries.flatten() {
+                        queue.push_back(entry.path());
+                    }
+                }
+                Err(_) => result.skipped_count += 1,
+            }
+        }
+    }
+
+    dirs.sort_by(|left, right| right.components().count().cmp(&left.components().count()));
+    for dir in dirs {
+        if dir == root || user_cache_dir_forbidden(&dir, root) {
+            continue;
+        }
+        match fs::remove_dir(&dir) {
+            Ok(_) => result.deleted_dirs = result.deleted_dirs.saturating_add(1),
+            Err(_) => result.skipped_count += 1,
+        }
+    }
+
+    result
+}
+
+fn delete_single_user_cache_file(
+    path: &Path,
+    metadata: &fs::Metadata,
+    result: &mut UserCacheDeleteResult,
+) {
+    if !file_old_enough_for_user_cache_delete(metadata) || user_cache_file_forbidden(path) {
+        result.skipped_count += 1;
+        return;
+    }
+    let bytes = metadata.len();
+    match fs::remove_file(path) {
+        Ok(_) => {
+            result.deleted_bytes = result.deleted_bytes.saturating_add(bytes);
+            result.deleted_files = result.deleted_files.saturating_add(1);
+        }
+        Err(_) => result.skipped_count += 1,
+    }
+}
+
+fn file_old_enough_for_user_cache_delete(metadata: &fs::Metadata) -> bool {
+    let Ok(modified) = metadata.modified() else {
+        return false;
+    };
+    let Ok(age) = SystemTime::now().duration_since(modified) else {
+        return false;
+    };
+    age.as_secs() >= 30 * 24 * 60 * 60
+}
+
+fn user_cache_dir_forbidden(path: &Path, root: &Path) -> bool {
+    if path == root {
+        return false;
+    }
+    let clean = normalize_path(&path_to_string(path));
+    clean.contains("\\node_modules")
+        || clean.contains("\\.git")
+        || clean.ends_with("\\config")
+        || clean.ends_with("\\settings")
+        || clean.ends_with("\\profiles")
+        || clean.ends_with("\\sessions")
+        || clean.ends_with("\\identity")
+}
+
+fn user_cache_file_forbidden(path: &Path) -> bool {
+    let clean_path = normalize_path(&path_to_string(path));
+    if !clean_path.contains("\\.cache\\") {
+        return true;
+    }
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.to_ascii_lowercase())
+        .unwrap_or_default();
+    file_name.is_empty()
+        || file_name.ends_with(".lock")
+        || file_name.ends_with(".db")
+        || file_name.ends_with(".sqlite")
+        || file_name.ends_with(".sqlite3")
+        || file_name.ends_with(".json")
+        || file_name.ends_with(".yaml")
+        || file_name.ends_with(".yml")
+        || file_name.ends_with(".toml")
+        || file_name.ends_with(".ini")
+        || file_name.ends_with(".conf")
+        || file_name.ends_with(".config")
+        || file_name.ends_with(".log")
+        || file_name.contains("cookie")
+        || file_name.contains("session")
+        || file_name.contains("token")
+        || file_name.contains("credential")
+        || file_name.contains("password")
+        || file_name.contains("history")
 }
 
 fn delete_npm_cache_target(root: &Path) -> NpmCacheDeleteResult {
@@ -5120,7 +5613,7 @@ fn openai_advice_row_schema() -> Value {
             "priority": { "type": "string", "enum": ["high", "medium", "low"] },
             "actionType": {
                 "type": "string",
-                "enum": ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+                "enum": ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             "targetId": { "type": "string" },
             "route": { "type": "string" }
@@ -5282,6 +5775,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         cfg!(target_os = "windows") && large_file_archive_executor_enabled();
     let browser_cache_enabled = cfg!(target_os = "windows") && browser_cache_executor_enabled();
     let gradle_cache_enabled = cfg!(target_os = "windows") && gradle_cache_executor_enabled();
+    let user_cache_enabled = cfg!(target_os = "windows") && user_cache_executor_enabled();
     let npm_cache_enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
     let pnpm_store_enabled = cfg!(target_os = "windows") && pnpm_store_executor_enabled();
     let recycle_bin_enabled = cfg!(target_os = "windows") && recycle_bin_executor_enabled();
@@ -5295,6 +5789,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         || large_file_archive_enabled
         || browser_cache_enabled
         || gradle_cache_enabled
+        || user_cache_enabled
         || npm_cache_enabled
         || pnpm_store_enabled
         || recycle_bin_enabled;
@@ -5323,6 +5818,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
             downloads_cleanup_executor: downloads_cleanup_enabled,
             large_file_archive_executor: large_file_archive_enabled,
             gradle_cache_executor: gradle_cache_enabled,
+            user_cache_executor: user_cache_enabled,
             npm_cache_executor: npm_cache_enabled,
             pnpm_store_executor: pnpm_store_enabled,
             recycle_bin_executor: recycle_bin_enabled,
@@ -6198,6 +6694,12 @@ fn exact_specs(target_drive: &str) -> Vec<ExactSpec> {
             recipe_id: "gradle-cache",
             title: "Gradle dependency and build cache",
             path: profile.join(".gradle").join("caches"),
+            kind: MeasureKind::FullTree,
+        });
+        specs.push(ExactSpec {
+            recipe_id: "user-cache",
+            title: "User .cache folder",
+            path: profile.join(".cache"),
             kind: MeasureKind::FullTree,
         });
         specs.push(ExactSpec {

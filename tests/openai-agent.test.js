@@ -63,6 +63,13 @@ const assert = require("assert");
               ]
             }
           ]
+        },
+        {
+          recipeId: "user-cache",
+          title: "User .cache folder",
+          path: "C:\\Users\\real\\.cache",
+          bytes: 3 * 1024 ** 3,
+          status: "measured"
         }
       ]
     },
@@ -169,6 +176,7 @@ const assert = require("assert");
   assert(manualContext.installedAppReview.forbiddenActions.includes("automated-uninstall"), "installed app review context should forbid automated uninstall");
   assert.strictEqual(manualContext.largeFileArchiveTargets[0].route, "item-review-large-files", "OpenAI context should include reviewed large-file archive targets");
   assert.strictEqual(manualContext.largeFileArchiveTargets[0].decision, "archive", "OpenAI context should preserve archive decisions");
+  assert.strictEqual(manualContext.userCacheTargets[0].route, "bounded-user-cache-delete", "OpenAI context should include scanned user .cache targets");
   assert.strictEqual(manualContext.driveInventoryRows[0].canCreateExecutor, false, "drive inventory rows should be advisory-only in OpenAI context");
   assert.strictEqual(manualContext.customRootRows[0].manualOnly, true, "custom root rows should be manual-only in OpenAI context");
 
@@ -441,6 +449,34 @@ const assert = require("assert");
   assert.strictEqual(pnpmBroker.rows[0].targetPanel, "pnpm-store-executor-panel", "broker should route pnpm recommendations to the pnpm executor panel");
   assert.strictEqual(pnpmBroker.rows[0].canAct, true, "broker should allow pnpm executor only when deterministic gates pass");
   assert.strictEqual(pnpmBroker.rows[0].buttonLabel, "Run pnpm cleanup", "broker should label pnpm executor recommendations");
+  const userCacheBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "user-cache",
+          title: "Clean user .cache",
+          reason: "The scanned current-user .cache root has a scoped executor.",
+          priority: "medium",
+          actionType: "run-user-cache-executor",
+          targetId: "user-cache",
+          route: "bounded-user-cache-delete"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-user-cache" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, userCacheExecutor: true },
+      userCacheTargets: [{ id: "user-cache", route: "bounded-user-cache-delete", bytes: 4096 }]
+    },
+    executionState: {
+      planId: "plan-user-cache",
+      scanFingerprint: "scan-user-cache",
+      consentPlanId: "plan-user-cache"
+    }
+  });
+  assert.strictEqual(userCacheBroker.rows[0].targetPanel, "user-cache-executor-panel", "broker should route user .cache recommendations to the user .cache panel");
+  assert.strictEqual(userCacheBroker.rows[0].canAct, true, "broker should allow user .cache executor only when deterministic gates pass");
+  assert.strictEqual(userCacheBroker.rows[0].buttonLabel, "Run .cache cleanup", "broker should label user .cache executor recommendations");
 
   console.log("openai agent adapter ok");
 })();

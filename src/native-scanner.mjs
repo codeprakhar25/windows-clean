@@ -550,6 +550,50 @@ export async function runNativeNpmCacheExecutor(boundary = {}, host = globalThis
   return normalizeNativeWriteBoundary(result);
 }
 
+export async function runNativeUserCacheExecutor(boundary = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      accepted: false,
+      reason: "Native user .cache executor is not available in the browser demo.",
+      entries: [],
+      warnings: ["Run the Tauri desktop shell before executing user .cache cleanup."]
+    };
+  }
+
+  const row = boundary.row || boundary.selectedRow || {};
+  const targetPath = row.targetPath || row.target || row.path || "";
+  const action = {
+    id: row.id || "user-cache",
+    title: row.title || "User .cache folder",
+    bytes: Number(row.bytes || boundary.expectedBytes || 0),
+    route: "bounded-user-cache-delete",
+    targetPath
+  };
+  const expectedBytes = Number(boundary.expectedBytes ?? action.bytes);
+
+  const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
+    request: {
+      schemaVersion: "spaceguard-user-cache-request/v1",
+      requestMode: "execute-user-cache",
+      planId: boundary.planId || "",
+      route: "bounded-user-cache-delete",
+      scanFingerprint: boundary.scanFingerprint || "",
+      consentPlanId: boundary.consentPlanId || "",
+      expectedBytes,
+      dryRunOnly: false,
+      mutationAttempted: true,
+      actions: [action]
+    }
+  });
+
+  return normalizeNativeWriteBoundary(result);
+}
+
 export async function runNativePnpmStoreExecutor(boundary = {}, host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {
@@ -940,6 +984,7 @@ function normalizeExecutorFlags(value = {}) {
     downloadsCleanupExecutor: Boolean(value.downloadsCleanupExecutor || value.downloads_cleanup_executor),
     largeFileArchiveExecutor: Boolean(value.largeFileArchiveExecutor || value.large_file_archive_executor),
     gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
+    userCacheExecutor: Boolean(value.userCacheExecutor || value.user_cache_executor),
     npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
     pnpmStoreExecutor: Boolean(value.pnpmStoreExecutor || value.pnpm_store_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),

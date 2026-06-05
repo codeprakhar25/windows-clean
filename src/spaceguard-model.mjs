@@ -329,6 +329,16 @@ export const executorPolicies = {
     verification: "Rescan Gradle cache and keep daemon metadata.",
     guardrails: ["Age threshold", "User profile only", "No project source directories"]
   },
+  "user-cache": {
+    route: "bounded-user-cache-delete",
+    lane: "rebuildable",
+    label: "Bounded user .cache cleanup",
+    realRunEnabled: false,
+    dryRunSupported: true,
+    requiresNativeValidation: true,
+    verification: "Rescan current-user .cache and verify protected config/database/session-like files stayed untouched.",
+    guardrails: ["Age threshold", "Exact current-user .cache root only", "No project source directories", "No config/database/session files"]
+  },
   "npm-cache": {
     route: "bounded-npm-cache-delete",
     lane: "rebuildable",
@@ -721,6 +731,18 @@ export const toolNativeCommandSpecs = [
     guardrails: ["No project source directories", "Keep daemon metadata", "No shell execution in current build"]
   },
   {
+    id: "user-cache",
+    tool: "filesystem",
+    actionId: "user-cache",
+    route: "bounded-user-cache-delete",
+    title: "User .cache",
+    inspectCommand: "native scan %UserProfile%\\.cache",
+    futureCommand: "bounded user .cache cleanup only",
+    status: "manual-boundary",
+    evidence: "Use native scan evidence for the exact current-user .cache root; compare root size before and after.",
+    guardrails: ["No project source directories", "No config/database/session files", "No shell execution in current build", "Current-user root only"]
+  },
+  {
     id: "windows-cleanup-api",
     tool: "windows",
     actionId: "windows-old",
@@ -996,6 +1018,17 @@ export const executorRouteRequirements = {
     fixtureIds: ["developer-tooling-fixture", "protected-path-fixture"],
     preconditions: ["Native Windows scan", "User profile root", "Age threshold", "No project source match"]
   },
+  "bounded-user-cache-delete": {
+    title: "Bounded user .cache",
+    lane: "rebuildable",
+    phase: "second-safe",
+    implementation: "Delete only old files and empty cache dirs under the exact current user's .cache root; skip config, database, lock, log, session, credential, project, and identity-like files.",
+    rollback: "Tool caches rebuild; skipped config and state files remain in place.",
+    proof: "Developer-tool fixture must show only the current-user .cache root is touched and protected cache-like state files are skipped.",
+    requiredValidationIds: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "tool-native-dry-runs", "ledger-rescan-parity"],
+    fixtureIds: ["developer-tooling-fixture", "protected-path-fixture"],
+    preconditions: ["Native Windows scan", "Current-user .cache root", "Age threshold", "No project, config, database, or identity file match"]
+  },
   "bounded-npm-cache-delete": {
     title: "Bounded npm cache",
     lane: "rebuildable",
@@ -1231,6 +1264,20 @@ export const actions = [
     method: "Remove old Gradle cache entries, keep current daemon metadata",
     consequence: "Future builds may re-download dependencies and run slower once.",
     recommendation: "Clean entries unused for 30+ days.",
+    selectedByDefault: true,
+    executableInDemo: true
+  },
+  {
+    id: "user-cache",
+    title: "User .cache folder",
+    family: "Developer caches",
+    path: "%UserProfile%\\.cache",
+    bytes: 4.7 * GB,
+    risk: "rebuildable",
+    gate: "groupConfirm",
+    method: "Remove old cache files under the exact current-user .cache root",
+    consequence: "Some developer tools may rebuild local cache data on next launch.",
+    recommendation: "Clean old disposable cache files when .cache is a top space source.",
     selectedByDefault: true,
     executableInDemo: true
   },
@@ -9127,6 +9174,7 @@ export function buildToolCommandInventory({
     const supported =
       spec.route === "tool-native-prune" ||
       spec.route === "bounded-cache-delete" ||
+      spec.route === "bounded-user-cache-delete" ||
       spec.route === "bounded-npm-cache-delete" ||
       spec.route === "bounded-pnpm-store-delete" ||
       spec.route === "windows-cleanup-api";
@@ -13223,6 +13271,7 @@ function getTaskCapabilityForbiddenOperations(row, power) {
   if (
     row.route === "tool-native-prune" ||
     row.route === "item-review-project-cache" ||
+    row.route === "bounded-user-cache-delete" ||
     row.route === "bounded-npm-cache-delete" ||
     row.route === "bounded-pnpm-store-delete"
   ) {
@@ -15238,6 +15287,13 @@ const executorSmokeRouteSpecs = {
     panelId: "gradle-cache-executor-panel",
     actionLabel: "Run Gradle cache cleanup"
   },
+  "bounded-user-cache-delete": {
+    flag: "userCacheExecutor",
+    envVar: "SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR",
+    requestMode: "execute-user-cache",
+    panelId: "user-cache-executor-panel",
+    actionLabel: "Run user .cache cleanup"
+  },
   "bounded-npm-cache-delete": {
     flag: "npmCacheExecutor",
     envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
@@ -15366,6 +15422,7 @@ function getExecutorSmokeNativeTargetCount(route, nativeScan = null) {
   const recipeIds = {
     "browser-cache-only": ["browser-cache"],
     "bounded-cache-delete": ["gradle-cache"],
+    "bounded-user-cache-delete": ["user-cache"],
     "bounded-npm-cache-delete": ["npm-cache"],
     "bounded-pnpm-store-delete": ["pnpm-store"],
     "shell-recycle-bin": ["recycle-bin"]
@@ -16172,6 +16229,7 @@ function normalizeExecutorFeatureFlags(value = {}) {
     downloadsCleanupExecutor: Boolean(value.downloadsCleanupExecutor || value.downloads_cleanup_executor),
     largeFileArchiveExecutor: Boolean(value.largeFileArchiveExecutor || value.large_file_archive_executor),
     gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
+    userCacheExecutor: Boolean(value.userCacheExecutor || value.user_cache_executor),
     npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
     pnpmStoreExecutor: Boolean(value.pnpmStoreExecutor || value.pnpm_store_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
@@ -16188,6 +16246,7 @@ function getScopedRealExecutorRoutes(runtimeCapabilities = {}) {
     flags.largeFileArchiveExecutor ? "item-review-large-files" : "",
     flags.projectDependencyExecutor ? "item-review-project-cache" : "",
     flags.gradleCacheExecutor ? "bounded-cache-delete" : "",
+    flags.userCacheExecutor ? "bounded-user-cache-delete" : "",
     flags.npmCacheExecutor ? "bounded-npm-cache-delete" : "",
     flags.pnpmStoreExecutor ? "bounded-pnpm-store-delete" : "",
     flags.recycleBinExecutor ? "shell-recycle-bin" : "",
@@ -16319,6 +16378,9 @@ function getFirstSafeAllowedRule(route, path) {
   if (route === "browser-cache-only") {
     if (text.includes("cache")) return "Browser cache folders";
   }
+  if (route === "bounded-user-cache-delete") {
+    if (text.endsWith("\\.cache") || text.includes("\\.cache\\")) return "%USERPROFILE%\\.cache";
+  }
   return "";
 }
 
@@ -16344,6 +16406,12 @@ function getFirstSafeForbiddenRule(route, path) {
     if (text.includes("web data")) return "Browser profile web data is forbidden";
     if (text.includes("bookmark") || text.includes("preference") || text.includes("favicon")) return "Browser profile metadata is forbidden";
     if (text.includes("identity") || text.includes("profile database")) return "Browser identity stores are forbidden";
+  }
+  if (route === "bounded-user-cache-delete") {
+    if (text.includes("downloads")) return "Downloads is not a user .cache executor target";
+    if (text.includes("documents") || text.includes("desktop")) return "Personal folders are not user .cache executor targets";
+    if (text.includes("node_modules") || text.includes("\\.git")) return "Project folders are forbidden";
+    if (text.includes("session") || text.includes("cookie") || text.includes("credential") || text.includes("password")) return "Identity-like cache files are forbidden";
   }
   return "";
 }

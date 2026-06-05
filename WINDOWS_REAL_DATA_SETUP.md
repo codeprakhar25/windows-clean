@@ -77,6 +77,13 @@ $env:SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR="1"
 npm run native:dev
 ```
 
+Optional user `.cache` executor:
+
+```powershell
+$env:SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR="1"
+npm run native:dev
+```
+
 Optional npm cache executor:
 
 ```powershell
@@ -259,6 +266,7 @@ For each Windows validation run, capture:
 - Temp activation rehearsal status if using the no-real-data demo path; this evidence must be labeled demo-only and must not replace native write-boundary proof.
 - Disabled temp executor scaffold status when probing `known-temp-delete`: route, `tempCleanupExecutor`, validation-required state, mutation disabled, and zero bytes.
 - Gradle cache executor status when selected: route `bounded-cache-delete`, `gradleCacheExecutor`, scanned `.gradle\caches` target evidence, old-file threshold, skipped lock/recent counts, and reclaimed bytes from the native response.
+- User `.cache` executor status when selected: route `bounded-user-cache-delete`, `userCacheExecutor`, scanned `%UserProfile%\.cache` target evidence, 30-day threshold, skipped config/database/session/credential/project counts, and reclaimed bytes from the native response.
 - npm cache executor status when selected: route `bounded-npm-cache-delete`, `npmCacheExecutor`, scanned `%LocalAppData%\npm-cache\_cacache` target evidence, 14-day threshold, skipped index/recent counts, and reclaimed bytes from the native response.
 - pnpm store executor status when selected: route `bounded-pnpm-store-delete`, `pnpmStoreExecutor`, scanned `%LocalAppData%\pnpm\store` target evidence, 30-day threshold, skipped metadata/recent counts, and reclaimed bytes from the native response.
 - Reviewed Downloads executor status when selected: route `item-review-recycle-bin`, `downloadsCleanupExecutor`, exact reviewed file targets, 30-day threshold, Shell Recycle Bin move evidence, and reclaimed bytes from the native response.

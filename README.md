@@ -75,6 +75,13 @@ $env:SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR="1"
 npm run native:dev
 ```
 
+Enable old-file cleanup under the exact current user's `.cache` root:
+
+```powershell
+$env:SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR="1"
+npm run native:dev
+```
+
 Enable old-file cleanup under the current user's npm `_cacache`:
 
 ```powershell
@@ -131,7 +138,7 @@ The native write-boundary command is:
 execute_cleanup_plan
 ```
 
-It validates request shape for dry-run probes and contains scoped real executor branches for `requestMode=execute-first-safe`, `requestMode=execute-project-deps`, `requestMode=execute-downloads-recycle-bin`, `requestMode=execute-large-file-archive`, `requestMode=execute-gradle-cache`, `requestMode=execute-npm-cache`, `requestMode=execute-pnpm-store`, `requestMode=execute-recycle-bin`, and `requestMode=execute-browser-cache`.
+It validates request shape for dry-run probes and contains scoped real executor branches for `requestMode=execute-first-safe`, `requestMode=execute-project-deps`, `requestMode=execute-downloads-recycle-bin`, `requestMode=execute-large-file-archive`, `requestMode=execute-gradle-cache`, `requestMode=execute-user-cache`, `requestMode=execute-npm-cache`, `requestMode=execute-pnpm-store`, `requestMode=execute-recycle-bin`, and `requestMode=execute-browser-cache`.
 
 For `known-temp-delete`, setting `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1` in `.env` or the Windows Tauri process environment enables deletion of old files under allowlisted temp roots only. The executor rejects missing plan/scan/consent IDs, non-Windows runtimes, non-temp routes, forbidden targets, symlinks, recent files, folders, and broad personal/project paths. It returns a ledger-style native response with accepted state, bytes reclaimed, skipped count, and warnings. Without the feature flag, it still rejects with zero bytes.
 
@@ -144,6 +151,8 @@ For `downloads-installers`, setting `SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR=1` ena
 For `large-user-files`, setting `SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR=1` enables reviewed large-file archive. The frontend sends only item-review targets marked **Move** or **Archive** plus an explicit archive destination. The native executor accepts only single non-symlink 1GB+ files under current-user review folders, requires the file to be at least 90 days old, requires an existing non-system destination on another drive, copies into a plan-specific `SpaceGuard Archive` folder, verifies the copied size, removes the source file, rejects bulk folders and same-drive destinations, and never runs shell commands.
 
 For `gradle-cache`, setting `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=1` enables bounded Gradle cache cleanup. The frontend sends only the concrete `.gradle\caches` path from the latest native read-only scan. The native executor accepts only the current user's `.gradle\caches` directory, deletes files older than 30 days, skips symlinks, lock files, recent files, daemon state, wrapper files, init scripts, project folders, `node_modules`, and Program Files paths, removes empty cache subdirectories bottom-up, and never runs Gradle or shell commands.
+
+For `user-cache`, setting `SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR=1` enables bounded user `.cache` cleanup. The frontend sends only the concrete `%UserProfile%\.cache` path from the latest native read-only scan. The native executor accepts only the current user's exact `.cache` directory, deletes files older than 30 days, skips symlinks, recent files, config files, databases, lock files, logs, sessions, credentials, identity-like files, project folders, `node_modules`, Program Files paths, and system paths, removes empty cache subdirectories bottom-up, and never runs shell commands.
 
 For `npm-cache`, setting `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1` enables bounded npm cache cleanup. The frontend sends only the concrete `%LocalAppData%\npm-cache\_cacache` path from the latest native read-only scan. The native executor accepts only the current user's `_cacache` directory, deletes content blobs and cache temp files older than 14 days, keeps npm index metadata, skips symlinks, recent files, global packages, project `node_modules`, Program Files paths, and system paths, removes empty cache subdirectories bottom-up, and never runs npm or shell commands.
 
@@ -248,6 +257,7 @@ The demo also includes:
 - First-safe temp executor panel for old files under allowlisted temp roots, feature-flagged in the Windows native runtime.
 - Recycle Bin executor panel for permanent Shell Recycle Bin emptying, requiring the permanent-removal confirmation gate and native request acknowledgement.
 - Gradle cache executor panel for old files under the current user's `.gradle\caches` root, with project folders and Gradle daemon/wrapper/config paths rejected.
+- User `.cache` executor panel for old files under the exact current user's `%UserProfile%\.cache` root, with config, database, session, credential, identity-like, and project paths rejected.
 - npm cache executor panel for old content blobs and temp files under `%LocalAppData%\npm-cache\_cacache`, with index metadata, globals, and project folders rejected.
 - pnpm store executor panel for old content and temp files under `%LocalAppData%\pnpm\store`, with store metadata, global bins, shell commands, and project folders rejected.
 - Reviewed Downloads executor panel for selected old installer/archive files under the current user's Downloads folder, moved through Recycle Bin semantics only.

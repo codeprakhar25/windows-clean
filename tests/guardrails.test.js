@@ -3209,6 +3209,40 @@ const assert = require("assert");
   const smokeMarkdown = guard.buildExecutorSmokeRunPacketMarkdown(npmSmokePacket);
   assert(smokeMarkdown.includes("SpaceGuard Executor Smoke-Run Packet"), "smoke packet markdown should have a title");
   assert(smokeMarkdown.includes("Export rescan comparison"), "smoke packet markdown should include proof export steps");
+  const userCacheSmokePacket = guard.buildExecutorSmokeRunPacket({
+    executorPlan: guard.buildExecutorPlan({
+      selectedIds: new Set(["user-cache"]),
+      actionList: guard.actions,
+      approvals: { groupConfirm: true, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
+      scanMode: "native-readonly"
+    }),
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      platform: "windows",
+      realRunEnabled: true,
+      destructiveCommands: true,
+      executorFlags: { userCacheExecutor: true }
+    },
+    scanSession: { currentFingerprint: "scan-user-cache-smoke" },
+    consentReceipt: { planId: "plan-user-cache-smoke" },
+    executionProofHandoff: { status: "waiting-for-execution" },
+    planSnapshot: { id: "plan-user-cache-smoke" },
+    nativeScan: {
+      findings: [
+        {
+          recipeId: "user-cache",
+          status: "measured",
+          path: "C:\\Users\\qa\\.cache",
+          bytes: 1024 * 1024 * 256
+        }
+      ]
+    }
+  });
+  assert.strictEqual(userCacheSmokePacket.status, "ready-for-smoke", "enabled user .cache route should be ready for a smoke run");
+  assert.strictEqual(userCacheSmokePacket.rows[0].envVar, "SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR", "user .cache smoke packet should name the executor env var");
+  assert.strictEqual(userCacheSmokePacket.rows[0].requestMode, "execute-user-cache", "user .cache smoke packet should name the native request mode");
+  assert.strictEqual(userCacheSmokePacket.rows[0].panelId, "user-cache-executor-panel", "user .cache smoke packet should point to the executor panel");
   const proofBlockedSmokePacket = guard.buildExecutorSmokeRunPacket({
     executorPlan: npmSmokeExecutorPlan,
     runtimeCapabilities: {
