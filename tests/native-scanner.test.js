@@ -131,7 +131,7 @@ const assert = require("assert");
         recipe_id: "installed-app-footprints",
         title: "Installed app footprints",
         path: "Program Files, ProgramData, LocalAppData\\Programs",
-        bytes: 6 * guard.GB,
+        bytes: 10 * guard.GB,
         status: "limited",
         items: [
           {
@@ -145,6 +145,21 @@ const assert = require("assert");
             reason: "Manual uninstall candidate",
             signals: [
               { label: "usage proof", value: "not proven", tone: "restricted" },
+              { label: "uninstall entry", value: "present", tone: "safe" }
+            ]
+          },
+          {
+            id: "app-unity-hub",
+            name: "Unity Hub",
+            path: "C:\\Program Files\\Unity Hub",
+            bytes: 4 * guard.GB,
+            age_days: 180,
+            kind: "developer tool footprint",
+            recommendation: "keep",
+            reason: "Read-only app usage evidence found via UserAssist launch evidence matching Unity Hub.",
+            signals: [
+              { label: "usage proof", value: "UserAssist launch evidence", tone: "safe" },
+              { label: "usage match", value: "name match: unity hub", tone: "safe" },
               { label: "uninstall entry", value: "present", tone: "safe" }
             ]
           }
@@ -206,7 +221,7 @@ const assert = require("assert");
   assert.strictEqual(docker.scanStatus, "unsupported", "unsupported native findings should be explicit");
   assert.strictEqual(largeFiles.bytes, 3 * guard.GB, "native large-file discovery should replace demo bytes");
   assert.strictEqual(largeFiles.scanStatus, "measured", "native large-file discovery should be marked measured");
-  assert.strictEqual(appFootprints.bytes, 6 * guard.GB, "native app footprint discovery should replace demo bytes");
+  assert.strictEqual(appFootprints.bytes, 10 * guard.GB, "native app footprint discovery should replace demo bytes");
   assert.strictEqual(appFootprints.scanStatus, "limited", "native app footprint discovery should preserve limited status");
 
   const scanCoverage = guard.buildScanCoverageSummary({
@@ -245,11 +260,22 @@ const assert = require("assert");
   assert.strictEqual(appFootprintReview.items[0].name, "Old IDE 2023", "native app footprint candidate should be preserved");
   assert.strictEqual(appFootprintReview.items[0].signals[0].label, "usage proof", "app footprint review should preserve structured review signals");
   assert.strictEqual(appFootprintReview.items[0].signals[0].value, "not proven", "app footprint signals should make usage uncertainty explicit");
+  const usageBackedApp = appFootprintReview.items.find((item) => item.id === "app-unity-hub");
+  assert(usageBackedApp, "app footprint review should preserve usage-backed app candidates");
+  assert.strictEqual(
+    usageBackedApp.signals.find((signal) => signal.label === "usage proof").value,
+    "UserAssist launch evidence",
+    "app footprint review should preserve read-only app usage evidence"
+  );
   assert.strictEqual(appFootprintReview.selectedBytes, 0, "app footprint candidates should not become executor recovery bytes");
   const appReviewDossier = guard.buildInstalledAppReviewDossier({ itemReviewsByAction: { "installed-app-footprints": appFootprintReview } });
   assert.strictEqual(appReviewDossier.status, "needs-user-review", "native app footprint candidates should populate app review dossier");
   assert.strictEqual(appReviewDossier.rows[0].usageProof, "not proven", "app review dossier should keep usage uncertainty explicit");
   assert.strictEqual(appReviewDossier.rows[0].uninstallEntry, "present", "app review dossier should keep uninstall-entry evidence");
+  assert(
+    appReviewDossier.rows.some((row) => row.usageProof === "UserAssist launch evidence"),
+    "app review dossier should preserve UserAssist usage evidence for review"
+  );
   assert.strictEqual(appReviewDossier.canCreateExecutor, false, "app review dossier must not create executor routes");
 
   const normalizedWithItems = native.normalizeNativeScan({

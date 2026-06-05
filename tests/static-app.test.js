@@ -549,6 +549,11 @@ assert(rustScanner.includes("installed_app_review_signals"), "Rust scanner shoul
 assert(rustScanner.includes("\"usage proof\""), "Rust scanner should make app usage uncertainty explicit");
 assert(rustScanner.includes("\"official action\""), "Rust scanner should identify the manual uninstall action");
 assert(rustScanner.includes("installed_app_registry_inventory"), "Rust scanner should enrich installed app review with read-only uninstall metadata");
+assert(rustScanner.includes("installed_app_usage_inventory"), "Rust scanner should enrich installed app review with read-only usage evidence");
+assert(rustScanner.includes("read_userassist_value_names"), "Rust scanner should read UserAssist value names without parsing executable authority");
+assert(rustScanner.includes("RegEnumValueW"), "Rust scanner should enumerate UserAssist values read-only");
+assert(rustScanner.includes("UserAssist launch evidence"), "Rust scanner should label app launch evidence explicitly");
+assert(rustScanner.includes("no matching UserAssist launch evidence"), "Rust scanner should distinguish missing usage evidence from unused proof");
 assert(rustScanner.includes("RegOpenKeyExW"), "Rust scanner should read Windows uninstall metadata through the registry API");
 assert(rustScanner.includes("RegQueryValueExW"), "Rust scanner should query uninstall metadata values read-only");
 assert(rustScanner.includes("RegEnumKeyExW"), "Rust scanner should enumerate uninstall metadata keys read-only");

@@ -364,6 +364,12 @@ struct InstalledAppMetadata {
     uninstall_available: bool,
 }
 
+#[derive(Clone, Debug, Default)]
+struct InstalledAppUsageEvidence {
+    source: &'static str,
+    match_label: String,
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -5661,6 +5667,16 @@ extern "system" {
         lp_data: *mut u8,
         lpcb_data: *mut u32,
     ) -> i32;
+    fn RegEnumValueW(
+        h_key: RegistryKeyHandle,
+        dw_index: u32,
+        lp_value_name: *mut u16,
+        lpcch_value_name: *mut u32,
+        lp_reserved: *mut u32,
+        lp_type: *mut u32,
+        lp_data: *mut u8,
+        lpcb_data: *mut u32,
+    ) -> i32;
     fn RegCloseKey(h_key: RegistryKeyHandle) -> i32;
 }
 
@@ -5685,6 +5701,124 @@ fn installed_app_registry_inventory() -> Vec<InstalledAppMetadata> {
 #[cfg(not(target_os = "windows"))]
 fn installed_app_registry_inventory() -> Vec<InstalledAppMetadata> {
     Vec::new()
+}
+
+#[cfg(target_os = "windows")]
+fn installed_app_usage_inventory() -> Vec<String> {
+    const USER_ASSIST_KEY: &str = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\UserAssist";
+    let Some(base_key) = registry_open_key(HKEY_CURRENT_USER, USER_ASSIST_KEY, KEY_READ) else {
+        return Vec::new();
+    };
+    let mut rows = Vec::new();
+    let mut index = 0_u32;
+
+    loop {
+        let mut name = vec![0_u16; 512];
+        let mut name_len = name.len() as u32;
+        let result = unsafe {
+            RegEnumKeyExW(
+                base_key,
+                index,
+                name.as_mut_ptr(),
+                &mut name_len,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        if result == ERROR_NO_MORE_ITEMS {
+            break;
+        }
+        index = index.saturating_add(1);
+        if result != ERROR_SUCCESS {
+            continue;
+        }
+
+        let guid = String::from_utf16_lossy(&name[..name_len as usize]);
+        let count_key = format!("{guid}\\Count");
+        if let Some(child_key) = registry_open_key(base_key, &count_key, KEY_READ) {
+            rows.extend(read_userassist_value_names(child_key));
+            unsafe {
+                RegCloseKey(child_key);
+            }
+        }
+    }
+
+    unsafe {
+        RegCloseKey(base_key);
+    }
+    dedupe_usage_inventory(rows)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn installed_app_usage_inventory() -> Vec<String> {
+    Vec::new()
+}
+
+#[cfg(target_os = "windows")]
+fn read_userassist_value_names(key: RegistryKeyHandle) -> Vec<String> {
+    let mut rows = Vec::new();
+    let mut index = 0_u32;
+
+    loop {
+        let mut name = vec![0_u16; 2048];
+        let mut name_len = name.len() as u32;
+        let result = unsafe {
+            RegEnumValueW(
+                key,
+                index,
+                name.as_mut_ptr(),
+                &mut name_len,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        if result == ERROR_NO_MORE_ITEMS {
+            break;
+        }
+        index = index.saturating_add(1);
+        if result != ERROR_SUCCESS || name_len == 0 {
+            continue;
+        }
+
+        let encoded = String::from_utf16_lossy(&name[..name_len as usize]);
+        let decoded = userassist_rot13_decode(&encoded);
+        if !decoded.trim().is_empty() {
+            rows.push(decoded);
+        }
+    }
+
+    rows
+}
+
+fn userassist_rot13_decode(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' => ((((ch as u8 - b'a') + 13) % 26) + b'a') as char,
+            'A'..='Z' => ((((ch as u8 - b'A') + 13) % 26) + b'A') as char,
+            _ => ch,
+        })
+        .collect()
+}
+
+fn dedupe_usage_inventory(rows: Vec<String>) -> Vec<String> {
+    let mut deduped = Vec::new();
+    for row in rows {
+        let normalized = normalize_usage_match_text(&row);
+        if normalized.is_empty()
+            || deduped
+                .iter()
+                .any(|existing: &String| normalize_usage_match_text(existing) == normalized)
+        {
+            continue;
+        }
+        deduped.push(row);
+    }
+    deduped
 }
 
 #[cfg(target_os = "windows")]
@@ -6431,6 +6565,7 @@ fn measure_installed_app_footprints(
     let mut errors = 0_u64;
     let mut limited = false;
     let registry_inventory = installed_app_registry_inventory();
+    let usage_inventory = installed_app_usage_inventory();
 
     for root in roots {
         let normalized = normalize_path(&path_to_string(&root));
@@ -6478,6 +6613,7 @@ fn measure_installed_app_footprints(
                     &path,
                     stats.bytes,
                     &registry_inventory,
+                    &usage_inventory,
                 ));
             }
         }
@@ -6533,6 +6669,7 @@ fn installed_app_scan_item(
     path: &Path,
     bytes: u64,
     registry_inventory: &[InstalledAppMetadata],
+    usage_inventory: &[String],
 ) -> ScanItem {
     let age_days = path_age_days(path).unwrap_or(0);
     let folder_name = path
@@ -6545,16 +6682,17 @@ fn installed_app_scan_item(
         .map(|item| item.display_name.as_str())
         .filter(|value| !value.trim().is_empty())
         .unwrap_or(folder_name);
-    let recommendation = if bytes >= 1024 * 1024 * 1024 && age_days >= 45 {
+    let usage_evidence = find_installed_app_usage_evidence(path, folder_name, name, usage_inventory);
+    let recommendation = if bytes >= 1024 * 1024 * 1024 && age_days >= 45 && usage_evidence.is_none() {
         "review"
     } else {
         "keep"
     };
     let kind = installed_app_kind(folder_name, path);
     let reason =
-        installed_app_review_reason(path, bytes, age_days, recommendation, metadata.as_ref());
+        installed_app_review_reason(path, bytes, age_days, recommendation, metadata.as_ref(), usage_evidence.as_ref());
     let signals =
-        installed_app_review_signals(bytes, age_days, recommendation, kind, metadata.as_ref());
+        installed_app_review_signals(bytes, age_days, recommendation, kind, metadata.as_ref(), usage_evidence.as_ref());
 
     ScanItem {
         id: stable_item_id("installed-app-footprints", path),
@@ -6575,14 +6713,15 @@ fn installed_app_review_signals(
     recommendation: &str,
     kind: &str,
     metadata: Option<&InstalledAppMetadata>,
+    usage_evidence: Option<&InstalledAppUsageEvidence>,
 ) -> Vec<ScanSignal> {
     let mut signals = vec![
         review_signal(
             "candidate",
             if recommendation == "review" {
-                "large old footprint"
+                "large old footprint without launch evidence"
             } else {
-                "weak usage signal"
+                "weak unused-app signal"
             },
             if recommendation == "review" {
                 "review"
@@ -6590,7 +6729,13 @@ fn installed_app_review_signals(
                 "safe"
             },
         ),
-        review_signal("usage proof", "not proven", "restricted"),
+        review_signal(
+            "usage proof",
+            usage_evidence
+                .map(|evidence| evidence.source)
+                .unwrap_or("not proven"),
+            if usage_evidence.is_some() { "safe" } else { "restricted" },
+        ),
         review_signal("kind", kind, "review"),
         review_signal(
             "modified age",
@@ -6608,6 +6753,12 @@ fn installed_app_review_signals(
             "restricted",
         ),
     ];
+
+    if let Some(evidence) = usage_evidence {
+        signals.push(review_signal("usage match", evidence.match_label.as_str(), "safe"));
+    } else {
+        signals.push(review_signal("usage evidence", "no UserAssist match", "review"));
+    }
 
     if let Some(metadata) = metadata {
         signals.push(review_signal(
@@ -6669,14 +6820,24 @@ fn installed_app_review_reason(
     age_days: u64,
     recommendation: &str,
     metadata: Option<&InstalledAppMetadata>,
+    usage_evidence: Option<&InstalledAppUsageEvidence>,
 ) -> String {
     let mut details = Vec::new();
     if recommendation == "review" {
         details.push(format!(
-            "Large app footprint last modified about {age_days} day(s) ago."
+            "Large app footprint last modified about {age_days} day(s) ago with no matching UserAssist launch evidence."
         ));
     } else {
         details.push("Recent, small, or ambiguous app footprint.".to_string());
+    }
+
+    if let Some(evidence) = usage_evidence {
+        details.push(format!(
+            "Read-only app usage evidence found via {} matching {}.",
+            evidence.source, evidence.match_label
+        ));
+    } else {
+        details.push("No matching UserAssist launch-history evidence was found.".to_string());
     }
 
     if let Some(metadata) = metadata {
@@ -6745,12 +6906,65 @@ fn find_installed_app_metadata(
         .cloned()
 }
 
+fn find_installed_app_usage_evidence(
+    path: &Path,
+    folder_name: &str,
+    display_name: &str,
+    usage_inventory: &[String],
+) -> Option<InstalledAppUsageEvidence> {
+    let folder_key = normalize_usage_match_text(folder_name);
+    let display_key = normalize_usage_match_text(display_name);
+    let basename_key = path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .map(normalize_usage_match_text)
+        .unwrap_or_default();
+    let candidates = [folder_key, display_key, basename_key]
+        .into_iter()
+        .filter(|candidate| candidate.len() >= 4)
+        .collect::<Vec<_>>();
+    if candidates.is_empty() {
+        return None;
+    }
+
+    for row in usage_inventory {
+        let normalized = normalize_usage_match_text(row);
+        if normalized.is_empty() {
+            continue;
+        }
+        if let Some(candidate) = candidates.iter().find(|candidate| {
+            let candidate = candidate.as_str();
+            normalized == candidate
+                || normalized.contains(&format!("\\{candidate}\\"))
+                || normalized.contains(&format!("\\{candidate}."))
+                || normalized.contains(&format!("/{candidate}/"))
+                || normalized.contains(&format!("/{candidate}."))
+                || normalized.contains(candidate)
+        }) {
+            return Some(InstalledAppUsageEvidence {
+                source: "UserAssist launch evidence",
+                match_label: format!("name match: {candidate}"),
+            });
+        }
+    }
+
+    None
+}
+
 fn normalize_registry_path_match(value: &str) -> String {
     value
         .trim()
         .trim_matches('"')
         .replace('/', "\\")
         .trim_end_matches('\\')
+        .to_ascii_lowercase()
+}
+
+fn normalize_usage_match_text(value: &str) -> String {
+    value
+        .trim()
+        .trim_matches('"')
+        .replace('/', "\\")
         .to_ascii_lowercase()
 }
 
