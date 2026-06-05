@@ -57,6 +57,8 @@ import {
   buildExecutorManifest,
   buildExecutorPlan,
   buildExecutorReadiness,
+  buildExecutorSmokeRunPacket,
+  buildExecutorSmokeRunPacketMarkdown,
   buildExecutionProofHandoff,
   buildLedgerHistoryMarkdown,
   buildLedgerHistorySummary,
@@ -872,6 +874,37 @@ export default function App() {
         nativeScan: nativeScan.result
       }),
     [releaseGate, executorPlan, executorManifest, dataMode, runtimeCapabilities.result, nativeScan.result]
+  );
+  const executorSmokeRunPacket = useMemo(
+    () =>
+      buildExecutorSmokeRunPacket({
+        executorPlan,
+        runtimeCapabilities: runtimeCapabilities.result,
+        scanSession,
+        consentReceipt,
+        executionProofHandoff,
+        rescanComparison,
+        validationPack,
+        releaseGate,
+        planSnapshot,
+        nativeScan: nativeScan.result,
+        archiveDestination: largeFileArchiveDestination,
+        permanentRemovalConfirmed: Boolean(approvals.permanentConfirm)
+      }),
+    [
+      executorPlan,
+      runtimeCapabilities.result,
+      scanSession,
+      consentReceipt,
+      executionProofHandoff,
+      rescanComparison,
+      validationPack,
+      releaseGate,
+      planSnapshot,
+      nativeScan.result,
+      largeFileArchiveDestination,
+      approvals.permanentConfirm
+    ]
   );
   const firstSafeValidationGate = useMemo(
     () =>
@@ -3114,6 +3147,23 @@ export default function App() {
     downloadTextFile("spaceguard-validation-pack.md", body, "text/markdown;charset=utf-8");
   }
 
+  function exportExecutorSmokeRunPacket() {
+    const exportedPacket = { ...executorSmokeRunPacket, generatedAt: new Date().toISOString() };
+    const markdown = buildExecutorSmokeRunPacketMarkdown(exportedPacket);
+    const body = [
+      markdown,
+      "",
+      "---",
+      "",
+      "## Structured Smoke-Run JSON",
+      "",
+      "```json",
+      JSON.stringify(exportedPacket, null, 2),
+      "```"
+    ].join("\n");
+    downloadTextFile("spaceguard-executor-smoke-run-packet.md", body, "text/markdown;charset=utf-8");
+  }
+
   function exportSupportBundle() {
     const exportedBundle = { ...supportBundle, generatedAt: new Date().toISOString() };
     const markdown = buildSupportBundleMarkdown(exportedBundle);
@@ -3640,6 +3690,7 @@ export default function App() {
             />
             <CandidateSafetyManifestPanel manifest={candidateSafetyManifest} />
             <ExecutorManifestPanel manifest={executorManifest} />
+            <ExecutorSmokeRunPacketPanel packet={executorSmokeRunPacket} onExport={exportExecutorSmokeRunPacket} />
             <ToolCommandInventoryPanel inventory={toolCommandInventory} />
             <VerificationPanel planSnapshot={planSnapshot} verificationSummary={verificationSummary} />
             <PostRunVerificationPanel verification={postRunVerification} scanning={scanning} nativeCapability={nativeCapability} onRescan={runPostRunReadonlyScan} onExport={exportPostRunVerification} />
@@ -7684,6 +7735,77 @@ function ExecutorManifestPanel({ manifest }) {
             </div>
           ))}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ExecutorSmokeRunPacketPanel({ packet, onExport }) {
+  const previewRows = packet.rows.length ? packet.rows.slice(0, 4) : [];
+
+  return (
+    <Card id="executor-smoke-run-packet-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Executor smoke-run packet
+          <Badge variant={packet.tone}>{packet.status}</Badge>
+        </CardTitle>
+        <CardDescription>{packet.primary}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-3 gap-2">
+          <QueueStat label="Routes" value={packet.counts.routes} tone={packet.counts.routes ? "review" : "restricted"} />
+          <QueueStat label="Ready" value={packet.counts.ready} tone={packet.counts.ready ? "safe" : "review"} />
+          <QueueStat label="Proof" value={packet.proofStatus === "waiting-for-execution" ? "clear" : packet.proofStatus.replace(/^proof-/, "")} tone={packet.proofAllowsNextExecutor ? "safe" : "restricted"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Run boundary</span>
+            <Badge variant={packet.realRunEnabled ? "restricted" : "review"}>{packet.realRunEnabled ? "scoped write visible" : "write off"}</Badge>
+            <Badge variant={packet.validationReady ? "safe" : "outline"}>{packet.validationReady ? "validation ready" : "smoke only"}</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+            <span>Plan: {packet.planId || "missing"}</span>
+            <span>Scan: {packet.scanFingerprint ? "current" : "missing"}</span>
+            <span>Consent: {packet.consentPlanId || "missing"}</span>
+            <span>Rescan comparison: {packet.rescanComparisonStatus}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {previewRows.length ? (
+            previewRows.map((row) => (
+              <div key={`${row.route}-${row.id}`} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="mr-auto min-w-0 text-sm font-medium">{row.title}</div>
+                  <Badge variant={row.tone}>{row.status}</Badge>
+                  <Badge variant="outline">{row.route}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{row.targetEvidence}</p>
+                <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
+                  <span>Flag: {row.envVar} {row.flagEnabled ? "enabled" : "off"}</span>
+                  <span>Request: {row.requestMode}</span>
+                  {row.blockedReason ? <span>Blocker: {row.blockedReason}</span> : null}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1">
+                  {row.checks.slice(0, 5).map((check) => (
+                    <Badge key={check.id} variant={check.passed ? "safe" : "review"}>{check.label}</Badge>
+                  ))}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              Select a scoped executor route such as npm cache, Gradle cache, browser cache, temp cleanup, Downloads review, or Recycle Bin before exporting a smoke packet.
+            </div>
+          )}
+        </div>
+
+        <Button type="button" variant="outline" size="sm" onClick={onExport}>
+          <Download className="h-4 w-4" />
+          Export smoke packet
+        </Button>
       </CardContent>
     </Card>
   );

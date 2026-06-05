@@ -7491,6 +7491,143 @@ export function buildExecutorManifest({
   };
 }
 
+export function buildExecutorSmokeRunPacket({
+  executorPlan = null,
+  runtimeCapabilities = {},
+  scanSession = null,
+  consentReceipt = null,
+  executionProofHandoff = null,
+  rescanComparison = null,
+  validationPack = null,
+  releaseGate = null,
+  planSnapshot = null,
+  nativeScan = null,
+  archiveDestination = "",
+  permanentRemovalConfirmed = false,
+  generatedAt = "set-on-export"
+} = {}) {
+  const runtime = runtimeCapabilities || {};
+  const flags = normalizeExecutorFeatureFlags(runtime.executorFlags || runtime.executor_flags || {});
+  const planId = planSnapshot?.id || "";
+  const scanFingerprint = scanSession?.currentFingerprint || "";
+  const consentPlanId = consentReceipt?.planId || "";
+  const proofStatus = executionProofHandoff?.status || "waiting-for-execution";
+  const proofAllowsNextExecutor = proofStatus === "waiting-for-execution" || proofStatus === "proof-complete";
+  const selectedRows = (executorPlan?.rows || []).filter((row) => getExecutorSmokeRouteSpec(row.route));
+  const rows = selectedRows.map((row) =>
+    buildExecutorSmokeRunRow({
+      row,
+      runtime,
+      flags,
+      planId,
+      scanFingerprint,
+      consentPlanId,
+      proofStatus,
+      proofAllowsNextExecutor,
+      nativeScan,
+      archiveDestination,
+      permanentRemovalConfirmed
+    })
+  );
+  const readyRows = rows.filter((row) => row.status === "ready");
+  const proofBlockedRows = rows.filter((row) => row.status === "needs-proof");
+  const blockedRows = rows.filter((row) => row.status === "blocked");
+  const validationReady = Boolean(validationPack?.readyForRealRun || releaseGate?.readyForRealRun);
+  const proofComplete = Boolean(proofStatus === "proof-complete" && rescanComparison?.status === "matched");
+  const status = !rows.length
+    ? "no-routes"
+    : proofComplete
+      ? "proof-complete"
+      : proofBlockedRows.length
+        ? "needs-proof"
+        : readyRows.length
+          ? "ready-for-smoke"
+          : "blocked";
+
+  return {
+    schemaVersion: "spaceguard-executor-smoke-run-packet/v1",
+    product: "SpaceGuard",
+    generatedAt,
+    status,
+    tone: status === "ready-for-smoke" || status === "proof-complete" ? "safe" : status === "needs-proof" || status === "blocked" ? "restricted" : "review",
+    planId,
+    scanFingerprint,
+    consentPlanId,
+    nativeAvailable: Boolean(runtime.available),
+    windows: Boolean(runtime.windows),
+    realRunEnabled: Boolean(runtime.realRunEnabled),
+    destructiveCommands: Boolean(runtime.destructiveCommands),
+    validationReady,
+    releaseReady: Boolean(releaseGate?.readyForRealRun),
+    proofStatus,
+    proofAllowsNextExecutor,
+    rescanComparisonStatus: rescanComparison?.status || "not-run",
+    postRunScanEvidence: Boolean(rescanComparison?.postRunScanEvidence),
+    selectedRoutes: rows.map((row) => row.route),
+    rows,
+    readyRows,
+    blockedRows,
+    proofBlockedRows,
+    counts: {
+      routes: rows.length,
+      ready: readyRows.length,
+      blocked: blockedRows.length,
+      needsProof: proofBlockedRows.length,
+      validationReady: validationReady ? 1 : 0
+    },
+    primary: getExecutorSmokeRunPrimary(status, { readyRows, blockedRows, proofBlockedRows }),
+    steps: getExecutorSmokeRunSteps(status, { readyRows, blockedRows, proofBlockedRows })
+  };
+}
+
+export function buildExecutorSmokeRunPacketMarkdown(packet = null) {
+  const rows = packet?.rows?.length
+    ? packet.rows
+        .map((row) => [
+          `- ${row.title}: ${row.status}`,
+          `  - Route: ${row.route}`,
+          `  - Feature flag: ${row.envVar} (${row.flagEnabled ? "enabled" : "disabled"})`,
+          `  - Request mode: ${row.requestMode}`,
+          `  - Panel: ${row.panelId}`,
+          `  - Expected bytes: ${formatBytes(row.bytes)}`,
+          `  - Target evidence: ${row.targetEvidence}`,
+          `  - Blocker: ${row.blockedReason || "none"}`,
+          `  - Checks: ${row.checks.map((check) => `${check.passed ? "PASS" : "WAIT"} ${check.label}`).join("; ")}`
+        ].join("\n"))
+        .join("\n")
+    : "- No scoped executor routes are selected.";
+  const steps = packet?.steps?.length ? packet.steps.map((step) => `- ${step}`).join("\n") : "- Select a scoped executor route.";
+  const exports = packet?.rows?.length
+    ? Array.from(new Set(packet.rows.flatMap((row) => row.exportChecklist))).map((item) => `- ${item}`).join("\n")
+    : "- No exports required until a route is selected.";
+
+  return [
+    "# SpaceGuard Executor Smoke-Run Packet",
+    "",
+    `Generated: ${packet?.generatedAt || "set-on-export"}`,
+    `Schema: ${packet?.schemaVersion || "spaceguard-executor-smoke-run-packet/v1"}`,
+    `Status: ${packet?.status || "not-built"}`,
+    `Plan: ${packet?.planId || "missing"}`,
+    `Scan fingerprint: ${packet?.scanFingerprint || "missing"}`,
+    `Consent plan: ${packet?.consentPlanId || "missing"}`,
+    `Runtime real run: ${packet?.realRunEnabled ? "yes" : "no"}`,
+    `Validation ready: ${packet?.validationReady ? "yes" : "no"}`,
+    `Proof status: ${packet?.proofStatus || "unknown"}`,
+    `Rescan comparison: ${packet?.rescanComparisonStatus || "not-run"}`,
+    "",
+    "## Operator Steps",
+    steps,
+    "",
+    "## Route Rows",
+    rows,
+    "",
+    "## Export Checklist",
+    exports,
+    "",
+    "This packet does not grant cleanup authority. The native executor still requires its feature flag, current scan, current consent, route target validation, and post-run proof clearance."
+  ].join("\n");
+}
+
 export function buildRealExecutorCapsule({
   executorManifest = null,
   executorPlan = null,
@@ -14973,6 +15110,220 @@ function getExecutorRouteRequirement(route) {
     fixtureIds: [],
     preconditions: ["Classify route"]
   };
+}
+
+const executorSmokeRouteSpecs = {
+  "known-temp-delete": {
+    flag: "tempCleanupExecutor",
+    envVar: "SPACEGUARD_ENABLE_TEMP_EXECUTOR",
+    requestMode: "execute-first-safe",
+    panelId: "first-safe-temp-executor-panel",
+    actionLabel: "Run real temp cleanup"
+  },
+  "item-review-recycle-bin": {
+    flag: "downloadsCleanupExecutor",
+    envVar: "SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR",
+    requestMode: "execute-downloads-recycle-bin",
+    panelId: "downloads-cleanup-executor-panel",
+    actionLabel: "Move reviewed Downloads items"
+  },
+  "item-review-large-files": {
+    flag: "largeFileArchiveExecutor",
+    envVar: "SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR",
+    requestMode: "execute-large-file-archive",
+    panelId: "large-file-archive-executor-panel",
+    actionLabel: "Archive reviewed large files",
+    requiresArchiveDestination: true
+  },
+  "item-review-project-cache": {
+    flag: "projectDependencyExecutor",
+    envVar: "SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR",
+    requestMode: "execute-project-deps",
+    panelId: "project-dependency-executor-panel",
+    actionLabel: "Run reviewed dependency cleanup"
+  },
+  "browser-cache-only": {
+    flag: "browserCacheExecutor",
+    envVar: "SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR",
+    requestMode: "execute-browser-cache",
+    panelId: "browser-cache-executor-panel",
+    actionLabel: "Run browser cache cleanup"
+  },
+  "bounded-cache-delete": {
+    flag: "gradleCacheExecutor",
+    envVar: "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR",
+    requestMode: "execute-gradle-cache",
+    panelId: "gradle-cache-executor-panel",
+    actionLabel: "Run Gradle cache cleanup"
+  },
+  "bounded-npm-cache-delete": {
+    flag: "npmCacheExecutor",
+    envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
+    requestMode: "execute-npm-cache",
+    panelId: "npm-cache-executor-panel",
+    actionLabel: "Run npm cache cleanup"
+  },
+  "bounded-pnpm-store-delete": {
+    flag: "pnpmStoreExecutor",
+    envVar: "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR",
+    requestMode: "execute-pnpm-store",
+    panelId: "pnpm-store-executor-panel",
+    actionLabel: "Run pnpm store cleanup"
+  },
+  "shell-recycle-bin": {
+    flag: "recycleBinExecutor",
+    envVar: "SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR",
+    requestMode: "execute-recycle-bin",
+    panelId: "recycle-bin-executor-panel",
+    actionLabel: "Empty selected Recycle Bin",
+    requiresPermanentConfirmation: true
+  }
+};
+
+function getExecutorSmokeRouteSpec(route) {
+  return executorSmokeRouteSpecs[route] || null;
+}
+
+function buildExecutorSmokeRunRow({
+  row = {},
+  runtime = {},
+  flags = {},
+  planId = "",
+  scanFingerprint = "",
+  consentPlanId = "",
+  proofStatus = "waiting-for-execution",
+  proofAllowsNextExecutor = true,
+  nativeScan = null,
+  archiveDestination = "",
+  permanentRemovalConfirmed = false
+} = {}) {
+  const spec = getExecutorSmokeRouteSpec(row.route);
+  const requirement = getExecutorRouteRequirement(row.route);
+  const flagEnabled = Boolean(spec && flags[spec.flag]);
+  const targetSummary = getExecutorSmokeTargetSummary(row, nativeScan);
+  const checks = [
+    buildExecutorSmokeCheck("native-runtime", "Native Windows runtime", Boolean(runtime.available && runtime.windows), runtime.available ? `platform=${runtime.platform || "unknown"}` : "Tauri desktop shell required"),
+    buildExecutorSmokeCheck("real-run-flag", "Scoped real-run mode", Boolean(runtime.realRunEnabled), runtime.realRunEnabled ? "runtime exposes scoped real execution" : "enable one scoped executor flag before launch"),
+    buildExecutorSmokeCheck("feature-flag", "Route feature flag", flagEnabled, flagEnabled ? `${spec.envVar}=1` : `set ${spec.envVar}=1 in .env or process env`),
+    buildExecutorSmokeCheck("plan-id", "Current plan id", Boolean(planId), planId || "missing plan id"),
+    buildExecutorSmokeCheck("scan-fingerprint", "Current native scan", Boolean(scanFingerprint), scanFingerprint || "missing native scan fingerprint"),
+    buildExecutorSmokeCheck("consent", "Current consent receipt", Boolean(planId && consentPlanId && consentPlanId === planId), consentPlanId ? `consent=${consentPlanId}` : "missing consent receipt"),
+    buildExecutorSmokeCheck("route-targets", "Route target evidence", targetSummary.count > 0, targetSummary.detail),
+    buildExecutorSmokeCheck("post-run-proof", "Post-run proof clearance", Boolean(proofAllowsNextExecutor), proofAllowsNextExecutor ? `proof=${proofStatus}` : `finish current proof first: ${proofStatus}`)
+  ];
+
+  if (spec.requiresArchiveDestination) {
+    checks.push(buildExecutorSmokeCheck(
+      "archive-destination",
+      "Archive destination",
+      Boolean(String(archiveDestination || "").trim()),
+      String(archiveDestination || "").trim() || "missing destination"
+    ));
+  }
+  if (spec.requiresPermanentConfirmation) {
+    checks.push(buildExecutorSmokeCheck(
+      "permanent-confirmation",
+      "Permanent-removal confirmation",
+      Boolean(permanentRemovalConfirmed),
+      permanentRemovalConfirmed ? "confirmed" : "required before Recycle Bin execution"
+    ));
+  }
+
+  const failed = checks.filter((check) => !check.passed);
+  const proofFailed = failed.some((check) => check.id === "post-run-proof");
+  const status = failed.length ? (proofFailed ? "needs-proof" : "blocked") : "ready";
+
+  return {
+    id: row.id || row.route || "executor-route",
+    title: row.title || requirement.title,
+    route: row.route || "",
+    lane: row.lane || requirement.lane,
+    phase: requirement.phase,
+    status,
+    tone: status === "ready" ? "safe" : "restricted",
+    bytes: Number(row.bytes || 0),
+    featureFlag: spec.flag,
+    envVar: spec.envVar,
+    flagEnabled,
+    requestMode: spec.requestMode,
+    panelId: spec.panelId,
+    actionLabel: spec.actionLabel,
+    targetCount: targetSummary.count,
+    targetEvidence: targetSummary.detail,
+    blockedReason: failed[0]?.detail || "",
+    checks,
+    preconditions: requirement.preconditions || [],
+    operatorSteps: buildExecutorSmokeOperatorSteps(spec),
+    exportChecklist: [
+      "Export dry-run report before execution.",
+      "Keep execution ledger after the native run.",
+      "Run post-run rescan immediately after execution.",
+      "Export rescan comparison.",
+      "Export this smoke-run packet with structured JSON."
+    ]
+  };
+}
+
+function buildExecutorSmokeCheck(id, label, passed, detail) {
+  return { id, label, passed: Boolean(passed), detail };
+}
+
+function getExecutorSmokeTargetSummary(row = {}, nativeScan = null) {
+  const reviewTargets = Array.isArray(row.reviewTargets) ? row.reviewTargets : [];
+  const archiveTargets = Array.isArray(row.archiveTargets) ? row.archiveTargets : [];
+  if (reviewTargets.length) return { count: reviewTargets.length, detail: `${reviewTargets.length} reviewed Remove target(s)` };
+  if (archiveTargets.length) return { count: archiveTargets.length, detail: `${archiveTargets.length} reviewed Archive/Move target(s)` };
+  const nativeTargets = getExecutorSmokeNativeTargetCount(row.route, nativeScan);
+  if (nativeTargets.count) return nativeTargets;
+  const path = row.targetPath || row.target || row.path || "";
+  if (path) return { count: 1, detail: String(path) };
+  return { count: Number(row.bytes || 0) > 0 ? 1 : 0, detail: Number(row.bytes || 0) > 0 ? `${formatBytes(row.bytes)} selected` : "missing selected target" };
+}
+
+function getExecutorSmokeNativeTargetCount(route, nativeScan = null) {
+  const recipeIds = {
+    "browser-cache-only": ["browser-cache"],
+    "bounded-cache-delete": ["gradle-cache"],
+    "bounded-npm-cache-delete": ["npm-cache"],
+    "bounded-pnpm-store-delete": ["pnpm-store"],
+    "shell-recycle-bin": ["recycle-bin"]
+  }[route] || [];
+  if (!recipeIds.length) return { count: 0, detail: "" };
+  const rows = (nativeScan?.findings || []).filter((finding) =>
+    recipeIds.includes(finding.recipeId) &&
+    (finding.status === "measured" || finding.status === "limited") &&
+    finding.path
+  );
+  return rows.length
+    ? { count: rows.length, detail: `${rows.length} scanned native target(s)` }
+    : { count: 0, detail: `missing scanned ${recipeIds.join(", ")} target` };
+}
+
+function buildExecutorSmokeOperatorSteps(spec) {
+  return [
+    `Set ${spec.envVar}=1 before launching the Tauri desktop app.`,
+    "Run a native read-only scan and keep the current fingerprint.",
+    "Select the matching cleanup route and arm consent for the current plan.",
+    `Use ${spec.panelId} and click ${spec.actionLabel}.`,
+    "Run post-run rescan before starting any other scoped executor.",
+    "Export the rescan comparison and smoke-run packet."
+  ];
+}
+
+function getExecutorSmokeRunPrimary(status, { readyRows = [], blockedRows = [], proofBlockedRows = [] } = {}) {
+  if (status === "ready-for-smoke") return `${readyRows.length} scoped route(s) are ready for a Windows smoke run.`;
+  if (status === "proof-complete") return "Post-run proof is complete for the latest scoped execution.";
+  if (status === "needs-proof") return `${proofBlockedRows.length} route(s) are blocked until current post-run proof is finished.`;
+  if (status === "blocked") return blockedRows[0]?.blockedReason || "Selected scoped routes are missing runtime or consent evidence.";
+  return "Select a scoped executor route before building a smoke-run packet.";
+}
+
+function getExecutorSmokeRunSteps(status, { readyRows = [], blockedRows = [], proofBlockedRows = [] } = {}) {
+  if (status === "ready-for-smoke") return readyRows[0]?.operatorSteps || ["Run the selected scoped executor.", "Run post-run rescan.", "Export proof."];
+  if (status === "proof-complete") return ["Export the rescan comparison.", "Attach the ledger and smoke-run packet.", "Do not broaden route scope from this proof."];
+  if (status === "needs-proof") return proofBlockedRows[0]?.operatorSteps?.slice(-2) || ["Run post-run rescan.", "Export rescan comparison."];
+  if (status === "blocked") return blockedRows.slice(0, 3).map((row) => `${row.title}: ${row.blockedReason}`);
+  return ["Run a native scan.", "Select one scoped executor route.", "Enable only that route's feature flag."];
 }
 
 function buildExecutorManifestNextSteps(routes, selectedRoutes) {

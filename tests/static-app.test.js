@@ -390,6 +390,11 @@ assert(app.includes("planLockId"), "dry-run consent should bind the plan lock id
 assert(app.includes("buildItemReview"), "item review should be wired");
 assert(app.includes("buildExecutorPlan"), "executor plan should be wired");
 assert(app.includes("buildExecutorManifest"), "executor manifest should be wired");
+assert(app.includes("buildExecutorSmokeRunPacket"), "executor smoke-run packet should be wired");
+assert(app.includes("buildExecutorSmokeRunPacketMarkdown"), "executor smoke-run packet export should be wired");
+assert(app.includes("ExecutorSmokeRunPacketPanel"), "executor smoke-run packet panel should be rendered");
+assert(app.includes("executor-smoke-run-packet-panel"), "executor smoke-run packet should be focusable");
+assert(app.includes("Export smoke packet"), "executor smoke-run packet should be exportable");
 assert(app.includes("buildToolCommandInventory"), "tool command inventory should be wired");
 assert(app.includes("buildPrivilegeBoundary"), "privilege boundary should be wired");
 assert(app.includes("buildPrivacyBoundary"), "privacy boundary should be wired");
@@ -586,6 +591,8 @@ assert(app.includes("ExecutionProofHandoffPanel"), "execution proof handoff pane
 assert(app.includes("execution-proof-handoff-panel"), "execution proof handoff panel should be focusable");
 assert(app.includes("Execution proof handoff"), "execution proof handoff should be visible after executors");
 assert(app.includes("Run post-run rescan"), "execution proof handoff should expose the ledger-preserving rescan action");
+assert(model.includes("spaceguard-executor-smoke-run-packet/v1"), "model should expose executor smoke-run packet schema");
+assert(model.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "smoke packet should name scoped executor env vars");
 assert(app.includes("blockExecutorForPendingProof"), "scoped executor handlers should block when post-run proof is pending");
 assert(openAiAgent.includes("post-run-proof"), "OpenAI broker should check pending post-run proof before executor recommendations");
 assert(app.includes("runPostRunReadonlyScan"), "post-run verification should have a ledger-preserving native rescan action");

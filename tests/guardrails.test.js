@@ -3167,6 +3167,75 @@ const assert = require("assert");
   assert(validationMarkdown.includes("SpaceGuard Validation Evidence Pack"), "validation pack markdown should have a title");
   assert(validationMarkdown.includes("Disposable VM Matrix"), "validation pack markdown should include the VM matrix");
   assert(validationMarkdown.includes("Executor Manifest"), "validation pack markdown should include the executor manifest");
+  const npmSmokeExecutorPlan = guard.buildExecutorPlan({
+    selectedIds: new Set(["npm-cache"]),
+    actionList: guard.actions,
+    approvals: { groupConfirm: true, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
+    scanMode: "native-readonly"
+  });
+  const npmSmokePacket = guard.buildExecutorSmokeRunPacket({
+    executorPlan: npmSmokeExecutorPlan,
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      platform: "windows",
+      realRunEnabled: true,
+      destructiveCommands: true,
+      executorFlags: { npmCacheExecutor: true }
+    },
+    scanSession: { currentFingerprint: "scan-npm-smoke" },
+    consentReceipt: { planId: "plan-npm-smoke" },
+    executionProofHandoff: { status: "waiting-for-execution" },
+    rescanComparison: { status: "not-run", postRunScanEvidence: false },
+    validationPack,
+    planSnapshot: { id: "plan-npm-smoke" },
+    nativeScan: {
+      findings: [
+        {
+          recipeId: "npm-cache",
+          status: "measured",
+          path: "C:\\Users\\qa\\AppData\\Local\\npm-cache\\_cacache",
+          bytes: 1024 * 1024 * 512
+        }
+      ]
+    }
+  });
+  assert.strictEqual(npmSmokePacket.schemaVersion, "spaceguard-executor-smoke-run-packet/v1", "smoke packet should expose a schema");
+  assert.strictEqual(npmSmokePacket.status, "ready-for-smoke", "enabled scoped route should be ready for a smoke run");
+  assert.strictEqual(npmSmokePacket.rows[0].envVar, "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "smoke packet should name the executor env var");
+  assert.strictEqual(npmSmokePacket.rows[0].requestMode, "execute-npm-cache", "smoke packet should name the native request mode");
+  assert.strictEqual(npmSmokePacket.rows[0].panelId, "npm-cache-executor-panel", "smoke packet should point to the executor panel");
+  assert(npmSmokePacket.rows[0].checks.some((check) => check.id === "post-run-proof" && check.passed), "smoke packet should verify proof clearance");
+  const smokeMarkdown = guard.buildExecutorSmokeRunPacketMarkdown(npmSmokePacket);
+  assert(smokeMarkdown.includes("SpaceGuard Executor Smoke-Run Packet"), "smoke packet markdown should have a title");
+  assert(smokeMarkdown.includes("Export rescan comparison"), "smoke packet markdown should include proof export steps");
+  const proofBlockedSmokePacket = guard.buildExecutorSmokeRunPacket({
+    executorPlan: npmSmokeExecutorPlan,
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      platform: "windows",
+      realRunEnabled: true,
+      destructiveCommands: true,
+      executorFlags: { npmCacheExecutor: true }
+    },
+    scanSession: { currentFingerprint: "scan-npm-smoke" },
+    consentReceipt: { planId: "plan-npm-smoke" },
+    executionProofHandoff: { status: "proof-required" },
+    planSnapshot: { id: "plan-npm-smoke" },
+    nativeScan: {
+      findings: [
+        {
+          recipeId: "npm-cache",
+          status: "measured",
+          path: "C:\\Users\\qa\\AppData\\Local\\npm-cache\\_cacache",
+          bytes: 1024
+        }
+      ]
+    }
+  });
+  assert.strictEqual(proofBlockedSmokePacket.status, "needs-proof", "smoke packet should block another executor while proof is pending");
+  assert(proofBlockedSmokePacket.rows[0].checks.some((check) => check.id === "post-run-proof" && !check.passed), "smoke packet should expose pending proof as a failed check");
   const recordedValidationPack = guard.buildValidationEvidencePack({
     releaseGate: partialEvidenceGate,
     executorPlan,
