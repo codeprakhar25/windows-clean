@@ -36,6 +36,19 @@ The agent must never silently:
 - Resize partitions.
 - Delete from Windows system directories.
 
+## OpenAI Advisor Boundary
+
+The OpenAI integration is advisory, not an executor.
+
+- It receives a bounded context packet: scan mode, selected actions, candidate samples, readiness state, runtime capability flags, and policy boundaries.
+- It can rank candidates, explain risk, suggest the next workflow branch, and draft questions for the user.
+- It cannot scan local folders directly.
+- It cannot approve consent, gates, item-review decisions, or protected-path changes.
+- It cannot run shell commands, registry commands, partition operations, or native cleanup commands.
+- It cannot delete, move, archive, or modify files.
+
+All state changes still flow through deterministic UI state and native executor contracts.
+
 ## Workflow State Machine
 
 ### 1. Intake
@@ -214,6 +227,9 @@ Review gate invariant:
 Execution rules:
 
 - Dry-run before real run.
+- `execute-first-safe` is currently limited to `known-temp-delete`.
+- The first-safe temp executor requires Windows, `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1`, current plan/scan/consent IDs, and target allowlist success.
+- The first-safe temp executor deletes files only, skips symlinks and recent files, never removes folders, and returns a ledger-style native response.
 - Prefer official commands: Storage Sense/Disk Cleanup, package-manager prune, Docker prune.
 - Direct delete only for known disposable folders and only after checking active locks.
 - Use Recycle Bin or quarantine for review files where possible.
@@ -502,7 +518,7 @@ The second native command is:
 simulate_cleanup_plan
 ```
 
-It returns native dry-run ledger entries plus bounded candidate metadata for first-safe routes only. It must reuse the native first-safe target allowlist before candidate enumeration and return target-scope rejection metadata without file samples when the path is missing, forbidden, or not allowlisted. It must report `realRunEnabled: false` and `destructiveCommands: false` until real executors are explicitly implemented and validated.
+It returns native dry-run ledger entries plus bounded candidate metadata for first-safe routes only. It must reuse the native first-safe target allowlist before candidate enumeration and return target-scope rejection metadata without file samples when the path is missing, forbidden, or not allowlisted. It must report `realRunEnabled: false` and `destructiveCommands: false` unless the dedicated temp executor flag is enabled in the native runtime.
 
 The third native command is:
 
@@ -510,9 +526,9 @@ The third native command is:
 execute_cleanup_plan
 ```
 
-It is a rejecting write boundary for future executor request-shape validation. Current builds must validate dry-run-only state, mutation flags, plan/scan/consent evidence, first-safe route membership, per-action route matches, and selected target paths, then return `accepted: false`, `realRunEnabled: false`, `destructiveCommands: false`, native reject codes, and zero reclaimed bytes for every entry.
+It is a rejecting write boundary for dry-run probes and the native entrypoint for first-safe execution. Rejecting probes must validate dry-run-only state, mutation flags, plan/scan/consent evidence, first-safe route membership, per-action route matches, and selected target paths, then return `accepted: false`, native reject codes, and zero reclaimed bytes for every entry.
 
-For `known-temp-delete`, it may also return a disabled `tempCleanupExecutor` scaffold. This proves the native route boundary exists but cannot mutate until the feature flag, validation evidence, rollback/rescan proof, and release review all pass.
+For `known-temp-delete`, `requestMode=execute-first-safe` may delete old files under allowlisted temp roots when `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1` is present on Windows. Every other route remains rejecting or advisory.
 
 Each rejected write entry returns preflight checks. For the temp scaffold, shape, target allowlist, and mutation lock can pass while feature flag and validation evidence remain blocked or waiting.
 

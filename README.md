@@ -1,11 +1,12 @@
 # SpaceGuard
 
-SpaceGuard is a guarded Windows space recovery assistant. The current app has two modes:
+SpaceGuard is a guarded Windows space recovery assistant. The current app has three working surfaces:
 
 - Browser demo: React + Vite with fixed sample data.
 - Native shell: Tauri + Rust read-only scanner for known local roots.
+- OpenAI advisor: optional Responses API call from `.env` that interprets the current scan/plan context and suggests next actions without direct tool authority.
 
-The native scanner measures filesystem metadata only. It does not delete data, change settings, touch partitions, call registry APIs, run shell cleanup commands, or collect cloud telemetry.
+The native scanner measures filesystem metadata. Real cleanup is limited to the feature-flagged first-safe temp executor; all other routes remain read-only or advisory.
 
 The product goal is to answer one user question clearly:
 
@@ -39,6 +40,21 @@ For the full Windows setup and disposable fixture workflow, see [WINDOWS_REAL_DA
 Run the desktop shell:
 
 ```bash
+npm run native:dev
+```
+
+Configure the OpenAI advisor:
+
+```bash
+cp .env.example .env
+# set VITE_OPENAI_API_KEY in .env
+npm run native:dev
+```
+
+Enable the first real executor only on a disposable Windows validation machine or after you accept the temp-file risk:
+
+```powershell
+$env:SPACEGUARD_ENABLE_TEMP_EXECUTOR="1"
 npm run native:dev
 ```
 
@@ -77,9 +93,11 @@ The native write-boundary command is:
 execute_cleanup_plan
 ```
 
-It exists only to validate the future request shape and reject every write attempt. It checks dry-run-only state, mutation flags, plan/scan/consent evidence, first-safe route membership, per-action route matches, and selected target paths, then returns `accepted: false`, `realRunEnabled: false`, `destructiveCommands: false`, zero reclaimed bytes, reject codes, and no filesystem mutation.
+It validates request shape for dry-run probes and now contains the first real executor branch for `requestMode=execute-first-safe`.
 
-For `known-temp-delete`, the native response now exposes a disabled executor scaffold: route `known-temp-delete`, feature flag `tempCleanupExecutor`, validation status `validation-required`, and mutation disabled. This is implementation evidence only; the command still rejects the request and returns zero bytes.
+For `known-temp-delete`, setting `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1` in the Windows Tauri runtime enables deletion of old files under allowlisted temp roots only. The executor rejects missing plan/scan/consent IDs, non-Windows runtimes, non-temp routes, forbidden targets, symlinks, recent files, folders, and broad personal/project paths. It returns a ledger-style native response with accepted state, bytes reclaimed, skipped count, and warnings. Without the feature flag, it still rejects with zero bytes.
+
+For `known-temp-delete`, the native response exposes an executor scaffold: route `known-temp-delete`, feature flag `tempCleanupExecutor`, and whether mutation is enabled in the current runtime.
 
 Each rejected write entry also carries native preflight evidence: request-shape checks, target allowlist status, mutation lock, route feature-flag state, and validation-evidence state. Preflight rows show what would block or pass before a future executor runs; they do not create cleanup authority.
 
@@ -97,13 +115,15 @@ The **Real data launch roadmap** panel consolidates product status and rough del
 
 The **Native beta distribution** panel separates read-only beta packaging from real cleanup. It requires a current native read-only scan, local-only privacy, release/setup docs, install/uninstall path, redacted support workflow, signing or SmartScreen evidence, and no real-cleanup claim before native beta can be called ready.
 
+The **OpenAI cleanup agent** panel sends a bounded context packet to the OpenAI Responses API when the user clicks **Ask OpenAI**. It includes scan status, selected actions, candidate samples, executor readiness, and runtime capability flags. It does not grant the model filesystem access, approval authority, shell execution, or delete/move/archive authority.
+
 The native runtime capability command is:
 
 ```txt
 runtime_capabilities
 ```
 
-It reports platform, scanner availability, dry-run availability, and whether real executors are enabled. In the current build, real executors are disabled.
+It reports platform, scanner availability, dry-run availability, and whether real executors are enabled.
 
 Runtime capabilities also expose per-executor feature flags: `tempCleanupExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`. They default to false independently, so enabling a temp executor cannot accidentally enable browser, Recycle Bin, or tool-native cleanup routes.
 
@@ -166,6 +186,8 @@ The demo also includes:
 - Windows setup assistant that separates browser demo, desktop shell, current read-only scan evidence, local privacy/export, native beta readiness, and the real-cleanup lock.
 - Real data launch roadmap with current milestone, progress, rough estimate, confidence, demo/native activation proof, native evidence quality, and real-cleanup lock status.
 - Native beta distribution readiness for signing, setup docs, install/uninstall, support workflow, read-only scan evidence, no-cleanup claims, and exportable beta evidence records.
+- OpenAI cleanup agent panel for advisory ranking, next-step suggestions, blocked-action explanations, and user questions from real scan context.
+- First-safe temp executor panel for the only current real cleanup path: old files under allowlisted temp roots, feature-flagged in the Windows native runtime.
 - Demo rehearsal runbook that proves the browser demo can go from scan to gated plan, dry-run consent, simulated ledger, and report export without native data or real cleanup.
 - Product completion audit that maps the original product requirements to proven, partial, waiting, locked, or unsafe evidence so the app cannot overclaim real cleanup readiness.
 - Safety interlock that summarizes runtime write signals, native write signals, scan freshness, dry-run consent, task power leases, standing permission, run readiness, write-boundary evidence, release review, and write readiness into one stop/hold/dry-run state.

@@ -1,17 +1,17 @@
 # Windows Real-Data Setup
 
-This guide is for moving SpaceGuard from browser demo data to real local measurements. It does not enable deletion. Real executors remain disabled until Windows validation, rollback, signing, and release gates pass.
+This guide is for moving SpaceGuard from browser demo data to real local measurements and the first feature-flagged temp cleanup executor.
 
 ## Safety Boundary
 
-Current native mode is read-only:
+Default native mode is read-only:
 
 - It measures known local roots and C: volume totals.
 - It can produce native dry-run ledger entries.
-- It does not delete files, edit registry keys, resize partitions, run cleanup shell commands, or self-elevate.
+- It does not delete files, edit registry keys, resize partitions, run cleanup shell commands, or self-elevate unless the first-safe temp executor flag is explicitly enabled.
 - Review-gated findings still require per-item decisions.
 
-Use a disposable Windows 11 VM for fixture validation. Use your real machine only for read-only scanner smoke tests.
+Use a disposable Windows 11 VM for fixture validation. Use your real machine only after a read-only smoke test and only for the `known-temp-delete` executor if you accept that it permanently removes old files from allowlisted temp roots.
 
 ## Prerequisites
 
@@ -31,6 +31,23 @@ npm run demo:rehearsal
 npm run native:rehearsal
 npm run build
 ```
+
+Optional OpenAI advisor:
+
+```powershell
+Copy-Item .env.example .env
+# edit .env and set VITE_OPENAI_API_KEY
+npm run native:dev
+```
+
+Optional first-safe temp executor:
+
+```powershell
+$env:SPACEGUARD_ENABLE_TEMP_EXECUTOR="1"
+npm run native:dev
+```
+
+That flag enables only `known-temp-delete`. It does not enable Recycle Bin cleanup, browser cache deletion, tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, or project-folder deletion.
 
 ## Read-Only Real Scan
 
@@ -68,15 +85,17 @@ In the app:
 24. Add protected paths before planning any review-heavy route.
 25. Use **Custom root triage** for custom read-only findings. Mark each unknown folder Keep, Archive, Move, Inspect, or Escalate; these dispositions stay manual and cannot create executor routes.
 26. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
-27. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, **First-safe validation gate**, **First-safe work order**, **Temp executor activation**, **Release review packet**, **Validation evidence**, and **Product completion audit** to confirm real cleanup is still locked.
-28. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
-29. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
-30. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
-31. If resuming from an exported `spaceguard-validation-pack/v1` file, paste the JSON or markdown export into **Validation pack import**. Imported rows still need reviewer and artifact detail before they can pass release gates.
-32. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
-33. Record native beta distribution evidence with reviewer and artifact paths. Use [NATIVE_BETA_DISTRIBUTION.md](./NATIVE_BETA_DISTRIBUTION.md) for install/uninstall, support, signing, and public-claim evidence.
-34. Export the local evidence backup before clearing browser storage or switching profiles. Importing this backup restores evidence ledgers and run history only; it does not restore scan results, selected actions, consent, runtime capability, or cleanup authority.
-35. Export the workflow handoff for resume guidance, the redacted support bundle for diagnostics, and the beta handoff manifest to label which artifacts are public-safe, internal-only, or path-level. Export the release review packet, dry-run report, validation pack, and native beta evidence ledger when review or path-level evidence is needed.
+27. Use **OpenAI cleanup agent** for advisory ranking and explanation only. The panel sends the bounded scan/plan context to OpenAI when clicked; the model cannot scan folders, approve gates, or run cleanup.
+28. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, **First-safe validation gate**, **First-safe work order**, **Temp executor activation**, **Release review packet**, **Validation evidence**, and **Product completion audit** to confirm every route except feature-flagged temp cleanup is still locked.
+29. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
+30. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
+31. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
+32. If resuming from an exported `spaceguard-validation-pack/v1` file, paste the JSON or markdown export into **Validation pack import**. Imported rows still need reviewer and artifact detail before they can pass release gates.
+33. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; rejection-mode evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
+34. Use **Real temp cleanup** only for the `known-temp-delete` route after a current plan, scan fingerprint, and consent receipt are present. After execution, run a fresh native scan to verify free space.
+35. Record native beta distribution evidence with reviewer and artifact paths. Use [NATIVE_BETA_DISTRIBUTION.md](./NATIVE_BETA_DISTRIBUTION.md) for install/uninstall, support, signing, and public-claim evidence.
+36. Export the local evidence backup before clearing browser storage or switching profiles. Importing this backup restores evidence ledgers and run history only; it does not restore scan results, selected actions, consent, runtime capability, or cleanup authority.
+37. Export the workflow handoff for resume guidance, the redacted support bundle for diagnostics, and the beta handoff manifest to label which artifacts are public-safe, internal-only, or path-level. Export the release review packet, dry-run report, validation pack, and native beta evidence ledger when review or path-level evidence is needed.
 
 ## Disposable Fixture Run
 

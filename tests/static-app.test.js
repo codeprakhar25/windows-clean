@@ -8,6 +8,7 @@ const css = fs.readFileSync(path.join(root, "src", "index.css"), "utf8");
 const app = fs.readFileSync(path.join(root, "src", "App.jsx"), "utf8");
 const model = fs.readFileSync(path.join(root, "src", "spaceguard-model.mjs"), "utf8");
 const nativeAdapter = fs.readFileSync(path.join(root, "src", "native-scanner.mjs"), "utf8");
+const openAiAgent = fs.readFileSync(path.join(root, "src", "openai-agent.mjs"), "utf8");
 const tauriConfig = fs.readFileSync(path.join(root, "src-tauri", "tauri.conf.json"), "utf8");
 const rustScanner = fs.readFileSync(path.join(root, "src-tauri", "src", "main.rs"), "utf8");
 const packageJson = fs.readFileSync(path.join(root, "package.json"), "utf8");
@@ -74,6 +75,9 @@ const requiredAppMarkers = [
   "Coverage confidence",
   "Recovery advisor",
   "Agent questions",
+  "OpenAI cleanup agent",
+  "AI authority boundary",
+  "direct tools blocked",
   "Open item review",
   "Question queue is clear",
   "Storage strategy",
@@ -88,6 +92,12 @@ const requiredAppMarkers = [
   "Native dry-run",
   "Scope evidence export",
   "Rejected samples",
+  "Candidate safety manifest",
+  "Candidate boundary",
+  "no executor authority",
+  "Real temp cleanup",
+  "Executor boundary",
+  "Run real temp cleanup",
   "Privilege boundary",
   "Privacy boundary",
   "Public beta readiness",
@@ -262,9 +272,21 @@ assert(app.includes("storage-pressure-diagnosis-panel"), "storage pressure diagn
 assert(app.includes("buildNativeEvidenceQualityGate"), "native evidence quality should be wired");
 assert(app.includes("NativeEvidenceQualityPanel"), "native evidence quality panel should be rendered");
 assert(app.includes("native-evidence-quality-panel"), "native evidence quality should be focusable");
+assert(app.includes("buildCandidateSafetyManifest"), "candidate safety manifest should be wired");
+assert(app.includes("CandidateSafetyManifestPanel"), "candidate safety manifest panel should be rendered");
+assert(app.includes("candidate-safety-manifest-panel"), "candidate safety manifest should be focusable");
+assert(app.includes("Candidate samples prove target filtering"), "candidate safety panel copy should keep executor authority separate");
 assert(app.includes("buildScanSessionEvidence"), "scan session freshness guard should be wired");
 assert(app.includes("buildRecoveryAdvisor"), "recovery advisor should be wired");
 assert(app.includes("buildAgentQuestionQueue"), "agent question queue should be wired");
+assert(app.includes("buildAIAgentIntegration"), "AI agent integration audit should be wired");
+assert(app.includes("OpenAIAgentPanel"), "OpenAI agent panel should be rendered");
+assert(app.includes("openai-agent-panel"), "OpenAI agent panel should be focusable");
+assert(app.includes("requestOpenAIAgentAdvice"), "OpenAI agent should call the provider adapter");
+assert(openAiAgent.includes("https://api.openai.com/v1/responses"), "OpenAI adapter should use the Responses API endpoint");
+assert(openAiAgent.includes("VITE_OPENAI_API_KEY"), "OpenAI adapter should read the Vite env API key");
+assert(openAiAgent.includes("directDeleteAuthority"), "OpenAI context should deny direct delete authority");
+assert(model.includes("spaceguard-ai-agent-integration/v1"), "model should expose AI integration status");
 assert(app.includes("buildStorageStrategyPlan"), "storage strategy workflow should be wired");
 assert(app.includes("buildManualStrategyChecklist"), "manual strategy checklist should be wired");
 assert(app.includes("buildReviewWorkbench"), "review workbench should be wired");
@@ -308,6 +330,14 @@ assert(app.includes("buildTempExecutorActivationRehearsal"), "temp activation re
 assert(app.includes("TempExecutorActivationRehearsalPanel"), "temp activation rehearsal panel should be rendered");
 assert(app.includes("temp-activation-rehearsal-panel"), "temp activation rehearsal should be focusable");
 assert(app.includes("Open temp activation"), "question queue actions should focus temp activation");
+assert(app.includes("FirstSafeTempExecutorPanel"), "first-safe temp executor panel should be rendered");
+assert(app.includes("first-safe-temp-executor-panel"), "first-safe temp executor panel should be focusable");
+assert(app.includes("runNativeTempCleanupExecutor"), "real temp executor should be wired through the native adapter");
+assert(nativeAdapter.includes("requestMode: \"execute-first-safe\""), "native adapter should send the execute-first-safe request mode");
+assert(rustScanner.includes("execute_first_safe_temp_cleanup"), "Rust native shell should implement the first-safe temp executor branch");
+assert(rustScanner.includes("SPACEGUARD_ENABLE_TEMP_EXECUTOR"), "Rust native shell should require the temp executor feature flag");
+assert(rustScanner.includes("fs::remove_file"), "Rust temp executor should perform file deletion only");
+assert(!rustScanner.includes("remove_dir_all"), "Rust temp executor must not recursively remove directories");
 assert(app.includes("buildWriteBoundaryProbe"), "write boundary probe should be wired");
 assert(app.includes("buildValidationEvidencePack"), "validation evidence pack should be wired");
 assert(app.includes("buildValidationPackMarkdown"), "validation pack markdown export should be wired");
@@ -458,6 +488,8 @@ assert(model.includes("spaceguard-native-evidence-quality/v1"), "model should ex
 assert(model.includes("grade-native-evidence"), "product audit should track native evidence quality");
 assert(model.includes("Native evidence is planning-grade"), "native evidence quality should grade read-only planning evidence");
 assert(model.includes("nativePlanningReady"), "real data roadmap should use native evidence quality before native readiness");
+assert(model.includes("spaceguard-candidate-safety-manifest/v1"), "model should expose candidate safety manifest schema");
+assert(model.includes("prove-candidate-safety"), "product audit should track candidate safety");
 assert(model.includes("spaceguard-custom-root-triage/v1"), "model should expose custom root triage schema");
 assert(model.includes("customRootDispositionOptions"), "model should define custom root disposition options");
 assert(model.includes("canCreateExecutor: false"), "custom root triage should block executor creation");
@@ -581,7 +613,9 @@ assert(rustScanner.includes("real_run_enabled: false"), "native dry-run should r
 assert(rustScanner.includes("write_capability: false"), "native scanner should report write capability disabled");
 assert(rustScanner.includes("destructive_commands: false"), "native scanner should report destructive commands disabled");
 assert(rustScanner.includes("accepted: false"), "native write boundary should reject execution");
-assert(!/\bremove_file\b|\bremove_dir\b|\bCommand::new\b|powercfg|reg\.exe/i.test(rustScanner), "native scanner should not contain delete, shell, registry, or powercfg execution");
+assert(!/\bCommand::new\b|powercfg|reg\.exe/i.test(rustScanner), "native scanner should not contain shell, registry, or powercfg execution");
+assert(!/\bremove_dir\b|\bremove_dir_all\b/i.test(rustScanner), "native temp executor should not remove directories");
+assert(rustScanner.includes("delete_single_temp_file"), "native deletion should be isolated to the temp file executor");
 assert(packageJson.includes("vite"), "package should use Vite");
 assert(packageJson.includes("@radix-ui/react-slot"), "package should include shadcn primitive dependency");
 assert(packageJson.includes("@tauri-apps/cli"), "package should include Tauri CLI for native setup");
@@ -616,7 +650,7 @@ assert(nativeBetaRunbook.includes("must not delete files"), "native beta runbook
 assert(fixtureScript.includes("dryRunScopeCases"), "fixture seeder should emit dry-run scope validation cases");
 assert(fixtureInspectScript.includes("dryRunScopeCheck"), "fixture inspector should emit dry-run scope validation result");
 assert(fixtureInspectScript.includes("DryRunScopeEvidencePath"), "fixture inspector should accept dry-run scope evidence input");
-assert(realDataGuide.includes("Real executors remain disabled"), "real-data guide should keep execution boundary explicit");
+assert(realDataGuide.includes("That flag enables only `known-temp-delete`"), "real-data guide should keep execution boundary explicit");
 assert(fixtureScript.includes("spaceguard-fixture"), "fixture script should seed named SpaceGuard fixture roots");
 assert(fixtureScript.includes("LargeCandidateMB"), "fixture script should support optional large-file validation");
 assert(fixtureScript.includes("destructiveCommands = $false"), "fixture manifest should mark destructive commands disabled");

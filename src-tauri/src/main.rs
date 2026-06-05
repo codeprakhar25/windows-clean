@@ -458,6 +458,9 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
         mutation_attempted: Some(false),
         actions: Vec::new(),
     });
+    if request.request_mode.as_deref() == Some("execute-first-safe") {
+        return execute_first_safe_temp_cleanup(request);
+    }
     let route = request.route.clone();
     let plan_id = request.plan_id.clone();
     let expected_bytes = request
@@ -531,6 +534,170 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
         },
         contract_echo,
         executor_scaffold,
+        entries,
+        warnings,
+    }
+}
+
+fn execute_first_safe_temp_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let flag_enabled = temp_executor_enabled();
+    let rejections = temp_execution_rejections(&request, flag_enabled);
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-write-boundary-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-first-safe".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+
+    let entries = request
+        .actions
+        .into_iter()
+        .map(|action| {
+            let target_reject = write_action_target_reject_code(&route, &action.target_path);
+            let route_match = action.route == route && route == "known-temp-delete";
+            let can_execute = rejections.is_empty() && route_match && target_reject.is_none();
+
+            if can_execute {
+                let deleted = delete_temp_action_targets(action.target_path.as_deref().unwrap_or(""));
+                return WriteExecutionEntry {
+                    id: action.id,
+                    title: action.title,
+                    route: action.route,
+                    result: if deleted.deleted_files > 0 {
+                        "executed".to_string()
+                    } else {
+                        "no-op".to_string()
+                    },
+                    reject_code: String::new(),
+                    bytes: deleted.deleted_bytes,
+                    preflight_status: "executed".to_string(),
+                    preflight_checks: vec![
+                        write_preflight_check(
+                            "route-first-safe",
+                            "First-safe route",
+                            "passed",
+                            "Action route is known-temp-delete.",
+                        ),
+                        write_preflight_check(
+                            "target-allowlist",
+                            "Target allowlist",
+                            "passed",
+                            "Target path is limited to temp cleanup roots.",
+                        ),
+                        write_preflight_check(
+                            "feature-flag",
+                            "Executor feature flag",
+                            "passed",
+                            "SPACEGUARD_ENABLE_TEMP_EXECUTOR enabled the temp executor.",
+                        ),
+                    ],
+                    note: format!(
+                        "Temp executor deleted {} file(s), reclaimed {} byte(s), skipped {} item(s), and never removed directories.",
+                        deleted.deleted_files, deleted.deleted_bytes, deleted.skipped_count
+                    ),
+                };
+            }
+
+            let reject_code = if !route_match {
+                "route-not-first-safe"
+            } else {
+                target_reject
+                    .or_else(|| rejections.first().copied())
+                    .unwrap_or("real-executor-disabled")
+            };
+
+            WriteExecutionEntry {
+                id: action.id,
+                title: action.title,
+                route: action.route,
+                result: "rejected".to_string(),
+                reject_code: reject_code.to_string(),
+                bytes: 0,
+                preflight_status: "target-blocked".to_string(),
+                preflight_checks: vec![
+                    write_preflight_check(
+                        "route-first-safe",
+                        "First-safe route",
+                        if route_match { "passed" } else { "blocked" },
+                        if route_match {
+                            "Action route is known-temp-delete."
+                        } else {
+                            "Only known-temp-delete can execute in this first real executor."
+                        },
+                    ),
+                    write_preflight_check(
+                        "target-allowlist",
+                        "Target allowlist",
+                        if target_reject.is_none() { "passed" } else { "blocked" },
+                        if target_reject.is_none() {
+                            "Target path is allowlisted."
+                        } else {
+                            "Target path is missing, forbidden, or outside the temp allowlist."
+                        },
+                    ),
+                    write_preflight_check(
+                        "feature-flag",
+                        "Executor feature flag",
+                        if flag_enabled { "passed" } else { "blocked" },
+                        if flag_enabled {
+                            "Temp executor feature flag is enabled."
+                        } else {
+                            "SPACEGUARD_ENABLE_TEMP_EXECUTOR is not enabled."
+                        },
+                    ),
+                ],
+                note: format!(
+                    "Real temp cleanup rejected with code {reject_code}. Plan {plan_id}; no bytes were removed for this action."
+                ),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let accepted = rejections.is_empty()
+        && entries
+            .iter()
+            .all(|entry| entry.result == "executed" || entry.result == "no-op");
+    let reclaimed = entries.iter().map(|entry| entry.bytes).sum::<u64>();
+    let mut warnings = temp_execution_warnings(&rejections);
+    if accepted {
+        warnings.push(format!(
+            "Real temp cleanup completed for plan {plan_id}; reclaimed {reclaimed} byte(s). Run a fresh native scan to verify free space."
+        ));
+    }
+
+    WriteExecutionResponse {
+        mode: if accepted {
+            "native-temp-executor"
+        } else {
+            "native-temp-executor-rejected"
+        },
+        real_run_enabled: flag_enabled,
+        destructive_commands: flag_enabled,
+        accepted,
+        reason: if accepted {
+            format!("Temp cleanup executor accepted the first-safe plan and reclaimed {reclaimed} byte(s).")
+        } else {
+            "Temp cleanup executor rejected the request before mutation.".to_string()
+        },
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
         entries,
         warnings,
     }
@@ -708,15 +875,30 @@ fn is_first_safe_write_route(route: &str) -> bool {
 
 fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
     match route {
-        "known-temp-delete" => Some(WriteExecutorScaffold {
-            route: "known-temp-delete".to_string(),
-            title: "Known temp roots".to_string(),
-            feature_flag: "tempCleanupExecutor".to_string(),
-            status: "feature-flag-disabled".to_string(),
-            validation_status: "validation-required".to_string(),
-            mutation_enabled: false,
-            reason: "Temp cleanup executor scaffold is present, but mutation remains disabled until Windows fixture validation, rollback/rescan proof, and release review pass.".to_string(),
-        }),
+        "known-temp-delete" => {
+            let enabled = cfg!(target_os = "windows") && temp_executor_enabled();
+            Some(WriteExecutorScaffold {
+                route: "known-temp-delete".to_string(),
+                title: "Known temp roots".to_string(),
+                feature_flag: "tempCleanupExecutor".to_string(),
+                status: if enabled {
+                    "feature-flag-enabled".to_string()
+                } else {
+                    "feature-flag-disabled".to_string()
+                },
+                validation_status: if enabled {
+                    "first-safe-temp-only".to_string()
+                } else {
+                    "validation-required".to_string()
+                },
+                mutation_enabled: enabled,
+                reason: if enabled {
+                    "Temp cleanup executor can delete old files under allowlisted temp roots only.".to_string()
+                } else {
+                    "Temp cleanup executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_TEMP_EXECUTOR is enabled on Windows.".to_string()
+                },
+            })
+        }
         _ => None,
     }
 }
@@ -821,28 +1003,208 @@ fn write_boundary_warning(code: &str) -> &'static str {
     }
 }
 
+fn temp_executor_enabled() -> bool {
+    env::var("SPACEGUARD_ENABLE_TEMP_EXECUTOR")
+        .map(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+fn temp_execution_rejections(
+    request: &WriteExecutionRequest,
+    flag_enabled: bool,
+) -> Vec<&'static str> {
+    let mut codes = Vec::new();
+    if !cfg!(target_os = "windows") {
+        codes.push("windows-required");
+    }
+    if !flag_enabled {
+        codes.push("temp-executor-feature-flag-disabled");
+    }
+    if request.plan_id.trim().is_empty() {
+        codes.push("missing-plan-id");
+    }
+    if request
+        .scan_fingerprint
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-scan-fingerprint");
+    }
+    if request
+        .consent_plan_id
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-consent-plan-id");
+    }
+    if request.request_mode.as_deref() != Some("execute-first-safe") {
+        codes.push("request-mode-invalid");
+    }
+    if request.route != "known-temp-delete" {
+        codes.push("route-not-first-safe");
+    }
+    if request.dry_run_only != Some(false) {
+        codes.push("dry-run-disabled-required");
+    }
+    if request.mutation_attempted != Some(true) {
+        codes.push("mutation-confirmation-required");
+    }
+    if request.actions.is_empty() {
+        codes.push("no-actions");
+    }
+    codes
+}
+
+fn temp_execution_warnings(codes: &[&'static str]) -> Vec<String> {
+    if codes.is_empty() {
+        return vec![
+            "Temp cleanup executor deletes files only, skips symlinks and recent files, and never removes directories.".to_string(),
+        ];
+    }
+    codes
+        .iter()
+        .map(|code| match *code {
+            "windows-required" => "Real temp cleanup is Windows-only.",
+            "dry-run-disabled-required" => {
+                "Real temp cleanup requires dryRunOnly=false on the execute-first-safe request."
+            }
+            "mutation-confirmation-required" => {
+                "Real temp cleanup requires mutationAttempted=true on the execute-first-safe request."
+            }
+            "temp-executor-feature-flag-disabled" => {
+                "Set SPACEGUARD_ENABLE_TEMP_EXECUTOR=1 before launching the Tauri app to enable this executor."
+            }
+            "request-mode-invalid" => "Real temp cleanup requires requestMode=execute-first-safe.",
+            _ => write_boundary_warning(code),
+        })
+        .map(String::from)
+        .collect()
+}
+
+#[derive(Default)]
+struct TempDeleteResult {
+    deleted_bytes: u64,
+    deleted_files: u64,
+    skipped_count: u64,
+}
+
+fn delete_temp_action_targets(value: &str) -> TempDeleteResult {
+    let mut result = TempDeleteResult::default();
+    for target in split_dry_run_targets(value) {
+        let path = resolve_dry_run_target(&target);
+        let deleted = delete_temp_files_under(&path, 1_000);
+        result.deleted_bytes = result.deleted_bytes.saturating_add(deleted.deleted_bytes);
+        result.deleted_files = result.deleted_files.saturating_add(deleted.deleted_files);
+        result.skipped_count = result.skipped_count.saturating_add(deleted.skipped_count);
+    }
+    result
+}
+
+fn delete_temp_files_under(root: &Path, limit: usize) -> TempDeleteResult {
+    let mut result = TempDeleteResult::default();
+    let Ok(root_metadata) = fs::symlink_metadata(root) else {
+        result.skipped_count += 1;
+        return result;
+    };
+    if root_metadata.file_type().is_symlink() {
+        result.skipped_count += 1;
+        return result;
+    }
+    if root_metadata.is_file() {
+        delete_single_temp_file(root, &root_metadata, &mut result);
+        return result;
+    }
+
+    let mut queue = VecDeque::from([root.to_path_buf()]);
+    let mut visited = 0usize;
+    while let Some(path) = queue.pop_front() {
+        if visited >= 20_000 || result.deleted_files as usize >= limit {
+            break;
+        }
+        visited += 1;
+
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            result.skipped_count += 1;
+            continue;
+        };
+        if metadata.file_type().is_symlink() {
+            result.skipped_count += 1;
+            continue;
+        }
+        if metadata.is_file() {
+            delete_single_temp_file(&path, &metadata, &mut result);
+            continue;
+        }
+        if metadata.is_dir() {
+            match fs::read_dir(&path) {
+                Ok(entries) => {
+                    for entry in entries.flatten() {
+                        queue.push_back(entry.path());
+                    }
+                }
+                Err(_) => result.skipped_count += 1,
+            }
+        }
+    }
+    result
+}
+
+fn delete_single_temp_file(path: &Path, metadata: &fs::Metadata, result: &mut TempDeleteResult) {
+    if !file_old_enough_for_temp_delete(metadata) {
+        result.skipped_count += 1;
+        return;
+    }
+    let bytes = metadata.len();
+    match fs::remove_file(path) {
+        Ok(_) => {
+            result.deleted_bytes = result.deleted_bytes.saturating_add(bytes);
+            result.deleted_files = result.deleted_files.saturating_add(1);
+        }
+        Err(_) => result.skipped_count += 1,
+    }
+}
+
+fn file_old_enough_for_temp_delete(metadata: &fs::Metadata) -> bool {
+    let Ok(modified) = metadata.modified() else {
+        return false;
+    };
+    let Ok(age) = SystemTime::now().duration_since(modified) else {
+        return false;
+    };
+    age.as_secs() >= 24 * 60 * 60
+}
+
 #[tauri::command]
 fn runtime_capabilities() -> RuntimeCapabilities {
+    let temp_enabled = cfg!(target_os = "windows") && temp_executor_enabled();
     RuntimeCapabilities {
-        mode: "native-readonly",
+        mode: if temp_enabled { "native-first-safe-write" } else { "native-readonly" },
         platform: env::consts::OS.to_string(),
         windows: cfg!(target_os = "windows"),
         elevated: is_process_elevated(),
         elevation_source: elevation_source(),
-        real_run_enabled: false,
-        destructive_commands: false,
+        real_run_enabled: temp_enabled,
+        destructive_commands: temp_enabled,
         scan_known_roots: true,
         simulate_cleanup_plan: true,
         execute_cleanup_plan: true,
-        safe_executors_enabled: false,
+        safe_executors_enabled: temp_enabled,
         executor_flags: ExecutorFeatureFlags {
-            temp_cleanup_executor: false,
+            temp_cleanup_executor: temp_enabled,
             recycle_bin_executor: false,
             browser_cache_executor: false,
             tool_native_prune_executors: false,
         },
-        reason: "Real executors are disabled until Windows VM validation and rollback tests pass."
-            .to_string(),
+        reason: if temp_enabled {
+            "First-safe temp cleanup executor is enabled by SPACEGUARD_ENABLE_TEMP_EXECUTOR."
+        } else {
+            "Real executors are disabled until SPACEGUARD_ENABLE_TEMP_EXECUTOR is enabled on Windows."
+        }
+        .to_string(),
     }
 }
 

@@ -43,8 +43,10 @@ import {
   buildCustomRootTriage,
   buildPlanReview,
   buildAgentQuestionQueue,
+  buildAIAgentIntegration,
   buildBetaHandoffManifest,
   buildBetaHandoffManifestMarkdown,
+  buildCandidateSafetyManifest,
   buildAgentTaskRunbook,
   buildDecisionLog,
   buildDemoRehearsalRunbook,
@@ -139,9 +141,15 @@ import {
   mergeNativeScanIntoActions,
   runNativeDryRunScopeValidation,
   runNativeExecutorDryRun,
+  runNativeTempCleanupExecutor,
   runNativeReadonlyScan,
   runNativeWriteBoundary
 } from "./native-scanner.mjs";
+import {
+  buildOpenAIAgentContext,
+  getOpenAIAgentConfig,
+  requestOpenAIAgentAdvice
+} from "./openai-agent.mjs";
 
 const RUN_HISTORY_STORAGE_KEY = "spaceguard.ledgerHistory.v1";
 const VALIDATION_EVIDENCE_STORAGE_KEY = "spaceguard.validationEvidence.v1";
@@ -219,6 +227,9 @@ export default function App() {
   const [nativeExecutorDryRun, setNativeExecutorDryRun] = useState({ status: "idle", result: null, error: "" });
   const [nativeScopeEvidenceExport, setNativeScopeEvidenceExport] = useState({ status: "idle", result: null, error: "" });
   const [nativeWriteBoundary, setNativeWriteBoundary] = useState({ status: "idle", result: null, error: "" });
+  const [nativeRealExecution, setNativeRealExecution] = useState({ status: "idle", result: null, error: "" });
+  const [aiPrompt, setAiPrompt] = useState("Find the fastest safe path to recover real space from this scan.");
+  const [aiAdvice, setAiAdvice] = useState({ status: "idle", result: null, error: "" });
   const [runtimeCapabilities, setRuntimeCapabilities] = useState({
     status: "loading",
     result: {
@@ -270,6 +281,7 @@ export default function App() {
 
   const scenario = useMemo(() => getScenario(scenarioId), [scenarioId]);
   const nativeCapability = useMemo(() => getNativeScannerCapability(globalThis), []);
+  const openAiConfig = useMemo(() => getOpenAIAgentConfig(import.meta.env), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -733,6 +745,17 @@ export default function App() {
         runtimeCapabilities: runtimeCapabilities.result
       }),
     [realExecutorCapsule, executorPlan, planSnapshot, scanSession, consentReceipt, releaseGate, runtimeCapabilities.result]
+  );
+  const candidateSafetyManifest = useMemo(
+    () =>
+      buildCandidateSafetyManifest({
+        nativeExecutorDryRun,
+        executorPlan,
+        firstSafeExecutorContract,
+        nativeEvidenceQuality,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [nativeExecutorDryRun, executorPlan, firstSafeExecutorContract, nativeEvidenceQuality, runtimeCapabilities.result]
   );
   const writeBoundaryProbe = useMemo(
     () =>
@@ -1264,6 +1287,59 @@ export default function App() {
       runtimeCapabilities.result
     ]
   );
+  const openAiAgentContext = useMemo(
+    () =>
+      buildOpenAIAgentContext({
+        profile,
+        scanMode: dataMode,
+        scanSession,
+        actionList,
+        selectedIds,
+        readiness,
+        runReadiness,
+        dryRunLaunchGuard,
+        safetyInterlock,
+        candidateSafetyManifest,
+        nativeEvidenceQuality,
+        storagePressureDiagnosis,
+        executorPlan,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [
+      profile,
+      dataMode,
+      scanSession,
+      actionList,
+      selectedIds,
+      readiness,
+      runReadiness,
+      dryRunLaunchGuard,
+      safetyInterlock,
+      candidateSafetyManifest,
+      nativeEvidenceQuality,
+      storagePressureDiagnosis,
+      executorPlan,
+      runtimeCapabilities.result
+    ]
+  );
+  const aiAgentIntegration = useMemo(
+    () =>
+      buildAIAgentIntegration({
+        providerConfig: {
+          connected: openAiConfig.connected,
+          provider: openAiConfig.provider,
+          model: openAiConfig.model,
+          endpoint: openAiConfig.endpoint,
+          keySource: openAiConfig.keySource
+        },
+        agentQuestionQueue,
+        operatingChecklist,
+        nativeEvidenceQuality,
+        candidateSafetyManifest,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [openAiConfig, agentQuestionQueue, operatingChecklist, nativeEvidenceQuality, candidateSafetyManifest, runtimeCapabilities.result]
+  );
   const userDecisionReceipt = useMemo(
     () =>
       buildUserDecisionReceipt({
@@ -1308,6 +1384,8 @@ export default function App() {
         driveInventorySummary,
         storagePressureDiagnosis,
         nativeEvidenceQuality,
+        candidateSafetyManifest,
+        aiAgentIntegration,
         demoRehearsalRunbook,
         windowsSetupAssistant,
         taskPowerCatalog,
@@ -1347,6 +1425,8 @@ export default function App() {
       driveInventorySummary,
       storagePressureDiagnosis,
       nativeEvidenceQuality,
+      candidateSafetyManifest,
+      aiAgentIntegration,
       demoRehearsalRunbook,
       windowsSetupAssistant,
       taskPowerCatalog,
@@ -1459,6 +1539,7 @@ export default function App() {
     setNativeExecutorDryRun({ status: "idle", result: null, error: "" });
     setNativeScopeEvidenceExport({ status: "idle", result: null, error: "" });
     setNativeWriteBoundary({ status: "idle", result: null, error: "" });
+    setNativeRealExecution({ status: "idle", result: null, error: "" });
     setExecutionConsent({ accepted: false, planId: "", acceptedAt: "" });
   }
 
@@ -1715,7 +1796,8 @@ export default function App() {
   }
 
   function armExecutionConsent() {
-    if (!runReadiness.ready || !planLock.readyForPreflight || safetyInterlock.status === "unsafe-stop") return;
+    const firstSafeTempRuntime = Boolean(runtimeCapabilities.result.executorFlags?.tempCleanupExecutor && realExecutorCapsule?.route?.id === "known-temp-delete");
+    if (!runReadiness.ready || !planLock.readyForPreflight || (safetyInterlock.status === "unsafe-stop" && !firstSafeTempRuntime)) return;
     setExecutionConsent({
       accepted: true,
       planId: planSnapshot.id,
@@ -1752,6 +1834,68 @@ export default function App() {
       setNativeWriteBoundary({ status: "complete", result, error: "" });
     } catch (error) {
       setNativeWriteBoundary({
+        status: "error",
+        result: null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  async function askOpenAIAgent() {
+    if (aiAdvice.status === "running") return;
+    setAiAdvice({ status: "running", result: null, error: "" });
+    try {
+      const result = await requestOpenAIAgentAdvice({
+        context: openAiAgentContext,
+        userPrompt: aiPrompt,
+        config: openAiConfig
+      });
+      setAiAdvice({ status: "complete", result, error: "" });
+    } catch (error) {
+      setAiAdvice({
+        status: "error",
+        result: null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  async function executeFirstSafeTempCleanup() {
+    if (nativeRealExecution.status === "running") return;
+    if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.tempCleanupExecutor) {
+      setNativeRealExecution({
+        status: "blocked",
+        result: null,
+        error: "Temp cleanup executor is not enabled. Set SPACEGUARD_ENABLE_TEMP_EXECUTOR=1 before launching the Tauri app."
+      });
+      return;
+    }
+
+    setActiveStage("execute");
+    setNativeRealExecution({ status: "running", result: null, error: "" });
+    try {
+      const result = await runNativeTempCleanupExecutor({
+        capsule: realExecutorCapsule,
+        contract: firstSafeExecutorContract,
+        planId: planSnapshot.id
+      });
+      setNativeRealExecution({ status: "complete", result, error: "" });
+      const executedAt = new Date().toISOString();
+      const nextLedger = result.entries.map((entry, index) => ({
+        id: entry.id,
+        planId: planSnapshot.id,
+        executedAt,
+        time: `T+${String(index + 1).padStart(2, "0")}m`,
+        title: entry.title,
+        result: entry.result,
+        bytes: entry.bytes,
+        method: `${entry.route}: ${entry.note}`
+      }));
+      setLedger(nextLedger);
+      recordLedgerRun(nextLedger);
+      window.setTimeout(() => setActiveStage("verify"), 240);
+    } catch (error) {
+      setNativeRealExecution({
         status: "error",
         result: null,
         error: error instanceof Error ? error.message : String(error)
@@ -2113,6 +2257,7 @@ export default function App() {
       advisor: recoveryAdvisor,
       decisionLog,
       agentQuestionQueue,
+      aiAgentIntegration,
       taskRunbook,
       restrictionPolicyMatrix,
       windowsSetupAssistant,
@@ -2144,6 +2289,7 @@ export default function App() {
       nativeBetaEvidenceLedger,
       releaseReviewPacket,
       executorManifest,
+      candidateSafetyManifest,
       toolCommandInventory,
       writeReadiness,
       realExecutorCapsule,
@@ -2616,6 +2762,16 @@ export default function App() {
               onProbeWriteBoundary={probeNativeWriteBoundary}
             />
 
+            <OpenAIAgentPanel
+              integration={aiAgentIntegration}
+              config={openAiConfig}
+              prompt={aiPrompt}
+              advice={aiAdvice}
+              context={openAiAgentContext}
+              onPrompt={setAiPrompt}
+              onAsk={askOpenAIAgent}
+            />
+
             <StorageStrategyPanel strategy={storageStrategy} />
 
             <ManualStrategyChecklistPanel
@@ -2724,6 +2880,7 @@ export default function App() {
               canExportScopeEvidence={runtimeCapabilities.result.simulateCleanupPlan}
               onExportScopeEvidence={exportNativeDryRunScopeEvidence}
             />
+            <CandidateSafetyManifestPanel manifest={candidateSafetyManifest} />
             <ExecutorManifestPanel manifest={executorManifest} />
             <ToolCommandInventoryPanel inventory={toolCommandInventory} />
             <VerificationPanel planSnapshot={planSnapshot} verificationSummary={verificationSummary} />
@@ -2754,6 +2911,13 @@ export default function App() {
               nativeWriteBoundary={nativeWriteBoundary}
               runtimeCapabilities={runtimeCapabilities}
               onProbe={probeNativeWriteBoundary}
+            />
+            <FirstSafeTempExecutorPanel
+              runtimeCapabilities={runtimeCapabilities}
+              execution={nativeRealExecution}
+              contract={firstSafeExecutorContract}
+              capsule={realExecutorCapsule}
+              onExecute={executeFirstSafeTempCleanup}
             />
             <ValidationEvidencePanel
               validationPack={validationPack}
@@ -5298,6 +5462,122 @@ function AgentQuestionPanel({
   );
 }
 
+function OpenAIAgentPanel({ integration, config, prompt, advice, context, onPrompt, onAsk }) {
+  const running = advice.status === "running";
+  const result = advice.result?.advice || null;
+  const recommended = result?.recommendedActions || [];
+  const blocked = result?.blockedActions || [];
+  const configured = Boolean(config.configured);
+
+  return (
+    <Card id="openai-agent-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4" />
+              OpenAI cleanup agent
+            </CardTitle>
+            <CardDescription>{integration.primary}</CardDescription>
+          </div>
+          <Badge variant={configured ? "safe" : "review"}>{configured ? "connected" : "set .env"}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Model" value={config.model} tone={configured ? "safe" : "review"} />
+          <QueueStat label="Selected" value={context.selectedActions.length} tone={context.selectedActions.length ? "advanced" : "review"} />
+          <QueueStat label="Direct tools" value="blocked" tone="safe" />
+          <QueueStat label="Real exec" value={context.runtime.tempCleanupExecutor ? "temp flag" : "off"} tone={context.runtime.tempCleanupExecutor ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">AI authority boundary</span>
+            <Badge variant="safe">advisory only</Badge>
+            <Badge variant="safe">direct tools blocked</Badge>
+            <Badge variant={configured ? "outline" : "review"}>{config.keySource}</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+            <span>Provider: OpenAI Responses API</span>
+            <span>Endpoint: {config.endpoint.replace(/^https?:\/\//, "")}</span>
+            <span>Native scan: {context.runtime.nativeAvailable ? "available" : "not available"}</span>
+            <span>Candidate samples: {context.candidateSamples.length}</span>
+          </div>
+        </div>
+
+        <Textarea
+          value={prompt}
+          onChange={(event) => onPrompt(event.target.value)}
+          placeholder="Ask what to clean first, what is risky, or what blocks the real executor."
+          rows={3}
+        />
+
+        <Button size="sm" onClick={onAsk} disabled={running || !configured}>
+          {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          {running ? "Asking OpenAI" : "Ask OpenAI"}
+        </Button>
+
+        {!configured ? (
+          <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+            Add `VITE_OPENAI_API_KEY` to `.env`, optionally set `VITE_OPENAI_MODEL`, then restart the dev server.
+          </div>
+        ) : null}
+
+        {advice.error ? (
+          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{advice.error}</div>
+        ) : null}
+
+        {result ? (
+          <div className="grid gap-3">
+            <div className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="mr-auto text-sm font-medium">{result.nextAction}</span>
+                <Badge variant="outline">{result.confidence}</Badge>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">{result.summary}</p>
+              {advice.result?.requestId ? <p className="mt-2 font-mono text-xs text-muted-foreground">request {advice.result.requestId}</p> : null}
+            </div>
+
+            {recommended.length ? (
+              <div className="grid gap-2 md:grid-cols-2">
+                {recommended.slice(0, 4).map((row) => (
+                  <div key={`${row.id}-${row.title}`} className="rounded-md border bg-card p-3">
+                    <div className="flex items-center gap-2">
+                      <span className="mr-auto min-w-0 text-sm font-medium">{row.title}</span>
+                      <Badge variant="advanced">{row.priority}</Badge>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">{row.reason}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {blocked.length || result.questions?.length || result.warnings?.length ? (
+              <div className="grid gap-2 md:grid-cols-3">
+                <AdviceList title="Blocked" rows={blocked.map((row) => row.title || row.reason)} />
+                <AdviceList title="Questions" rows={result.questions} />
+                <AdviceList title="Warnings" rows={result.warnings} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AdviceList({ title, rows = [] }) {
+  return (
+    <div className="rounded-md border bg-muted/30 p-3">
+      <div className="mb-2 text-sm font-medium">{title}</div>
+      <div className="flex flex-col gap-2">
+        {rows.length ? rows.slice(0, 4).map((row) => <span key={row} className="text-xs text-muted-foreground">{row}</span>) : <span className="text-xs text-muted-foreground">None</span>}
+      </div>
+    </div>
+  );
+}
+
 function questionActionLabel(question) {
   if (question.action === "suggest-plan") return "Rebuild plan";
   if (question.action === "approve-rebuildable") return "Approve caches";
@@ -6255,6 +6535,82 @@ function ExecutorPolicyPanel({ executorPlan, executorReadiness, nativeExecutorDr
   );
 }
 
+function CandidateSafetyManifestPanel({ manifest }) {
+  const previewRows = manifest.rows.slice(0, 4);
+
+  return (
+    <Card id="candidate-safety-manifest-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Candidate safety manifest
+          <Badge variant={manifest.tone}>{manifest.status}</Badge>
+        </CardTitle>
+        <CardDescription>{manifest.primary}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <QueueStat label="Samples" value={manifest.counts.candidates} tone={manifest.counts.candidates ? "safe" : "review"} />
+          <QueueStat label="Skipped" value={manifest.counts.skipped} tone={manifest.counts.skipped ? "review" : "safe"} />
+          <QueueStat label="Leaks" value={manifest.counts.leaks} tone={manifest.counts.leaks ? "restricted" : "safe"} />
+          <QueueStat label="Real run" value={manifest.counts.realRun} tone="safe" />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Candidate boundary</span>
+            <Badge variant={manifest.readyForImplementationEvidence ? "safe" : "review"}>
+              {manifest.readyForImplementationEvidence ? "implementation evidence" : "evidence waiting"}
+            </Badge>
+            <Badge variant={manifest.pathLevelEvidence ? "review" : "safe"}>{manifest.pathLevelEvidence ? "path-level" : "redacted"}</Badge>
+            <Badge variant="safe">no executor authority</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Candidate samples prove target filtering and skip behavior for future executor work. They do not count recovered space and cannot unlock mutation.
+          </p>
+        </div>
+
+        {previewRows.length ? (
+          <div className="flex flex-col gap-2">
+            {previewRows.map((row) => (
+              <div key={`${row.id}-${row.route}`} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{row.title}</span>
+                  <Badge variant={row.tone}>{row.status}</Badge>
+                  <Badge variant="outline">{row.candidateCount} candidates</Badge>
+                  <Badge variant={row.skippedCount ? "review" : "safe"}>{row.skippedCount} skipped</Badge>
+                </div>
+                <div className="mt-2 truncate font-mono text-xs text-muted-foreground">{row.targetPath || "no target path"}</div>
+                <p className="mt-2 text-xs text-muted-foreground">{row.detail}</p>
+                {row.sampleNames.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {row.sampleNames.map((name) => (
+                      <Badge key={name} variant="outline">{name}</Badge>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">Run native dry-run simulation to capture candidate samples.</div>
+        )}
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 text-sm font-medium">Next candidate steps</div>
+          <div className="flex flex-col gap-2">
+            {manifest.steps.slice(0, 4).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ExecutorManifestPanel({ manifest }) {
   const previewRoutes = manifest.selectedRoutes.length ? manifest.selectedRoutes.slice(0, 5) : manifest.shippableRoutes.slice(0, 5);
   const statusVariant = (status) => {
@@ -6920,6 +7276,84 @@ function WriteBoundaryProbePanel({ probe, nativeWriteBoundary, runtimeCapabiliti
                     ))}
                   </div>
                 ) : null}
+                <p className="mt-2 text-xs text-muted-foreground">{entry.note}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function FirstSafeTempExecutorPanel({ runtimeCapabilities, execution, contract, capsule, onExecute }) {
+  const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.tempCleanupExecutor);
+  const selectedRows = capsule?.selectedRows || [];
+  const preview = contract?.requestPreview || {};
+  const routeReady = preview.route === "known-temp-delete" && selectedRows.length > 0;
+  const requestReady = Boolean(routeReady && preview.planId && preview.scanFingerprint && preview.consentPlanId);
+  const running = execution.status === "running";
+  const result = execution.result;
+  const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+  const disabled = running || !enabled || !requestReady;
+
+  return (
+    <Card id="first-safe-temp-executor-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Real temp cleanup
+          <Badge variant={enabled ? "restricted" : "review"}>{enabled ? "feature on" : "feature off"}</Badge>
+        </CardTitle>
+        <CardDescription>
+          First real executor: selected temp targets only, file-only deletion, symlink skipping, native allowlist enforced.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Route" value={contract?.requestPreview?.route || "none"} tone={routeReady ? "safe" : "review"} />
+          <QueueStat label="Actions" value={selectedRows.length} tone={selectedRows.length ? "advanced" : "review"} />
+          <QueueStat label="Request" value={requestReady ? "ready" : "wait"} tone={requestReady ? "safe" : "review"} />
+          <QueueStat label="Accepted" value={result?.accepted ? "yes" : "no"} tone={result?.accepted ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Executor boundary</span>
+            <Badge variant={enabled ? "restricted" : "safe"}>{enabled ? "can delete temp files" : "cannot delete"}</Badge>
+            <Badge variant="outline">known-temp-delete</Badge>
+            <Badge variant="safe">no broad folders</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Enable with `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1` before launching Tauri.</span>
+            <span>Request evidence: plan {preview.planId ? "yes" : "no"}, scan {preview.scanFingerprint ? "yes" : "no"}, consent {preview.consentPlanId ? "yes" : "no"}.</span>
+            <span>Allowed targets are `%TEMP%`, `%TMP%`, and `Windows\\Temp`; Downloads, Desktop, Documents, node_modules, and reparse-like targets are rejected.</span>
+          </div>
+        </div>
+
+        <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
+          {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          {running ? "Cleaning temp files" : "Run real temp cleanup"}
+        </Button>
+
+        {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}
+
+        {result?.warnings?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.warnings.slice(0, 3).map((warning) => (
+              <div key={warning} className="rounded-md border bg-card p-3 text-xs text-muted-foreground">{warning}</div>
+            ))}
+          </div>
+        ) : null}
+
+        {result?.entries?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.entries.slice(0, 4).map((entry) => (
+              <div key={`${entry.id}-${entry.result}-${entry.bytes}`} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{entry.title}</span>
+                  <Badge variant={entry.result === "executed" ? "safe" : "review"}>{entry.result}</Badge>
+                  <Badge variant="outline">{formatBytes(entry.bytes)}</Badge>
+                </div>
                 <p className="mt-2 text-xs text-muted-foreground">{entry.note}</p>
               </div>
             ))}

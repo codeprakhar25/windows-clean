@@ -218,6 +218,52 @@ export async function runNativeWriteBoundary(boundary = {}, host = globalThis) {
   return normalizeNativeWriteBoundary(result);
 }
 
+export async function runNativeTempCleanupExecutor(boundary = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      accepted: false,
+      reason: "Native temp cleanup executor is not available in the browser demo.",
+      entries: [],
+      warnings: ["Run the Tauri desktop shell before executing cleanup."]
+    };
+  }
+
+  const capsule = boundary.capsule || boundary.realExecutorCapsule || boundary;
+  const contract = boundary.contract || boundary.firstSafeExecutorContract || (boundary.schemaVersion === "spaceguard-first-safe-executor-contract/v1" ? boundary : null);
+  const preview = contract?.requestPreview || {};
+  const route = preview.route || capsule.route?.id || "known-temp-delete";
+  const rows = Array.isArray(preview.actions) && preview.actions.length ? preview.actions : capsule.selectedRows || [];
+  const expectedBytes = Number(preview.expectedBytes ?? rows.reduce((sum, row) => sum + Number(row.bytes || 0), 0));
+
+  const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
+    request: {
+      schemaVersion: contract?.schemaVersion || "spaceguard-write-boundary-request/v1",
+      requestMode: "execute-first-safe",
+      planId: preview.planId || boundary.planId || capsule.planId || "",
+      route,
+      scanFingerprint: preview.scanFingerprint || "",
+      consentPlanId: preview.consentPlanId || "",
+      expectedBytes,
+      dryRunOnly: false,
+      mutationAttempted: true,
+      actions: rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        bytes: Number(row.bytes || 0),
+        route: route || row.route || "",
+        targetPath: row.targetPath || row.target || row.path || ""
+      }))
+    }
+  });
+
+  return normalizeNativeWriteBoundary(result);
+}
+
 export async function getNativeRuntimeCapabilities(host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {

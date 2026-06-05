@@ -3574,6 +3574,152 @@ export function buildDecisionLog({
   ];
 }
 
+export function buildAIAgentIntegration({
+  providerConfig = null,
+  agentQuestionQueue = null,
+  productCompletionAudit = null,
+  operatingChecklist = null,
+  nativeEvidenceQuality = null,
+  candidateSafetyManifest = null,
+  runtimeCapabilities = {}
+} = {}) {
+  const providerConnected = Boolean(providerConfig?.connected || providerConfig?.apiKeyPresent || providerConfig?.endpoint);
+  const scopedTempExecutor = Boolean(
+    runtimeCapabilities?.realRunEnabled
+      && runtimeCapabilities?.destructiveCommands
+      && runtimeCapabilities?.safeExecutorsEnabled
+      && runtimeCapabilities?.executorFlags?.tempCleanupExecutor
+      && !runtimeCapabilities?.executorFlags?.recycleBinExecutor
+      && !runtimeCapabilities?.executorFlags?.browserCacheExecutor
+      && !runtimeCapabilities?.executorFlags?.toolNativePruneExecutors
+  );
+  const unsafeRuntime = Boolean((runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands) && !scopedTempExecutor);
+  const activeQuestion = agentQuestionQueue?.activeQuestion || null;
+  const contextPacket = {
+    activeQuestion: activeQuestion?.prompt || "",
+    activeAction: activeQuestion?.action || "none",
+    productAuditStatus: productCompletionAudit?.status || "not-evaluated",
+    operatingStatus: operatingChecklist?.status || "not-evaluated",
+    nativeEvidenceQuality: nativeEvidenceQuality?.status || "not-evaluated",
+    candidateSafety: candidateSafetyManifest?.status || "not-evaluated",
+    realCleanupLocked: productCompletionAudit?.realCleanupLocked !== false,
+    pathLevelEvidence: Boolean(candidateSafetyManifest?.pathLevelEvidence || nativeEvidenceQuality?.pathLevelEvidence)
+  };
+  const allowedTasks = [
+    "Explain scan and storage-pressure evidence.",
+    "Suggest the next workflow branch.",
+    "Draft user-facing questions and summaries.",
+    "Rank safe cleanup candidates already exposed by the deterministic model.",
+    "Prepare report, support, and handoff text."
+  ];
+  const blockedTasks = [
+    "Directly scan local folders.",
+    "Approve gates or consent on behalf of the user.",
+    "Change protected paths or item-review decisions.",
+    "Run shell commands, installers, registry edits, partition changes, or native write commands.",
+    "Delete, move, archive, or modify files."
+  ];
+  const rows = [
+    buildAIAgentIntegrationRow({
+      id: "provider-connector",
+      label: "LLM provider connector",
+      lane: "connector",
+      status: providerConnected ? "configured" : "not-configured",
+      detail: providerConnected
+        ? "A provider endpoint is configured for advisory responses."
+        : "No LLM provider is wired yet; the app is using deterministic workflow automation.",
+      action: providerConnected ? "Use advisory-only responses." : "Add provider settings in the native shell before calling an LLM."
+    }),
+    buildAIAgentIntegrationRow({
+      id: "workflow-engine",
+      label: "Deterministic workflow engine",
+      lane: "agent",
+      status: "active",
+      detail: activeQuestion
+        ? `Current workflow question: ${activeQuestion.prompt}`
+        : "Workflow state is being derived from scan, gates, consent, validation, and safety surfaces.",
+      action: activeQuestion?.action || "continue-workflow"
+    }),
+    buildAIAgentIntegrationRow({
+      id: "context-boundary",
+      label: "Context boundary",
+      lane: "privacy",
+      status: contextPacket.pathLevelEvidence ? "path-level-review" : "redacted-ready",
+      detail: contextPacket.pathLevelEvidence
+        ? "Some context can include local paths or candidate filenames and needs explicit export/review."
+        : "Context can be summarized without local path-level details.",
+      action: "Send only the bounded context packet to an AI provider."
+    }),
+    buildAIAgentIntegrationRow({
+      id: "tool-authority",
+      label: "Tool authority",
+      lane: "guardrail",
+      status: "advisory-only",
+      detail: "AI output can suggest next steps, but existing UI gates must perform every state change.",
+      action: "Never give the AI direct native tool access."
+    }),
+    buildAIAgentIntegrationRow({
+      id: "mutation-boundary",
+      label: "Mutation boundary",
+      lane: "safety",
+      status: unsafeRuntime ? "unsafe-stop" : scopedTempExecutor ? "scoped-executor-visible" : "locked",
+      detail: unsafeRuntime
+        ? "Runtime write capability is visible; AI integration must stop."
+        : scopedTempExecutor
+          ? "A scoped temp executor is visible, but AI still has no direct tool access."
+          : "Real cleanup, destructive commands, and write execution remain unavailable.",
+      action: unsafeRuntime ? "Restore dry-run lock before using AI." : "Keep AI advisory-only and apply suggestions through UI controls."
+    })
+  ];
+  const status = unsafeRuntime
+    ? "unsafe-stop"
+    : providerConnected
+      ? "advisory-connector-ready"
+      : "connector-not-configured";
+
+  return {
+    schemaVersion: "spaceguard-ai-agent-integration/v1",
+    status,
+    tone: status === "unsafe-stop" ? "restricted" : providerConnected ? "safe" : "review",
+    providerConnected,
+    deterministicAgentActive: true,
+    directToolAccess: false,
+    advisoryOnly: true,
+    contextPacket,
+    allowedTasks,
+    blockedTasks,
+    rows,
+    counts: {
+      rows: rows.length,
+      allowedTasks: allowedTasks.length,
+      blockedTasks: blockedTasks.length,
+      providerConnected: providerConnected ? 1 : 0,
+      directToolRoutes: 0,
+      realRun: 0
+    },
+    primary: providerConnected
+      ? "AI advisory connector is configured, but all actions remain controlled by the deterministic workflow gates."
+      : "No LLM provider is wired yet; deterministic workflow automation is active and ready for a bounded AI connector.",
+    steps: providerConnected
+      ? ["Use AI only for explanations and suggestions.", "Apply decisions through existing UI gates.", "Keep reports and path-level context export-controlled."]
+      : ["Add provider settings in the native shell.", "Send only bounded context packets.", "Require UI confirmation for every suggested state change."]
+  };
+}
+
+function buildAIAgentIntegrationRow({ id, label, lane, status, detail, action }) {
+  return {
+    id,
+    label,
+    lane,
+    status,
+    detail,
+    action,
+    tone: status === "unsafe-stop" ? "restricted" : status === "active" || status === "configured" || status === "locked" || status === "redacted-ready" ? "safe" : "review",
+    aiCanAct: false,
+    canRealRun: false
+  };
+}
+
 export function buildUserDecisionReceipt({
   actionList = actions,
   selectedIds = new Set(),
@@ -5478,6 +5624,8 @@ export function buildProductCompletionAudit({
   driveInventorySummary = null,
   storagePressureDiagnosis = null,
   nativeEvidenceQuality = null,
+  candidateSafetyManifest = null,
+  aiAgentIntegration = null,
   demoRehearsalRunbook = null,
   windowsSetupAssistant = null,
   taskPowerCatalog = null,
@@ -5570,6 +5718,20 @@ export function buildProductCompletionAudit({
       detail: agentQuestionQueue?.activeQuestion?.prompt || "Question queue is ready when workflow state needs user input.",
       evidence: agentQuestionQueue ? `${agentQuestionQueue.counts?.total || 0} question(s), ${agentQuestionQueue.counts?.actionable || 0} actionable` : "question queue missing",
       nextStep: agentQuestionQueue?.activeQuestion?.action ? `Use ${agentQuestionQueue.activeQuestion.action}.` : "Continue through the guarded workflow."
+    }),
+    buildProductCompletionAuditRow({
+      id: "ai-agent-integration",
+      requirement: "Integrate AI as advisory workflow support",
+      status: aiAgentIntegration?.status === "unsafe-stop"
+        ? "unsafe"
+        : aiAgentIntegration?.providerConnected && aiAgentIntegration?.advisoryOnly
+          ? "proven"
+          : aiAgentIntegration?.schemaVersion
+            ? "partial"
+            : "waiting-evidence",
+      detail: aiAgentIntegration?.primary || "AI agent integration has not been evaluated.",
+      evidence: aiAgentIntegration?.status || "AI integration missing",
+      nextStep: aiAgentIntegration?.steps?.[0] || "Define provider and advisory-only tool boundary."
     }),
     buildProductCompletionAuditRow({
       id: "approval-gates",
@@ -5682,6 +5844,20 @@ export function buildProductCompletionAudit({
       detail: nativeEvidenceQuality?.primary || "Native evidence quality has not been evaluated.",
       evidence: nativeEvidenceQuality?.status || "quality gate missing",
       nextStep: nativeEvidenceQuality?.steps?.[0] || "Run native read-only scan and review evidence quality."
+    }),
+    buildProductCompletionAuditRow({
+      id: "prove-candidate-safety",
+      requirement: "Prove native candidate manifest before executor work",
+      status: candidateSafetyManifest?.status === "unsafe-signal" || candidateSafetyManifest?.status === "scope-leak" || candidateSafetyManifest?.status === "contract-route-mismatch"
+        ? "unsafe"
+        : candidateSafetyManifest?.readyForImplementationEvidence
+          ? "native-proven"
+          : candidateSafetyManifest?.schemaVersion
+            ? "partial"
+            : "waiting-evidence",
+      detail: candidateSafetyManifest?.primary || "Native candidate safety manifest has not been evaluated.",
+      evidence: candidateSafetyManifest?.status || "candidate manifest missing",
+      nextStep: candidateSafetyManifest?.steps?.[0] || "Run native dry-run simulation and inspect candidate safety."
     }),
     buildProductCompletionAuditRow({
       id: "privacy-and-support",
@@ -8784,6 +8960,142 @@ export function buildNativeDryRunScopeEvidence({
   };
 }
 
+export function buildCandidateSafetyManifest({
+  nativeExecutorDryRun = null,
+  executorPlan = null,
+  firstSafeExecutorContract = null,
+  nativeEvidenceQuality = null,
+  runtimeCapabilities = {}
+} = {}) {
+  const result = nativeExecutorDryRun?.result || nativeExecutorDryRun || {};
+  const dryRunStatus = nativeExecutorDryRun?.status || (Array.isArray(result.entries) ? "complete" : "idle");
+  const selectedRoutes = new Set((executorPlan?.rows || []).map((row) => row.route).filter(Boolean));
+  const contractRoute = firstSafeExecutorContract?.route?.id || firstSafeExecutorContract?.requestPreview?.route || "";
+  const rawEntries = Array.isArray(result.entries) ? result.entries : [];
+  const unsafeRuntime = Boolean(
+    result.realRunEnabled ||
+      result.real_run_enabled ||
+      result.destructiveCommands ||
+      result.destructive_commands ||
+      runtimeCapabilities?.realRunEnabled ||
+      runtimeCapabilities?.destructiveCommands
+  );
+  const rows = rawEntries.map((entry) => {
+    const targetScopeStatus = entry.targetScopeStatus || entry.target_scope_status || "";
+    const rejectCode = entry.rejectCode || entry.reject_code || "";
+    const candidateCount = Number(entry.candidateCount || entry.candidate_count || 0);
+    const candidateBytes = Number(entry.candidateBytes || entry.candidate_bytes || 0);
+    const skippedCount = Number(entry.skippedCount || entry.skipped_count || 0);
+    const candidates = Array.isArray(entry.candidates) ? entry.candidates : [];
+    const targetAllowed = targetScopeStatus === "target-allowed" && !rejectCode;
+    const targetBlocked = targetScopeStatus === "target-blocked" || Boolean(rejectCode);
+    const scopeLeak = targetBlocked && (candidateCount > 0 || candidates.length > 0);
+    const route = entry.route || "";
+    const contractMatched = !contractRoute || !route || route === contractRoute;
+
+    return {
+      id: entry.id || "",
+      title: entry.title || entry.id || "Candidate row",
+      route,
+      targetPath: entry.targetPath || entry.target_path || "",
+      targetScopeStatus,
+      rejectCode,
+      status: scopeLeak
+        ? "scope-leak"
+        : !contractMatched
+          ? "contract-route-mismatch"
+          : targetAllowed
+            ? candidateCount > 0
+              ? "candidate-sampled"
+              : "target-allowed-empty"
+            : targetBlocked
+              ? "target-rejected"
+              : "unclassified",
+      tone: scopeLeak || !contractMatched ? "restricted" : targetAllowed ? "safe" : targetBlocked ? "review" : "outline",
+      candidateBytes,
+      candidateCount,
+      skippedCount,
+      sampleNames: candidates.slice(0, 3).map((candidate) => candidate.name || candidate.path || "candidate").filter(Boolean),
+      targetAllowed,
+      targetBlocked,
+      scopeLeak,
+      contractMatched,
+      canCreateExecutor: false,
+      canRealRun: false,
+      detail: getCandidateSafetyRowDetail({ targetAllowed, targetBlocked, scopeLeak, rejectCode, candidateCount, skippedCount })
+    };
+  });
+  const allowedRows = rows.filter((row) => row.targetAllowed);
+  const sampledRows = rows.filter((row) => row.status === "candidate-sampled");
+  const rejectedRows = rows.filter((row) => row.targetBlocked);
+  const leakRows = rows.filter((row) => row.scopeLeak);
+  const mismatchRows = rows.filter((row) => !row.contractMatched);
+  const candidateBytes = rows.reduce((sum, row) => sum + row.candidateBytes, 0);
+  const candidateCount = rows.reduce((sum, row) => sum + row.candidateCount, 0);
+  const skippedCount = rows.reduce((sum, row) => sum + row.skippedCount, 0);
+  const selectedRouteCount = selectedRoutes.size;
+  const qualityReady = nativeEvidenceQuality ? Boolean(nativeEvidenceQuality.planningReady) : true;
+  const readyForImplementationEvidence = Boolean(
+    dryRunStatus === "complete" &&
+      rows.length > 0 &&
+      sampledRows.length > 0 &&
+      leakRows.length === 0 &&
+      mismatchRows.length === 0 &&
+      !unsafeRuntime &&
+      qualityReady
+  );
+  const status = unsafeRuntime
+    ? "unsafe-signal"
+    : dryRunStatus !== "complete"
+      ? "dry-run-needed"
+      : !rows.length
+        ? "manifest-empty"
+        : leakRows.length
+          ? "scope-leak"
+          : mismatchRows.length
+            ? "contract-route-mismatch"
+            : !qualityReady
+              ? "evidence-quality-waiting"
+              : !sampledRows.length
+                ? "no-candidate-samples"
+                : "candidate-manifest-ready";
+
+  return {
+    schemaVersion: "spaceguard-candidate-safety-manifest/v1",
+    status,
+    tone: status === "candidate-manifest-ready" ? "safe" : status === "unsafe-signal" || status === "scope-leak" || status === "contract-route-mismatch" ? "restricted" : "review",
+    dryRunStatus,
+    contractRoute,
+    selectedRouteCount,
+    readyForImplementationEvidence,
+    pathLevelEvidence: rows.some((row) => Boolean(row.targetPath || row.sampleNames.length)),
+    realRunEnabled: false,
+    destructiveCommands: unsafeRuntime,
+    executorRoutes: 0,
+    candidateBytes,
+    rows,
+    allowedRows,
+    sampledRows,
+    rejectedRows,
+    blockedRows: [...leakRows, ...mismatchRows],
+    counts: {
+      rows: rows.length,
+      allowed: allowedRows.length,
+      sampled: sampledRows.length,
+      rejected: rejectedRows.length,
+      leaks: leakRows.length,
+      mismatches: mismatchRows.length,
+      candidates: candidateCount,
+      skipped: skippedCount,
+      selectedRoutes: selectedRouteCount,
+      executorRoutes: 0,
+      realRun: 0
+    },
+    primary: getCandidateSafetyManifestPrimary(status, { candidateCount, candidateBytes, leakRows, mismatchRows }),
+    steps: getCandidateSafetyManifestSteps(status, { rows, nativeEvidenceQuality })
+  };
+}
+
 function summarizeFixtureDryRunScopeCheck(evidence = {}) {
   const check = evidence.dryRunScopeCheck || evidence.dry_run_scope_check || null;
   if (!check || typeof check !== "object" || Array.isArray(check)) {
@@ -8824,6 +9136,43 @@ function summarizeFixtureDryRunScopeCheck(evidence = {}) {
       ? `${cases.length} dry-run target-scope case(s) passed.`
       : "Dry-run target-scope evidence must include allowed and rejected cases, zero samples for rejected targets, destructiveCommands=false, and no failed cases."
   };
+}
+
+function getCandidateSafetyRowDetail({ targetAllowed = false, targetBlocked = false, scopeLeak = false, rejectCode = "", candidateCount = 0, skippedCount = 0 } = {}) {
+  if (scopeLeak) return "Rejected target scope returned candidate samples; this must block executor implementation.";
+  if (targetAllowed) return `${candidateCount} candidate sample(s) were reported and ${skippedCount} item(s) were skipped without mutation.`;
+  if (targetBlocked) return `Target scope was rejected with ${rejectCode || "a policy code"} and produced no usable candidates.`;
+  return "Native dry-run did not classify this candidate row.";
+}
+
+function getCandidateSafetyManifestPrimary(status, { candidateCount = 0, candidateBytes = 0, leakRows = [], mismatchRows = [] } = {}) {
+  if (status === "candidate-manifest-ready") {
+    return `${candidateCount} native candidate sample(s) are ready as implementation evidence (${formatBytes(candidateBytes)} sampled), with real cleanup still locked.`;
+  }
+  if (status === "unsafe-signal") return "Runtime or dry-run evidence exposed write capability; candidate manifest review is stopped.";
+  if (status === "scope-leak") return `${leakRows.length} rejected target scope row(s) returned candidate samples.`;
+  if (status === "contract-route-mismatch") return `${mismatchRows.length} candidate row(s) do not match the current first-safe contract route.`;
+  if (status === "evidence-quality-waiting") return "Native candidate samples exist, but native evidence quality is not planning-ready.";
+  if (status === "no-candidate-samples") return "Native dry-run completed, but no allowed target returned candidate samples.";
+  if (status === "manifest-empty") return "Native dry-run completed without candidate rows.";
+  return "Run the native dry-run simulation to capture candidate-level executor evidence.";
+}
+
+function getCandidateSafetyManifestSteps(status, { rows = [], nativeEvidenceQuality = null } = {}) {
+  if (status === "candidate-manifest-ready") {
+    return [
+      "Attach this manifest to first-safe implementation notes.",
+      "Keep rejected target scopes sample-free.",
+      "Require fixture validation, rollback/rescan proof, release review, and write readiness before mutation."
+    ];
+  }
+  if (status === "unsafe-signal") return ["Stop candidate review.", "Restore dry-run-only runtime signals.", "Rerun native scan and dry-run evidence."];
+  if (status === "scope-leak") return ["Fix native dry-run target-scope filtering.", "Ensure rejected targets return zero samples.", "Repeat fixture scope validation."];
+  if (status === "contract-route-mismatch") return ["Select one first-safe route.", "Regenerate the first-safe contract.", "Rerun native dry-run for the matching route."];
+  if (status === "evidence-quality-waiting") return nativeEvidenceQuality?.steps?.slice(0, 3) || ["Complete native evidence quality before using candidate samples."];
+  if (status === "no-candidate-samples") return ["Run the dry-run in a seeded Windows fixture.", "Use known temp roots with old files.", "Keep empty manifests from satisfying executor validation."];
+  if (rows.length === 0) return ["Select a first-safe cleanup route.", "Arm dry-run consent.", "Run native dry-run simulation."];
+  return ["Review native dry-run warnings.", "Keep real execution locked.", "Rerun candidate manifest after fixing blockers."];
 }
 
 function parseFixtureEvidenceInput(evidenceObject, evidenceText) {
@@ -10428,6 +10777,7 @@ export function buildReport({
   advisor = null,
   decisionLog = [],
   agentQuestionQueue = null,
+  aiAgentIntegration = null,
   itemReview = null,
   executorPlan = null,
   taskRunbook = null,
@@ -10457,6 +10807,7 @@ export function buildReport({
   releaseReviewPacket = null,
   customRootTriage = null,
   executorManifest = null,
+  candidateSafetyManifest = null,
   toolCommandInventory = null,
   writeReadiness = null,
   realExecutorCapsule = null,
@@ -10588,6 +10939,25 @@ export function buildReport({
           workflowHandoff.nextActions.length
             ? workflowHandoff.nextActions.map((step) => `- Next: ${step}`).join("\n")
             : "- No next actions."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## AI Agent Integration",
+    aiAgentIntegration
+      ? [
+          `- Status: ${aiAgentIntegration.status}`,
+          `- Provider connected: ${aiAgentIntegration.providerConnected ? "yes" : "no"}`,
+          `- Deterministic agent active: ${aiAgentIntegration.deterministicAgentActive ? "yes" : "no"}`,
+          `- Advisory only: ${aiAgentIntegration.advisoryOnly ? "yes" : "no"}`,
+          `- Direct tool access: ${aiAgentIntegration.directToolAccess ? "yes" : "no"}`,
+          `- Direct tool routes: ${aiAgentIntegration.counts.directToolRoutes}`,
+          `- Real-run rows: ${aiAgentIntegration.counts.realRun}`,
+          `- Primary: ${aiAgentIntegration.primary}`,
+          aiAgentIntegration.rows.length
+            ? aiAgentIntegration.rows.map((row) => `- ${row.label}: ${row.status} | lane=${row.lane} | aiCanAct=${row.aiCanAct ? "yes" : "no"} | ${row.detail}`).join("\n")
+            : "- No AI integration rows.",
+          aiAgentIntegration.allowedTasks.length ? aiAgentIntegration.allowedTasks.map((task) => `- Allowed: ${task}`).join("\n") : "- No allowed AI tasks.",
+          aiAgentIntegration.blockedTasks.length ? aiAgentIntegration.blockedTasks.map((task) => `- Blocked: ${task}`).join("\n") : "- No blocked AI tasks."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -11191,6 +11561,26 @@ export function buildReport({
                 .map((row) => `- ${row.title}: ${row.status} | power=${row.powerLabel} | ${row.lane} | ${row.route} | ${row.realBlockedReason || row.verification}`)
                 .join("\n")
             : "- No selected executor routes."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Candidate Safety Manifest",
+    candidateSafetyManifest
+      ? [
+          `- Status: ${candidateSafetyManifest.status}`,
+          `- Ready for implementation evidence: ${candidateSafetyManifest.readyForImplementationEvidence ? "yes" : "no"}`,
+          `- Candidate bytes: ${formatBytes(candidateSafetyManifest.candidateBytes || 0)}`,
+          `- Candidate samples: ${candidateSafetyManifest.counts.candidates}`,
+          `- Skipped items: ${candidateSafetyManifest.counts.skipped}`,
+          `- Rejected scopes: ${candidateSafetyManifest.counts.rejected}`,
+          `- Scope leaks: ${candidateSafetyManifest.counts.leaks}`,
+          `- Executor routes: ${candidateSafetyManifest.counts.executorRoutes}`,
+          `- Real-run rows: ${candidateSafetyManifest.counts.realRun}`,
+          `- Primary: ${candidateSafetyManifest.primary}`,
+          candidateSafetyManifest.rows.length
+            ? candidateSafetyManifest.rows.map((row) => `- ${row.title}: ${row.status} | route=${row.route} | scope=${row.targetScopeStatus || "missing"} | candidates=${row.candidateCount} | skipped=${row.skippedCount} | real=${row.canRealRun ? "yes" : "no"} | ${row.detail}`).join("\n")
+            : "- No candidate rows.",
+          candidateSafetyManifest.steps.length ? candidateSafetyManifest.steps.map((step) => `- Next: ${step}`).join("\n") : "- No candidate safety steps."
         ].join("\n")
       : "- Not evaluated.",
     "",

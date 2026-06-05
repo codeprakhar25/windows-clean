@@ -2882,6 +2882,75 @@ const assert = require("assert");
   assert.strictEqual(nativeScopeEvidence.entries[0].candidates, undefined, "native dry-run scope evidence must not export candidate filenames");
   assert.strictEqual(nativeScopeEvidence.planId, "plan-scope", "native scope evidence should include plan id");
   assert.strictEqual(nativeScopeEvidence.scanFingerprint, "scan-scope", "native scope evidence should include scan fingerprint");
+  const candidateSafetyManifest = guard.buildCandidateSafetyManifest({
+    nativeExecutorDryRun: {
+      status: "complete",
+      result: {
+        mode: "native-dry-run",
+        realRunEnabled: false,
+        destructiveCommands: false,
+        entries: [
+          {
+            id: "windows-temp",
+            title: "Windows temp",
+            route: "known-temp-delete",
+            targetPath: "%TEMP%",
+            targetScopeStatus: "target-allowed",
+            rejectCode: "",
+            candidateBytes: 4096,
+            candidateCount: 2,
+            skippedCount: 1,
+            candidates: [{ name: "a.tmp" }, { name: "b.tmp" }]
+          },
+          {
+            id: "downloads-forbidden-as-temp",
+            title: "Downloads forbidden",
+            route: "known-temp-delete",
+            targetPath: "C:\\Users\\demo\\Downloads",
+            targetScopeStatus: "target-blocked",
+            rejectCode: "target-forbidden",
+            candidateBytes: 0,
+            candidateCount: 0,
+            skippedCount: 1,
+            candidates: []
+          }
+        ]
+      }
+    },
+    executorPlan: { rows: [{ route: "known-temp-delete" }] },
+    firstSafeExecutorContract: { route: { id: "known-temp-delete" } },
+    nativeEvidenceQuality: { planningReady: true },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(candidateSafetyManifest.schemaVersion, "spaceguard-candidate-safety-manifest/v1", "candidate safety manifest should expose a schema");
+  assert.strictEqual(candidateSafetyManifest.status, "candidate-manifest-ready", "candidate manifest should be ready when allowed samples and rejected sample-free scopes exist");
+  assert.strictEqual(candidateSafetyManifest.readyForImplementationEvidence, true, "candidate manifest should mark implementation evidence ready");
+  assert.strictEqual(candidateSafetyManifest.counts.executorRoutes, 0, "candidate manifest must not create executor routes");
+  assert.strictEqual(candidateSafetyManifest.counts.realRun, 0, "candidate manifest must not create real-run rows");
+  assert(candidateSafetyManifest.rows.some((row) => row.id === "downloads-forbidden-as-temp" && row.status === "target-rejected"), "candidate manifest should preserve rejected target rows");
+  const candidateSafetyReport = guard.buildReport({
+    scenario: guard.getScenario("developer"),
+    profile: guard.getScenario("developer").profile,
+    actionList: developerActions,
+    selectedIds: new Set(["windows-temp"]),
+    readiness: guard.getExecutionReadinessForActions(new Set(["windows-temp"]), { groupConfirm: true, reviewed: {}, typed: {} }, developerActions, protectedPaths),
+    ledger: [],
+    protectedPaths,
+    goalBytes: 10 * guard.GB,
+    candidateSafetyManifest
+  });
+  assert(candidateSafetyReport.includes("## Candidate Safety Manifest"), "report should include candidate safety manifest");
+  assert(candidateSafetyReport.includes("Real-run rows: 0"), "candidate safety report should preserve zero real-run rows");
+  const candidateSafetyAudit = guard.buildProductCompletionAudit({
+    scanned: true,
+    scanMode: "native-readonly",
+    candidateSafetyManifest
+  });
+  assert.strictEqual(
+    candidateSafetyAudit.rows.find((row) => row.id === "prove-candidate-safety").status,
+    "native-proven",
+    "product audit should track candidate safety evidence"
+  );
   const unsafeNativeScopeEvidence = guard.buildNativeDryRunScopeEvidence({
     nativeExecutorDryRun: {
       result: {
@@ -2894,6 +2963,22 @@ const assert = require("assert");
     }
   });
   assert.strictEqual(unsafeNativeScopeEvidence.passed, false, "native dry-run scope evidence should fail if rejected targets report samples");
+  const unsafeCandidateManifest = guard.buildCandidateSafetyManifest({
+    nativeExecutorDryRun: {
+      status: "complete",
+      result: {
+        realRunEnabled: false,
+        destructiveCommands: false,
+        entries: [
+          { id: "bad", title: "Bad target", route: "known-temp-delete", targetScopeStatus: "target-blocked", rejectCode: "target-forbidden", candidateCount: 1, candidates: [{ name: "leak.tmp" }] }
+        ]
+      }
+    },
+    firstSafeExecutorContract: { route: { id: "known-temp-delete" } },
+    nativeEvidenceQuality: { planningReady: true }
+  });
+  assert.strictEqual(unsafeCandidateManifest.status, "scope-leak", "candidate safety should block rejected scopes that return samples");
+  assert.strictEqual(unsafeCandidateManifest.readyForImplementationEvidence, false, "scope leak must not be implementation evidence");
   const statusOnlyRejectedSamplesEvidence = guard.buildNativeDryRunScopeEvidence({
     nativeExecutorDryRun: {
       result: {
