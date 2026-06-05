@@ -2003,6 +2003,21 @@ export default function App() {
       focusWorkflowPanel("agent-question-panel");
       return;
     }
+    if (actionType === "manual-only") {
+      const targetId = String(row.targetId || row.id || "").toLowerCase();
+      const route = String(row.route || "").toLowerCase();
+      if (targetId.startsWith("custom-root") || route.includes("custom-root")) {
+        focusWorkflowPanel("custom-root-triage-panel");
+        return;
+      }
+      if (targetId.startsWith("drive-") || route.includes("drive-inventory")) {
+        focusWorkflowPanel("drive-inventory-panel");
+        return;
+      }
+      setFocusedReviewId("installed-app-footprints");
+      focusWorkflowPanel("item-review-panel");
+      return;
+    }
     if (actionType === "run-temp-executor") {
       focusWorkflowPanel("first-safe-temp-executor-panel");
       await executeFirstSafeTempCleanup();
@@ -6081,6 +6096,8 @@ function aiRecommendationActionLabel(row = {}) {
       return "Run scan";
     case "ask-user":
       return "Open question";
+    case "manual-only":
+      return "Open manual review";
     default:
       return "";
   }

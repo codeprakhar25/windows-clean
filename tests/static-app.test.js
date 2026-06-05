@@ -311,11 +311,17 @@ assert(openAiAgent.includes("gradleCacheTargets"), "OpenAI context should includ
 assert(openAiAgent.includes("npmCacheTargets"), "OpenAI context should include scanned npm cache targets");
 assert(openAiAgent.includes("recycleBinTargets"), "OpenAI context should include scanned Recycle Bin targets");
 assert(openAiAgent.includes("browserCacheTargets"), "OpenAI context should include scanned browser cache targets");
+assert(openAiAgent.includes("manualReviewTargets"), "OpenAI context should include manual review targets");
+assert(openAiAgent.includes("driveInventoryRows"), "OpenAI context should include drive inventory rows");
+assert(openAiAgent.includes("customRootRows"), "OpenAI context should include custom root triage rows");
 assert(openAiAgent.includes("run-gradle-cache-executor"), "OpenAI schema should allow Gradle cache executor recommendations");
 assert(openAiAgent.includes("run-npm-cache-executor"), "OpenAI schema should allow npm cache executor recommendations");
 assert(openAiAgent.includes("run-recycle-bin-executor"), "OpenAI schema should allow Recycle Bin executor recommendations");
 assert(openAiAgent.includes("run-browser-cache-executor"), "OpenAI schema should allow browser cache executor recommendations");
+assert(openAiAgent.includes("manual-only"), "OpenAI schema should allow manual-only recommendations");
 assert(openAiAgent.includes("forbiddenActions"), "OpenAI context should expose forbidden actions");
+assert(app.includes("Open manual review"), "OpenAI manual-only recommendations should expose a review action");
+assert(app.includes("manualReviewTargets"), "OpenAI manual-only recommendations should be visible in the panel");
 assert(app.includes("Project targets"), "OpenAI panel should show reviewed project target count");
 assert(app.includes("Gradle root"), "OpenAI panel should show Gradle cache target count");
 assert(app.includes("npm root"), "OpenAI panel should show npm cache target count");
@@ -327,6 +333,8 @@ assert(app.includes("Transport:"), "OpenAI panel should show native/browser tran
 assert(app.includes("OPENAI_MODEL"), "OpenAI panel should mention the primary model env setting");
 assert(app.includes("agent-question-panel"), "OpenAI ask-user recommendations should be able to focus the question panel");
 assert(app.includes("item-review-panel"), "OpenAI review-target recommendations should be able to focus item review");
+assert(app.includes("custom-root-triage-panel"), "OpenAI manual-only recommendations should be able to focus custom root triage");
+assert(app.includes("drive-inventory-panel"), "OpenAI manual-only recommendations should be able to focus drive inventory");
 assert(model.includes("spaceguard-ai-agent-integration/v1"), "model should expose AI integration status");
 assert(app.includes("buildStorageStrategyPlan"), "storage strategy workflow should be wired");
 assert(app.includes("buildManualStrategyChecklist"), "manual strategy checklist should be wired");
