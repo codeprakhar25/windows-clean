@@ -78,6 +78,10 @@ const requiredAppMarkers = [
   "Agent questions",
   "OpenAI cleanup agent",
   "AI authority boundary",
+  "Real cleanup command flow",
+  "AI recommendation path",
+  "Ask OpenAI for next cleanup step",
+  "Follow AI recommendation",
   "direct tools blocked",
   "Open item review",
   "Question queue is clear",
@@ -392,6 +396,11 @@ assert(app.includes("buildExecutorPlan"), "executor plan should be wired");
 assert(app.includes("buildExecutorManifest"), "executor manifest should be wired");
 assert(app.includes("buildExecutorSmokeRunPacket"), "executor smoke-run packet should be wired");
 assert(app.includes("buildExecutorSmokeRunPacketMarkdown"), "executor smoke-run packet export should be wired");
+assert(app.includes("buildScopedExecutorCommandFlow"), "scoped executor command flow should be wired");
+assert(app.includes("ScopedExecutorCommandFlowPanel"), "scoped executor command flow panel should be rendered");
+assert(app.includes("scoped-executor-command-flow-panel"), "scoped executor command flow should be focusable");
+assert(app.includes("handleScopedExecutorCommand"), "scoped executor command flow should dispatch primary workflow actions");
+assert(app.includes("executeScopedExecutorRoute"), "scoped executor command flow should call existing executor handlers");
 assert(app.includes("ExecutorSmokeRunPacketPanel"), "executor smoke-run packet panel should be rendered");
 assert(app.includes("executor-smoke-run-packet-panel"), "executor smoke-run packet should be focusable");
 assert(app.includes("Export smoke packet"), "executor smoke-run packet should be exportable");
@@ -592,6 +601,9 @@ assert(app.includes("execution-proof-handoff-panel"), "execution proof handoff p
 assert(app.includes("Execution proof handoff"), "execution proof handoff should be visible after executors");
 assert(app.includes("Run post-run rescan"), "execution proof handoff should expose the ledger-preserving rescan action");
 assert(model.includes("spaceguard-executor-smoke-run-packet/v1"), "model should expose executor smoke-run packet schema");
+assert(model.includes("spaceguard-scoped-executor-command-flow/v1"), "model should expose scoped executor command flow schema");
+assert(model.includes("buildScopedExecutorCommandFlow"), "model should build the scoped executor command flow");
+assert(model.includes("Review proof"), "scoped command flow should review proof before another executor run");
 assert(model.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "smoke packet should name scoped executor env vars");
 assert(app.includes("blockExecutorForPendingProof"), "scoped executor handlers should block when post-run proof is pending");
 assert(openAiAgent.includes("post-run-proof"), "OpenAI broker should check pending post-run proof before executor recommendations");

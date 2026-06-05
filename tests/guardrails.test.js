@@ -3236,6 +3236,35 @@ const assert = require("assert");
   });
   assert.strictEqual(proofBlockedSmokePacket.status, "needs-proof", "smoke packet should block another executor while proof is pending");
   assert(proofBlockedSmokePacket.rows[0].checks.some((check) => check.id === "post-run-proof" && !check.passed), "smoke packet should expose pending proof as a failed check");
+  const scopedCommandFlow = guard.buildScopedExecutorCommandFlow({
+    smokeRunPacket: npmSmokePacket,
+    executionProofHandoff: { status: "waiting-for-execution" },
+    nativeCapability: { available: true },
+    scanning: false
+  });
+  assert.strictEqual(scopedCommandFlow.schemaVersion, "spaceguard-scoped-executor-command-flow/v1", "scoped executor command flow should expose a schema");
+  assert.strictEqual(scopedCommandFlow.status, "ready-to-execute", "ready smoke packet should become a real execution command flow");
+  assert.strictEqual(scopedCommandFlow.route, "bounded-npm-cache-delete", "command flow should select the enabled scoped route");
+  assert.strictEqual(scopedCommandFlow.nextAction.type, "execute-route", "ready command flow should route to the existing executor handler");
+  assert.strictEqual(scopedCommandFlow.nextAction.targetPanel, "npm-cache-executor-panel", "ready command flow should focus the scoped executor panel");
+  assert(scopedCommandFlow.steps.some((step) => step.id === "scan" && step.targetPanel === "real-data-readiness-panel"), "command flow should route scan work to the real data panel");
+  assert(scopedCommandFlow.steps.some((step) => step.id === "proof" && step.actionType === "run-post-run-rescan"), "command flow should include post-run proof as the final step");
+  const proofRequiredCommandFlow = guard.buildScopedExecutorCommandFlow({
+    smokeRunPacket: proofBlockedSmokePacket,
+    executionProofHandoff: { status: "proof-required" },
+    nativeCapability: { available: true },
+    scanning: false
+  });
+  assert.strictEqual(proofRequiredCommandFlow.status, "proof-required", "command flow should block fresh execution while proof is pending");
+  assert.strictEqual(proofRequiredCommandFlow.nextAction.type, "run-post-run-rescan", "proof-required command flow should send the user to post-run rescan");
+  const proofCompleteCommandFlow = guard.buildScopedExecutorCommandFlow({
+    smokeRunPacket: npmSmokePacket,
+    executionProofHandoff: { status: "proof-complete" },
+    nativeCapability: { available: true },
+    scanning: false
+  });
+  assert.strictEqual(proofCompleteCommandFlow.status, "proof-complete", "command flow should identify completed post-run proof");
+  assert.strictEqual(proofCompleteCommandFlow.nextAction.label, "Review proof", "proof-complete command flow should not lead with another executor run");
   const recordedValidationPack = guard.buildValidationEvidencePack({
     releaseGate: partialEvidenceGate,
     executorPlan,

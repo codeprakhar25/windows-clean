@@ -101,6 +101,7 @@ import {
   buildSafetyInterlock,
   buildScanCoverageSummary,
   buildScanSessionEvidence,
+  buildScopedExecutorCommandFlow,
   buildNativeScanRequestGuard,
   buildStoragePressureDiagnosis,
   buildStorageStrategyPlan,
@@ -905,6 +906,16 @@ export default function App() {
       largeFileArchiveDestination,
       approvals.permanentConfirm
     ]
+  );
+  const scopedExecutorCommandFlow = useMemo(
+    () =>
+      buildScopedExecutorCommandFlow({
+        smokeRunPacket: executorSmokeRunPacket,
+        executionProofHandoff,
+        nativeCapability,
+        scanning
+      }),
+    [executorSmokeRunPacket, executionProofHandoff, nativeCapability, scanning]
   );
   const firstSafeValidationGate = useMemo(
     () =>
@@ -2686,6 +2697,43 @@ export default function App() {
     }
   }
 
+  async function executeScopedExecutorRoute(route) {
+    if (route === "known-temp-delete") return executeFirstSafeTempCleanup();
+    if (route === "item-review-recycle-bin") return executeReviewedDownloadsCleanup();
+    if (route === "item-review-large-files") return executeLargeFileArchive();
+    if (route === "item-review-project-cache") return executeReviewedProjectDependencies();
+    if (route === "browser-cache-only") return executeBrowserCacheCleanup();
+    if (route === "bounded-cache-delete") return executeGradleCacheCleanup();
+    if (route === "bounded-npm-cache-delete") return executeNpmCacheCleanup();
+    if (route === "bounded-pnpm-store-delete") return executePnpmStoreCleanup();
+    if (route === "shell-recycle-bin") return executeRecycleBinCleanup();
+    focusWorkflowPanel("executor-smoke-run-packet-panel");
+    return undefined;
+  }
+
+  async function handleScopedExecutorCommand(action = scopedExecutorCommandFlow.nextAction) {
+    if (!action || action.disabled) return;
+    if (action.type === "run-real-scan") {
+      await runRealReadonlyScan();
+      return;
+    }
+    if (action.type === "arm-consent") {
+      armExecutionConsent();
+      focusWorkflowPanel("execution-consent-panel");
+      return;
+    }
+    if (action.type === "run-post-run-rescan") {
+      await runPostRunReadonlyScan();
+      return;
+    }
+    if (action.type === "execute-route") {
+      focusWorkflowPanel(action.targetPanel);
+      await executeScopedExecutorRoute(action.route);
+      return;
+    }
+    focusWorkflowPanel(action.targetPanel || "executor-smoke-run-packet-panel");
+  }
+
   function setValidationCheckEvidence(checkId, checked) {
     setValidationEvidence((current) => {
       const next = { ...current };
@@ -3449,6 +3497,24 @@ export default function App() {
 
             <RealDataLaunchRoadmapPanel roadmap={realDataLaunchRoadmap} />
 
+            <ScopedExecutorCommandFlowPanel
+              flow={scopedExecutorCommandFlow}
+              agent={{
+                configured: openAiConfig.configured || openAiAgentContext.runtime.openAiAdvisorConfigured,
+                keySource: openAiAgentContext.runtime.openAiAdvisorConfigured ? openAiAgentContext.runtime.openAiKeySource : openAiConfig.keySource,
+                model: openAiConfig.model,
+                running: aiAdvice.status === "running",
+                error: aiAdvice.error,
+                result: aiAdvice.result?.advice || null,
+                broker: openAiRecommendationBroker,
+                runHistory: openAiAgentRunHistory
+              }}
+              onAction={handleScopedExecutorCommand}
+              onAskAgent={askOpenAIAgent}
+              onAgentAction={handleOpenAIAgentRecommendation}
+              onExportSmokePacket={exportExecutorSmokeRunPacket}
+            />
+
             <NativeBetaDistributionPanel
               readiness={nativeBetaDistributionReadiness}
               evidence={nativeBetaEvidence}
@@ -3941,7 +4007,7 @@ function NativeScannerPanel({ capability, nativeScan }) {
           : "Demo only";
 
   return (
-    <Card>
+    <Card id="real-data-readiness-panel">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -4176,6 +4242,137 @@ function RealDataLaunchRoadmapPanel({ roadmap }) {
               </div>
             ))}
           </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onAskAgent, onAgentAction, onExportSmokePacket }) {
+  const next = flow.nextAction || {};
+  const result = agent.result || null;
+  const brokerRows = agent.broker?.rows || [];
+  const brokerByKey = new Map(brokerRows.map((row) => [row.key, row]));
+  const recommendedRows = (result?.recommendedActions || []).slice(0, 3);
+  const hasAgentAdvice = Boolean(result);
+
+  return (
+    <Card id="scoped-executor-command-flow-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Play className="h-4 w-4" />
+              Real cleanup command flow
+            </CardTitle>
+            <CardDescription>{flow.primary}</CardDescription>
+          </div>
+          <Badge variant={flow.tone}>{flow.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <QueueStat label="Route" value={flow.route ? flow.route.split("-")[0] : "none"} tone={flow.route ? "review" : "restricted"} />
+          <QueueStat label="Progress" value={`${flow.progress}%`} tone={flow.progress >= 60 ? "safe" : "review"} />
+          <QueueStat label="Complete" value={`${flow.counts.complete}/${flow.counts.total}`} tone={flow.counts.complete === flow.counts.total ? "safe" : "review"} />
+          <QueueStat label="Blocked" value={flow.counts.blocked} tone={flow.counts.blocked ? "restricted" : "safe"} />
+          <QueueStat label="OpenAI" value={agent.configured ? "ready" : "set .env"} tone={agent.configured ? "safe" : "review"} />
+          <QueueStat label="AI ready" value={agent.broker?.counts?.ready || 0} tone={agent.broker?.counts?.ready ? "safe" : "review"} />
+          <QueueStat label="AI blocked" value={agent.broker?.counts?.blocked || 0} tone={agent.broker?.counts?.blocked ? "restricted" : "safe"} />
+          <QueueStat label="AI runs" value={agent.runHistory?.length || 0} tone={agent.runHistory?.length ? "safe" : "review"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">{flow.title}</span>
+            {flow.primaryRow?.envVar ? <Badge variant={flow.primaryRow.flagEnabled ? "safe" : "review"}>{flow.primaryRow.envVar}</Badge> : null}
+            {flow.primaryRow?.requestMode ? <Badge variant="outline">{flow.primaryRow.requestMode}</Badge> : null}
+          </div>
+          <Progress value={flow.progress} indicatorClassName={flow.status === "ready-to-execute" ? "bg-emerald-600" : "bg-blue-600"} />
+          {flow.primaryRow?.blockedReason ? <p className="mt-2 text-xs text-muted-foreground">{flow.primaryRow.blockedReason}</p> : null}
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-5">
+          {flow.steps.map((step) => {
+            const stepDisabled = step.id === "execute" && step.status !== "active";
+            return (
+              <button
+                key={step.id}
+                type="button"
+                className={`rounded-md border bg-card p-3 text-left transition hover:bg-muted/40 ${stepDisabled ? "opacity-60" : ""}`}
+                disabled={stepDisabled}
+                onClick={() => onAction({ type: step.actionType, targetPanel: step.targetPanel, route: step.route })}
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{step.label}</span>
+                  <Badge variant={step.tone}>{step.status}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">{step.detail}</p>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">AI recommendation path</span>
+            <Badge variant={agent.configured ? "safe" : "review"}>{agent.configured ? agent.model : "OPENAI_API_KEY missing"}</Badge>
+            <Badge variant="safe">direct tools blocked</Badge>
+            <Badge variant={agent.broker?.tone || "review"}>{agent.broker?.status || "broker-idle"}</Badge>
+            {agent.keySource ? <Badge variant="outline">{agent.keySource}</Badge> : null}
+          </div>
+          {hasAgentAdvice ? (
+            <div className="grid gap-2">
+              <div className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto text-sm font-medium">{result.nextAction || "OpenAI next action"}</span>
+                  <Badge variant="outline">{result.confidence || "medium"}</Badge>
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">{result.summary}</p>
+              </div>
+              {recommendedRows.length ? (
+                <div className="grid gap-2 md:grid-cols-3">
+                  {recommendedRows.map((row) => {
+                    const brokerRow = brokerByKey.get(getOpenAIAgentRecommendationKey(row));
+                    const actionLabel = brokerRow?.canAct ? brokerRow.buttonLabel : brokerRow?.targetPanel ? "Open gate" : "Review";
+                    return (
+                      <div key={getOpenAIAgentRecommendationKey(row)} className="rounded-md border bg-card p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="mr-auto text-sm font-medium">{row.title}</span>
+                          <Badge variant={brokerRow?.tone || "review"}>{brokerRow?.status || row.priority}</Badge>
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">{row.reason}</p>
+                        <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => onAgentAction(row)} disabled={agent.running || (!brokerRow?.canAct && !brokerRow?.targetPanel)}>
+                          <Play className="h-4 w-4" />
+                          Follow AI recommendation: {actionLabel}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="rounded-md border bg-card p-3 text-sm text-muted-foreground">
+              Ask OpenAI for the next cleanup step after a real scan. The model receives bounded scan and plan context, then any recommendation still routes through scan, consent, feature-flag, target, and proof checks.
+            </div>
+          )}
+          {agent.error ? <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{agent.error}</div> : null}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" onClick={() => onAction(next)} disabled={flow.scanning || next.disabled}>
+            {flow.scanning ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            {flow.scanning ? "Scanning" : next.label || "Open route"}
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={onAskAgent} disabled={agent.running || !agent.configured}>
+            {agent.running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {agent.running ? "Asking OpenAI" : "Ask OpenAI for next cleanup step"}
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={onExportSmokePacket}>
+            <Download className="h-4 w-4" />
+            Export smoke packet
+          </Button>
         </div>
       </CardContent>
     </Card>

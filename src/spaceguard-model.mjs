@@ -7628,6 +7628,84 @@ export function buildExecutorSmokeRunPacketMarkdown(packet = null) {
   ].join("\n");
 }
 
+export function buildScopedExecutorCommandFlow({
+  smokeRunPacket = null,
+  executionProofHandoff = null,
+  nativeCapability = null,
+  scanning = false,
+  generatedAt = "set-on-export"
+} = {}) {
+  const packet = smokeRunPacket || buildExecutorSmokeRunPacket();
+  const primaryRow = selectScopedExecutorCommandRow(packet);
+  const proofStatus = executionProofHandoff?.status || packet.proofStatus || "waiting-for-execution";
+  const proofRequiresAction = Boolean(proofStatus && proofStatus !== "waiting-for-execution" && proofStatus !== "proof-complete");
+  const scanCheck = primaryRow?.checks?.find((check) => check.id === "scan-fingerprint");
+  const consentCheck = primaryRow?.checks?.find((check) => check.id === "consent");
+  const flagCheck = primaryRow?.checks?.find((check) => check.id === "feature-flag");
+  const targetCheck = primaryRow?.checks?.find((check) => check.id === "route-targets");
+  const nativeCheck = primaryRow?.checks?.find((check) => check.id === "native-runtime");
+  const steps = buildScopedExecutorCommandSteps({
+    primaryRow,
+    packet,
+    proofStatus,
+    proofRequiresAction,
+    nativeCheck,
+    scanCheck,
+    consentCheck,
+    flagCheck,
+    targetCheck
+  });
+  const nextAction = getScopedExecutorNextAction({
+    primaryRow,
+    packet,
+    proofStatus,
+    proofRequiresAction,
+    nativeCheck,
+    scanCheck,
+    consentCheck,
+    flagCheck,
+    targetCheck
+  });
+  const completed = steps.filter((step) => step.status === "complete").length;
+  const status = !primaryRow
+    ? "select-route"
+    : proofStatus === "proof-complete"
+      ? "proof-complete"
+      : proofRequiresAction
+        ? "proof-required"
+        : primaryRow.status === "ready"
+          ? "ready-to-execute"
+          : nextAction.type === "run-real-scan"
+            ? "scan-needed"
+            : nextAction.type === "arm-consent"
+              ? "consent-needed"
+              : "route-blocked";
+
+  return {
+    schemaVersion: "spaceguard-scoped-executor-command-flow/v1",
+    generatedAt,
+    status,
+    tone: status === "ready-to-execute" || status === "proof-complete" ? "safe" : status === "proof-required" || status === "route-blocked" ? "restricted" : "review",
+    route: primaryRow?.route || "",
+    title: primaryRow?.title || "No scoped executor selected",
+    panelId: primaryRow?.panelId || "executor-smoke-run-packet-panel",
+    actionLabel: primaryRow?.actionLabel || "Select route",
+    primaryRow,
+    nextAction,
+    steps,
+    counts: {
+      total: steps.length,
+      complete: completed,
+      waiting: steps.filter((step) => step.status === "waiting").length,
+      blocked: steps.filter((step) => step.status === "blocked").length
+    },
+    progress: steps.length ? Math.round((completed / steps.length) * 100) : 0,
+    primary: getScopedExecutorCommandPrimary(status, primaryRow, nextAction, scanning),
+    nativeAvailable: Boolean(nativeCapability?.available || packet.nativeAvailable),
+    scanning: Boolean(scanning)
+  };
+}
+
 export function buildRealExecutorCapsule({
   executorManifest = null,
   executorPlan = null,
@@ -15324,6 +15402,173 @@ function getExecutorSmokeRunSteps(status, { readyRows = [], blockedRows = [], pr
   if (status === "needs-proof") return proofBlockedRows[0]?.operatorSteps?.slice(-2) || ["Run post-run rescan.", "Export rescan comparison."];
   if (status === "blocked") return blockedRows.slice(0, 3).map((row) => `${row.title}: ${row.blockedReason}`);
   return ["Run a native scan.", "Select one scoped executor route.", "Enable only that route's feature flag."];
+}
+
+function selectScopedExecutorCommandRow(packet = null) {
+  const rows = packet?.rows || [];
+  return (
+    rows.find((row) => row.status === "ready") ||
+    rows.find((row) => row.status === "needs-proof") ||
+    rows.find((row) => row.flagEnabled) ||
+    rows[0] ||
+    null
+  );
+}
+
+function buildScopedExecutorCommandSteps({
+  primaryRow = null,
+  packet = null,
+  proofStatus = "waiting-for-execution",
+  proofRequiresAction = false,
+  nativeCheck = null,
+  scanCheck = null,
+  consentCheck = null,
+  flagCheck = null,
+  targetCheck = null
+} = {}) {
+  const hasRoute = Boolean(primaryRow);
+  const proofComplete = proofStatus === "proof-complete";
+  return [
+    buildScopedExecutorCommandStep({
+      id: "scan",
+      label: "Native scan",
+      status: scanCheck?.passed ? "complete" : "active",
+      detail: scanCheck?.detail || (packet?.nativeAvailable ? "Run real scan to capture current local evidence." : "Open the Tauri desktop shell to scan real folders."),
+      actionType: "run-real-scan",
+      targetPanel: "real-data-readiness-panel"
+    }),
+    buildScopedExecutorCommandStep({
+      id: "consent",
+      label: "Consent",
+      status: consentCheck?.passed ? "complete" : scanCheck?.passed ? "active" : "waiting",
+      detail: consentCheck?.detail || "Arm consent for the current plan and scan fingerprint.",
+      actionType: "arm-consent",
+      targetPanel: "execution-consent-panel"
+    }),
+    buildScopedExecutorCommandStep({
+      id: "route",
+      label: primaryRow ? `Route: ${primaryRow.title}` : "Select route",
+      status: !hasRoute ? "active" : flagCheck?.passed && targetCheck?.passed && nativeCheck?.passed ? "complete" : "blocked",
+      detail: primaryRow?.blockedReason || targetCheck?.detail || "Select a scoped executor route and enable only its flag.",
+      actionType: "focus-route",
+      targetPanel: primaryRow?.panelId || "executor-smoke-run-packet-panel",
+      route: primaryRow?.route || ""
+    }),
+    buildScopedExecutorCommandStep({
+      id: "execute",
+      label: primaryRow?.actionLabel || "Run executor",
+      status: primaryRow?.status === "ready" && !proofRequiresAction ? "active" : proofComplete ? "complete" : "waiting",
+      detail: primaryRow?.status === "ready" ? "Run through the existing native executor panel." : primaryRow?.blockedReason || "Complete route checks before execution.",
+      actionType: "execute-route",
+      targetPanel: primaryRow?.panelId || "executor-smoke-run-packet-panel",
+      route: primaryRow?.route || ""
+    }),
+    buildScopedExecutorCommandStep({
+      id: "proof",
+      label: "Post-run proof",
+      status: proofComplete ? "complete" : proofRequiresAction ? "active" : "waiting",
+      detail: proofComplete ? "Rescan comparison matched the latest scoped run." : proofRequiresAction ? "Run post-run native rescan before another executor." : "Required immediately after execution.",
+      actionType: "run-post-run-rescan",
+      targetPanel: "execution-proof-handoff-panel"
+    })
+  ];
+}
+
+function buildScopedExecutorCommandStep({ id, label, status, detail, actionType, targetPanel, route = "" }) {
+  return {
+    id,
+    label,
+    status,
+    tone: status === "complete" ? "safe" : status === "blocked" ? "restricted" : status === "active" ? "review" : "advisory",
+    detail,
+    actionType,
+    targetPanel,
+    route
+  };
+}
+
+function getScopedExecutorNextAction({
+  primaryRow = null,
+  proofStatus = "waiting-for-execution",
+  proofRequiresAction = false,
+  nativeCheck = null,
+  scanCheck = null,
+  consentCheck = null,
+  flagCheck = null,
+  targetCheck = null
+} = {}) {
+  if (proofStatus === "proof-complete") {
+    return {
+      type: "focus-route",
+      label: "Review proof",
+      targetPanel: "execution-proof-handoff-panel",
+      route: primaryRow?.route || "",
+      disabled: false
+    };
+  }
+  if (proofRequiresAction) {
+    return {
+      type: "run-post-run-rescan",
+      label: "Run post-run rescan",
+      targetPanel: "execution-proof-handoff-panel",
+      route: primaryRow?.route || "",
+      disabled: proofStatus === "proof-complete"
+    };
+  }
+  if (!primaryRow) {
+    return {
+      type: "focus-route",
+      label: "Open smoke packet",
+      targetPanel: "executor-smoke-run-packet-panel",
+      route: "",
+      disabled: false
+    };
+  }
+  if (!nativeCheck?.passed || !scanCheck?.passed) {
+    return {
+      type: "run-real-scan",
+      label: "Run real scan",
+      targetPanel: "real-data-readiness-panel",
+      route: primaryRow.route,
+      disabled: false
+    };
+  }
+  if (!consentCheck?.passed) {
+    return {
+      type: "arm-consent",
+      label: "Arm consent",
+      targetPanel: "execution-consent-panel",
+      route: primaryRow.route,
+      disabled: false
+    };
+  }
+  if (!flagCheck?.passed || !targetCheck?.passed || primaryRow.status !== "ready") {
+    return {
+      type: "focus-route",
+      label: "Open route panel",
+      targetPanel: primaryRow.panelId || "executor-smoke-run-packet-panel",
+      route: primaryRow.route,
+      disabled: false
+    };
+  }
+  return {
+    type: "execute-route",
+    label: primaryRow.actionLabel || "Run scoped executor",
+    targetPanel: primaryRow.panelId,
+    route: primaryRow.route,
+    disabled: false
+  };
+}
+
+function getScopedExecutorCommandPrimary(status, primaryRow = null, nextAction = {}, scanning = false) {
+  if (scanning) return "Native scan is running. Wait for current evidence before executing.";
+  if (status === "select-route") return "Select a scoped cleanup route to start the real-run command flow.";
+  if (status === "proof-complete") return "The latest scoped execution has post-run proof. Export the packet before widening scope.";
+  if (status === "proof-required") return "Post-run proof is pending. Run rescan before any other scoped executor.";
+  if (status === "ready-to-execute") return `${primaryRow?.title || "Selected route"} is ready to execute through the existing guarded panel.`;
+  if (status === "scan-needed") return "Run a real native scan before executing this scoped route.";
+  if (status === "consent-needed") return "Arm consent for the current plan and scan fingerprint.";
+  return nextAction?.label ? `${primaryRow?.title || "Selected route"} needs: ${nextAction.label}.` : "Complete route checks before execution.";
 }
 
 function buildExecutorManifestNextSteps(routes, selectedRoutes) {
