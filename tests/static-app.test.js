@@ -580,6 +580,8 @@ assert(app.includes("ExecutionProofHandoffPanel"), "execution proof handoff pane
 assert(app.includes("execution-proof-handoff-panel"), "execution proof handoff panel should be focusable");
 assert(app.includes("Execution proof handoff"), "execution proof handoff should be visible after executors");
 assert(app.includes("Run post-run rescan"), "execution proof handoff should expose the ledger-preserving rescan action");
+assert(app.includes("blockExecutorForPendingProof"), "scoped executor handlers should block when post-run proof is pending");
+assert(openAiAgent.includes("post-run-proof"), "OpenAI broker should check pending post-run proof before executor recommendations");
 assert(app.includes("runPostRunReadonlyScan"), "post-run verification should have a ledger-preserving native rescan action");
 assert(app.includes("executionProofContext"), "post-run verification should freeze the execution plan context");
 assert(app.includes("commitExecutionLedger"), "execution ledger writes should go through one proof-context helper");

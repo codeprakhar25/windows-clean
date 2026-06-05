@@ -572,11 +572,14 @@ function buildExecutorRecommendationBrokerRow({ row, actionType, key, policy, co
   const planId = executionState.planId || context?.plan?.id || "";
   const consentPlanId = executionState.consentPlanId || "";
   const scanFingerprint = executionState.scanFingerprint || "";
+  const proofStatus = String(executionState.proofStatus || "waiting-for-execution");
+  const proofAllowsExecution = proofStatus === "waiting-for-execution" || proofStatus === "proof-complete";
   const targetCount = getExecutorRecommendationTargetCount(policy, context);
   const checks = [
     buildBrokerCheck("native-runtime", "Native runtime", Boolean(runtime.nativeAvailable), runtime.nativeAvailable ? "Tauri native runtime is available." : "Use the desktop shell before running scoped executors."),
     buildBrokerCheck("real-run-flag", "Scoped real-run flag", Boolean(runtime.realRunEnabled), runtime.realRunEnabled ? "Runtime exposes scoped real execution." : "Scoped real execution is disabled."),
     buildBrokerCheck("feature-flag", "Route feature flag", Boolean(runtime[policy.flag]), runtime[policy.flag] ? `${policy.flag} is enabled.` : `${policy.flag} is disabled.`),
+    buildBrokerCheck("post-run-proof", "Post-run proof", proofAllowsExecution, proofAllowsExecution ? `proof=${proofStatus}` : `Finish post-run proof before another scoped executor. proof=${proofStatus}`),
     buildBrokerCheck("plan-id", "Current plan", Boolean(planId), planId || "missing plan id"),
     buildBrokerCheck("scan-fingerprint", "Scan fingerprint", Boolean(scanFingerprint), scanFingerprint || "missing scan fingerprint"),
     buildBrokerCheck("consent", "Consent receipt", Boolean(planId && consentPlanId && consentPlanId === planId), consentPlanId ? `consent=${consentPlanId}` : "missing consent receipt"),

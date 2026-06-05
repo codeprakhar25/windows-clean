@@ -304,6 +304,7 @@ The demo also includes:
 - Plan snapshot verification so a ledger is trusted only when it matches the current selected actions, approvals, protected paths, and item decisions.
 - Post-run verification checklist that turns the current ledger into affected-root rescan checkpoints before any Windows validation can count, with a dedicated **Run post-run rescan** action that preserves the ledger and compares against the execution snapshot that produced it.
 - Execution proof handoff panel that appears with the scoped executor workflow and makes the next required post-run proof step explicit: current run type, reclaimed bytes, checkpoints, post-run scan timing, parity counts, and the ledger-preserving **Run post-run rescan** action.
+- Scoped executor handlers and OpenAI recommendation broker checks refuse a second scoped execution while the current ledger is still in `proof-required`, `proof-review`, or `proof-mismatch` state.
 - Rollback plan panel and local proof ledger that classify each selected executor route as rebuildable, restore-path-required, backup-required, permanent-warning, or blocked, then require reviewer, evidence path, and restore/backup/acknowledgement reference for proof routes.
 - Local run history that persists dry-run and scoped executor ledger records on the device and separates current-plan records from stale audit evidence.
 - Privacy boundary panel that explains local scan metadata, manual exports, local audit storage, blocked data classes, and disabled telemetry/cloud upload.

@@ -267,6 +267,8 @@ For each Windows validation run, capture:
 
 Rescan comparison only counts when the native scan is taken after the current run ledger. The expected operator order is: finish item decisions, arm and run the dry-run simulation or scoped executor, use **Execution proof handoff** or verification to click **Run post-run rescan**, then inspect the rescan comparison panel. The general **Run real scan** action starts a new planning scan and clears execution state; use it for discovery, not after-ledger proof. A native scan captured before the ledger remains evidence for sizing, not parity.
 
+After any scoped executor creates a ledger, another scoped executor should remain blocked until the proof handoff reaches `proof-complete`. Pending or mismatched proof is a stop condition, not a warning-only note.
+
 ## Release Criteria
 
 Do not implement write-capable executors until:

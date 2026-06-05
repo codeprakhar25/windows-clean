@@ -367,13 +367,15 @@ const assert = require("assert");
     executionState: {
       planId: "plan-npm",
       scanFingerprint: "scan-npm",
-      consentPlanId: ""
+      consentPlanId: "",
+      proofStatus: "proof-required"
     }
   });
   assert.strictEqual(blockedBroker.rows[0].status, "blocked", "broker should block executor recommendations when a feature flag or consent gate is missing");
   assert.strictEqual(blockedBroker.rows[0].canAct, false, "blocked broker row should not execute");
   assert(blockedBroker.rows[0].checks.some((check) => check.id === "feature-flag" && !check.passed), "broker should expose missing feature-flag evidence");
   assert(blockedBroker.rows[0].checks.some((check) => check.id === "consent" && !check.passed), "broker should expose missing consent evidence");
+  assert(blockedBroker.rows[0].checks.some((check) => check.id === "post-run-proof" && !check.passed), "broker should expose pending post-run proof evidence");
 
   const pnpmBroker = openai.buildOpenAIAgentRecommendationBroker({
     advice: {
