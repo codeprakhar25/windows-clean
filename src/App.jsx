@@ -92,6 +92,7 @@ import {
   buildTaskPowerBroker,
   buildTaskPowerCatalog,
   buildTaskPowerLeaseAudit,
+  buildTempExecutorActivationRehearsal,
   buildTempExecutorActivationGate,
   buildToolCommandInventory,
   buildUserDecisionReceipt,
@@ -689,6 +690,19 @@ export default function App() {
         realExecutorCapsule
       }),
     [runtimeCapabilities.result, firstSafeValidationGate, firstSafeImplementationWorkOrder, writeBoundaryProbe, releaseGate, writeReadiness, realExecutorCapsule]
+  );
+  const tempExecutorActivationRehearsal = useMemo(
+    () =>
+      buildTempExecutorActivationRehearsal({
+        runtimeCapabilities: runtimeCapabilities.result,
+        firstSafeExecutorContract,
+        firstSafeValidationGate,
+        firstSafeImplementationWorkOrder,
+        releaseGate,
+        writeReadiness,
+        realExecutorCapsule
+      }),
+    [runtimeCapabilities.result, firstSafeExecutorContract, firstSafeValidationGate, firstSafeImplementationWorkOrder, releaseGate, writeReadiness, realExecutorCapsule]
   );
   const baseAgentQuestionQueue = useMemo(
     () =>
@@ -1778,6 +1792,7 @@ export default function App() {
       firstSafeValidationGate,
       firstSafeImplementationWorkOrder,
       tempExecutorActivationGate,
+      tempExecutorActivationRehearsal,
       writeBoundaryProbe,
       ledgerHistorySummary,
       storageStrategy,
@@ -2289,6 +2304,7 @@ export default function App() {
             <FirstSafeValidationGatePanel gate={firstSafeValidationGate} />
             <FirstSafeImplementationWorkOrderPanel workOrder={firstSafeImplementationWorkOrder} />
             <TempExecutorActivationGatePanel gate={tempExecutorActivationGate} />
+            <TempExecutorActivationRehearsalPanel rehearsal={tempExecutorActivationRehearsal} />
             <WriteBoundaryProbePanel
               probe={writeBoundaryProbe}
               nativeWriteBoundary={nativeWriteBoundary}
@@ -5607,6 +5623,59 @@ function TempExecutorActivationGatePanel({ gate }) {
               </div>
             ))}
           </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TempExecutorActivationRehearsalPanel({ rehearsal }) {
+  const visibleRows = rehearsal.rows.slice(0, 4);
+  const activationStatus = rehearsal.activationGate?.status || "not-evaluated";
+
+  return (
+    <Card id="temp-activation-rehearsal-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Temp activation rehearsal
+          <Badge variant={rehearsal.tone}>{rehearsal.status}</Badge>
+        </CardTitle>
+        <CardDescription>{rehearsal.primary}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <QueueStat label="Entries" value={rehearsal.counts.entries} tone={rehearsal.counts.entries ? "review" : "restricted"} />
+          <QueueStat label="Preflight" value={rehearsal.counts.preflightChecks} tone={rehearsal.counts.preflightChecks ? "review" : "restricted"} />
+          <QueueStat label="Gate" value={activationStatus} tone={activationStatus === "feature-flag-disabled" ? "safe" : "review"} />
+          <QueueStat label="Mutation" value={rehearsal.mutationEnabled ? "enabled" : "locked"} tone={rehearsal.mutationEnabled ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">Demo-only evidence</span>
+            <Badge variant={rehearsal.demoOnly ? "outline" : "restricted"}>
+              {rehearsal.demoOnly ? "synthetic" : "native"}
+            </Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Route: {rehearsal.route.title}</span>
+            <span>Feature flag: {rehearsal.route.featureFlag}</span>
+            <span>Rejected entries: {rehearsal.syntheticWriteBoundaryProbe?.counts?.rejected || 0}</span>
+            <span>Bytes reclaimed: {formatBytes(rehearsal.syntheticWriteBoundaryProbe?.counts?.bytes || 0)}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {visibleRows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 text-sm font-medium">{row.label}</div>
+                <Badge variant={row.passed ? "safe" : row.status === "blocked" ? "restricted" : "review"}>{row.status}</Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">{row.detail}</p>
+              {row.evidence ? <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{row.evidence}</p> : null}
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>

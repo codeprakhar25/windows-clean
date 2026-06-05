@@ -91,6 +91,8 @@ const requiredAppMarkers = [
   "Real executor capsule",
   "First-safe executor contract",
   "Temp executor activation",
+  "Temp activation rehearsal",
+  "Demo-only evidence",
   "Activation boundary",
   "activation locked",
   "Open temp activation",
@@ -241,6 +243,9 @@ assert(app.includes("first-safe-work-order-panel"), "first-safe work order shoul
 assert(app.includes("buildTempExecutorActivationGate"), "temp executor activation gate should be wired");
 assert(app.includes("TempExecutorActivationGatePanel"), "temp executor activation gate panel should be rendered");
 assert(app.includes("temp-executor-activation-gate-panel"), "temp executor activation gate should be focusable");
+assert(app.includes("buildTempExecutorActivationRehearsal"), "temp activation rehearsal should be wired");
+assert(app.includes("TempExecutorActivationRehearsalPanel"), "temp activation rehearsal panel should be rendered");
+assert(app.includes("temp-activation-rehearsal-panel"), "temp activation rehearsal should be focusable");
 assert(app.includes("Open temp activation"), "question queue actions should focus temp activation");
 assert(app.includes("buildWriteBoundaryProbe"), "write boundary probe should be wired");
 assert(app.includes("buildValidationEvidencePack"), "validation evidence pack should be wired");
@@ -379,7 +384,9 @@ assert(model.includes("spaceguard-real-executor-capsule/v1"), "model should expo
 assert(model.includes("spaceguard-first-safe-executor-contract/v1"), "model should expose first-safe executor contract schema");
 assert(model.includes("spaceguard-first-safe-work-order/v1"), "model should expose first-safe implementation work order schema");
 assert(model.includes("spaceguard-temp-executor-activation-gate/v1"), "model should expose temp executor activation gate schema");
+assert(model.includes("spaceguard-temp-activation-rehearsal/v1"), "model should expose temp activation rehearsal schema");
 assert(model.includes("feature-flag-disabled"), "temp executor activation should block while the route flag is disabled");
+assert(model.includes("Demo-only activation rehearsal"), "temp activation rehearsal should identify synthetic evidence");
 assert(model.includes("activation-review-ready"), "temp executor activation should have an explicit review-ready state");
 assert(model.includes("review-temp-activation"), "question queue should ask to review temp activation blockers");
 assert(model.includes("tempActivationStatus"), "workflow handoff should carry temp activation status");

@@ -293,6 +293,7 @@ Temp executor activation invariant:
 - Activation review applies only to `known-temp-delete` and only after disabled scaffold and per-action native preflight evidence exist.
 - The gate must name the current blocker: missing preflight, disabled `tempCleanupExecutor`, validation/work-order blockers, release/write-readiness blockers, or unsafe runtime.
 - The gate is review evidence only. It must keep `activationAllowed=false`, `mutationEnabled=false`, `realRunAllowed=false`, and `destructiveActionAvailable=false` in this build.
+- Demo activation rehearsal may synthesize rejected preflight evidence for presentation, but it must be marked demo-only and cannot satisfy native validation, release readiness, or write readiness.
 
 Write boundary probe invariant:
 

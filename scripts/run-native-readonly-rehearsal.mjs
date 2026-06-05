@@ -26,6 +26,7 @@ import {
   buildTaskPowerBroker,
   buildTaskPowerCatalog,
   buildTaskPowerLeaseAudit,
+  buildTempExecutorActivationRehearsal,
   buildTempExecutorActivationGate,
   buildValidationEvidencePack,
   buildWriteBoundaryProbe,
@@ -296,6 +297,15 @@ export function buildNativeReadonlyRehearsalSummary() {
     writeReadiness,
     realExecutorCapsule
   });
+  const tempExecutorActivationRehearsal = buildTempExecutorActivationRehearsal({
+    runtimeCapabilities,
+    firstSafeExecutorContract,
+    firstSafeValidationGate,
+    firstSafeImplementationWorkOrder,
+    releaseGate,
+    writeReadiness,
+    realExecutorCapsule
+  });
   const taskPowerCatalog = buildTaskPowerCatalog({
     actionList,
     selectedIds,
@@ -389,6 +399,8 @@ export function buildNativeReadonlyRehearsalSummary() {
     ["first-safe work order keeps real run locked", !firstSafeImplementationWorkOrder.realRunAllowed && !firstSafeImplementationWorkOrder.destructiveActionAvailable],
     ["temp activation preflight missing", tempExecutorActivationGate.status === "preflight-missing"],
     ["temp activation keeps mutation locked", !tempExecutorActivationGate.activationAllowed && !tempExecutorActivationGate.mutationEnabled],
+    ["temp activation rehearsal ready", tempExecutorActivationRehearsal.status === "rehearsal-ready"],
+    ["temp activation rehearsal stays flag-blocked", tempExecutorActivationRehearsal.activationGate?.status === "feature-flag-disabled"],
     ["destructive commands absent", !runtimeCapabilities.destructiveCommands],
     ["zero real-run rows", planLock.counts.realRun === 0 && dryRunLaunchGuard.counts.realRun === 0]
   ].filter(([, passed]) => !passed);
@@ -411,6 +423,8 @@ export function buildNativeReadonlyRehearsalSummary() {
     launchStatus: dryRunLaunchGuard.status,
     workOrderStatus: firstSafeImplementationWorkOrder.status,
     activationGateStatus: tempExecutorActivationGate.status,
+    activationRehearsalStatus: tempExecutorActivationRehearsal.status,
+    activationRehearsalGateStatus: tempExecutorActivationRehearsal.activationGate?.status || "not-evaluated",
     realRunEnabled: false,
     destructiveCommands: false,
     failures: failures.map(([label]) => label)

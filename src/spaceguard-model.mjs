@@ -6761,6 +6761,163 @@ export function buildTempExecutorActivationGate({
   };
 }
 
+export function buildTempExecutorActivationRehearsal({
+  runtimeCapabilities = {},
+  firstSafeExecutorContract = null,
+  firstSafeValidationGate = null,
+  firstSafeImplementationWorkOrder = null,
+  releaseGate = null,
+  writeReadiness = null,
+  realExecutorCapsule = null
+} = {}) {
+  const routeId = "known-temp-delete";
+  const contract = firstSafeExecutorContracts[routeId];
+  const requestPreview = firstSafeExecutorContract?.requestPreview || null;
+  const unsafeRuntime = Boolean(
+    runtimeCapabilities?.realRunEnabled ||
+      runtimeCapabilities?.destructiveCommands ||
+      runtimeCapabilities?.safeExecutorsEnabled ||
+      realExecutorCapsule?.destructiveActionAvailable
+  );
+  const contractReady = Boolean(
+    firstSafeExecutorContract?.status === "disabled-contract-ready" &&
+      firstSafeExecutorContract?.route?.id === routeId &&
+      requestPreview?.route === routeId
+  );
+  const rehearsalRuntime = {
+    ...runtimeCapabilities,
+    available: true,
+    executeCleanupPlan: true,
+    realRunEnabled: false,
+    destructiveCommands: false,
+    safeExecutorsEnabled: false,
+    executorFlags: {
+      ...normalizeExecutorFeatureFlags(runtimeCapabilities?.executorFlags || {}),
+      tempCleanupExecutor: false
+    }
+  };
+  const syntheticWriteBoundaryProbe = contractReady
+    ? buildWriteBoundaryProbe({
+        nativeWriteBoundary: {
+          status: "complete",
+          result: {
+            available: true,
+            accepted: false,
+            realRunEnabled: false,
+            destructiveCommands: false,
+            reason: "Demo-only activation rehearsal generated rejected temp executor preflight evidence.",
+            contractEcho: buildTempActivationContractEcho(requestPreview),
+            executorScaffold: {
+              route: routeId,
+              title: contract.title,
+              featureFlag: contract.featureFlag,
+              status: "feature-flag-disabled",
+              validationStatus: firstSafeValidationGate?.implementationPlanningReady ? "validation-ready" : "validation-required",
+              mutationEnabled: false,
+              reason: "Demo rehearsal scaffold is disabled and cannot mutate."
+            },
+            entries: buildTempActivationSyntheticEntries(requestPreview, firstSafeValidationGate),
+            warnings: ["Demo-only evidence; no native command ran and no filesystem mutation was attempted."]
+          }
+        },
+        realExecutorCapsule,
+        firstSafeExecutorContract,
+        runtimeCapabilities: rehearsalRuntime
+      })
+    : null;
+  const activationGate = syntheticWriteBoundaryProbe
+    ? buildTempExecutorActivationGate({
+        runtimeCapabilities: rehearsalRuntime,
+        firstSafeValidationGate,
+        firstSafeImplementationWorkOrder,
+        writeBoundaryProbe: syntheticWriteBoundaryProbe,
+        releaseGate,
+        writeReadiness,
+        realExecutorCapsule
+      })
+    : null;
+  const rows = [
+    buildTempActivationRehearsalRow({
+      id: "disabled-contract",
+      label: "Disabled contract",
+      passed: contractReady,
+      blocked: unsafeRuntime,
+      detail: contractReady
+        ? "Current first-safe contract can be echoed by the demo rehearsal."
+        : "A ready known-temp disabled contract is required before rehearsal evidence can be synthesized.",
+      evidence: firstSafeExecutorContract?.status || "missing"
+    }),
+    buildTempActivationRehearsalRow({
+      id: "synthetic-rejection",
+      label: "Synthetic rejected probe",
+      passed: Boolean(syntheticWriteBoundaryProbe?.rejectionEvidence),
+      blocked: unsafeRuntime,
+      detail: syntheticWriteBoundaryProbe?.rejectionEvidence
+        ? "Demo-only write-boundary evidence rejects every entry with zero bytes."
+        : "Rejected probe evidence was not produced.",
+      evidence: syntheticWriteBoundaryProbe?.status || "not-built"
+    }),
+    buildTempActivationRehearsalRow({
+      id: "activation-gate",
+      label: "Activation gate outcome",
+      passed: activationGate?.status === "feature-flag-disabled",
+      blocked: unsafeRuntime,
+      detail: activationGate?.primary || "Activation gate was not evaluated.",
+      evidence: activationGate?.status || "not-evaluated"
+    }),
+    buildTempActivationRehearsalRow({
+      id: "mutation-lock",
+      label: "Mutation lock",
+      passed: !unsafeRuntime && !activationGate?.activationAllowed && !activationGate?.mutationEnabled,
+      blocked: unsafeRuntime,
+      detail: unsafeRuntime
+        ? "Runtime write capability is visible; demo rehearsal must stop."
+        : "Rehearsal is proof-only and cannot enable mutation.",
+      evidence: "demo-only"
+    })
+  ];
+  const blockers = rows
+    .filter((row) => !row.passed)
+    .map((row) => ({ id: row.id, label: row.label, detail: row.detail }));
+  const status = unsafeRuntime
+    ? "unsafe-runtime"
+    : !contractReady
+      ? "contract-missing"
+      : activationGate?.status === "feature-flag-disabled"
+        ? "rehearsal-ready"
+        : "rehearsal-blocked";
+
+  return {
+    schemaVersion: "spaceguard-temp-activation-rehearsal/v1",
+    status,
+    tone: status === "rehearsal-ready" ? "safe" : status === "unsafe-runtime" ? "restricted" : "review",
+    demoOnly: true,
+    route: {
+      id: routeId,
+      title: contract.title,
+      featureFlag: contract.featureFlag
+    },
+    activationGate,
+    syntheticWriteBoundaryProbe,
+    realRunAllowed: false,
+    mutationEnabled: false,
+    destructiveActionAvailable: false,
+    mutationAttempted: false,
+    rows,
+    blockers,
+    counts: {
+      checks: rows.length,
+      passed: rows.filter((row) => row.passed).length,
+      blocked: blockers.length,
+      entries: syntheticWriteBoundaryProbe?.counts?.entries || 0,
+      preflightChecks: syntheticWriteBoundaryProbe?.counts?.preflightChecks || 0,
+      realRun: 0
+    },
+    primary: getTempActivationRehearsalPrimary(status, activationGate, blockers),
+    steps: buildTempActivationRehearsalSteps(status, activationGate, blockers)
+  };
+}
+
 export function buildToolCommandInventory({
   actionList = actions,
   executorPlan = null,
@@ -8540,6 +8697,7 @@ export function buildReport({
   firstSafeValidationGate = null,
   firstSafeImplementationWorkOrder = null,
   tempExecutorActivationGate = null,
+  tempExecutorActivationRehearsal = null,
   writeBoundaryProbe = null,
   ledgerHistorySummary = null,
   storageStrategy = null,
@@ -9363,6 +9521,25 @@ export function buildReport({
           tempExecutorActivationGate.blockers.length
             ? tempExecutorActivationGate.blockers.map((blocker) => `- Blocker: ${blocker.label} | ${blocker.detail}`).join("\n")
             : "- No activation blockers."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Temp Activation Rehearsal",
+    tempExecutorActivationRehearsal
+      ? [
+          `- Status: ${tempExecutorActivationRehearsal.status}`,
+          `- Demo only: ${tempExecutorActivationRehearsal.demoOnly ? "yes" : "no"}`,
+          `- Route: ${tempExecutorActivationRehearsal.route.title} (${tempExecutorActivationRehearsal.route.id})`,
+          `- Activation gate: ${tempExecutorActivationRehearsal.activationGate?.status || "not-evaluated"}`,
+          `- Real run allowed: ${tempExecutorActivationRehearsal.realRunAllowed ? "yes" : "no"}`,
+          `- Mutation enabled: ${tempExecutorActivationRehearsal.mutationEnabled ? "yes" : "no"}`,
+          `- Mutation attempted: ${tempExecutorActivationRehearsal.mutationAttempted ? "yes" : "no"}`,
+          `- Entries: ${tempExecutorActivationRehearsal.counts.entries}`,
+          `- Preflight checks: ${tempExecutorActivationRehearsal.counts.preflightChecks}`,
+          `- Primary: ${tempExecutorActivationRehearsal.primary}`,
+          tempExecutorActivationRehearsal.rows.length
+            ? tempExecutorActivationRehearsal.rows.map((row) => `- ${row.label}: ${row.status} | ${row.detail}`).join("\n")
+            : "- No rehearsal rows."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -12018,6 +12195,86 @@ function buildTempExecutorActivationGateSteps(status, { blockers = [], contract 
   return visibleBlockers.length
     ? visibleBlockers.map((blocker) => `${blocker.label}: ${blocker.detail}`)
     : ["Complete activation evidence.", "Keep mutation locked.", "Review the temp route again."];
+}
+
+function buildTempActivationContractEcho(requestPreview = {}) {
+  return {
+    schemaVersion: requestPreview.schemaVersion || "spaceguard-first-safe-executor-contract/v1",
+    requestMode: requestPreview.mode || "reject-only-preview",
+    planId: requestPreview.planId || "",
+    route: requestPreview.route || "known-temp-delete",
+    scanFingerprint: requestPreview.scanFingerprint || "",
+    consentPlanId: requestPreview.consentPlanId || "",
+    expectedBytes: Number(requestPreview.expectedBytes || 0),
+    dryRunOnly: true,
+    mutationAttempted: false,
+    actionCount: Number(requestPreview.actionCount || requestPreview.actions?.length || 0)
+  };
+}
+
+function buildTempActivationSyntheticEntries(requestPreview = {}, firstSafeValidationGate = null) {
+  const actions = Array.isArray(requestPreview.actions) && requestPreview.actions.length
+    ? requestPreview.actions
+    : [{ id: "windows-temp", title: "Windows temporary files", route: "known-temp-delete", targetPath: "%TEMP%" }];
+  const validationReady = Boolean(firstSafeValidationGate?.implementationPlanningReady);
+  const validationStatus = validationReady ? "passed" : "blocked";
+  const validationDetail = validationReady
+    ? "Route validation gate is ready."
+    : firstSafeValidationGate?.primary || "Route validation evidence is still incomplete.";
+
+  return actions.map((action) => ({
+    id: action.id || "windows-temp",
+    title: action.title || "Windows temporary files",
+    route: action.route || requestPreview.route || "known-temp-delete",
+    result: "rejected",
+    rejectCode: "temp-executor-feature-flag-disabled",
+    bytes: 0,
+    preflightStatus: "executor-disabled-after-preflight",
+    preflightChecks: [
+      { id: "route-first-safe", label: "First-safe route", status: "passed", detail: "Known temp cleanup is a first-safe route." },
+      { id: "request-shape", label: "Request shape", status: "passed", detail: "Dry-run-only request shape echoes the current plan contract." },
+      { id: "target-allowlist", label: "Target allowlist", status: "passed", detail: `${action.targetPath || "%TEMP%"} matches the temp root allowlist.` },
+      { id: "mutation-lock", label: "Mutation lock", status: "passed", detail: "Demo rehearsal keeps mutation disabled." },
+      { id: "feature-flag", label: "Feature flag", status: "blocked", detail: "tempCleanupExecutor is disabled." },
+      { id: "validation-evidence", label: "Validation evidence", status: validationStatus, detail: validationDetail }
+    ],
+    note: "Demo-only activation rehearsal; no native command ran and no mutation was attempted."
+  }));
+}
+
+function buildTempActivationRehearsalRow({ id, label, passed = false, blocked = false, detail = "", evidence = "" } = {}) {
+  return {
+    id,
+    label,
+    status: blocked ? "blocked" : passed ? "passed" : "waiting",
+    passed: Boolean(passed && !blocked),
+    detail,
+    evidence
+  };
+}
+
+function getTempActivationRehearsalPrimary(status, activationGate = null, blockers = []) {
+  if (status === "rehearsal-ready") {
+    return "Demo activation rehearsal proves the temp scaffold still stops at the disabled feature flag.";
+  }
+  if (status === "unsafe-runtime") return "Demo activation rehearsal is stopped because runtime write capability is visible.";
+  if (status === "contract-missing") return "Build a ready known-temp disabled contract before demo activation rehearsal.";
+  return activationGate?.primary || blockers[0]?.detail || "Demo activation rehearsal is blocked.";
+}
+
+function buildTempActivationRehearsalSteps(status, activationGate = null, blockers = []) {
+  if (status === "rehearsal-ready") {
+    return [
+      "Use the rehearsal to show the full disabled-scaffold path without native mutation.",
+      "Keep the real write-boundary probe separate for desktop evidence.",
+      "Do not count rehearsal evidence as Windows validation or release readiness."
+    ];
+  }
+  if (status === "unsafe-runtime") {
+    return ["Stop rehearsal.", "Restore dry-run-only runtime signals.", "Regenerate the rehearsal after write capability is hidden."];
+  }
+  const visible = blockers.slice(0, 3);
+  return visible.length ? visible.map((blocker) => `${blocker.label}: ${blocker.detail}`) : ["Build the disabled first-safe contract.", "Keep mutation locked.", "Run the demo rehearsal again."];
 }
 
 function normalizeWriteExecutorScaffold(value = null) {

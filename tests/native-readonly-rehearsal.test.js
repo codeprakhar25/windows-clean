@@ -14,6 +14,8 @@ assert.strictEqual(summary.safetyStatus, "dry-run-interlocked", "native rehearsa
 assert.strictEqual(summary.launchStatus, "dry-run-launch-ready", "native rehearsal should be launch-ready for dry-run only");
 assert.strictEqual(summary.workOrderStatus, "validation-blocked", "native rehearsal should keep first-safe work order blocked by missing Windows validation evidence");
 assert.strictEqual(summary.activationGateStatus, "preflight-missing", "native rehearsal should keep temp activation blocked before write preflight evidence");
+assert.strictEqual(summary.activationRehearsalStatus, "rehearsal-ready", "native rehearsal should synthesize disabled temp activation evidence");
+assert.strictEqual(summary.activationRehearsalGateStatus, "feature-flag-disabled", "native activation rehearsal should stop at disabled temp flag");
 assert.strictEqual(summary.realRunEnabled, false, "native rehearsal must not enable real execution");
 assert.strictEqual(summary.destructiveCommands, false, "native rehearsal must not expose destructive commands");
 assert(summary.planId.startsWith("plan-"), "native rehearsal should bind a plan id");

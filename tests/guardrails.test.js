@@ -3041,6 +3041,41 @@ const assert = require("assert");
     intakePolicy: intakeAllowedPolicy
   });
   assert(activationQuestionQueue.questions.some((question) => question.id === "review-temp-activation" && question.targetPanel === "temp-executor-activation-gate-panel"), "question queue should focus the temp activation gate after preflight evidence exists");
+  const tempActivationRehearsal = guard.buildTempExecutorActivationRehearsal({
+    runtimeCapabilities: {
+      available: false,
+      realRunEnabled: false,
+      destructiveCommands: false,
+      safeExecutorsEnabled: false,
+      executorFlags: { tempCleanupExecutor: false }
+    },
+    firstSafeExecutorContract: firstSafeContract,
+    firstSafeValidationGate: blockedFirstSafeValidationGate,
+    firstSafeImplementationWorkOrder: blockedFirstSafeWorkOrder,
+    releaseGate: enabledGate,
+    writeReadiness: currentBuildWriteReadiness,
+    realExecutorCapsule: currentBuildExecutorCapsule
+  });
+  assert.strictEqual(tempActivationRehearsal.schemaVersion, "spaceguard-temp-activation-rehearsal/v1", "temp activation rehearsal should expose a schema version");
+  assert.strictEqual(tempActivationRehearsal.status, "rehearsal-ready", "demo rehearsal should synthesize rejected temp activation evidence");
+  assert.strictEqual(tempActivationRehearsal.demoOnly, true, "temp activation rehearsal must be demo-only");
+  assert.strictEqual(tempActivationRehearsal.activationGate.status, "feature-flag-disabled", "temp activation rehearsal should stop at disabled feature flag");
+  assert.strictEqual(tempActivationRehearsal.syntheticWriteBoundaryProbe.rejectionEvidence, true, "temp activation rehearsal should build rejected write-boundary evidence");
+  assert.strictEqual(tempActivationRehearsal.syntheticWriteBoundaryProbe.counts.bytes, 0, "temp activation rehearsal must report zero bytes");
+  assert.strictEqual(tempActivationRehearsal.mutationAttempted, false, "temp activation rehearsal must not attempt mutation");
+  assert.strictEqual(tempActivationRehearsal.mutationEnabled, false, "temp activation rehearsal must keep mutation disabled");
+  assert(tempActivationRehearsal.syntheticWriteBoundaryProbe.counts.preflightChecks > 0, "temp activation rehearsal should include preflight checks");
+  const unsafeTempActivationRehearsal = guard.buildTempExecutorActivationRehearsal({
+    runtimeCapabilities: { available: true, realRunEnabled: true, destructiveCommands: true },
+    firstSafeExecutorContract: firstSafeContract,
+    firstSafeValidationGate: readyFirstSafeValidationGate,
+    firstSafeImplementationWorkOrder: readyFirstSafeWorkOrder,
+    releaseGate: enabledGate,
+    writeReadiness: currentBuildWriteReadiness,
+    realExecutorCapsule: currentBuildExecutorCapsule
+  });
+  assert.strictEqual(unsafeTempActivationRehearsal.status, "unsafe-runtime", "temp activation rehearsal should stop on unsafe runtime signals");
+  assert.strictEqual(unsafeTempActivationRehearsal.realRunAllowed, false, "unsafe temp activation rehearsal must not allow real execution");
   const targetRejectedWriteBoundaryProbe = guard.buildWriteBoundaryProbe({
     nativeWriteBoundary: {
       status: "complete",
@@ -3306,6 +3341,7 @@ const assert = require("assert");
     firstSafeValidationGate: readyFirstSafeValidationGate,
     firstSafeImplementationWorkOrder: readyFirstSafeWorkOrder,
     tempExecutorActivationGate: disabledFlagActivationGate,
+    tempExecutorActivationRehearsal: tempActivationRehearsal,
     writeBoundaryProbe: rejectedWriteBoundaryProbe
   });
   assert(writeReadinessReport.includes("## Write Readiness"), "dry-run report should include write readiness");
@@ -3322,6 +3358,9 @@ const assert = require("assert");
   assert(writeReadinessReport.includes("## Temp Executor Activation Gate"), "dry-run report should include temp executor activation gate");
   assert(writeReadinessReport.includes("Activation allowed: no"), "activation gate report should keep activation locked");
   assert(writeReadinessReport.includes("Feature flag: tempCleanupExecutor | disabled"), "activation gate report should expose the disabled temp flag");
+  assert(writeReadinessReport.includes("## Temp Activation Rehearsal"), "dry-run report should include temp activation rehearsal");
+  assert(writeReadinessReport.includes("Demo only: yes"), "activation rehearsal report should mark synthetic evidence");
+  assert(writeReadinessReport.includes("Activation gate: feature-flag-disabled"), "activation rehearsal report should show the disabled flag outcome");
   const hypotheticalRealExecutorPlan = {
     ...tempExecutorPlan,
     realRunEnabled: true,

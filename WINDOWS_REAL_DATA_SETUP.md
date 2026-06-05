@@ -44,31 +44,32 @@ In the app:
 
 1. Check **Windows setup assistant**. Browser demo is enough for rehearsal; desktop shell plus current read-only scan evidence is required for real local data.
 2. Complete **Demo rehearsal runbook** in browser demo mode first. It should show no native data required, no destructive commands, real cleanup locked, and zero real-run routes before you export the dry-run report.
-3. Set **Real scan settings** for target drive, project artifact inclusion, traversal depth, per-root entry cap, and optional custom read-only roots.
-4. Click **Run real scan**.
-5. Check **Real data readiness** for native availability, write capability, destructive command state, and target-drive volume evidence.
-6. Check **Scan session** and confirm the captured fingerprint is current. If target drive, custom roots, traversal caps, project-artifact setting, or protected paths changed, rerun the native scan before planning.
-7. Review **Intake constraints**. Leave admin/system actions off unless this validation run intentionally includes Windows.old, hibernation, WSL compaction, or another admin-sensitive dry-run route.
-8. Check **Risk budget** to confirm selected routes stay within Safe, Balanced, or Emergency mode before dry-run consent.
-9. Check **Plan lock** to confirm the lock binds the current plan id, scan fingerprint, selected rows, risk budget, and consent state before launch.
-10. Check **Task powers** to confirm selected routes activate only scoped powers and that admin, advanced, manual, or restricted powers stay locked or advisory as expected.
-11. Check **Task grants** after arming dry-run consent. Every issued grant must be `dry-run-only`, tied to the current plan id and scan fingerprint, and must refuse issuance if runtime write capability appears.
-12. Check **Power lease audit** to confirm each issued grant still matches the current plan id, scan fingerprint, dry-run consent, broker request, and runtime write lock.
-13. Check **Safety interlock** to confirm unsafe signals are zero, dry-run is either explicitly held or dry-run-interlocked, and real execution remains locked.
-14. Check **Dry-run launch guard** to confirm simulation is blocked until run readiness, current consent, current plan lock, and safety interlock all pass.
-15. Check **Operating checklist** to confirm the safe next action, active user decision, ledger state, and zero real-run rows are visible in one place.
-16. Check **User decision receipt** to confirm selected tasks, approvals, item decisions, protected paths, admin intake, consent, active question, and real-run lock are recorded without granting cleanup authority.
-17. Check **Task runbook** to confirm each selected cleanup target has its own next question, allowed operations, forbidden operations, evidence needs, and no cross-task authority.
-18. Check **Restriction matrix** to confirm browser identity, Docker volumes, pagefile or registry tuning, partition writes, custom roots, admin/system work, personal/project data, and tool-native commands stay in the correct refusal or gated lane.
-19. Add protected paths before planning any review-heavy route.
-20. Use **Custom root triage** for custom read-only findings. Mark each unknown folder Keep, Archive, Move, Inspect, or Escalate; these dispositions stay manual and cannot create executor routes.
-21. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
-22. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, **First-safe validation gate**, **First-safe work order**, **Temp executor activation**, **Release review packet**, **Validation evidence**, and **Product completion audit** to confirm real cleanup is still locked.
-23. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
-24. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
-25. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
-26. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
-27. Export the workflow handoff for resume guidance and the redacted support bundle for diagnostics, then export the release review packet, dry-run report, and validation pack when path-level evidence is needed.
+3. Review **Temp activation rehearsal** for the no-real-data path. It should show demo-only synthetic evidence, activation gate `feature-flag-disabled`, zero bytes, and mutation locked.
+4. Set **Real scan settings** for target drive, project artifact inclusion, traversal depth, per-root entry cap, and optional custom read-only roots.
+5. Click **Run real scan**.
+6. Check **Real data readiness** for native availability, write capability, destructive command state, and target-drive volume evidence.
+7. Check **Scan session** and confirm the captured fingerprint is current. If target drive, custom roots, traversal caps, project-artifact setting, or protected paths changed, rerun the native scan before planning.
+8. Review **Intake constraints**. Leave admin/system actions off unless this validation run intentionally includes Windows.old, hibernation, WSL compaction, or another admin-sensitive dry-run route.
+9. Check **Risk budget** to confirm selected routes stay within Safe, Balanced, or Emergency mode before dry-run consent.
+10. Check **Plan lock** to confirm the lock binds the current plan id, scan fingerprint, selected rows, risk budget, and consent state before launch.
+11. Check **Task powers** to confirm selected routes activate only scoped powers and that admin, advanced, manual, or restricted powers stay locked or advisory as expected.
+12. Check **Task grants** after arming dry-run consent. Every issued grant must be `dry-run-only`, tied to the current plan id and scan fingerprint, and must refuse issuance if runtime write capability appears.
+13. Check **Power lease audit** to confirm each issued grant still matches the current plan id, scan fingerprint, dry-run consent, broker request, and runtime write lock.
+14. Check **Safety interlock** to confirm unsafe signals are zero, dry-run is either explicitly held or dry-run-interlocked, and real execution remains locked.
+15. Check **Dry-run launch guard** to confirm simulation is blocked until run readiness, current consent, current plan lock, and safety interlock all pass.
+16. Check **Operating checklist** to confirm the safe next action, active user decision, ledger state, and zero real-run rows are visible in one place.
+17. Check **User decision receipt** to confirm selected tasks, approvals, item decisions, protected paths, admin intake, consent, active question, and real-run lock are recorded without granting cleanup authority.
+18. Check **Task runbook** to confirm each selected cleanup target has its own next question, allowed operations, forbidden operations, evidence needs, and no cross-task authority.
+19. Check **Restriction matrix** to confirm browser identity, Docker volumes, pagefile or registry tuning, partition writes, custom roots, admin/system work, personal/project data, and tool-native commands stay in the correct refusal or gated lane.
+20. Add protected paths before planning any review-heavy route.
+21. Use **Custom root triage** for custom read-only findings. Mark each unknown folder Keep, Archive, Move, Inspect, or Escalate; these dispositions stay manual and cannot create executor routes.
+22. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
+23. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, **First-safe validation gate**, **First-safe work order**, **Temp executor activation**, **Release review packet**, **Validation evidence**, and **Product completion audit** to confirm real cleanup is still locked.
+24. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
+25. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
+26. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
+27. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
+28. Export the workflow handoff for resume guidance and the redacted support bundle for diagnostics, then export the release review packet, dry-run report, and validation pack when path-level evidence is needed.
 
 ## Disposable Fixture Run
 
@@ -156,6 +157,7 @@ For each Windows validation run, capture:
 - First-safe validation gate status, route-required checks, fixture coverage, unsafe runtime status, and `realRunAllowed=false`.
 - First-safe work order status, build items, acceptance tests, feature flag, boundary reprobe state, and `realRunAllowed=false`.
 - Temp executor activation status, route flag state, scaffold status, preflight count, blockers, `activationAllowed=false`, and `mutationEnabled=false`.
+- Temp activation rehearsal status if using the no-real-data demo path; this evidence must be labeled demo-only and must not replace native write-boundary proof.
 - Disabled temp executor scaffold status when probing `known-temp-delete`: route, `tempCleanupExecutor`, validation-required state, mutation disabled, and zero bytes.
 - Write-boundary preflight rows for request shape, target allowlist, mutation lock, feature flag, and validation evidence.
 - Write boundary probe state if the desktop runtime exposes `execute_cleanup_plan`; current evidence must show accepted false, rejected entries, zero bytes, matching first-safe contract echo, and no mutation.

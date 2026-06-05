@@ -91,6 +91,8 @@ The **First-safe work order** turns a passed validation gate into an engineering
 
 The **Temp executor activation** gate is the route-specific bridge between the disabled temp scaffold and any future real executor. It requires the known-temp route, disabled scaffold evidence, native preflight rows, the `tempCleanupExecutor` flag, validation gate, work order, release gate, and write readiness. Current builds report activation allowed as false, mutation disabled, and destructive action unavailable.
 
+The **Temp activation rehearsal** panel is a browser-safe demo of that same route. It synthesizes rejected write-boundary evidence from the current first-safe contract, feeds it through the real activation gate, and should stop at `feature-flag-disabled`. It is demo-only evidence: no native command runs, no local path is scanned, no mutation is attempted, and it cannot satisfy Windows validation or release readiness.
+
 The native runtime capability command is:
 
 ```txt
@@ -312,6 +314,8 @@ The first-safe validation gate converts that route contract plus Windows validat
 The first-safe work order is the handoff from validation into implementation. For the selected route it lists build items, acceptance tests, fixture ids, feature flag, rollback/rescan proof, and write-boundary reprobe requirements. A ready work order means an engineer can start the disabled executor slice; it does not mean the app can delete anything.
 
 The temp executor activation gate is the route-level decision after the work order. It explains why `known-temp-delete` still cannot become a mutating executor: missing preflight, disabled `tempCleanupExecutor`, validation blockers, release blockers, or unsafe runtime signals. Even a review-ready activation state keeps `activationAllowed=false`, `mutationEnabled=false`, and `realRunAllowed=false` in this build.
+
+The temp activation rehearsal exists for the no-real-data demo path. It builds a synthetic rejected probe with the current contract echo, disabled scaffold, zero bytes, and per-action preflight checks. The expected rehearsal status is `rehearsal-ready` with its nested activation gate at `feature-flag-disabled`; this is presentation and workflow proof only, not native validation evidence.
 
 The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` rejecting stub in the desktop shell, but success means rejection, not cleanup: `accepted=false`, all entries rejected with native reject codes, zero reclaimed bytes, and a native echo that matches the current first-safe executor contract. Target-scope reject codes are diagnostic only and do not count as passing rejection evidence. Probe entries are never ledger recovery.
 

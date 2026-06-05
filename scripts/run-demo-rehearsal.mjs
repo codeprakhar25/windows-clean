@@ -28,6 +28,7 @@ import {
   buildTaskPowerBroker,
   buildTaskPowerCatalog,
   buildTaskPowerLeaseAudit,
+  buildTempExecutorActivationRehearsal,
   buildTempExecutorActivationGate,
   buildValidationEvidencePack,
   buildWriteBoundaryProbe,
@@ -219,6 +220,15 @@ const tempExecutorActivationGate = buildTempExecutorActivationGate({
   writeReadiness,
   realExecutorCapsule
 });
+const tempExecutorActivationRehearsal = buildTempExecutorActivationRehearsal({
+  runtimeCapabilities,
+  firstSafeExecutorContract,
+  firstSafeValidationGate,
+  firstSafeImplementationWorkOrder,
+  releaseGate,
+  writeReadiness,
+  realExecutorCapsule
+});
 const taskPowerCatalog = buildTaskPowerCatalog({
   actionList,
   selectedIds,
@@ -359,6 +369,8 @@ const failures = [
   ["first-safe work order keeps real run locked", !firstSafeImplementationWorkOrder.realRunAllowed && !firstSafeImplementationWorkOrder.destructiveActionAvailable],
   ["temp activation preflight missing", tempExecutorActivationGate.status === "preflight-missing"],
   ["temp activation keeps mutation locked", !tempExecutorActivationGate.activationAllowed && !tempExecutorActivationGate.mutationEnabled],
+  ["temp activation rehearsal ready", tempExecutorActivationRehearsal.status === "rehearsal-ready"],
+  ["temp activation rehearsal stays flag-blocked", tempExecutorActivationRehearsal.activationGate?.status === "feature-flag-disabled"],
   ["zero real-run routes", demoRehearsalRunbook.counts.realRun === 0 && planLock.counts.realRun === 0],
   ["history current", runHistory.length === 1 && runHistory[0].planId === planSnapshot.id]
 ].filter(([, passed]) => !passed);
@@ -378,6 +390,8 @@ const summary = {
   launchStatus: dryRunLaunchGuard.status,
   workOrderStatus: firstSafeImplementationWorkOrder.status,
   activationGateStatus: tempExecutorActivationGate.status,
+  activationRehearsalStatus: tempExecutorActivationRehearsal.status,
+  activationRehearsalGateStatus: tempExecutorActivationRehearsal.activationGate?.status || "not-evaluated",
   realRunEnabled: false,
   destructiveCommands: false,
   failures: failures.map(([label]) => label)
