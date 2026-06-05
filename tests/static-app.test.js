@@ -293,8 +293,11 @@ assert(openAiAgent.includes("text: {"), "OpenAI adapter should configure Respons
 assert(openAiAgent.includes("type: \"json_schema\""), "OpenAI adapter should request strict structured output");
 assert(openAiAgent.includes("spaceguard_cleanup_agent_advice"), "OpenAI adapter should name the cleanup agent schema");
 assert(openAiAgent.includes("reviewedProjectTargets"), "OpenAI context should include reviewed project targets");
+assert(openAiAgent.includes("browserCacheTargets"), "OpenAI context should include scanned browser cache targets");
+assert(openAiAgent.includes("run-browser-cache-executor"), "OpenAI schema should allow browser cache executor recommendations");
 assert(openAiAgent.includes("forbiddenActions"), "OpenAI context should expose forbidden actions");
 assert(app.includes("Project targets"), "OpenAI panel should show reviewed project target count");
+assert(app.includes("Cache roots"), "OpenAI panel should show browser cache target count");
 assert(app.includes("strict JSON"), "OpenAI panel should show structured output boundary");
 assert(model.includes("spaceguard-ai-agent-integration/v1"), "model should expose AI integration status");
 assert(app.includes("buildStorageStrategyPlan"), "storage strategy workflow should be wired");

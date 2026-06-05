@@ -133,7 +133,7 @@ The **Real data launch roadmap** panel consolidates product status and rough del
 
 The **Native beta distribution** panel separates read-only beta packaging from real cleanup. It requires a current native read-only scan, local-only privacy, release/setup docs, install/uninstall path, redacted support workflow, signing or SmartScreen evidence, and no real-cleanup claim before native beta can be called ready.
 
-The **OpenAI cleanup agent** panel sends a bounded context packet to the OpenAI Responses API when the user clicks **Ask OpenAI**. It includes scan status, selected actions, candidate samples, reviewed project dependency targets, executor readiness, and runtime capability flags. Responses use a strict JSON schema with a bounded action vocabulary, so the app can display ranked next actions, blockers, questions, and warnings predictably. It does not grant the model filesystem access, approval authority, shell execution, or delete/move/archive authority.
+The **OpenAI cleanup agent** panel sends a bounded context packet to the OpenAI Responses API when the user clicks **Ask OpenAI**. It includes scan status, selected actions, candidate samples, reviewed project dependency targets, scanned browser cache roots, executor readiness, and runtime capability flags. Responses use a strict JSON schema with a bounded action vocabulary, so the app can display ranked next actions, blockers, questions, and warnings predictably. It does not grant the model filesystem access, approval authority, shell execution, or delete/move/archive authority.
 
 The native runtime capability command is:
 

@@ -27,7 +27,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "run-browser-cache-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -48,7 +48,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "run-browser-cache-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -93,6 +93,7 @@ export function buildOpenAIAgentContext({
   nativeEvidenceQuality,
   storagePressureDiagnosis,
   executorPlan,
+  nativeScan,
   runtimeCapabilities
 } = {}) {
   const selected = actionList
@@ -129,6 +130,18 @@ export function buildOpenAIAgentContext({
         reason: target.reason || ""
       }))
     )
+    .slice(0, 16);
+  const browserCacheTargets = (nativeScan?.findings || [])
+    .filter((finding) => finding.recipeId === "browser-cache")
+    .filter((finding) => (finding.status === "measured" || finding.status === "limited") && finding.path)
+    .map((finding, index) => ({
+      id: `browser-cache-${index + 1}`,
+      title: finding.title || "Browser cache root",
+      route: "browser-cache-only",
+      path: finding.path,
+      bytes: Number(finding.bytes || 0),
+      status: finding.status || "unknown"
+    }))
     .slice(0, 16);
 
   return {
@@ -173,6 +186,7 @@ export function buildOpenAIAgentContext({
     topFindings,
     executableRows,
     reviewedProjectTargets,
+    browserCacheTargets,
     candidateSamples: (candidateSafetyManifest?.rows || []).slice(0, 12).map((row) => ({
       id: row.id,
       title: row.title,
@@ -210,7 +224,7 @@ export async function requestOpenAIAgentAdvice({
       "You are the SpaceGuard local Windows cleanup advisor.",
       "You never claim you scanned the computer yourself; you only interpret the provided app context.",
       "You cannot approve gates, modify files, run shell commands, or delete data.",
-      "When a scoped executor is visible, recommend the exact UI button only after the context says current consent and reviewed targets exist.",
+      "When a scoped executor is visible, recommend the exact UI button only after the context says current consent and route-specific targets exist.",
       "Use actionType values from the schema. Keep targetId empty unless you are referring to a provided target id.",
       "Prioritize concrete next steps that move toward real safe cleanup.",
       "Return structured JSON that matches the provided response schema."
@@ -364,6 +378,7 @@ function normalizeActionType(value) {
     clean === "review-target" ||
     clean === "run-temp-executor" ||
     clean === "run-project-deps-executor" ||
+    clean === "run-browser-cache-executor" ||
     clean === "rescan" ||
     clean === "ask-user" ||
     clean === "manual-only"

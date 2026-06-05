@@ -1308,6 +1308,7 @@ export default function App() {
         nativeEvidenceQuality,
         storagePressureDiagnosis,
         executorPlan,
+        nativeScan: nativeScan.result,
         runtimeCapabilities: runtimeCapabilities.result
       }),
     [
@@ -1324,6 +1325,7 @@ export default function App() {
       nativeEvidenceQuality,
       storagePressureDiagnosis,
       executorPlan,
+      nativeScan.result,
       runtimeCapabilities.result
     ]
   );
@@ -5632,12 +5634,13 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
           <QueueStat label="Model" value={config.model} tone={configured ? "safe" : "review"} />
           <QueueStat label="Selected" value={context.selectedActions.length} tone={context.selectedActions.length ? "advanced" : "review"} />
           <QueueStat label="Direct tools" value="blocked" tone="safe" />
           <QueueStat label="Real exec" value={scopedRealFlag ? "scoped flag" : "off"} tone={scopedRealFlag ? "restricted" : "safe"} />
           <QueueStat label="Project targets" value={context.reviewedProjectTargets?.length || 0} tone={context.reviewedProjectTargets?.length ? "advanced" : "review"} />
+          <QueueStat label="Cache roots" value={context.browserCacheTargets?.length || 0} tone={context.browserCacheTargets?.length ? "advanced" : "review"} />
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
