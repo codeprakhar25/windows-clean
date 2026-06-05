@@ -7,12 +7,14 @@ import {
   buildExecutorManifest,
   buildExecutorPlan,
   buildExecutorReadiness,
+  buildDriveInventorySummary,
   buildFirstSafeExecutorContract,
   buildFirstSafeImplementationWorkOrder,
   buildFirstSafeValidationGate,
   buildDryRunLaunchGuard,
   buildIntakePolicy,
   buildNativeBetaDistributionReadiness,
+  buildNativeEvidenceQualityGate,
   buildPlanLock,
   buildPlanSnapshot,
   buildPrivacyBoundary,
@@ -24,6 +26,7 @@ import {
   buildSafetyInterlock,
   buildScanCoverageSummary,
   buildScanSessionEvidence,
+  buildStoragePressureDiagnosis,
   buildTaskCapabilityGrants,
   buildTaskPowerBroker,
   buildTaskPowerCatalog,
@@ -99,6 +102,30 @@ export function buildNativeReadonlyRehearsalSummary() {
       free_bytes: 24 * GB,
       source: "GetDiskFreeSpaceExW"
     },
+    drive_inventory: [
+      {
+        id: "drive-users",
+        name: "Users",
+        path: "C:\\Users",
+        bytes: 280 * GB,
+        status: "limited",
+        files: 12000,
+        dirs: 950,
+        errors: 2,
+        classification: "user-data-review"
+      },
+      {
+        id: "drive-windows",
+        name: "Windows",
+        path: "C:\\Windows",
+        bytes: 84 * GB,
+        status: "limited",
+        files: 9000,
+        dirs: 650,
+        errors: 1,
+        classification: "system-or-protected"
+      }
+    ],
     findings: [
       {
         recipe_id: "windows-temp",
@@ -185,6 +212,10 @@ export function buildNativeReadonlyRehearsalSummary() {
     actionList,
     scanMode: "native-readonly",
     nativeScan
+  });
+  const driveInventorySummary = buildDriveInventorySummary({
+    nativeScan,
+    scanMode: "native-readonly"
   });
   const readiness = getExecutionReadinessForActions(selectedIds, approvals, actionList, [], null, intakePolicy);
   const riskBudget = buildRiskBudget({ actionList, selectedIds, intakePolicy });
@@ -355,6 +386,34 @@ export function buildNativeReadonlyRehearsalSummary() {
     validationEvidence: {},
     runtimeCapabilities
   });
+  const storagePressureDiagnosis = buildStoragePressureDiagnosis({
+    scanned: true,
+    scanMode: "native-readonly",
+    profile: {
+      drive: nativeScan.volume?.drive || "C:",
+      totalBytes: nativeScan.volume?.totalBytes || 0,
+      usedBytes: nativeScan.volume?.usedBytes || 0,
+      freeBytes: nativeScan.volume?.freeBytes || 0
+    },
+    goalBytes: intakePolicy.goalBytes,
+    actionList,
+    selectedIds,
+    approvals,
+    protectedPaths: [],
+    scanCoverage,
+    driveInventorySummary
+  });
+  const nativeEvidenceQuality = buildNativeEvidenceQualityGate({
+    scanned: true,
+    scanMode: "native-readonly",
+    scanSession,
+    scanCoverage,
+    driveInventorySummary,
+    storagePressureDiagnosis,
+    nativeCapability: { available: true },
+    runtimeCapabilities,
+    privacyBoundary
+  });
   const nativeBetaDistributionReadiness = buildNativeBetaDistributionReadiness({
     scanMode: "native-readonly",
     nativeCapability: { available: true },
@@ -402,6 +461,7 @@ export function buildNativeReadonlyRehearsalSummary() {
     scanMode: "native-readonly",
     scanSession,
     scanCoverage,
+    nativeEvidenceQuality,
     windowsSetupAssistant,
     nativeBetaDistributionReadiness,
     validationPack,
@@ -421,6 +481,7 @@ export function buildNativeReadonlyRehearsalSummary() {
     ["coverage uses native evidence", scanCoverage.scanMode === "native-readonly" && scanCoverage.measuredBytes > 0],
     ["setup assistant native-ready", windowsSetupAssistant.status === "native-scan-ready"],
     ["privacy boundary local-only", privacyBoundary.status === "native-local-only"],
+    ["native evidence quality planning-ready", nativeEvidenceQuality.planningReady && nativeEvidenceQuality.counts.realRun === 0],
     ["risk budget satisfied", riskBudget.status === "within-risk-budget"],
     ["preflight ready", preflight.ready],
     ["run readiness ready", runReadiness.ready],
@@ -450,6 +511,8 @@ export function buildNativeReadonlyRehearsalSummary() {
     scanMode: "native-readonly",
     scanStatus: scanSession.status,
     coverageStatus: scanCoverage.status,
+    nativeEvidenceQualityStatus: nativeEvidenceQuality.status,
+    nativePlanningReady: nativeEvidenceQuality.planningReady,
     setupStatus: windowsSetupAssistant.status,
     privacyStatus: privacyBoundary.status,
     planId: planSnapshot.id,

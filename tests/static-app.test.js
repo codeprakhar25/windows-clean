@@ -198,6 +198,7 @@ assert(app.includes("runNativeReadonlyScan"), "real read-only scan workflow shou
 assert(app.includes("buildWindowsSetupAssistant"), "Windows setup assistant should be wired");
 assert(app.includes("WindowsSetupAssistantPanel"), "Windows setup assistant panel should be rendered");
 assert(app.includes("buildRealDataLaunchRoadmap"), "real data launch roadmap should be wired");
+assert(app.includes("nativeEvidenceQuality"), "native evidence quality should feed downstream planning surfaces");
 assert(app.includes("RealDataLaunchRoadmapPanel"), "real data launch roadmap panel should be rendered");
 assert(app.includes("real-data-launch-roadmap-panel"), "real data launch roadmap should be focusable");
 assert(app.includes("Real data launch roadmap"), "real data roadmap should expose launch status copy");
@@ -456,6 +457,7 @@ assert(model.includes("Diagnosis can recommend workflow branches"), "diagnosis s
 assert(model.includes("spaceguard-native-evidence-quality/v1"), "model should expose native evidence quality schema");
 assert(model.includes("grade-native-evidence"), "product audit should track native evidence quality");
 assert(model.includes("Native evidence is planning-grade"), "native evidence quality should grade read-only planning evidence");
+assert(model.includes("nativePlanningReady"), "real data roadmap should use native evidence quality before native readiness");
 assert(model.includes("spaceguard-custom-root-triage/v1"), "model should expose custom root triage schema");
 assert(model.includes("customRootDispositionOptions"), "model should define custom root disposition options");
 assert(model.includes("canCreateExecutor: false"), "custom root triage should block executor creation");

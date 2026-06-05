@@ -8022,6 +8022,7 @@ export function buildRealDataLaunchRoadmap({
   scanMode = "demo",
   scanSession = null,
   scanCoverage = null,
+  nativeEvidenceQuality = null,
   demoRehearsalRunbook = null,
   windowsSetupAssistant = null,
   publicBetaReadiness = null,
@@ -8055,6 +8056,9 @@ export function buildRealDataLaunchRoadmap({
   const publicDemoSafe = Boolean(demoRehearsalRunbook?.safeForPublicDemo && !unsafeWriteSignal);
   const nativeAvailable = Boolean(windowsSetupAssistant?.nativeAvailable || runtimeCapabilities?.available || runtimeCapabilities?.scanKnownRoots);
   const nativeScanCurrent = Boolean(scanMode === "native-readonly" && scanSession?.readyForPlanning && scanSession?.nativeEvidence);
+  const nativeEvidenceEvaluated = Boolean(nativeEvidenceQuality?.schemaVersion);
+  const nativePlanningReady = nativeEvidenceEvaluated ? Boolean(nativeEvidenceQuality?.planningReady) : nativeScanCurrent;
+  const nativeQualityStatus = nativeEvidenceQuality?.status || "not-evaluated";
   const privacyReady = Boolean(windowsSetupAssistant?.privacyReady);
   const webDemoReady = Boolean(publicBetaReadiness?.readyForWebDemo || nativeBetaDistributionReadiness?.readyForWebDemo);
   const nativeBetaReady = Boolean(publicBetaReadiness?.readyForNativeBeta || nativeBetaDistributionReadiness?.readyForNativeBeta);
@@ -8086,13 +8090,13 @@ export function buildRealDataLaunchRoadmap({
     buildRealDataLaunchMilestone({
       id: "native-readonly-beta",
       label: "Native read-only beta",
-      status: nativeBetaReady ? "ready" : nativeScanCurrent ? "partial" : nativeAvailable ? "waiting" : "locked",
-      estimate: nativeBetaReady ? "ready now" : nativeScanCurrent ? "3-5 days" : nativeAvailable ? "1 week" : "1-2 weeks",
-      confidence: nativeAvailable || nativeScanCurrent ? "medium" : "low",
+      status: nativeBetaReady ? "ready" : nativePlanningReady ? "partial" : nativeAvailable ? "waiting" : "locked",
+      estimate: nativeBetaReady ? "ready now" : nativePlanningReady ? "3-5 days" : nativeAvailable ? "1 week" : "1-2 weeks",
+      confidence: nativeAvailable || nativePlanningReady ? "medium" : "low",
       detail: nativeBetaReady
         ? "Native read-only beta evidence is complete."
-        : nativeScanCurrent
-          ? "Read-only scan evidence exists; finish signing, support, uninstall, and release docs."
+        : nativePlanningReady
+          ? "Planning-grade read-only evidence exists; finish signing, support, uninstall, and release docs."
           : "Start the desktop shell and capture current read-only Windows scan evidence."
     }),
     buildRealDataLaunchMilestone({
@@ -8132,17 +8136,19 @@ export function buildRealDataLaunchRoadmap({
     }),
     buildRealDataLaunchRoadmapRow({
       id: "native-readonly-scan",
-      label: "Native read-only scan",
+      label: "Native read-only evidence",
       lane: "real-data",
-      status: nativeScanCurrent ? "ready" : nativeAvailable ? "waiting" : "locked",
-      detail: nativeScanCurrent
-        ? `Current native scan evidence is ready with ${scanCoverage?.confidenceScore || 0}% coverage confidence.`
+      status: nativePlanningReady ? "ready" : nativeScanCurrent ? "partial" : nativeAvailable ? "waiting" : "locked",
+      detail: nativePlanningReady
+        ? nativeEvidenceQuality?.primary || `Current native scan evidence is ready with ${scanCoverage?.confidenceScore || 0}% coverage confidence.`
+        : nativeScanCurrent
+          ? nativeEvidenceQuality?.primary || "Native scan is current, but planning-grade evidence quality is incomplete."
         : nativeAvailable
           ? "Desktop shell is available; run the read-only scan for the current settings."
           : "Browser mode cannot inspect local folders.",
-      evidence: scanSession?.status || windowsSetupAssistant?.status || "not-captured",
-      nextStep: nativeScanCurrent ? "Use native evidence for dry-run planning." : "Run a native read-only scan on Windows.",
-      estimate: nativeScanCurrent ? "ready now" : nativeAvailable ? "same day" : "1-2 weeks"
+      evidence: nativeQualityStatus,
+      nextStep: nativePlanningReady ? "Use native evidence for dry-run planning." : nativeEvidenceQuality?.steps?.[0] || "Run a native read-only scan on Windows.",
+      estimate: nativePlanningReady ? "ready now" : nativeAvailable ? "same day" : "1-2 weeks"
     }),
     buildRealDataLaunchRoadmapRow({
       id: "privacy-support",
@@ -8227,7 +8233,7 @@ export function buildRealDataLaunchRoadmap({
       ? "real-cleanup-release-ready"
       : workOrderReady
         ? "first-safe-build-ready"
-        : nativeScanCurrent
+        : nativePlanningReady
           ? "native-readonly-ready"
           : demoEvidenceReady
             ? "demo-ready"
@@ -8247,6 +8253,8 @@ export function buildRealDataLaunchRoadmap({
     destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
     nativeAvailable,
     nativeScanCurrent,
+    nativePlanningReady,
+    nativeQualityStatus,
     demoEvidenceReady,
     activationRehearsed,
     nativePreflightReady,

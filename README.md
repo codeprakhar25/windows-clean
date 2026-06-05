@@ -164,7 +164,7 @@ The demo also includes:
 - Scenario presets for developer, gaming, and family laptops.
 - Real data readiness panel for the Tauri read-only scanner.
 - Windows setup assistant that separates browser demo, desktop shell, current read-only scan evidence, local privacy/export, native beta readiness, and the real-cleanup lock.
-- Real data launch roadmap with current milestone, progress, rough estimate, confidence, demo/native activation proof, and real-cleanup lock status.
+- Real data launch roadmap with current milestone, progress, rough estimate, confidence, demo/native activation proof, native evidence quality, and real-cleanup lock status.
 - Native beta distribution readiness for signing, setup docs, install/uninstall, support workflow, read-only scan evidence, no-cleanup claims, and exportable beta evidence records.
 - Demo rehearsal runbook that proves the browser demo can go from scan to gated plan, dry-run consent, simulated ledger, and report export without native data or real cleanup.
 - Product completion audit that maps the original product requirements to proven, partial, waiting, locked, or unsafe evidence so the app cannot overclaim real cleanup readiness.

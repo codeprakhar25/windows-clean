@@ -3553,6 +3553,14 @@ const assert = require("assert");
     scanMode: "native-readonly",
     scanSession: { status: "native-current", readyForPlanning: true, nativeEvidence: true },
     scanCoverage: { confidenceScore: 82 },
+    nativeEvidenceQuality: {
+      schemaVersion: "spaceguard-native-evidence-quality/v1",
+      status: "planning-grade-partial",
+      planningReady: true,
+      primary: "Native evidence is planning-grade with partial coverage.",
+      steps: ["Use measured native rows only for planning."],
+      counts: { realRun: 0 }
+    },
     windowsSetupAssistant: { status: "native-scan-ready", nativeAvailable: true, privacyReady: true },
     validationPack: { schemaVersion: "spaceguard-validation-pack/v1", readyForRealRun: false, blockedReason: "Validation evidence missing." },
     writeReadiness: currentBuildWriteReadiness,
@@ -3566,7 +3574,25 @@ const assert = require("assert");
   });
   assert.strictEqual(nativeLaunchRoadmap.status, "native-readonly-ready", "native roadmap should recognize current read-only scan evidence");
   assert.strictEqual(nativeLaunchRoadmap.nativeScanCurrent, true, "native roadmap should surface current native scan evidence");
+  assert.strictEqual(nativeLaunchRoadmap.nativePlanningReady, true, "native roadmap should consume the native evidence quality gate");
+  assert.strictEqual(nativeLaunchRoadmap.nativeQualityStatus, "planning-grade-partial", "native roadmap should expose quality status");
   assert.strictEqual(nativeLaunchRoadmap.realCleanupLocked, true, "native roadmap must keep real cleanup locked");
+  const incompleteQualityRoadmap = guard.buildRealDataLaunchRoadmap({
+    scanMode: "native-readonly",
+    scanSession: { status: "native-current", readyForPlanning: true, nativeEvidence: true },
+    nativeEvidenceQuality: {
+      schemaVersion: "spaceguard-native-evidence-quality/v1",
+      status: "native-evidence-incomplete",
+      planningReady: false,
+      primary: "Native evidence is incomplete.",
+      steps: ["Capture top-level drive inventory."],
+      counts: { realRun: 0 }
+    },
+    windowsSetupAssistant: { status: "native-scan-ready", nativeAvailable: true, privacyReady: true },
+    runtimeCapabilities: { available: true, scanKnownRoots: true, realRunEnabled: false, destructiveCommands: false, safeExecutorsEnabled: false }
+  });
+  assert.notStrictEqual(incompleteQualityRoadmap.status, "native-readonly-ready", "roadmap must not call native read-only ready when quality gate is incomplete");
+  assert.strictEqual(incompleteQualityRoadmap.rows.find((row) => row.id === "native-readonly-scan").status, "partial", "current scan with incomplete quality should stay partial");
   const unsafeLaunchRoadmap = guard.buildRealDataLaunchRoadmap({
     scanMode: "native-readonly",
     scanSession: { status: "native-current", readyForPlanning: true, nativeEvidence: true },
