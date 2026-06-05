@@ -7500,6 +7500,79 @@ export function buildFixtureEvidenceImport({
   };
 }
 
+const nativeBetaEvidenceImportIds = new Set([
+  "publicReleaseResearch",
+  "windowsRealDataSetup",
+  "installUninstallRunbook",
+  "supportRunbook",
+  "supportBundleExport"
+]);
+
+export function buildNativeBetaEvidenceImport({
+  evidenceText = "",
+  evidenceObject = null,
+  currentEvidence = {},
+  importedAt = new Date().toISOString()
+} = {}) {
+  const parsed = parseNativeBetaEvidenceInput(evidenceObject, evidenceText);
+  if (!parsed.ok) {
+    return buildRejectedNativeBetaEvidenceImport("parse-error", parsed.detail, currentEvidence, importedAt);
+  }
+
+  const evidence = parsed.value;
+  if (evidence.schemaVersion !== "spaceguard-native-beta-evidence/v1") {
+    return buildRejectedNativeBetaEvidenceImport("schema-mismatch", "Native beta evidence must use spaceguard-native-beta-evidence/v1.", currentEvidence, importedAt, evidence);
+  }
+
+  const sourceRows = Array.isArray(evidence.rows) ? evidence.rows : [];
+  const knownRows = sourceRows.filter((row) => nativeBetaEvidenceImportIds.has(row?.id));
+  if (!knownRows.length) {
+    return buildRejectedNativeBetaEvidenceImport("missing-known-rows", "No known native beta evidence rows were found.", currentEvidence, importedAt, evidence);
+  }
+
+  const nativeBetaEvidence = { ...(currentEvidence || {}) };
+  const warnings = [];
+  let complete = 0;
+  let needsDetail = 0;
+
+  for (const row of knownRows) {
+    const evidencePath = cleanEvidenceText(row.evidencePath || row.artifact || row.artifactId);
+    const reviewer = cleanEvidenceText(row.reviewer);
+    const sourcePassed = row.passed === true || row.status === "complete" || row.status === "passed";
+    const status = sourcePassed && evidencePath && reviewer ? "passed" : "draft";
+    if (sourcePassed && status !== "passed") {
+      needsDetail += 1;
+      warnings.push(`${row.id} needs reviewer and artifact detail before it counts.`);
+    }
+    if (status === "passed") complete += 1;
+    nativeBetaEvidence[row.id] = {
+      status,
+      evidencePath,
+      reviewer,
+      notes: cleanEvidenceText(row.notes),
+      recordedAt: cleanEvidenceText(row.recordedAt) || importedAt,
+      updatedAt: importedAt
+    };
+  }
+
+  return {
+    schemaVersion: "spaceguard-native-beta-evidence-import/v1",
+    status: "import-ready",
+    canApply: true,
+    importedAt,
+    detail: `${knownRows.length} native beta evidence row(s) imported; ${complete} complete.`,
+    nativeBetaEvidence,
+    warnings,
+    counts: {
+      sourceRows: sourceRows.length,
+      importedRows: knownRows.length,
+      complete,
+      needsDetail,
+      ignoredRows: sourceRows.length - knownRows.length
+    }
+  };
+}
+
 export function buildNativeDryRunScopeEvidence({
   nativeExecutorDryRun = null,
   planSnapshot = null,
@@ -7617,6 +7690,55 @@ function parseFixtureEvidenceInput(evidenceObject, evidenceText) {
       detail: error instanceof Error ? error.message : "Fixture evidence JSON could not be parsed."
     };
   }
+}
+
+function parseNativeBetaEvidenceInput(evidenceObject, evidenceText) {
+  if (evidenceObject && typeof evidenceObject === "object" && !Array.isArray(evidenceObject)) {
+    return { ok: true, value: evidenceObject };
+  }
+  const text = String(evidenceText || "").trim();
+  if (!text) {
+    return { ok: false, detail: "Native beta evidence JSON or markdown export is required." };
+  }
+  const candidates = [
+    text,
+    ...[...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map((match) => match[1]?.trim()).filter(Boolean)
+  ];
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return { ok: true, value: parsed };
+      }
+    } catch {
+      // Continue through possible markdown code fences.
+    }
+  }
+  return { ok: false, detail: "Native beta evidence could not be parsed as JSON." };
+}
+
+function buildRejectedNativeBetaEvidenceImport(status, detail, currentEvidence, importedAt, evidence = null) {
+  const rows = Array.isArray(evidence?.rows) ? evidence.rows : [];
+  return {
+    schemaVersion: "spaceguard-native-beta-evidence-import/v1",
+    status,
+    canApply: false,
+    importedAt,
+    detail,
+    nativeBetaEvidence: currentEvidence || {},
+    warnings: [],
+    counts: {
+      sourceRows: rows.length,
+      importedRows: 0,
+      complete: 0,
+      needsDetail: 0,
+      ignoredRows: rows.length
+    }
+  };
+}
+
+function cleanEvidenceText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
 }
 
 function buildRejectedFixtureImport(status, detail, currentEvidence, importedAt, evidence = null) {

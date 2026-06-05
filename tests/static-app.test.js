@@ -194,6 +194,10 @@ assert(app.includes("NATIVE_BETA_EVIDENCE_STORAGE_KEY"), "native beta evidence s
 assert(app.includes("nativeBetaEvidenceSpecs"), "native beta evidence checklist should be explicit");
 assert(app.includes("readStoredNativeBetaEvidence"), "native beta evidence should load from local storage");
 assert(app.includes("writeStoredNativeBetaEvidence"), "native beta evidence should save to local storage");
+assert(app.includes("nativeBetaImportText"), "native beta evidence import text should be tracked in UI state");
+assert(app.includes("importNativeBetaEvidenceLedger"), "native beta evidence import should be wired");
+assert(model.includes("buildNativeBetaEvidenceImport"), "model should import native beta evidence ledgers");
+assert(model.includes("spaceguard-native-beta-evidence-import/v1"), "native beta evidence import should expose a schema");
 assert(app.includes("buildNativeBetaEvidenceLedger"), "native beta evidence should be exportable as a ledger");
 assert(app.includes("buildNativeBetaEvidenceLedgerMarkdown"), "native beta evidence ledger should export markdown");
 assert(app.includes("buildNativeBetaDocumentationEvidence"), "native beta documentation readiness should be derived from evidence");
@@ -202,6 +206,9 @@ assert(app.includes("coerceNativeBetaEvidenceFormRecord"), "native beta evidence
 assert(app.includes("setNativeBetaEvidenceRow"), "native beta evidence checklist should be editable");
 assert(app.includes("Recorded beta evidence"), "native beta distribution panel should expose editable evidence");
 assert(app.includes("Export ledger"), "native beta distribution panel should expose evidence export action");
+assert(app.includes("Import exported ledger"), "native beta distribution panel should expose evidence import action");
+assert(app.includes("Paste spaceguard-native-beta-evidence/v1 JSON"), "native beta evidence import should accept exported JSON");
+assert(app.includes("Import ledger"), "native beta evidence import should have an explicit action");
 assert(app.includes("spaceguard-native-beta-evidence.md"), "native beta evidence export should use a stable file name");
 assert(app.includes("Structured Native Beta Evidence JSON"), "native beta evidence export should include structured JSON");
 assert(app.includes("Evidence path or artifact id"), "native beta evidence should require artifact references");
@@ -523,6 +530,7 @@ assert(nativeBetaRunbook.includes("Uninstall Path"), "native beta runbook should
 assert(nativeBetaRunbook.includes("Support Intake"), "native beta runbook should cover support intake");
 assert(nativeBetaRunbook.includes("Evidence To Record In The App"), "native beta runbook should explain app evidence records");
 assert(nativeBetaRunbook.includes("The checkbox alone does not count"), "native beta evidence should require reviewer and artifact detail");
+assert(nativeBetaRunbook.includes("Import exported ledger"), "native beta runbook should explain evidence import resume flow");
 assert(nativeBetaRunbook.includes("Release Stop Conditions"), "native beta runbook should define distribution stop conditions");
 assert(nativeBetaRunbook.includes("must not delete files"), "native beta runbook should preserve the no-real-cleanup boundary");
 assert(fixtureScript.includes("dryRunScopeCases"), "fixture seeder should emit dry-run scope validation cases");

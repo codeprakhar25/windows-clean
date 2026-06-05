@@ -1370,6 +1370,56 @@ const assert = require("assert");
     "passed",
     "release review should pass native beta ledger row only when distribution and evidence are complete"
   );
+  const importedNativeBetaEvidence = guard.buildNativeBetaEvidenceImport({
+    evidenceText: [
+      "# SpaceGuard Native Beta Evidence Ledger",
+      "",
+      "```json",
+      JSON.stringify({
+        schemaVersion: "spaceguard-native-beta-evidence/v1",
+        rows: [
+          {
+            id: "publicReleaseResearch",
+            status: "complete",
+            passed: true,
+            reviewer: "Prakh",
+            evidencePath: "evidence/release-notes.md",
+            notes: "Release copy avoids real cleanup claims."
+          },
+          {
+            id: "supportRunbook",
+            status: "complete",
+            passed: true,
+            reviewer: "",
+            evidencePath: "evidence/support-runbook.md"
+          },
+          {
+            id: "unknownEvidence",
+            status: "complete",
+            reviewer: "Prakh",
+            evidencePath: "evidence/unknown.md"
+          }
+        ]
+      }),
+      "```"
+    ].join("\n"),
+    currentEvidence: {},
+    importedAt: "2026-06-05T00:00:00.000Z"
+  });
+  assert.strictEqual(importedNativeBetaEvidence.schemaVersion, "spaceguard-native-beta-evidence-import/v1", "native beta evidence import should expose a schema version");
+  assert.strictEqual(importedNativeBetaEvidence.canApply, true, "native beta evidence import should accept exported markdown JSON");
+  assert.strictEqual(importedNativeBetaEvidence.counts.importedRows, 2, "native beta evidence import should map known evidence rows");
+  assert.strictEqual(importedNativeBetaEvidence.counts.ignoredRows, 1, "native beta evidence import should ignore unknown rows");
+  assert.strictEqual(importedNativeBetaEvidence.counts.complete, 1, "native beta evidence import should count complete rows");
+  assert.strictEqual(importedNativeBetaEvidence.counts.needsDetail, 1, "native beta evidence import should keep incomplete rows as needs-detail");
+  assert.strictEqual(importedNativeBetaEvidence.nativeBetaEvidence.publicReleaseResearch.status, "passed", "complete imported beta row should pass");
+  assert.strictEqual(importedNativeBetaEvidence.nativeBetaEvidence.supportRunbook.status, "draft", "missing reviewer should not pass imported beta row");
+  const rejectedNativeBetaEvidence = guard.buildNativeBetaEvidenceImport({
+    evidenceText: JSON.stringify({ schemaVersion: "spaceguard-fixture-evidence/v1", rows: [] }),
+    currentEvidence: { supportRunbook: { status: "draft" } }
+  });
+  assert.strictEqual(rejectedNativeBetaEvidence.canApply, false, "native beta evidence import should reject wrong schemas");
+  assert.strictEqual(rejectedNativeBetaEvidence.nativeBetaEvidence.supportRunbook.status, "draft", "rejected native beta import should preserve current evidence");
   const nativeBetaEvidenceLedger = {
     schemaVersion: "spaceguard-native-beta-evidence/v1",
     status: "partial",

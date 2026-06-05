@@ -65,6 +65,7 @@ import {
   buildRescanComparisonMarkdown,
   buildManualStrategyChecklist,
   buildNativeBetaDistributionReadiness,
+  buildNativeBetaEvidenceImport,
   buildRestrictionPolicyMatrix,
   buildPlanLock,
   buildReleaseGate,
@@ -249,6 +250,8 @@ export default function App() {
   const [fixtureImportReviewer, setFixtureImportReviewer] = useState("");
   const [fixtureImportArtifact, setFixtureImportArtifact] = useState("");
   const [fixtureImportResult, setFixtureImportResult] = useState(null);
+  const [nativeBetaImportText, setNativeBetaImportText] = useState("");
+  const [nativeBetaImportResult, setNativeBetaImportResult] = useState(null);
   const [executionConsent, setExecutionConsent] = useState({ accepted: false, planId: "", acceptedAt: "" });
 
   const scenario = useMemo(() => getScenario(scenarioId), [scenarioId]);
@@ -1700,8 +1703,25 @@ export default function App() {
     });
   }
 
+  function updateNativeBetaImportText(value) {
+    setNativeBetaImportText(value);
+    setNativeBetaImportResult(null);
+  }
+
+  function importNativeBetaEvidenceLedger() {
+    const result = buildNativeBetaEvidenceImport({
+      evidenceText: nativeBetaImportText,
+      currentEvidence: nativeBetaEvidence
+    });
+    setNativeBetaImportResult(result);
+    if (result.canApply) {
+      setNativeBetaEvidence(result.nativeBetaEvidence);
+    }
+  }
+
   function resetNativeBetaEvidence() {
     setNativeBetaEvidence({});
+    setNativeBetaImportResult(null);
   }
 
   function importFixtureEvidence() {
@@ -2264,8 +2284,12 @@ export default function App() {
             <NativeBetaDistributionPanel
               readiness={nativeBetaDistributionReadiness}
               evidence={nativeBetaEvidence}
+              importText={nativeBetaImportText}
+              importResult={nativeBetaImportResult}
               onToggleEvidence={setNativeBetaEvidenceRow}
               onUpdateEvidence={updateNativeBetaEvidence}
+              onImportText={updateNativeBetaImportText}
+              onImportEvidence={importNativeBetaEvidenceLedger}
               onResetEvidence={resetNativeBetaEvidence}
               onExportEvidence={exportNativeBetaEvidenceLedger}
             />
@@ -2868,7 +2892,18 @@ function RealDataLaunchRoadmapPanel({ roadmap }) {
   );
 }
 
-function NativeBetaDistributionPanel({ readiness, evidence, onToggleEvidence, onUpdateEvidence, onResetEvidence, onExportEvidence }) {
+function NativeBetaDistributionPanel({
+  readiness,
+  evidence,
+  importText,
+  importResult,
+  onToggleEvidence,
+  onUpdateEvidence,
+  onImportText,
+  onImportEvidence,
+  onResetEvidence,
+  onExportEvidence
+}) {
   const visibleRows = readiness.waitingRows.length ? readiness.waitingRows : readiness.rows.slice(0, 4);
   const evidenceRows = nativeBetaEvidenceSpecs.map((spec) => ({
     ...spec,
@@ -2952,6 +2987,48 @@ function NativeBetaDistributionPanel({ readiness, evidence, onToggleEvidence, on
                 Reset
               </Button>
             </div>
+          </div>
+          <div className="mb-3 rounded-md border bg-card p-3">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium">Import exported ledger</span>
+              <Badge variant={importResult?.canApply ? "safe" : importResult ? "review" : "outline"}>
+                {importResult?.status || "waiting"}
+              </Badge>
+            </div>
+            <Textarea
+              className="min-h-20 font-mono"
+              value={importText}
+              placeholder='Paste spaceguard-native-beta-evidence/v1 JSON or the exported markdown file'
+              aria-label="native beta evidence import"
+              onChange={(event) => onImportText(event.target.value)}
+            />
+            <Button type="button" className="mt-2 w-full" variant="outline" onClick={onImportEvidence} disabled={!importText.trim()}>
+              <ClipboardList className="h-4 w-4" />
+              Import ledger
+            </Button>
+            {importResult ? (
+              <div className="mt-2 rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={importResult.canApply ? "safe" : "review"}>
+                    {importResult.canApply ? "mapped" : "blocked"}
+                  </Badge>
+                  <span>{importResult.detail}</span>
+                </div>
+                <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                  <span>Rows: {importResult.counts.importedRows}/{importResult.counts.sourceRows}</span>
+                  <span>Complete: {importResult.counts.complete}</span>
+                  <span>Needs detail: {importResult.counts.needsDetail}</span>
+                  <span>Ignored: {importResult.counts.ignoredRows}</span>
+                </div>
+                {importResult.warnings.length ? (
+                  <div className="mt-2 flex flex-col gap-1">
+                    {importResult.warnings.map((warning) => (
+                      <span key={warning}>{warning}</span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div className="grid gap-2">
             {evidenceRows.map((row) => {

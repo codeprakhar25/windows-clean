@@ -74,6 +74,8 @@ Use the Native beta distribution panel and fill every evidence row with status, 
 
 The checkbox alone does not count. The readiness gate requires both reviewer and artifact evidence.
 
+If a reviewer resumes on another browser profile or after local storage reset, paste the exported `spaceguard-native-beta-evidence/v1` JSON or markdown file into **Import exported ledger** in the Native beta distribution panel. Imported rows still need reviewer and artifact detail before they count.
+
 ## Release Stop Conditions
 
 Stop distribution if any of these are true:
