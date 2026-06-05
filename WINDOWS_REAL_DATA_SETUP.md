@@ -69,7 +69,8 @@ In the app:
 25. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
 26. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
 27. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
-28. Export the workflow handoff for resume guidance and the redacted support bundle for diagnostics, then export the release review packet, dry-run report, and validation pack when path-level evidence is needed.
+28. Record native beta distribution evidence with reviewer and artifact paths. Use [NATIVE_BETA_DISTRIBUTION.md](./NATIVE_BETA_DISTRIBUTION.md) for install/uninstall, support, signing, and public-claim evidence.
+29. Export the workflow handoff for resume guidance and the redacted support bundle for diagnostics, then export the release review packet, dry-run report, validation pack, and native beta evidence ledger when path-level evidence is needed.
 
 ## Disposable Fixture Run
 
@@ -140,6 +141,7 @@ For each Windows validation run, capture:
 - Active agent question and question queue state.
 - Per-check validation evidence records with reviewer, timestamp, artifact path, and notes.
 - Public beta readiness state.
+- Native beta distribution evidence records, including reviewer, artifact path, notes, and completion state.
 - Redacted support bundle.
 - Redacted workflow handoff.
 - Manual strategy checklist state for backup, archive, move, uninstall, or partition-prep evidence.

@@ -11,7 +11,9 @@ const nativeAdapter = fs.readFileSync(path.join(root, "src", "native-scanner.mjs
 const tauriConfig = fs.readFileSync(path.join(root, "src-tauri", "tauri.conf.json"), "utf8");
 const rustScanner = fs.readFileSync(path.join(root, "src-tauri", "src", "main.rs"), "utf8");
 const packageJson = fs.readFileSync(path.join(root, "package.json"), "utf8");
+const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const realDataGuide = fs.readFileSync(path.join(root, "WINDOWS_REAL_DATA_SETUP.md"), "utf8");
+const nativeBetaRunbook = fs.readFileSync(path.join(root, "NATIVE_BETA_DISTRIBUTION.md"), "utf8");
 const fixtureScript = fs.readFileSync(path.join(root, "scripts", "seed-spaceguard-fixtures.ps1"), "utf8");
 const fixtureInspectScript = fs.readFileSync(path.join(root, "scripts", "inspect-spaceguard-fixtures.ps1"), "utf8");
 
@@ -505,6 +507,16 @@ assert(realDataGuide.includes("Run real scan"), "real-data guide should include 
 assert(realDataGuide.includes("Disposable Fixture Run"), "real-data guide should include fixture validation setup");
 assert(realDataGuide.includes("inspect-spaceguard-fixtures.ps1"), "real-data guide should include fixture evidence inspection");
 assert(realDataGuide.includes("DryRunScopeEvidencePath"), "real-data guide should explain dry-run scope evidence inspection");
+assert(readme.includes("NATIVE_BETA_DISTRIBUTION.md"), "README should link native beta distribution runbook");
+assert(realDataGuide.includes("NATIVE_BETA_DISTRIBUTION.md"), "real-data guide should link native beta distribution runbook");
+assert(nativeBetaRunbook.includes("Native Beta Distribution Runbook"), "native beta runbook should exist");
+assert(nativeBetaRunbook.includes("Install Path"), "native beta runbook should cover install evidence");
+assert(nativeBetaRunbook.includes("Uninstall Path"), "native beta runbook should cover uninstall evidence");
+assert(nativeBetaRunbook.includes("Support Intake"), "native beta runbook should cover support intake");
+assert(nativeBetaRunbook.includes("Evidence To Record In The App"), "native beta runbook should explain app evidence records");
+assert(nativeBetaRunbook.includes("The checkbox alone does not count"), "native beta evidence should require reviewer and artifact detail");
+assert(nativeBetaRunbook.includes("Release Stop Conditions"), "native beta runbook should define distribution stop conditions");
+assert(nativeBetaRunbook.includes("must not delete files"), "native beta runbook should preserve the no-real-cleanup boundary");
 assert(fixtureScript.includes("dryRunScopeCases"), "fixture seeder should emit dry-run scope validation cases");
 assert(fixtureInspectScript.includes("dryRunScopeCheck"), "fixture inspector should emit dry-run scope validation result");
 assert(fixtureInspectScript.includes("DryRunScopeEvidencePath"), "fixture inspector should accept dry-run scope evidence input");
