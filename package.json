@@ -13,7 +13,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "demo:rehearsal": "node scripts/run-demo-rehearsal.mjs",
     "native:rehearsal": "node scripts/run-native-readonly-rehearsal.mjs",
-    "test": "node tests/guardrails.test.js && node tests/native-scanner.test.js && node tests/demo-rehearsal.test.js && node tests/native-readonly-rehearsal.test.js && node tests/static-app.test.js",
+    "test": "node tests/guardrails.test.js && node tests/native-scanner.test.js && node tests/openai-agent.test.js && node tests/demo-rehearsal.test.js && node tests/native-readonly-rehearsal.test.js && node tests/static-app.test.js",
     "check": "npm run build"
   },
   "dependencies": {

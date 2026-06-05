@@ -9,6 +9,7 @@ const app = fs.readFileSync(path.join(root, "src", "App.jsx"), "utf8");
 const model = fs.readFileSync(path.join(root, "src", "spaceguard-model.mjs"), "utf8");
 const nativeAdapter = fs.readFileSync(path.join(root, "src", "native-scanner.mjs"), "utf8");
 const openAiAgent = fs.readFileSync(path.join(root, "src", "openai-agent.mjs"), "utf8");
+const viteConfig = fs.readFileSync(path.join(root, "vite.config.mjs"), "utf8");
 const tauriConfig = fs.readFileSync(path.join(root, "src-tauri", "tauri.conf.json"), "utf8");
 const rustScanner = fs.readFileSync(path.join(root, "src-tauri", "src", "main.rs"), "utf8");
 const packageJson = fs.readFileSync(path.join(root, "package.json"), "utf8");
@@ -291,7 +292,12 @@ assert(app.includes("aiRecommendationActionLabel"), "OpenAI recommendation rows 
 assert(app.includes("Run npm cleanup"), "OpenAI recommendations should include npm executor action labels");
 assert(app.includes("onAction={handleOpenAIAgentRecommendation}"), "OpenAI panel should receive the guarded recommendation action handler");
 assert(openAiAgent.includes("https://api.openai.com/v1/responses"), "OpenAI adapter should use the Responses API endpoint");
-assert(openAiAgent.includes("VITE_OPENAI_API_KEY"), "OpenAI adapter should read the Vite env API key");
+assert(openAiAgent.includes("OPENAI_API_KEY"), "OpenAI adapter should read the primary .env API key");
+assert(openAiAgent.includes("VITE_OPENAI_API_KEY"), "OpenAI adapter should keep the Vite env API key fallback");
+assert(openAiAgent.includes("gpt-5.2"), "OpenAI adapter should default to the current GPT-5.2 model");
+assert(openAiAgent.includes("OPENAI_REASONING_EFFORT"), "OpenAI adapter should support configurable reasoning effort");
+assert(openAiAgent.includes("body.reasoning"), "OpenAI adapter should send configured reasoning effort");
+assert(viteConfig.includes('envPrefix: ["VITE_", "OPENAI_"]'), "Vite should expose OPENAI_* env vars for the local advisor panel");
 assert(openAiAgent.includes("directDeleteAuthority"), "OpenAI context should deny direct delete authority");
 assert(openAiAgent.includes("text: {"), "OpenAI adapter should configure Responses API text output");
 assert(openAiAgent.includes("type: \"json_schema\""), "OpenAI adapter should request strict structured output");
@@ -312,6 +318,8 @@ assert(app.includes("npm root"), "OpenAI panel should show npm cache target coun
 assert(app.includes("Recycle"), "OpenAI panel should show Recycle Bin target count");
 assert(app.includes("Cache roots"), "OpenAI panel should show browser cache target count");
 assert(app.includes("strict JSON"), "OpenAI panel should show structured output boundary");
+assert(app.includes("Reasoning:"), "OpenAI panel should show configured reasoning effort");
+assert(app.includes("OPENAI_MODEL"), "OpenAI panel should mention the primary model env setting");
 assert(app.includes("agent-question-panel"), "OpenAI ask-user recommendations should be able to focus the question panel");
 assert(app.includes("item-review-panel"), "OpenAI review-target recommendations should be able to focus item review");
 assert(model.includes("spaceguard-ai-agent-integration/v1"), "model should expose AI integration status");
@@ -718,6 +726,7 @@ assert(rustScanner.includes("delete_single_temp_file"), "temp deletion should be
 assert(packageJson.includes("vite"), "package should use Vite");
 assert(packageJson.includes("@radix-ui/react-slot"), "package should include shadcn primitive dependency");
 assert(packageJson.includes("@tauri-apps/cli"), "package should include Tauri CLI for native setup");
+assert(packageJson.includes("tests/openai-agent.test.js"), "package test script should include the OpenAI adapter test");
 assert(realDataGuide.includes("Run real scan"), "real-data guide should include native scan UI steps");
 assert(realDataGuide.includes("Disposable Fixture Run"), "real-data guide should include fixture validation setup");
 assert(realDataGuide.includes("inspect-spaceguard-fixtures.ps1"), "real-data guide should include fixture evidence inspection");

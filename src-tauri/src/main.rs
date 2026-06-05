@@ -665,7 +665,7 @@ fn execute_first_safe_temp_cleanup(request: WriteExecutionRequest) -> WriteExecu
                         if route_match {
                             "Action route is known-temp-delete."
                         } else {
-                            "Only known-temp-delete can execute in this first real executor."
+                            "Only known-temp-delete can execute through the temp cleanup executor."
                         },
                     ),
                     write_preflight_check(

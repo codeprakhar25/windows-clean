@@ -42,7 +42,7 @@ The OpenAI integration is advisory, not an executor.
 
 - It receives a bounded context packet: scan mode, selected actions, candidate samples, readiness state, runtime capability flags, and policy boundaries.
 - It receives reviewed project dependency targets only after item-review decisions mark them as Remove.
-- Its Responses API call requests strict JSON schema output named `spaceguard_cleanup_agent_advice`.
+- Its Responses API call reads `OPENAI_API_KEY`, `OPENAI_MODEL`, and `OPENAI_REASONING_EFFORT` from the local `.env`/Vite runtime and requests strict JSON schema output named `spaceguard_cleanup_agent_advice`.
 - Its allowed action vocabulary is limited to ranking reviewed targets, explaining blockers, asking the user, recommending a rescan, or recommending a scoped executor button.
 - It can rank candidates, explain risk, suggest the next workflow branch, and draft questions for the user.
 - It cannot scan local folders directly.

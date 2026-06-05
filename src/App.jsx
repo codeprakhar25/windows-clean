@@ -1347,7 +1347,8 @@ export default function App() {
           provider: openAiConfig.provider,
           model: openAiConfig.model,
           endpoint: openAiConfig.endpoint,
-          keySource: openAiConfig.keySource
+          keySource: openAiConfig.keySource,
+          reasoningEffort: openAiConfig.reasoningEffort
         },
         agentQuestionQueue,
         operatingChecklist,
@@ -5956,6 +5957,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
           <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
             <span>Provider: OpenAI Responses API</span>
             <span>Endpoint: {config.endpoint.replace(/^https?:\/\//, "")}</span>
+            <span>Reasoning: {config.reasoningEffort || "default"}</span>
             <span>Native scan: {context.runtime.nativeAvailable ? "available" : "not available"}</span>
             <span>Candidate samples: {context.candidateSamples.length}</span>
           </div>
@@ -5975,7 +5977,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
 
         {!configured ? (
           <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-            Add `VITE_OPENAI_API_KEY` to `.env`, optionally set `VITE_OPENAI_MODEL`, then restart the dev server.
+            Add `OPENAI_API_KEY` to `.env`, optionally set `OPENAI_MODEL` and `OPENAI_REASONING_EFFORT`, then restart the dev server.
           </div>
         ) : null}
 

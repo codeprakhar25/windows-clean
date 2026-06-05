@@ -6,7 +6,7 @@ SpaceGuard is a guarded Windows space recovery assistant. The current app has th
 - Native shell: Tauri + Rust read-only scanner for known local roots.
 - OpenAI advisor: optional Responses API call from `.env` that interprets the current scan/plan context and suggests next actions without direct tool authority.
 
-The native scanner measures filesystem metadata. Real cleanup is limited to the feature-flagged first-safe temp executor; all other routes remain read-only or advisory.
+The native scanner measures filesystem metadata. Real cleanup is limited to feature-flagged scoped executors for known temp files, reviewed project dependency folders, Gradle cache, npm cache, Recycle Bin, and browser cache; all other routes remain read-only, manual, or advisory.
 
 The product goal is to answer one user question clearly:
 
@@ -47,11 +47,12 @@ Configure the OpenAI advisor:
 
 ```bash
 cp .env.example .env
-# set VITE_OPENAI_API_KEY in .env
+# set OPENAI_API_KEY in .env
+# optional: set OPENAI_MODEL or OPENAI_REASONING_EFFORT
 npm run native:dev
 ```
 
-Enable the first real executor only on a disposable Windows validation machine or after you accept the temp-file risk:
+Enable temp cleanup only on a disposable Windows validation machine or after you accept the temp-file risk:
 
 ```powershell
 $env:SPACEGUARD_ENABLE_TEMP_EXECUTOR="1"
@@ -160,7 +161,7 @@ The **Real data launch roadmap** panel consolidates product status and rough del
 
 The **Native beta distribution** panel separates read-only beta packaging from real cleanup. It requires a current native read-only scan, local-only privacy, release/setup docs, install/uninstall path, redacted support workflow, signing or SmartScreen evidence, and no real-cleanup claim before native beta can be called ready.
 
-The **OpenAI cleanup agent** panel sends a bounded context packet to the OpenAI Responses API when the user clicks **Ask OpenAI**. It includes scan status, selected actions, candidate samples, reviewed project dependency targets, scanned Gradle and npm cache evidence, scanned browser cache roots, executor readiness, and runtime capability flags. Responses use a strict JSON schema with a bounded action vocabulary, so the app can display ranked next actions, blockers, questions, and warnings predictably. Recommended executor actions render as user-clickable buttons, but the click still routes through the same native feature flags, consent receipt, scan fingerprint, target validators, and UI preconditions. It does not grant the model filesystem access, approval authority, shell execution, or delete/move/archive authority.
+The **OpenAI cleanup agent** panel sends a bounded context packet to the OpenAI Responses API when the user clicks **Ask OpenAI**. It reads `OPENAI_API_KEY` from `.env` in local Vite/Tauri runs, defaults to `OPENAI_MODEL=gpt-5.2`, and supports `OPENAI_REASONING_EFFORT` for Responses API reasoning settings. It includes scan status, selected actions, candidate samples, reviewed project dependency targets, scanned Gradle and npm cache evidence, scanned browser cache roots, executor readiness, and runtime capability flags. Responses use a strict JSON schema with a bounded action vocabulary, so the app can display ranked next actions, blockers, questions, and warnings predictably. Recommended executor actions render as user-clickable buttons, but the click still routes through the same native feature flags, consent receipt, scan fingerprint, target validators, and UI preconditions. It does not grant the model filesystem access, approval authority, shell execution, or delete/move/archive authority.
 
 The native runtime capability command is:
 

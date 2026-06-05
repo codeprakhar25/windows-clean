@@ -1,5 +1,6 @@
-const DEFAULT_OPENAI_MODEL = "gpt-5.5";
+const DEFAULT_OPENAI_MODEL = "gpt-5.2";
 const DEFAULT_OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
+const DEFAULT_OPENAI_REASONING_EFFORT = "low";
 const OPENAI_AGENT_RESPONSE_FORMAT = {
   type: "json_schema",
   name: "spaceguard_cleanup_agent_advice",
@@ -62,9 +63,11 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
 };
 
 export function getOpenAIAgentConfig(env = import.meta.env || {}) {
-  const apiKey = String(env.VITE_OPENAI_API_KEY || "").trim();
-  const model = String(env.VITE_OPENAI_MODEL || DEFAULT_OPENAI_MODEL).trim() || DEFAULT_OPENAI_MODEL;
-  const endpoint = String(env.VITE_OPENAI_BASE_URL || DEFAULT_OPENAI_ENDPOINT).trim() || DEFAULT_OPENAI_ENDPOINT;
+  const apiKey = String(env.OPENAI_API_KEY || env.VITE_OPENAI_API_KEY || "").trim();
+  const model = String(env.OPENAI_MODEL || env.VITE_OPENAI_MODEL || DEFAULT_OPENAI_MODEL).trim() || DEFAULT_OPENAI_MODEL;
+  const endpoint = String(env.OPENAI_BASE_URL || env.VITE_OPENAI_BASE_URL || DEFAULT_OPENAI_ENDPOINT).trim() || DEFAULT_OPENAI_ENDPOINT;
+  const reasoningEffort = normalizeReasoningEffort(env.OPENAI_REASONING_EFFORT || env.VITE_OPENAI_REASONING_EFFORT || DEFAULT_OPENAI_REASONING_EFFORT);
+  const keySource = apiKey ? (env.OPENAI_API_KEY ? "OPENAI_API_KEY" : "VITE_OPENAI_API_KEY") : "missing";
 
   return {
     provider: "openai",
@@ -73,7 +76,8 @@ export function getOpenAIAgentConfig(env = import.meta.env || {}) {
     apiKey,
     model,
     endpoint,
-    keySource: apiKey ? "VITE_OPENAI_API_KEY" : "missing",
+    keySource,
+    reasoningEffort,
     advisoryOnly: true,
     directToolAccess: false
   };
@@ -251,7 +255,7 @@ export async function requestOpenAIAgentAdvice({
   fetchImpl = globalThis.fetch
 } = {}) {
   if (!config?.apiKey) {
-    throw new Error("Set VITE_OPENAI_API_KEY in .env and restart the Vite/Tauri dev server.");
+    throw new Error("Set OPENAI_API_KEY in .env and restart the Vite/Tauri dev server.");
   }
   if (typeof fetchImpl !== "function") {
     throw new Error("Fetch is not available in this runtime.");
@@ -292,6 +296,9 @@ export async function requestOpenAIAgentAdvice({
     ],
     max_output_tokens: 1200
   };
+  if (config.reasoningEffort && config.reasoningEffort !== "default") {
+    body.reasoning = { effort: config.reasoningEffort };
+  }
 
   const response = await fetchImpl(config.endpoint || DEFAULT_OPENAI_ENDPOINT, {
     method: "POST",
@@ -432,6 +439,14 @@ function normalizeActionType(value) {
     return clean;
   }
   return "manual-only";
+}
+
+function normalizeReasoningEffort(value) {
+  const clean = String(value || "").toLowerCase().trim();
+  if (clean === "default" || clean === "none" || clean === "minimal" || clean === "low" || clean === "medium" || clean === "high" || clean === "xhigh") {
+    return clean;
+  }
+  return DEFAULT_OPENAI_REASONING_EFFORT;
 }
 
 function normalizeStringList(value) {
