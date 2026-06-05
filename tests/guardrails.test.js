@@ -1466,7 +1466,19 @@ const assert = require("assert");
   const workflowHandoff = guard.buildWorkflowHandoffPacket({
     agentQuestionQueue: supportHandoffQuestions,
     productCompletionAudit: supportHandoffAudit,
+    nativeBetaEvidenceLedger,
     supportBundle,
+    releaseReviewPacket: {
+      status: "review-waiting",
+      writeSignalVisible: false,
+      rows: [
+        {
+          id: "native-beta-evidence-ledger",
+          status: "waiting",
+          detail: "1 beta evidence row needs reviewer or artifact detail."
+        }
+      ]
+    },
     runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
   });
   assert.strictEqual(workflowHandoff.schemaVersion, "spaceguard-workflow-handoff/v1", "workflow handoff should expose a schema version");
@@ -1474,12 +1486,16 @@ const assert = require("assert");
   assert.strictEqual(workflowHandoff.realCleanupEnabled, false, "workflow handoff must not enable cleanup");
   assert.strictEqual(workflowHandoff.realCleanupLocked, true, "workflow handoff should preserve cleanup lock");
   assert.strictEqual(workflowHandoff.activeQuestion.id, "run-first-scan", "workflow handoff should preserve the active question");
+  assert.strictEqual(workflowHandoff.workflow.nativeBetaEvidenceStatus, "partial", "workflow handoff should carry beta evidence status");
+  assert.strictEqual(workflowHandoff.workflow.nativeBetaEvidenceComplete, "1/5", "workflow handoff should carry beta evidence completion counts");
   assert(workflowHandoff.nextActions.some((step) => step.includes("Should I scan before suggesting cleanup?")), "workflow handoff should include active question as first next action");
+  assert(workflowHandoff.nextActions.some((step) => step.includes("Complete native beta evidence ledger")), "workflow handoff should include beta evidence as a resume action");
   const workflowHandoffJson = JSON.stringify(workflowHandoff);
   const workflowHandoffMarkdown = guard.buildWorkflowHandoffMarkdown(workflowHandoff);
   assert(!workflowHandoffJson.includes("C:\\Users"), "workflow handoff JSON should not include local paths");
   assert(!workflowHandoffMarkdown.includes("C:\\Users"), "workflow handoff markdown should not include local paths");
   assert(workflowHandoffMarkdown.includes("SpaceGuard Workflow Handoff"), "workflow handoff markdown should have a title");
+  assert(workflowHandoffMarkdown.includes("Native beta evidence: partial (1/5)"), "workflow handoff markdown should summarize beta evidence state");
   const handoffReport = guard.buildReport({
     scenario: guard.getScenario("developer"),
     profile: guard.getScenario("developer").profile,

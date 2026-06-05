@@ -5095,6 +5095,7 @@ export function buildWorkflowHandoffPacket({
   demoRehearsalRunbook = null,
   windowsSetupAssistant = null,
   scanSession = null,
+  nativeBetaEvidenceLedger = null,
   supportBundle = null,
   releaseReviewPacket = null,
   tempExecutorActivationGate = null,
@@ -5120,6 +5121,11 @@ export function buildWorkflowHandoffPacket({
             ? "readonly-handoff-ready"
             : "workflow-open";
   const auditSteps = productCompletionAudit?.steps || [];
+  const nativeBetaEvidenceRow = releaseReviewPacket?.rows?.find((row) => row.id === "native-beta-evidence-ledger") || null;
+  const betaEvidenceStep =
+    nativeBetaEvidenceRow && nativeBetaEvidenceRow.status !== "passed"
+      ? `Complete native beta evidence ledger: ${nativeBetaEvidenceRow.detail}`
+      : "";
   const activationStep =
     tempExecutorActivationGate?.schemaVersion && tempExecutorActivationGate.status !== "activation-review-ready"
       ? `Review temp executor activation: ${tempExecutorActivationGate.primary}`
@@ -5127,7 +5133,7 @@ export function buildWorkflowHandoffPacket({
   const activeStep = activeQuestion
     ? `${activeQuestion.prompt} ${activeQuestion.action && activeQuestion.action !== "none" ? `Action: ${activeQuestion.action}.` : "Record evidence in the indicated panel."}`
     : "";
-  const nextActions = [activeStep, activationStep, ...auditSteps]
+  const nextActions = [activeStep, betaEvidenceStep, activationStep, ...auditSteps]
     .filter(Boolean)
     .filter((step, index, list) => list.indexOf(step) === index)
     .slice(0, 6);
@@ -5161,6 +5167,8 @@ export function buildWorkflowHandoffPacket({
       setupStatus: windowsSetupAssistant?.status || "not-evaluated",
       demoStatus: demoRehearsalRunbook?.status || "not-evaluated",
       auditStatus: productCompletionAudit?.status || "not-evaluated",
+      nativeBetaEvidenceStatus: nativeBetaEvidenceLedger?.status || "not-recorded",
+      nativeBetaEvidenceComplete: `${nativeBetaEvidenceLedger?.counts?.complete || 0}/${nativeBetaEvidenceLedger?.counts?.total || 0}`,
       supportStatus: supportBundle?.summary?.status || "not-evaluated",
       releaseReviewStatus: releaseReviewPacket?.status || "not-evaluated",
       tempActivationStatus: tempExecutorActivationGate?.status || "not-evaluated",
@@ -5218,6 +5226,7 @@ export function buildWorkflowHandoffMarkdown(packet) {
     `Setup: ${packet.workflow.setupStatus}`,
     `Demo: ${packet.workflow.demoStatus}`,
     `Audit: ${packet.workflow.auditStatus}`,
+    `Native beta evidence: ${packet.workflow.nativeBetaEvidenceStatus} (${packet.workflow.nativeBetaEvidenceComplete || "0/0"})`,
     `Release review: ${packet.workflow.releaseReviewStatus}`,
     `Temp activation: ${packet.workflow.tempActivationStatus}`,
     `Temp activation allowed: ${packet.workflow.tempActivationAllowed ? "yes" : "no"}`,
