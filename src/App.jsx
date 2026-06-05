@@ -137,6 +137,7 @@ const VALIDATION_EVIDENCE_STORAGE_KEY = "spaceguard.validationEvidence.v1";
 const MANUAL_STRATEGY_EVIDENCE_STORAGE_KEY = "spaceguard.manualStrategyEvidence.v1";
 const ROLLBACK_EVIDENCE_STORAGE_KEY = "spaceguard.rollbackEvidence.v1";
 const CUSTOM_ROOT_TRIAGE_STORAGE_KEY = "spaceguard.customRootTriage.v1";
+const NATIVE_BETA_EVIDENCE_STORAGE_KEY = "spaceguard.nativeBetaEvidence.v1";
 const RUN_HISTORY_LIMIT = 25;
 const filters = ["all", "safe", "rebuildable", "review", "advanced", "restricted"];
 const modes = [
@@ -144,13 +145,33 @@ const modes = [
   ["balanced", "Balanced"],
   ["emergency", "Emergency"]
 ];
-const nativeBetaDocumentationEvidence = {
-  publicReleaseResearch: true,
-  windowsRealDataSetup: true,
-  installUninstallRunbook: true,
-  supportRunbook: true,
-  supportBundleExport: true
-};
+const nativeBetaEvidenceSpecs = [
+  {
+    id: "publicReleaseResearch",
+    label: "Public release notes",
+    detail: "Release copy must describe read-only scanning and avoid real-cleanup claims."
+  },
+  {
+    id: "windowsRealDataSetup",
+    label: "Windows real-data setup",
+    detail: "Setup docs must explain the desktop shell, read-only scan, privacy, and export boundaries."
+  },
+  {
+    id: "installUninstallRunbook",
+    label: "Install and uninstall path",
+    detail: "Distribution docs must cover install, uninstall, rollback, and support contact flow."
+  },
+  {
+    id: "supportRunbook",
+    label: "Support runbook",
+    detail: "Support must start from redacted diagnostics and request path-level reports only when needed."
+  },
+  {
+    id: "supportBundleExport",
+    label: "Redacted support export",
+    detail: "Support export evidence must prove local paths and filenames are excluded by default."
+  }
+];
 
 const riskAccent = {
   safe: "bg-emerald-500",
@@ -223,6 +244,7 @@ export default function App() {
   const [manualStrategyEvidence, setManualStrategyEvidence] = useState(() => readStoredManualStrategyEvidence());
   const [rollbackEvidence, setRollbackEvidence] = useState(() => readStoredRollbackEvidence());
   const [customRootTriageEvidence, setCustomRootTriageEvidence] = useState(() => readStoredCustomRootTriageEvidence());
+  const [nativeBetaEvidence, setNativeBetaEvidence] = useState(() => readStoredNativeBetaEvidence());
   const [fixtureImportText, setFixtureImportText] = useState("");
   const [fixtureImportReviewer, setFixtureImportReviewer] = useState("");
   const [fixtureImportArtifact, setFixtureImportArtifact] = useState("");
@@ -271,6 +293,10 @@ export default function App() {
   useEffect(() => {
     writeStoredCustomRootTriageEvidence(customRootTriageEvidence);
   }, [customRootTriageEvidence]);
+
+  useEffect(() => {
+    writeStoredNativeBetaEvidence(nativeBetaEvidence);
+  }, [nativeBetaEvidence]);
 
   const dataMode = nativeScan.result?.available ? "native-readonly" : "demo";
   const targetDrive = useMemo(() => normalizeTargetDrive(scanSettings.targetDrive), [scanSettings.targetDrive]);
@@ -814,6 +840,10 @@ export default function App() {
       }),
     [actionList, selectedIds, protectedPaths, intakePolicy, customRootTriage, taskRunbook, runtimeCapabilities.result]
   );
+  const nativeBetaDocumentationEvidence = useMemo(
+    () => buildNativeBetaDocumentationEvidence(nativeBetaEvidence),
+    [nativeBetaEvidence]
+  );
   const nativeBetaDistributionReadiness = useMemo(
     () =>
       buildNativeBetaDistributionReadiness({
@@ -826,7 +856,7 @@ export default function App() {
         validationEvidence,
         documentationEvidence: nativeBetaDocumentationEvidence
       }),
-    [dataMode, nativeCapability, runtimeCapabilities.result, scanSession, privacyBoundary, releaseGate, validationEvidence]
+    [dataMode, nativeCapability, runtimeCapabilities.result, scanSession, privacyBoundary, releaseGate, validationEvidence, nativeBetaDocumentationEvidence]
   );
   const publicBetaReadiness = useMemo(
     () =>
@@ -840,7 +870,7 @@ export default function App() {
         documentationEvidence: nativeBetaDocumentationEvidence,
         distributionReadiness: nativeBetaDistributionReadiness
       }),
-    [dataMode, nativeCapability, runtimeCapabilities.result, releaseGate, privacyBoundary, validationEvidence, nativeBetaDistributionReadiness]
+    [dataMode, nativeCapability, runtimeCapabilities.result, releaseGate, privacyBoundary, validationEvidence, nativeBetaDocumentationEvidence, nativeBetaDistributionReadiness]
   );
   const supportBundle = useMemo(
     () =>
@@ -1618,6 +1648,54 @@ export default function App() {
     setValidationEvidence({});
   }
 
+  function setNativeBetaEvidenceRow(rowId, checked) {
+    setNativeBetaEvidence((current) => {
+      const next = { ...current };
+      if (checked) {
+        const currentRecord = coerceNativeBetaEvidenceFormRecord(current[rowId]);
+        const now = new Date().toISOString();
+        next[rowId] = {
+          ...currentRecord,
+          status: "passed",
+          recordedAt: currentRecord.recordedAt || now,
+          updatedAt: now
+        };
+      } else {
+        const currentRecord = coerceNativeBetaEvidenceFormRecord(current[rowId]);
+        const hasDetail = Boolean(currentRecord.evidencePath || currentRecord.reviewer || currentRecord.notes);
+        if (hasDetail) {
+          next[rowId] = {
+            ...currentRecord,
+            status: "draft",
+            updatedAt: new Date().toISOString()
+          };
+        } else {
+          delete next[rowId];
+        }
+      }
+      return next;
+    });
+  }
+
+  function updateNativeBetaEvidence(rowId, field, value) {
+    setNativeBetaEvidence((current) => {
+      const currentRecord = coerceNativeBetaEvidenceFormRecord(current[rowId]);
+      return {
+        ...current,
+        [rowId]: {
+          ...currentRecord,
+          [field]: value,
+          status: currentRecord.status === "passed" ? "passed" : "draft",
+          updatedAt: new Date().toISOString()
+        }
+      };
+    });
+  }
+
+  function resetNativeBetaEvidence() {
+    setNativeBetaEvidence({});
+  }
+
   function importFixtureEvidence() {
     const result = buildFixtureEvidenceImport({
       evidenceText: fixtureImportText,
@@ -2158,7 +2236,13 @@ export default function App() {
 
             <RealDataLaunchRoadmapPanel roadmap={realDataLaunchRoadmap} />
 
-            <NativeBetaDistributionPanel readiness={nativeBetaDistributionReadiness} />
+            <NativeBetaDistributionPanel
+              readiness={nativeBetaDistributionReadiness}
+              evidence={nativeBetaEvidence}
+              onToggleEvidence={setNativeBetaEvidenceRow}
+              onUpdateEvidence={updateNativeBetaEvidence}
+              onResetEvidence={resetNativeBetaEvidence}
+            />
 
             <DemoRehearsalRunbookPanel runbook={demoRehearsalRunbook} onExport={exportReport} />
 
@@ -2758,8 +2842,13 @@ function RealDataLaunchRoadmapPanel({ roadmap }) {
   );
 }
 
-function NativeBetaDistributionPanel({ readiness }) {
+function NativeBetaDistributionPanel({ readiness, evidence, onToggleEvidence, onUpdateEvidence, onResetEvidence }) {
   const visibleRows = readiness.waitingRows.length ? readiness.waitingRows : readiness.rows.slice(0, 4);
+  const evidenceRows = nativeBetaEvidenceSpecs.map((spec) => ({
+    ...spec,
+    record: coerceNativeBetaEvidenceFormRecord(evidence?.[spec.id])
+  }));
+  const evidenceComplete = evidenceRows.filter((row) => isNativeBetaEvidenceRecordComplete(row.record)).length;
 
   return (
     <Card id="native-beta-distribution-panel">
@@ -2778,7 +2867,7 @@ function NativeBetaDistributionPanel({ readiness }) {
       <CardContent className="flex flex-col gap-3">
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <QueueStat label="Rows" value={`${readiness.counts.ready}/${readiness.counts.total}`} tone={readiness.readyForNativeBeta ? "safe" : "review"} />
-          <QueueStat label="Docs" value={readiness.docsReady ? "ready" : "wait"} tone={readiness.docsReady ? "safe" : "review"} />
+          <QueueStat label="Evidence" value={`${evidenceComplete}/${evidenceRows.length}`} tone={readiness.docsReady ? "safe" : "review"} />
           <QueueStat label="Signing" value={readiness.signingReady ? "ready" : "wait"} tone={readiness.signingReady ? "safe" : "review"} />
           <QueueStat label="Real cleanup" value={readiness.realRunEnabled ? "visible" : "locked"} tone={readiness.realRunEnabled ? "restricted" : "safe"} />
         </div>
@@ -2822,6 +2911,59 @@ function NativeBetaDistributionPanel({ readiness }) {
               <p className="mt-2 text-xs text-muted-foreground">{row.detail}</p>
             </div>
           ))}
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="text-sm font-medium">Recorded beta evidence</div>
+            <Button type="button" size="sm" variant="outline" onClick={onResetEvidence}>
+              <RefreshCcw className="h-4 w-4" />
+              Reset
+            </Button>
+          </div>
+          <div className="grid gap-2">
+            {evidenceRows.map((row) => {
+              const complete = isNativeBetaEvidenceRecordComplete(row.record);
+              const marked = row.record.status === "passed";
+              return (
+                <div key={row.id} className="rounded-md border bg-card p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Checkbox
+                      checked={marked}
+                      aria-label={`${row.label} evidence recorded`}
+                      onClick={() => onToggleEvidence(row.id, !marked)}
+                    />
+                    <div className="mr-auto min-w-0 text-sm font-medium">{row.label}</div>
+                    <Badge variant={complete ? "safe" : marked ? "review" : "outline"}>
+                      {complete ? "complete" : marked ? "needs detail" : "draft"}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">{row.detail}</p>
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    <Input
+                      value={row.record.evidencePath}
+                      placeholder="Evidence path or artifact id"
+                      aria-label={`${row.label} evidence path`}
+                      onChange={(event) => onUpdateEvidence(row.id, "evidencePath", event.target.value)}
+                    />
+                    <Input
+                      value={row.record.reviewer}
+                      placeholder="Reviewer"
+                      aria-label={`${row.label} reviewer`}
+                      onChange={(event) => onUpdateEvidence(row.id, "reviewer", event.target.value)}
+                    />
+                  </div>
+                  <Textarea
+                    className="mt-2"
+                    value={row.record.notes}
+                    placeholder="Notes"
+                    aria-label={`${row.label} notes`}
+                    onChange={(event) => onUpdateEvidence(row.id, "notes", event.target.value)}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -7122,6 +7264,19 @@ function RunHistoryPanel({ historySummary, onExport }) {
   );
 }
 
+function buildNativeBetaDocumentationEvidence(evidence = {}) {
+  return Object.fromEntries(
+    nativeBetaEvidenceSpecs.map((spec) => {
+      const record = coerceNativeBetaEvidenceFormRecord(evidence?.[spec.id]);
+      return [spec.id, isNativeBetaEvidenceRecordComplete(record)];
+    })
+  );
+}
+
+function isNativeBetaEvidenceRecordComplete(record = {}) {
+  return record.status === "passed" && Boolean(String(record.evidencePath || "").trim()) && Boolean(String(record.reviewer || "").trim());
+}
+
 function readStoredRunHistory() {
   try {
     const raw = globalThis.localStorage?.getItem(RUN_HISTORY_STORAGE_KEY);
@@ -7243,6 +7398,59 @@ function coerceCustomRootTriageFormRecord(value) {
 function writeStoredCustomRootTriageEvidence(evidence) {
   try {
     globalThis.localStorage?.setItem(CUSTOM_ROOT_TRIAGE_STORAGE_KEY, JSON.stringify(evidence || {}));
+  } catch {
+    // Local storage can be unavailable in hardened browser contexts.
+  }
+}
+
+function readStoredNativeBetaEvidence() {
+  try {
+    const raw = globalThis.localStorage?.getItem(NATIVE_BETA_EVIDENCE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, value]) => value === true || value === "passed" || (value && typeof value === "object" && !Array.isArray(value)))
+    );
+  } catch {
+    return {};
+  }
+}
+
+function coerceNativeBetaEvidenceFormRecord(value) {
+  if (value === true || value === "passed") {
+    return {
+      status: "passed",
+      evidencePath: "",
+      reviewer: "",
+      notes: "",
+      recordedAt: "",
+      updatedAt: ""
+    };
+  }
+  if (!value || typeof value !== "object") {
+    return {
+      status: "draft",
+      evidencePath: "",
+      reviewer: "",
+      notes: "",
+      recordedAt: "",
+      updatedAt: ""
+    };
+  }
+  return {
+    status: value.status === "passed" || value.status === "failed" || value.status === "draft" ? value.status : "draft",
+    evidencePath: value.evidencePath || value.evidence_path || value.artifactId || value.artifact_id || "",
+    reviewer: value.reviewer || "",
+    notes: value.notes || "",
+    recordedAt: value.recordedAt || value.recorded_at || "",
+    updatedAt: value.updatedAt || value.updated_at || ""
+  };
+}
+
+function writeStoredNativeBetaEvidence(evidence) {
+  try {
+    globalThis.localStorage?.setItem(NATIVE_BETA_EVIDENCE_STORAGE_KEY, JSON.stringify(evidence || {}));
   } catch {
     // Local storage can be unavailable in hardened browser contexts.
   }

@@ -188,6 +188,16 @@ assert(app.includes("buildNativeBetaDistributionReadiness"), "native beta distri
 assert(app.includes("NativeBetaDistributionPanel"), "native beta distribution panel should be rendered");
 assert(app.includes("native-beta-distribution-panel"), "native beta distribution panel should be focusable");
 assert(app.includes("Native beta distribution"), "native beta distribution panel should expose setup copy");
+assert(app.includes("NATIVE_BETA_EVIDENCE_STORAGE_KEY"), "native beta evidence should be persisted locally");
+assert(app.includes("nativeBetaEvidenceSpecs"), "native beta evidence checklist should be explicit");
+assert(app.includes("readStoredNativeBetaEvidence"), "native beta evidence should load from local storage");
+assert(app.includes("writeStoredNativeBetaEvidence"), "native beta evidence should save to local storage");
+assert(app.includes("buildNativeBetaDocumentationEvidence"), "native beta documentation readiness should be derived from evidence");
+assert(app.includes("coerceNativeBetaEvidenceFormRecord"), "native beta evidence should migrate older records");
+assert(app.includes("setNativeBetaEvidenceRow"), "native beta evidence checklist should be editable");
+assert(app.includes("Recorded beta evidence"), "native beta distribution panel should expose editable evidence");
+assert(app.includes("Evidence path or artifact id"), "native beta evidence should require artifact references");
+assert(!app.includes("publicReleaseResearch: true"), "native beta documentation evidence should not be hardcoded as complete in the UI");
 assert(app.includes("buildDemoRehearsalRunbook"), "demo rehearsal runbook should be wired");
 assert(app.includes("DemoRehearsalRunbookPanel"), "demo rehearsal runbook panel should be rendered");
 assert(app.includes("buildProductCompletionAudit"), "product completion audit should be wired");
