@@ -375,6 +375,7 @@ assert(model.includes("targetPath"), "first-safe contract should include native 
 assert(model.includes("target-scope-rejected"), "write boundary probe should separate target-scope rejection from passing evidence");
 assert(model.includes("spaceguard-write-boundary-probe/v1"), "model should expose write boundary probe schema");
 assert(model.includes("normalizeWriteExecutorScaffold"), "model should normalize native write executor scaffold metadata");
+assert(model.includes("normalizeWritePreflightChecks"), "model should normalize native write preflight checks");
 assert(model.includes("normalizeExecutorFeatureFlags"), "model should normalize per-executor runtime feature flags");
 assert(model.includes("contract-mismatch"), "write boundary probe should reject mismatched contract echoes");
 assert(model.includes("normalizeValidationEvidenceRecord"), "model should normalize structured validation evidence");
@@ -414,6 +415,7 @@ assert(nativeAdapter.includes("execute_cleanup_plan"), "native adapter should in
 assert(nativeAdapter.includes("rejectCode"), "native adapter should normalize write-boundary reject codes");
 assert(nativeAdapter.includes("targetPath"), "native adapter should pass selected target paths to the write boundary");
 assert(nativeAdapter.includes("executorScaffold"), "native adapter should normalize write executor scaffold metadata");
+assert(nativeAdapter.includes("preflightChecks"), "native adapter should normalize write preflight checks");
 assert(nativeAdapter.includes("runtime_capabilities"), "native adapter should invoke runtime capability command");
 assert(nativeAdapter.includes("executorFlags"), "native adapter should normalize per-executor feature flags");
 assert(nativeAdapter.includes("items.map"), "native adapter should preserve item-level review candidates");
@@ -432,6 +434,8 @@ assert(rustScanner.includes("write_action_target_reject_code(&action.route, &act
 assert(rustScanner.includes("execute_cleanup_plan"), "Rust rejecting write boundary command should exist");
 assert(rustScanner.includes("contract_echo"), "Rust rejecting write boundary should echo the first-safe contract");
 assert(rustScanner.includes("WriteExecutorScaffold"), "Rust write boundary should expose disabled executor scaffold metadata");
+assert(rustScanner.includes("WritePreflightCheck"), "Rust write boundary should expose per-action preflight checks");
+assert(rustScanner.includes("write_action_preflight"), "Rust write boundary should build per-action preflight evidence");
 assert(rustScanner.includes("tempCleanupExecutor"), "Rust write boundary should name the temp executor feature flag");
 assert(rustScanner.includes("temp-executor-feature-flag-disabled"), "Rust write boundary should reject the temp scaffold while disabled");
 assert(rustScanner.includes("write_boundary_rejections"), "Rust write boundary should validate request shape before rejection");

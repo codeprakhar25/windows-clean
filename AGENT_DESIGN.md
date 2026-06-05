@@ -293,6 +293,7 @@ Write boundary probe invariant:
 - The probe can call `execute_cleanup_plan` only to prove the native boundary rejects the current request shape.
 - Passing probe evidence requires `accepted=false`, `realRunEnabled=false`, `destructiveCommands=false`, every entry rejected, zero reclaimed bytes, and a native contract echo matching the current first-safe executor contract.
 - The known-temp route may report a disabled `tempCleanupExecutor` scaffold, but scaffold presence is implementation evidence only and must keep mutation disabled.
+- Every write-boundary entry must expose native preflight evidence for request shape, target allowlist, mutation lock, feature flag, and validation state before future executor work can be trusted.
 - Reject codes such as `real-executor-disabled`, `temp-executor-feature-flag-disabled`, `dry-run-only-required`, `route-not-first-safe`, `route-mismatch`, or `target-forbidden` are diagnostic evidence only; they do not create cleanup authority. Target-scope reject codes do not count as passing rejection evidence.
 - Probe entries cannot create ledger records, recovery totals, release-gate credit, or write-readiness credit.
 - Any accepted, destructive, real-run-enabled, non-rejected, non-zero-byte, or contract-mismatched signal is unsafe and blocks release review.
@@ -501,6 +502,8 @@ execute_cleanup_plan
 It is a rejecting write boundary for future executor request-shape validation. Current builds must validate dry-run-only state, mutation flags, plan/scan/consent evidence, first-safe route membership, per-action route matches, and selected target paths, then return `accepted: false`, `realRunEnabled: false`, `destructiveCommands: false`, native reject codes, and zero reclaimed bytes for every entry.
 
 For `known-temp-delete`, it may also return a disabled `tempCleanupExecutor` scaffold. This proves the native route boundary exists but cannot mutate until the feature flag, validation evidence, rollback/rescan proof, and release review all pass.
+
+Each rejected write entry returns preflight checks. For the temp scaffold, shape, target allowlist, and mutation lock can pass while feature flag and validation evidence remain blocked or waiting.
 
 The fourth native command is:
 

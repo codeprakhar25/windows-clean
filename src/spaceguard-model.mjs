@@ -6049,6 +6049,8 @@ export function buildWriteBoundaryProbe({
         result: entry.result || "unknown",
         rejectCode: entry.rejectCode || "",
         bytes: Number(entry.bytes || 0),
+        preflightStatus: entry.preflightStatus || entry.preflight_status || "",
+        preflightChecks: normalizeWritePreflightChecks(entry.preflightChecks || entry.preflight_checks),
         note: entry.note || ""
       }))
     : [];
@@ -6128,7 +6130,9 @@ export function buildWriteBoundaryProbe({
       bytes,
       warnings: warnings.length,
       contractEcho: contractEcho ? 1 : 0,
-      executorScaffold: executorScaffold ? 1 : 0
+      executorScaffold: executorScaffold ? 1 : 0,
+      preflightChecks: entries.reduce((sum, entry) => sum + entry.preflightChecks.length, 0),
+      preflightBlocked: entries.reduce((sum, entry) => sum + entry.preflightChecks.filter((check) => check.status === "blocked").length, 0)
     },
     primary: getWriteBoundaryProbePrimary(status, { selectedRows, entries, rejected, bytes }),
     steps: buildWriteBoundaryProbeSteps(status)
@@ -9009,12 +9013,14 @@ export function buildReport({
           `- Contract echo: ${writeBoundaryProbe.contractEcho ? "present" : "missing"}`,
           `- Contract match: ${writeBoundaryProbe.contractMatch ? "yes" : "no"}`,
           `- Executor scaffold: ${writeBoundaryProbe.executorScaffold ? `${writeBoundaryProbe.executorScaffold.title || writeBoundaryProbe.executorScaffold.route} | ${writeBoundaryProbe.executorScaffold.status} | flag=${writeBoundaryProbe.executorScaffold.featureFlag || "none"} | mutation=${writeBoundaryProbe.executorScaffold.mutationEnabled ? "enabled" : "disabled"}` : "none"}`,
+          `- Preflight checks: ${writeBoundaryProbe.counts.preflightChecks || 0}`,
+          `- Preflight blocked: ${writeBoundaryProbe.counts.preflightBlocked || 0}`,
           `- Entries: ${writeBoundaryProbe.counts.entries}`,
           `- Rejected entries: ${writeBoundaryProbe.counts.rejected}`,
           `- Bytes reclaimed: ${formatBytes(writeBoundaryProbe.counts.bytes || 0)}`,
           `- Reason: ${writeBoundaryProbe.reason || "None"}`,
           writeBoundaryProbe.entries.length
-            ? writeBoundaryProbe.entries.map((entry) => `- ${entry.title}: ${entry.result} | code=${entry.rejectCode || "none"} | ${formatBytes(entry.bytes)} | ${entry.note || "no mutation"}`).join("\n")
+            ? writeBoundaryProbe.entries.map((entry) => `- ${entry.title}: ${entry.result} | code=${entry.rejectCode || "none"} | preflight=${entry.preflightStatus || "none"} | ${formatBytes(entry.bytes)} | ${entry.note || "no mutation"}${entry.preflightChecks.length ? `\n${entry.preflightChecks.map((check) => `  - Preflight ${check.label}: ${check.status} | ${check.detail}`).join("\n")}` : ""}`).join("\n")
             : "- No write-boundary entries."
         ].join("\n")
       : "- Not evaluated.",
@@ -11599,6 +11605,17 @@ function normalizeWriteExecutorScaffold(value = null) {
     mutationEnabled: Boolean(value.mutationEnabled || value.mutation_enabled),
     reason: value.reason || ""
   };
+}
+
+function normalizeWritePreflightChecks(value = []) {
+  return Array.isArray(value)
+    ? value.map((check) => ({
+        id: check.id || "",
+        label: check.label || "",
+        status: check.status || "waiting",
+        detail: check.detail || ""
+      }))
+    : [];
 }
 
 function normalizeExecutorFeatureFlags(value = {}) {

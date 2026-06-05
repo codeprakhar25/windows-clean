@@ -5545,6 +5545,7 @@ function WriteBoundaryProbePanel({ probe, nativeWriteBoundary, runtimeCapabiliti
           <QueueStat label="Rejected" value={probe.counts.rejected} tone={probe.rejectionEvidence ? "safe" : "restricted"} />
           <QueueStat label="Bytes" value={formatBytes(probe.counts.bytes)} tone={probe.counts.bytes ? "restricted" : "safe"} />
           <QueueStat label="Contract" value={probe.contractRequired ? probe.contractMatch ? "match" : "wait" : "n/a"} tone={probe.contractMatch ? "safe" : "review"} />
+          <QueueStat label="Preflight" value={probe.counts.preflightBlocked ? `${probe.counts.preflightBlocked} blocked` : probe.counts.preflightChecks} tone={probe.counts.preflightBlocked ? "review" : "safe"} />
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
@@ -5597,6 +5598,16 @@ function WriteBoundaryProbePanel({ probe, nativeWriteBoundary, runtimeCapabiliti
                   <Badge variant="outline">{entry.rejectCode || "no code"}</Badge>
                   <Badge variant="outline">{formatBytes(entry.bytes)}</Badge>
                 </div>
+                {entry.preflightStatus ? (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    <Badge variant="outline">{entry.preflightStatus}</Badge>
+                    {entry.preflightChecks.slice(0, 3).map((check) => (
+                      <Badge key={`${entry.id}-${check.id}`} variant={check.status === "passed" ? "safe" : check.status === "blocked" ? "restricted" : "review"}>
+                        {check.label}: {check.status}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
                 <p className="mt-2 text-xs text-muted-foreground">{entry.note}</p>
               </div>
             ))}

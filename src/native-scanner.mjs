@@ -395,6 +395,8 @@ export function normalizeNativeWriteBoundary(result = {}) {
           result: entry.result || "rejected",
           rejectCode: entry.rejectCode || entry.reject_code || "",
           bytes: Number(entry.bytes || 0),
+          preflightStatus: entry.preflightStatus || entry.preflight_status || "",
+          preflightChecks: normalizeWritePreflightChecks(entry.preflightChecks || entry.preflight_checks),
           note: entry.note || ""
         }))
       : [],
@@ -402,6 +404,17 @@ export function normalizeNativeWriteBoundary(result = {}) {
     executorScaffold: normalizeWriteExecutorScaffold(result.executorScaffold || result.executor_scaffold),
     warnings: Array.isArray(result.warnings) ? result.warnings : []
   };
+}
+
+function normalizeWritePreflightChecks(value = []) {
+  return Array.isArray(value)
+    ? value.map((check) => ({
+        id: check.id || "",
+        label: check.label || "",
+        status: check.status || "waiting",
+        detail: check.detail || ""
+      }))
+    : [];
 }
 
 function normalizeWriteExecutorScaffold(value = null) {

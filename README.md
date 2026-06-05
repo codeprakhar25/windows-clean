@@ -81,6 +81,8 @@ It exists only to validate the future request shape and reject every write attem
 
 For `known-temp-delete`, the native response now exposes a disabled executor scaffold: route `known-temp-delete`, feature flag `tempCleanupExecutor`, validation status `validation-required`, and mutation disabled. This is implementation evidence only; the command still rejects the request and returns zero bytes.
 
+Each rejected write entry also carries native preflight evidence: request-shape checks, target allowlist status, mutation lock, route feature-flag state, and validation-evidence state. Preflight rows show what would block or pass before a future executor runs; they do not create cleanup authority.
+
 The **Write boundary probe** panel can call this rejecting command from the desktop shell. A passing probe is rejection evidence only: accepted is false, every entry is rejected, reclaimed bytes are zero, and no ledger or recovery claim is created.
 
 The **First-safe validation gate** sits between the disabled request contract and the write-boundary probe. It summarizes the selected first-safe route, required Windows validation checks, required fixtures, contract status, and runtime write signals. Passing this gate means implementation planning can start; it still reports real run allowed as false and keeps destructive actions hidden.
@@ -310,6 +312,8 @@ The first-safe work order is the handoff from validation into implementation. Fo
 The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` rejecting stub in the desktop shell, but success means rejection, not cleanup: `accepted=false`, all entries rejected with native reject codes, zero reclaimed bytes, and a native echo that matches the current first-safe executor contract. Target-scope reject codes are diagnostic only and do not count as passing rejection evidence. Probe entries are never ledger recovery.
 
 When the selected route is known temp cleanup, the probe also reports the disabled `tempCleanupExecutor` scaffold. That scaffold is the first native implementation boundary to finish next; it remains feature-flag disabled until fixture, rollback/rescan, release, and support evidence pass.
+
+The probe entry preflight checks are the native proof that request shape, target allowlist, mutation lock, feature flag, and validation state are evaluated before any executor could run. The expected current outcome for known temp is preflight passing the shape/target/mutation checks, then blocking on the disabled feature flag and missing validation evidence.
 
 The fixture evidence import accepts the JSON produced by `scripts/inspect-spaceguard-fixtures.ps1`. It can fill the `scanner-fixtures` validation record after the fixture JSON passes schema, count, age, size, destructive-command, reviewer, and artifact checks. It can also fill `dry-run-target-scope` only when the evidence includes explicit passing dry-run scope cases with allowed and rejected targets. Use **Export scope evidence** to run the native metadata-only scope probe and create the minimal `spaceguard-native-dry-run-scope/v1` JSON consumed by the fixture inspector. Protected-path, rollback, tool-command, native-build, and ledger/rescan evidence still require their own records.
 

@@ -220,7 +220,18 @@ struct WriteExecutionEntry {
     result: String,
     reject_code: String,
     bytes: u64,
+    preflight_status: String,
+    preflight_checks: Vec<WritePreflightCheck>,
     note: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WritePreflightCheck {
+    id: String,
+    label: String,
+    status: String,
+    detail: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -457,6 +468,7 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
             let requested_bytes = action.bytes;
             let reject_code =
                 write_action_reject_code(&action, &route, &boundary_rejections).to_string();
+            let preflight = write_action_preflight(&action, &route, &boundary_rejections, &reject_code);
             WriteExecutionEntry {
                 id: action.id,
                 title: action.title,
@@ -464,6 +476,8 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
                 result: "rejected".to_string(),
                 reject_code: reject_code.clone(),
                 bytes: 0,
+                preflight_status: preflight.0,
+                preflight_checks: preflight.1,
                 note: format!(
                     "Rejected by native write boundary with code {reject_code}. Route {route}, plan {plan_id}, requested {requested_bytes} byte(s); write execution is disabled."
                 ),
@@ -567,6 +581,102 @@ fn write_action_reject_code(
         .first()
         .copied()
         .unwrap_or_else(|| write_executor_scaffold_reject_code(route))
+}
+
+fn write_action_preflight(
+    action: &WriteExecutionAction,
+    route: &str,
+    boundary_rejections: &[&'static str],
+    reject_code: &str,
+) -> (String, Vec<WritePreflightCheck>) {
+    let route_match = action.route == route && is_first_safe_write_route(route);
+    let target_reject = write_action_target_reject_code(route, &action.target_path);
+    let request_shape_passed = boundary_rejections.is_empty();
+    let target_passed = target_reject.is_none();
+    let scaffold = write_executor_scaffold(route);
+    let scaffold_present = scaffold.is_some();
+    let preflight_status = if !route_match {
+        "route-blocked"
+    } else if target_reject.is_some() {
+        "target-blocked"
+    } else if !request_shape_passed {
+        "request-shape-blocked"
+    } else if scaffold_present && reject_code == "temp-executor-feature-flag-disabled" {
+        "executor-disabled-after-preflight"
+    } else {
+        "executor-disabled"
+    };
+
+    let checks = vec![
+        write_preflight_check(
+            "route-first-safe",
+            "First-safe route",
+            if route_match { "passed" } else { "blocked" },
+            if route_match {
+                "Selected action route matches the first-safe native boundary."
+            } else {
+                "Selected action route does not match an enabled first-safe boundary."
+            },
+        ),
+        write_preflight_check(
+            "request-shape",
+            "Request shape",
+            if request_shape_passed { "passed" } else { "blocked" },
+            if request_shape_passed {
+                "Plan, scan fingerprint, consent, dry-run-only, mutation flag, mode, and action list passed shape checks."
+            } else {
+                "Plan, scan fingerprint, consent, dry-run-only, mutation flag, mode, or action list failed shape checks."
+            },
+        ),
+        write_preflight_check(
+            "target-allowlist",
+            "Target allowlist",
+            if target_passed { "passed" } else { "blocked" },
+            if target_passed {
+                "Target path matches the route allowlist and does not hit forbidden rules."
+            } else {
+                "Target path is missing, forbidden, or outside the route allowlist."
+            },
+        ),
+        write_preflight_check(
+            "mutation-lock",
+            "Mutation lock",
+            "passed",
+            "Native write boundary keeps accepted=false, realRunEnabled=false, destructiveCommands=false, and bytes=0.",
+        ),
+        write_preflight_check(
+            "feature-flag",
+            "Executor feature flag",
+            if scaffold_present { "blocked" } else { "waiting" },
+            if scaffold_present {
+                "Route scaffold exists, but its executor feature flag is disabled."
+            } else {
+                "No route-specific executor scaffold is available for this route yet."
+            },
+        ),
+        write_preflight_check(
+            "validation-evidence",
+            "Validation evidence",
+            "waiting",
+            "Windows fixture validation, rollback/rescan proof, and release review must pass before mutation can be considered.",
+        ),
+    ];
+
+    (preflight_status.to_string(), checks)
+}
+
+fn write_preflight_check(
+    id: &str,
+    label: &str,
+    status: &str,
+    detail: &str,
+) -> WritePreflightCheck {
+    WritePreflightCheck {
+        id: id.to_string(),
+        label: label.to_string(),
+        status: status.to_string(),
+        detail: detail.to_string(),
+    }
 }
 
 fn is_first_safe_write_route(route: &str) -> bool {

@@ -366,6 +366,29 @@ const assert = require("assert");
   assert.strictEqual(scaffoldedWrite.executorScaffold.featureFlag, "tempCleanupExecutor", "write boundary should normalize scaffold feature flag");
   assert.strictEqual(scaffoldedWrite.executorScaffold.status, "feature-flag-disabled", "write boundary should normalize scaffold status");
   assert.strictEqual(scaffoldedWrite.executorScaffold.mutationEnabled, false, "write boundary scaffold must keep mutation disabled");
+  const preflightWrite = native.normalizeNativeWriteBoundary({
+    accepted: false,
+    real_run_enabled: false,
+    destructive_commands: false,
+    entries: [
+      {
+        id: "windows-temp",
+        title: "Windows temporary files",
+        route: "known-temp-delete",
+        result: "rejected",
+        reject_code: "temp-executor-feature-flag-disabled",
+        bytes: 0,
+        preflight_status: "executor-disabled-after-preflight",
+        preflight_checks: [
+          { id: "target-allowlist", label: "Target allowlist", status: "passed", detail: "Allowed temp root." },
+          { id: "feature-flag", label: "Feature flag", status: "blocked", detail: "tempCleanupExecutor disabled." }
+        ]
+      }
+    ]
+  });
+  assert.strictEqual(preflightWrite.entries[0].preflightStatus, "executor-disabled-after-preflight", "write boundary should normalize preflight status");
+  assert.strictEqual(preflightWrite.entries[0].preflightChecks[0].id, "target-allowlist", "write boundary should normalize preflight checks");
+  assert.strictEqual(preflightWrite.entries[0].preflightChecks[1].status, "blocked", "write boundary should preserve blocked preflight checks");
 
   const capabilities = native.normalizeNativeRuntimeCapabilities({
     mode: "native-readonly",
