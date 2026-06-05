@@ -420,6 +420,57 @@ const assert = require("assert");
   assert.strictEqual(rejectedWrite.entries[0].result, "rejected", "native write boundary should normalize rejected entries");
   assert.strictEqual(rejectedWrite.entries[0].rejectCode, "real-executor-disabled", "native write boundary should normalize reject codes");
   assert.strictEqual(rejectedWrite.entries[0].bytes, 0, "native write boundary should reclaim zero bytes");
+  let browserExecutionInvocation = null;
+  const browserExecution = await native.runNativeBrowserCacheExecutor(
+    {
+      rows: [{ id: "chrome-cache-data", title: "Chrome cache data", path: "C:\\Users\\real\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cache\\Cache_Data", bytes: 456 }],
+      planId: "plan-browser",
+      scanFingerprint: "scan-browser",
+      consentPlanId: "plan-browser",
+      expectedBytes: 456
+    },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            browserExecutionInvocation = { command, payload };
+            return Promise.resolve({
+              mode: "native-browser-cache-executor",
+              real_run_enabled: true,
+              destructive_commands: true,
+              accepted: true,
+              reason: "accepted",
+              contract_echo: {
+                schema_version: payload.request.schemaVersion,
+                request_mode: payload.request.requestMode,
+                plan_id: payload.request.planId,
+                route: payload.request.route,
+                scan_fingerprint: payload.request.scanFingerprint,
+                consent_plan_id: payload.request.consentPlanId,
+                expected_bytes: payload.request.expectedBytes,
+                dry_run_only: payload.request.dryRunOnly,
+                mutation_attempted: payload.request.mutationAttempted,
+                action_count: payload.request.actions.length
+              },
+              entries: [{ id: "chrome-cache-data", title: "Chrome cache data", route: "browser-cache-only", result: "executed", reject_code: "", bytes: 123, note: "deleted cache" }],
+              warnings: ["browser cache done"]
+            });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(browserExecutionInvocation.command, "execute_cleanup_plan", "browser cache executor should invoke execute_cleanup_plan");
+  assert.strictEqual(browserExecutionInvocation.payload.request.schemaVersion, "spaceguard-browser-cache-request/v1", "browser cache executor should use its schema");
+  assert.strictEqual(browserExecutionInvocation.payload.request.requestMode, "execute-browser-cache", "browser cache executor should send execute-browser-cache mode");
+  assert.strictEqual(browserExecutionInvocation.payload.request.route, "browser-cache-only", "browser cache executor should stay on browser-cache-only route");
+  assert.strictEqual(browserExecutionInvocation.payload.request.scanFingerprint, "scan-browser", "browser cache executor should pass scan fingerprint");
+  assert.strictEqual(browserExecutionInvocation.payload.request.consentPlanId, "plan-browser", "browser cache executor should pass consent receipt");
+  assert.strictEqual(browserExecutionInvocation.payload.request.dryRunOnly, false, "browser cache executor should be a mutating request");
+  assert.strictEqual(browserExecutionInvocation.payload.request.mutationAttempted, true, "browser cache executor should require mutation confirmation");
+  assert.strictEqual(browserExecutionInvocation.payload.request.actions[0].targetPath.endsWith("\\Cache\\Cache_Data"), true, "browser cache executor should pass concrete cache root path");
+  assert.strictEqual(browserExecution.accepted, true, "browser cache executor should normalize accepted responses");
+  assert.strictEqual(browserExecution.entries[0].route, "browser-cache-only", "browser cache executor should normalize executed route");
   const scaffoldedWrite = native.normalizeNativeWriteBoundary({
     mode: "native-write-rejected",
     real_run_enabled: false,
@@ -479,7 +530,7 @@ const assert = require("assert");
       temp_cleanup_executor: false,
       project_dependency_executor: true,
       recycle_bin_executor: false,
-      browser_cache_executor: false,
+      browser_cache_executor: true,
       tool_native_prune_executors: false
     },
     reason: "disabled"
@@ -496,7 +547,7 @@ const assert = require("assert");
       tempCleanupExecutor: false,
       projectDependencyExecutor: true,
       recycleBinExecutor: false,
-      browserCacheExecutor: false,
+      browserCacheExecutor: true,
       toolNativePruneExecutors: false
     },
     "native capabilities should normalize per-executor feature flags"

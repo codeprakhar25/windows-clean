@@ -140,6 +140,7 @@ import {
   getNativeRuntimeCapabilities,
   mergeNativeScanIntoActions,
   runNativeDryRunScopeValidation,
+  runNativeBrowserCacheExecutor,
   runNativeExecutorDryRun,
   runNativeProjectDependencyExecutor,
   runNativeTempCleanupExecutor,
@@ -230,6 +231,7 @@ export default function App() {
   const [nativeWriteBoundary, setNativeWriteBoundary] = useState({ status: "idle", result: null, error: "" });
   const [nativeRealExecution, setNativeRealExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeProjectDependencyExecution, setNativeProjectDependencyExecution] = useState({ status: "idle", result: null, error: "" });
+  const [nativeBrowserCacheExecution, setNativeBrowserCacheExecution] = useState({ status: "idle", result: null, error: "" });
   const [aiPrompt, setAiPrompt] = useState("Find the fastest safe path to recover real space from this scan.");
   const [aiAdvice, setAiAdvice] = useState({ status: "idle", result: null, error: "" });
   const [runtimeCapabilities, setRuntimeCapabilities] = useState({
@@ -1544,6 +1546,7 @@ export default function App() {
     setNativeWriteBoundary({ status: "idle", result: null, error: "" });
     setNativeRealExecution({ status: "idle", result: null, error: "" });
     setNativeProjectDependencyExecution({ status: "idle", result: null, error: "" });
+    setNativeBrowserCacheExecution({ status: "idle", result: null, error: "" });
     setExecutionConsent({ accepted: false, planId: "", acceptedAt: "" });
   }
 
@@ -1803,6 +1806,7 @@ export default function App() {
     const scopedExecutorRuntime = Boolean(
       (runtimeCapabilities.result.executorFlags?.tempCleanupExecutor && realExecutorCapsule?.route?.id === "known-temp-delete")
         || runtimeCapabilities.result.executorFlags?.projectDependencyExecutor
+        || runtimeCapabilities.result.executorFlags?.browserCacheExecutor
     );
     if (!runReadiness.ready || !planLock.readyForPreflight || (safetyInterlock.status === "unsafe-stop" && !scopedExecutorRuntime)) return;
     setExecutionConsent({
@@ -1958,6 +1962,70 @@ export default function App() {
       window.setTimeout(() => setActiveStage("verify"), 240);
     } catch (error) {
       setNativeProjectDependencyExecution({
+        status: "error",
+        result: null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  async function executeBrowserCacheCleanup() {
+    if (nativeBrowserCacheExecution.status === "running") return;
+    const browserRows = executorPlan.rows.filter((row) => row.route === "browser-cache-only");
+    const cacheTargets = (nativeScan.result?.findings || [])
+      .filter((finding) => finding.recipeId === "browser-cache")
+      .filter((finding) => (finding.status === "measured" || finding.status === "limited") && finding.path)
+      .map((finding, index) => ({
+        id: `browser-cache-${index + 1}`,
+        title: finding.title || "Browser cache root",
+        path: finding.path,
+        bytes: Number(finding.bytes || 0)
+      }));
+
+    if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.browserCacheExecutor) {
+      setNativeBrowserCacheExecution({
+        status: "blocked",
+        result: null,
+        error: "Browser cache executor is not enabled. Set SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR=1 before launching the Tauri app."
+      });
+      return;
+    }
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !browserRows.length || !cacheTargets.length) {
+      setNativeBrowserCacheExecution({
+        status: "blocked",
+        result: null,
+        error: "Browser cache cleanup needs the browser-cache action selected, scanned cache root evidence, current plan, scan fingerprint, and consent receipt."
+      });
+      return;
+    }
+
+    setActiveStage("execute");
+    setNativeBrowserCacheExecution({ status: "running", result: null, error: "" });
+    try {
+      const result = await runNativeBrowserCacheExecutor({
+        rows: cacheTargets,
+        planId: planSnapshot.id,
+        scanFingerprint: scanSession.currentFingerprint,
+        consentPlanId: consentReceipt.planId,
+        expectedBytes: cacheTargets.reduce((sum, target) => sum + Number(target.bytes || 0), 0)
+      });
+      setNativeBrowserCacheExecution({ status: "complete", result, error: "" });
+      const executedAt = new Date().toISOString();
+      const nextLedger = result.entries.map((entry, index) => ({
+        id: entry.id,
+        planId: planSnapshot.id,
+        executedAt,
+        time: `T+${String(index + 1).padStart(2, "0")}m`,
+        title: entry.title,
+        result: entry.result,
+        bytes: entry.bytes,
+        method: `${entry.route}: ${entry.note}`
+      }));
+      setLedger(nextLedger);
+      recordLedgerRun(nextLedger);
+      window.setTimeout(() => setActiveStage("verify"), 240);
+    } catch (error) {
+      setNativeBrowserCacheExecution({
         status: "error",
         result: null,
         error: error instanceof Error ? error.message : String(error)
@@ -2988,6 +3056,15 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               onExecute={executeReviewedProjectDependencies}
+            />
+            <BrowserCacheExecutorPanel
+              runtimeCapabilities={runtimeCapabilities}
+              execution={nativeBrowserCacheExecution}
+              executorPlan={executorPlan}
+              nativeScan={nativeScan}
+              scanSession={scanSession}
+              consentReceipt={consentReceipt}
+              onExecute={executeBrowserCacheCleanup}
             />
             <ValidationEvidencePanel
               validationPack={validationPack}
@@ -5538,6 +5615,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
   const recommended = result?.recommendedActions || [];
   const blocked = result?.blockedActions || [];
   const configured = Boolean(config.configured);
+  const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor);
 
   return (
     <Card id="openai-agent-panel">
@@ -5558,7 +5636,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
           <QueueStat label="Model" value={config.model} tone={configured ? "safe" : "review"} />
           <QueueStat label="Selected" value={context.selectedActions.length} tone={context.selectedActions.length ? "advanced" : "review"} />
           <QueueStat label="Direct tools" value="blocked" tone="safe" />
-          <QueueStat label="Real exec" value={context.runtime.tempCleanupExecutor || context.runtime.projectDependencyExecutor ? "scoped flag" : "off"} tone={context.runtime.tempCleanupExecutor || context.runtime.projectDependencyExecutor ? "restricted" : "safe"} />
+          <QueueStat label="Real exec" value={scopedRealFlag ? "scoped flag" : "off"} tone={scopedRealFlag ? "restricted" : "safe"} />
           <QueueStat label="Project targets" value={context.reviewedProjectTargets?.length || 0} tone={context.reviewedProjectTargets?.length ? "advanced" : "review"} />
         </div>
 
@@ -7517,6 +7595,111 @@ function ProjectDependencyExecutorPanel({ runtimeCapabilities, execution, execut
         <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
           {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {running ? "Cleaning dependencies" : "Run reviewed dependency cleanup"}
+        </Button>
+
+        {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}
+
+        {result?.warnings?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.warnings.slice(0, 3).map((warning) => (
+              <div key={warning} className="rounded-md border bg-card p-3 text-xs text-muted-foreground">{warning}</div>
+            ))}
+          </div>
+        ) : null}
+
+        {result?.entries?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.entries.slice(0, 4).map((entry) => (
+              <div key={`${entry.id}-${entry.result}-${entry.bytes}`} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{entry.title}</span>
+                  <Badge variant={entry.result === "executed" ? "safe" : "review"}>{entry.result}</Badge>
+                  <Badge variant="outline">{formatBytes(entry.bytes)}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{entry.note}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function BrowserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, onExecute }) {
+  const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.browserCacheExecutor);
+  const selectedRows = executorPlan.rows.filter((row) => row.route === "browser-cache-only");
+  const cacheTargets = (nativeScan.result?.findings || [])
+    .filter((finding) => finding.recipeId === "browser-cache")
+    .filter((finding) => (finding.status === "measured" || finding.status === "limited") && finding.path)
+    .map((finding, index) => ({
+      id: `browser-cache-${index + 1}`,
+      title: finding.title || "Browser cache root",
+      path: finding.path,
+      bytes: Number(finding.bytes || 0),
+      status: finding.status
+    }));
+  const requestReady = Boolean(selectedRows.length && cacheTargets.length && scanSession.currentFingerprint && consentReceipt.planId);
+  const running = execution.status === "running";
+  const result = execution.result;
+  const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+  const disabled = running || !enabled || !requestReady;
+
+  return (
+    <Card id="browser-cache-executor-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Browser cache cleanup
+          <Badge variant={enabled ? "restricted" : "review"}>{enabled ? "feature on" : "feature off"}</Badge>
+        </CardTitle>
+        <CardDescription>
+          Deletes only scanned browser cache roots. Cookies, sessions, saved logins, extensions, history, and profile stores are rejected.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Selected" value={selectedRows.length} tone={selectedRows.length ? "advanced" : "review"} />
+          <QueueStat label="Roots" value={cacheTargets.length} tone={cacheTargets.length ? "advanced" : "review"} />
+          <QueueStat label="Recovered" value={formatBytes(reclaimed)} tone={reclaimed ? "safe" : "review"} />
+          <QueueStat label="Request" value={requestReady ? "ready" : "wait"} tone={requestReady ? "safe" : "review"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Browser cache executor boundary</span>
+            <Badge variant={enabled ? "restricted" : "safe"}>{enabled ? "can delete cache" : "cannot delete"}</Badge>
+            <Badge variant="outline">browser-cache-only</Badge>
+            <Badge variant="safe">identity blocked</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Enable with `SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR=1` before launching Tauri.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, cache roots {cacheTargets.length}.</span>
+            <span>Targets come from read-only native browser cache findings; summary labels and profile stores are not sent to execution.</span>
+          </div>
+        </div>
+
+        {cacheTargets.length ? (
+          <div className="flex flex-col gap-2">
+            {cacheTargets.slice(0, 4).map((target) => (
+              <div key={target.id} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{target.title}</span>
+                  <Badge variant="outline">{formatBytes(target.bytes)}</Badge>
+                  <Badge variant={target.status === "limited" ? "review" : "safe"}>{target.status}</Badge>
+                </div>
+                <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{target.path}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+            Run a native read-only scan with browser cache findings before this executor has concrete targets.
+          </div>
+        )}
+
+        <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
+          {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          {running ? "Cleaning browser cache" : "Run browser cache cleanup"}
         </Button>
 
         {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}

@@ -65,6 +65,13 @@ $env:SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR="1"
 npm run native:dev
 ```
 
+Enable browser cache cleanup for scanned cache roots:
+
+```powershell
+$env:SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR="1"
+npm run native:dev
+```
+
 Build the desktop app:
 
 ```bash
@@ -100,13 +107,15 @@ The native write-boundary command is:
 execute_cleanup_plan
 ```
 
-It validates request shape for dry-run probes and now contains the first real executor branch for `requestMode=execute-first-safe`.
+It validates request shape for dry-run probes and contains scoped real executor branches for `requestMode=execute-first-safe`, `requestMode=execute-project-deps`, and `requestMode=execute-browser-cache`.
 
 For `known-temp-delete`, setting `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1` in the Windows Tauri runtime enables deletion of old files under allowlisted temp roots only. The executor rejects missing plan/scan/consent IDs, non-Windows runtimes, non-temp routes, forbidden targets, symlinks, recent files, folders, and broad personal/project paths. It returns a ledger-style native response with accepted state, bytes reclaimed, skipped count, and warnings. Without the feature flag, it still rejects with zero bytes.
 
 For `known-temp-delete`, the native response exposes an executor scaffold: route `known-temp-delete`, feature flag `tempCleanupExecutor`, and whether mutation is enabled in the current runtime.
 
 For `node-modules-old`, setting `SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR=1` enables reviewed dependency cleanup. The frontend sends only item-review targets marked **Remove**. The native executor accepts only `node_modules` directories whose parent has `package.json`, skips link-like entries, removes files through controlled traversal, removes empty directories bottom-up, and never runs package-manager or shell commands. Native review items also surface Expo and React Native hints from readable `package.json` metadata.
+
+For `browser-cache`, setting `SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR=1` enables browser cache cleanup. The frontend sends only concrete cache root paths from the latest native read-only scan. The native executor accepts cache folders such as Chromium `Cache`, Chromium `Cache_Data`, Chromium `Code Cache`, and Firefox `cache2`; it rejects cookies, sessions, saved logins, extensions, history, bookmarks, preferences, favicons, profile databases, symlinks, non-directories, and non-cache paths. It removes files through controlled traversal, removes empty cache subdirectories bottom-up, skips recently modified files, and never runs shell commands.
 
 Each rejected write entry also carries native preflight evidence: request-shape checks, target allowlist status, mutation lock, route feature-flag state, and validation-evidence state. Preflight rows show what would block or pass before a future executor runs; they do not create cleanup authority.
 
@@ -134,7 +143,7 @@ runtime_capabilities
 
 It reports platform, scanner availability, dry-run availability, and whether real executors are enabled.
 
-Runtime capabilities also expose per-executor feature flags: `tempCleanupExecutor`, `projectDependencyExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`. They default to false independently, so enabling a temp or project dependency executor cannot accidentally enable browser, Recycle Bin, or tool-native cleanup routes.
+Runtime capabilities also expose per-executor feature flags: `tempCleanupExecutor`, `projectDependencyExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`. They default to false independently, so enabling temp, project dependency, or browser cache cleanup cannot accidentally enable Recycle Bin or tool-native cleanup routes.
 
 It currently scans or reports:
 
@@ -198,8 +207,9 @@ The demo also includes:
 - Real data launch roadmap with current milestone, progress, rough estimate, confidence, demo/native activation proof, native evidence quality, and real-cleanup lock status.
 - Native beta distribution readiness for signing, setup docs, install/uninstall, support workflow, read-only scan evidence, no-cleanup claims, and exportable beta evidence records.
 - OpenAI cleanup agent panel for advisory ranking, next-step suggestions, blocked-action explanations, and user questions from real scan context.
-- First-safe temp executor panel for the only current real cleanup path: old files under allowlisted temp roots, feature-flagged in the Windows native runtime.
+- First-safe temp executor panel for old files under allowlisted temp roots, feature-flagged in the Windows native runtime.
 - Reviewed project dependency executor panel for stale `node_modules` cleanup, including Expo/React Native project hints and item-level remove targets.
+- Browser cache executor panel for scanned cache roots only, with cookies, sessions, logins, extensions, history, and profile stores blocked by native target validation.
 - Installed app footprint review for large app folders, with manual uninstall guidance and no automated uninstall or Program Files deletion.
 - Demo rehearsal runbook that proves the browser demo can go from scan to gated plan, dry-run consent, simulated ledger, and report export without native data or real cleanup.
 - Product completion audit that maps the original product requirements to proven, partial, waiting, locked, or unsafe evidence so the app cannot overclaim real cleanup readiness.
@@ -353,9 +363,9 @@ The rescan comparison panel is stricter than the checklist. It requires an absol
 
 The rollback plan is evaluated before dry-run consent. Disposable and rebuildable routes require rescan proof. Reviewed user items require a visible Recycle Bin, quarantine, or archive restore location. Recycle Bin emptying is marked as permanent-removal. Admin and advanced routes require backup or recovery-state evidence. The local rollback proof ledger treats checkbox-only or legacy evidence as draft until reviewer, evidence path, and route-specific restore/backup/acknowledgement reference are filled. None of these checks unlock real cleanup in the current build.
 
-The write-readiness panel is the final real-execution gate. It combines real executor implementation, runtime write capability, release gate status, post-run rescan parity, rollback proof, privilege boundary, privacy boundary, and current plan consent. In the current build it stays locked because no selected route exposes write-capable execution.
+The write-readiness panel is the final real-execution gate. It combines real executor implementation, runtime write capability, release gate status, post-run rescan parity, rollback proof, privilege boundary, privacy boundary, and current plan consent. It stays locked until the selected route exposes a scoped feature-flagged executor and current evidence passes.
 
-The real executor capsule names the next first-safe route that could become a write-capable executor. It lists the route implementation boundary, required fixtures, missing validation, code-path status, and blockers. It always reports destructive action availability separately; in the current build that value is `false`.
+The real executor capsule names the selected first-safe route that could become a write-capable executor. It lists the route implementation boundary, required fixtures, missing validation, code-path status, and blockers. It reports destructive action availability separately from route selection, so disabled and enabled scoped executors are visible without implying broader cleanup authority.
 
 The first-safe executor contract turns that capsule into a concrete request-shape preview for `execute_cleanup_plan`: selected route, plan id, scan fingerprint, action ids, target paths, expected bytes, allowed targets, forbidden targets, target-scope audit, and feature flag. The contract is currently `reject-only-preview`; it is useful for validating the native boundary, not for cleanup.
 
@@ -377,7 +387,7 @@ The fixture evidence import accepts the JSON produced by `scripts/inspect-spaceg
 
 Dry-run records are also saved to local browser storage as an append-only run history. A saved record can block a duplicate simulation for the same plan after reload, but it cannot unlock real execution. The history export is audit evidence only; real cleanup still requires native Windows validation and a post-run rescan.
 
-Real deletion is disabled in the current build. The executor layer classifies selected actions as dry-run routes, future safe-executor candidates, gated routes, or blocked routes. Safe executors should only be enabled after Windows validation and rollback tests exist.
+Broad deletion remains disabled. The executor layer classifies selected actions as dry-run routes, scoped feature-flagged executors, future safe-executor candidates, gated routes, or blocked routes. Temp files, reviewed `node_modules`, and browser cache roots are the only write-capable families, and only when their Windows runtime flags are enabled.
 
 The executor manifest is the real-data implementation map. It covers all route families, not just selected actions:
 
@@ -436,7 +446,7 @@ The production shell should become a signed Windows desktop app with:
 - Append-only local cleanup ledger.
 - No cloud upload by default.
 
-The current native slice is intentionally non-destructive. The next product milestone is Windows validation for the native scanner and dry-run executor, then real safe executors for temp files, Recycle Bin, browser cache, and tool-native prune commands.
+The current native slice is intentionally scoped. The next product milestone is Windows validation evidence for the temp, reviewed dependency, and browser cache executors, while Recycle Bin and tool-native prune commands remain future work.
 
 The native runtime also reports elevation state. This is evidence only: the app does not self-elevate, request UAC, or turn admin-sensitive routes into real executors.
 

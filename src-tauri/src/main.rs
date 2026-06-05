@@ -471,6 +471,9 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
     if request.request_mode.as_deref() == Some("execute-project-deps") {
         return execute_project_dependency_cleanup(request);
     }
+    if request.request_mode.as_deref() == Some("execute-browser-cache") {
+        return execute_browser_cache_cleanup(request);
+    }
     let route = request.route.clone();
     let plan_id = request.plan_id.clone();
     let expected_bytes = request
@@ -878,6 +881,171 @@ fn execute_project_dependency_cleanup(request: WriteExecutionRequest) -> WriteEx
     }
 }
 
+fn execute_browser_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let flag_enabled = browser_cache_executor_enabled();
+    let rejections = browser_cache_execution_rejections(&request, flag_enabled);
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-browser-cache-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-browser-cache".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+
+    let entries = request
+        .actions
+        .into_iter()
+        .map(|action| {
+            let target_path = action.target_path.clone().unwrap_or_default();
+            let target_reject = browser_cache_targets_reject_code(&target_path);
+            let route_match = action.route == route && route == "browser-cache-only";
+            let can_execute = rejections.is_empty() && route_match && target_reject.is_none();
+
+            if can_execute {
+                let deleted = delete_browser_cache_action_targets(&target_path);
+                return WriteExecutionEntry {
+                    id: action.id,
+                    title: action.title,
+                    route: action.route,
+                    result: if deleted.deleted_files > 0 || deleted.deleted_dirs > 0 {
+                        "executed".to_string()
+                    } else {
+                        "no-op".to_string()
+                    },
+                    reject_code: String::new(),
+                    bytes: deleted.deleted_bytes,
+                    preflight_status: "executed".to_string(),
+                    preflight_checks: vec![
+                        write_preflight_check(
+                            "route-browser-cache",
+                            "Browser cache route",
+                            "passed",
+                            "Action route is browser-cache-only.",
+                        ),
+                        write_preflight_check(
+                            "target-cache-root",
+                            "Cache-only target",
+                            "passed",
+                            "Target is a browser cache directory; cookies, sessions, logins, extensions, and profile stores are rejected.",
+                        ),
+                        write_preflight_check(
+                            "feature-flag",
+                            "Executor feature flag",
+                            "passed",
+                            "SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR enabled browser cache cleanup.",
+                        ),
+                    ],
+                    note: format!(
+                        "Browser cache executor deleted {} file(s), {} empty cache dir(s), reclaimed {} byte(s), and skipped {} item(s).",
+                        deleted.deleted_files, deleted.deleted_dirs, deleted.deleted_bytes, deleted.skipped_count
+                    ),
+                };
+            }
+
+            let reject_code = if !route_match {
+                "route-not-browser-cache"
+            } else {
+                target_reject
+                    .or_else(|| rejections.first().copied())
+                    .unwrap_or("browser-cache-executor-disabled")
+            };
+
+            WriteExecutionEntry {
+                id: action.id,
+                title: action.title,
+                route: action.route,
+                result: "rejected".to_string(),
+                reject_code: reject_code.to_string(),
+                bytes: 0,
+                preflight_status: "target-blocked".to_string(),
+                preflight_checks: vec![
+                    write_preflight_check(
+                        "route-browser-cache",
+                        "Browser cache route",
+                        if route_match { "passed" } else { "blocked" },
+                        if route_match {
+                            "Action route is browser-cache-only."
+                        } else {
+                            "Only browser-cache-only can use this executor."
+                        },
+                    ),
+                    write_preflight_check(
+                        "target-cache-root",
+                        "Cache-only target",
+                        if target_reject.is_none() { "passed" } else { "blocked" },
+                        if target_reject.is_none() {
+                            "Target is a browser cache directory."
+                        } else {
+                            "Target is missing, forbidden, not a browser cache directory, or link-like."
+                        },
+                    ),
+                    write_preflight_check(
+                        "feature-flag",
+                        "Executor feature flag",
+                        if flag_enabled { "passed" } else { "blocked" },
+                        if flag_enabled {
+                            "Browser cache executor feature flag is enabled."
+                        } else {
+                            "SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR is not enabled."
+                        },
+                    ),
+                ],
+                note: format!(
+                    "Browser cache cleanup rejected with code {reject_code}. Plan {plan_id}; no bytes were removed for this action."
+                ),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let accepted = rejections.is_empty()
+        && entries
+            .iter()
+            .all(|entry| entry.result == "executed" || entry.result == "no-op");
+    let reclaimed = entries.iter().map(|entry| entry.bytes).sum::<u64>();
+    let mut warnings = browser_cache_execution_warnings(&rejections);
+    if accepted {
+        warnings.push(format!(
+            "Browser cache cleanup completed for plan {plan_id}; reclaimed {reclaimed} byte(s). Run a fresh native scan to verify free space."
+        ));
+    }
+
+    WriteExecutionResponse {
+        mode: if accepted {
+            "native-browser-cache-executor"
+        } else {
+            "native-browser-cache-executor-rejected"
+        },
+        real_run_enabled: flag_enabled,
+        destructive_commands: flag_enabled,
+        accepted,
+        reason: if accepted {
+            format!("Browser cache executor accepted cache-only targets and reclaimed {reclaimed} byte(s).")
+        } else {
+            "Browser cache executor rejected the request before mutation.".to_string()
+        },
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
+        entries,
+        warnings,
+    }
+}
+
 fn write_boundary_rejections(request: &WriteExecutionRequest) -> Vec<&'static str> {
     let mut codes = Vec::new();
     let mode = request.request_mode.as_deref().unwrap_or("capsule-probe");
@@ -1097,6 +1265,30 @@ fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
                 },
             })
         }
+        "browser-cache-only" => {
+            let enabled = cfg!(target_os = "windows") && browser_cache_executor_enabled();
+            Some(WriteExecutorScaffold {
+                route: "browser-cache-only".to_string(),
+                title: "Browser cache only".to_string(),
+                feature_flag: "browserCacheExecutor".to_string(),
+                status: if enabled {
+                    "feature-flag-enabled".to_string()
+                } else {
+                    "feature-flag-disabled".to_string()
+                },
+                validation_status: if enabled {
+                    "cache-roots-only".to_string()
+                } else {
+                    "validation-required".to_string()
+                },
+                mutation_enabled: enabled,
+                reason: if enabled {
+                    "Browser cache executor can remove files and empty dirs under scanned cache roots only.".to_string()
+                } else {
+                    "Browser cache executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR is enabled on Windows.".to_string()
+                },
+            })
+        }
         _ => None,
     }
 }
@@ -1105,6 +1297,7 @@ fn write_executor_scaffold_reject_code(route: &str) -> &'static str {
     match route {
         "known-temp-delete" => "temp-executor-feature-flag-disabled",
         "item-review-project-cache" => "project-deps-executor-disabled",
+        "browser-cache-only" => "browser-cache-executor-disabled",
         _ => "real-executor-disabled",
     }
 }
@@ -1155,6 +1348,11 @@ fn write_target_forbidden(route: &str, target: &str) -> bool {
                 || target.contains("extension")
                 || target.contains("identity")
                 || target.contains("profile database")
+                || target.contains("history")
+                || target.contains("web data")
+                || target.contains("bookmark")
+                || target.contains("preference")
+                || target.contains("favicon")
         }
         "item-review-project-cache" => {
             !target.ends_with("\\node_modules")
@@ -1176,7 +1374,10 @@ fn write_target_allowed(route: &str, target: &str) -> bool {
         }
         "shell-recycle-bin" => target.contains("$recycle.bin") || target.contains("recycle bin"),
         "browser-cache-only" => {
-            target.contains("\\cache") || target.contains("cache2") || target.contains("code cache")
+            target.contains("\\cache")
+                || target.contains("cache2")
+                || target.contains("cache_data")
+                || target.contains("code cache")
         }
         "item-review-project-cache" => {
             target.ends_with("\\node_modules") || target.contains("\\node_modules\\")
@@ -1211,8 +1412,15 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "project-deps-executor-disabled" => {
             "Write request rejected: projectDependencyExecutor scaffold is feature-flag disabled."
         }
+        "browser-cache-executor-disabled" => {
+            "Write request rejected: browserCacheExecutor scaffold is feature-flag disabled."
+        }
         "target-not-node-modules" => "Write request rejected: project dependency target is not node_modules.",
-        "target-link-or-not-directory" => "Write request rejected: project dependency target is link-like or not a directory.",
+        "target-not-browser-cache" => "Write request rejected: browser cache target is not a cache directory.",
+        "route-not-browser-cache" => "Write request rejected: browser cache cleanup requires route browser-cache-only.",
+        "target-link-or-not-directory" => {
+            "Write request rejected: target is link-like or not a directory."
+        }
         "target-missing-package-json" => "Write request rejected: parent project package.json is missing.",
         "no-actions" => "Write request rejected: no selected actions were supplied.",
         _ => "Write request rejected by native boundary validation.",
@@ -1232,6 +1440,17 @@ fn temp_executor_enabled() -> bool {
 
 fn project_dependency_executor_enabled() -> bool {
     env::var("SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR")
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn browser_cache_executor_enabled() -> bool {
+    env::var("SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR")
         .map(|value| {
             matches!(
                 value.to_ascii_lowercase().as_str(),
@@ -1394,6 +1613,83 @@ fn project_dependency_execution_warnings(codes: &[&'static str]) -> Vec<String> 
         .collect()
 }
 
+fn browser_cache_execution_rejections(
+    request: &WriteExecutionRequest,
+    flag_enabled: bool,
+) -> Vec<&'static str> {
+    let mut codes = Vec::new();
+    if !cfg!(target_os = "windows") {
+        codes.push("windows-required");
+    }
+    if !flag_enabled {
+        codes.push("browser-cache-executor-disabled");
+    }
+    if request.plan_id.trim().is_empty() {
+        codes.push("missing-plan-id");
+    }
+    if request
+        .scan_fingerprint
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-scan-fingerprint");
+    }
+    if request
+        .consent_plan_id
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-consent-plan-id");
+    }
+    if request.request_mode.as_deref() != Some("execute-browser-cache") {
+        codes.push("request-mode-invalid");
+    }
+    if request.route != "browser-cache-only" {
+        codes.push("route-not-browser-cache");
+    }
+    if request.dry_run_only != Some(false) {
+        codes.push("dry-run-disabled-required");
+    }
+    if request.mutation_attempted != Some(true) {
+        codes.push("mutation-confirmation-required");
+    }
+    if request.actions.is_empty() {
+        codes.push("no-actions");
+    }
+    codes
+}
+
+fn browser_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
+    if codes.is_empty() {
+        return vec![
+            "Browser cache executor removes cache files and empty cache subdirectories only; identity stores remain forbidden.".to_string(),
+        ];
+    }
+    codes
+        .iter()
+        .map(|code| match *code {
+            "windows-required" => "Browser cache cleanup is Windows-only in this build.",
+            "browser-cache-executor-disabled" => {
+                "Set SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR=1 before launching the Tauri app to enable browser cache cleanup."
+            }
+            "dry-run-disabled-required" => {
+                "Browser cache cleanup requires dryRunOnly=false on the execute-browser-cache request."
+            }
+            "mutation-confirmation-required" => {
+                "Browser cache cleanup requires mutationAttempted=true on the execute-browser-cache request."
+            }
+            "request-mode-invalid" => "Browser cache cleanup requires requestMode=execute-browser-cache.",
+            "route-not-browser-cache" => "Browser cache cleanup requires route browser-cache-only.",
+            _ => write_boundary_warning(code),
+        })
+        .map(String::from)
+        .collect()
+}
+
 fn project_dependency_target_reject_code(value: &str) -> Option<&'static str> {
     let path = resolve_dry_run_target(value);
     if path.as_os_str().is_empty() {
@@ -1422,6 +1718,47 @@ fn project_dependency_target_reject_code(value: &str) -> Option<&'static str> {
     None
 }
 
+fn browser_cache_targets_reject_code(value: &str) -> Option<&'static str> {
+    let targets = split_dry_run_targets(value);
+    if targets.is_empty() {
+        return Some("target-missing");
+    }
+    for target in targets {
+        if let Some(code) = browser_cache_target_reject_code(&target) {
+            return Some(code);
+        }
+    }
+    None
+}
+
+fn browser_cache_target_reject_code(value: &str) -> Option<&'static str> {
+    let path = resolve_dry_run_target(value);
+    if path.as_os_str().is_empty() {
+        return Some("target-missing");
+    }
+
+    let original = normalize_write_target(value);
+    let resolved = normalize_write_target(&path_to_string(&path));
+    if write_target_forbidden("browser-cache-only", &original)
+        || write_target_forbidden("browser-cache-only", &resolved)
+    {
+        return Some("target-forbidden");
+    }
+    if !write_target_allowed("browser-cache-only", &original)
+        && !write_target_allowed("browser-cache-only", &resolved)
+    {
+        return Some("target-not-browser-cache");
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(&path) else {
+        return Some("target-missing");
+    };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Some("target-link-or-not-directory");
+    }
+    None
+}
+
 #[derive(Default)]
 struct TempDeleteResult {
     deleted_bytes: u64,
@@ -1435,6 +1772,112 @@ struct ProjectDependencyDeleteResult {
     deleted_files: u64,
     deleted_dirs: u64,
     skipped_count: u64,
+}
+
+#[derive(Default)]
+struct BrowserCacheDeleteResult {
+    deleted_bytes: u64,
+    deleted_files: u64,
+    deleted_dirs: u64,
+    skipped_count: u64,
+}
+
+fn delete_browser_cache_action_targets(value: &str) -> BrowserCacheDeleteResult {
+    let mut result = BrowserCacheDeleteResult::default();
+    for target in split_dry_run_targets(value) {
+        let path = resolve_dry_run_target(&target);
+        let deleted = delete_browser_cache_target(&path);
+        result.deleted_bytes = result.deleted_bytes.saturating_add(deleted.deleted_bytes);
+        result.deleted_files = result.deleted_files.saturating_add(deleted.deleted_files);
+        result.deleted_dirs = result.deleted_dirs.saturating_add(deleted.deleted_dirs);
+        result.skipped_count = result.skipped_count.saturating_add(deleted.skipped_count);
+    }
+    result
+}
+
+fn delete_browser_cache_target(root: &Path) -> BrowserCacheDeleteResult {
+    let mut result = BrowserCacheDeleteResult::default();
+    if browser_cache_target_reject_code(&path_to_string(root)).is_some() {
+        result.skipped_count += 1;
+        return result;
+    }
+
+    let mut queue = VecDeque::from([root.to_path_buf()]);
+    let mut dirs = Vec::new();
+    let mut visited = 0usize;
+    while let Some(path) = queue.pop_front() {
+        if visited >= 120_000 || result.deleted_files >= 80_000 {
+            result.skipped_count += 1;
+            break;
+        }
+        visited += 1;
+
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            result.skipped_count += 1;
+            continue;
+        };
+        if metadata.file_type().is_symlink() {
+            result.skipped_count += 1;
+            continue;
+        }
+        if metadata.is_file() {
+            delete_single_browser_cache_file(&path, &metadata, &mut result);
+            continue;
+        }
+        if metadata.is_dir() {
+            dirs.push(path.clone());
+            match fs::read_dir(&path) {
+                Ok(entries) => {
+                    for entry in entries.flatten() {
+                        queue.push_back(entry.path());
+                    }
+                }
+                Err(_) => result.skipped_count += 1,
+            }
+        }
+    }
+
+    dirs.sort_by(|left, right| right.components().count().cmp(&left.components().count()));
+    for dir in dirs {
+        if dir == root {
+            continue;
+        }
+        match fs::remove_dir(&dir) {
+            Ok(_) => result.deleted_dirs = result.deleted_dirs.saturating_add(1),
+            Err(_) => result.skipped_count += 1,
+        }
+    }
+
+    result
+}
+
+fn delete_single_browser_cache_file(
+    path: &Path,
+    metadata: &fs::Metadata,
+    result: &mut BrowserCacheDeleteResult,
+) {
+    if !file_old_enough_for_browser_cache_delete(metadata) {
+        result.skipped_count += 1;
+        return;
+    }
+    let bytes = metadata.len();
+    match fs::remove_file(path) {
+        Ok(_) => {
+            result.deleted_bytes = result.deleted_bytes.saturating_add(bytes);
+            result.deleted_files = result.deleted_files.saturating_add(1);
+        }
+        Err(_) => result.skipped_count += 1,
+    }
+}
+
+fn file_old_enough_for_browser_cache_delete(metadata: &fs::Metadata) -> bool {
+    let Ok(modified) = metadata.modified() else {
+        return false;
+    };
+    let Ok(age) = SystemTime::now().duration_since(modified) else {
+        return false;
+    };
+    age.as_secs() >= 10 * 60
 }
 
 fn delete_project_dependency_target(root: &Path) -> ProjectDependencyDeleteResult {
@@ -1588,9 +2031,15 @@ fn runtime_capabilities() -> RuntimeCapabilities {
     let temp_enabled = cfg!(target_os = "windows") && temp_executor_enabled();
     let project_dependency_enabled =
         cfg!(target_os = "windows") && project_dependency_executor_enabled();
-    let real_execution_enabled = temp_enabled || project_dependency_enabled;
+    let browser_cache_enabled = cfg!(target_os = "windows") && browser_cache_executor_enabled();
+    let real_execution_enabled =
+        temp_enabled || project_dependency_enabled || browser_cache_enabled;
     RuntimeCapabilities {
-        mode: if real_execution_enabled { "native-scoped-write" } else { "native-readonly" },
+        mode: if real_execution_enabled {
+            "native-scoped-write"
+        } else {
+            "native-readonly"
+        },
         platform: env::consts::OS.to_string(),
         windows: cfg!(target_os = "windows"),
         elevated: is_process_elevated(),
@@ -1605,15 +2054,11 @@ fn runtime_capabilities() -> RuntimeCapabilities {
             temp_cleanup_executor: temp_enabled,
             project_dependency_executor: project_dependency_enabled,
             recycle_bin_executor: false,
-            browser_cache_executor: false,
+            browser_cache_executor: browser_cache_enabled,
             tool_native_prune_executors: false,
         },
-        reason: if temp_enabled && project_dependency_enabled {
-            "Scoped temp and project dependency executors are enabled by environment flags."
-        } else if temp_enabled {
-            "First-safe temp cleanup executor is enabled by SPACEGUARD_ENABLE_TEMP_EXECUTOR."
-        } else if project_dependency_enabled {
-            "Reviewed project dependency executor is enabled by SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR."
+        reason: if real_execution_enabled {
+            "One or more scoped cleanup executors are enabled by environment flags."
         } else {
             "Real executors are disabled until a scoped executor flag is enabled on Windows."
         }

@@ -166,7 +166,8 @@ export function buildOpenAIAgentContext({
       realRunEnabled: Boolean(runtimeCapabilities?.realRunEnabled),
       destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
       tempCleanupExecutor: Boolean(runtimeCapabilities?.executorFlags?.tempCleanupExecutor),
-      projectDependencyExecutor: Boolean(runtimeCapabilities?.executorFlags?.projectDependencyExecutor)
+      projectDependencyExecutor: Boolean(runtimeCapabilities?.executorFlags?.projectDependencyExecutor),
+      browserCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.browserCacheExecutor)
     },
     selectedActions: selected,
     topFindings,

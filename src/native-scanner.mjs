@@ -322,6 +322,51 @@ export async function runNativeProjectDependencyExecutor(boundary = {}, host = g
   return normalizeNativeWriteBoundary(result);
 }
 
+export async function runNativeBrowserCacheExecutor(boundary = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      accepted: false,
+      reason: "Native browser cache executor is not available in the browser demo.",
+      entries: [],
+      warnings: ["Run the Tauri desktop shell before executing browser cache cleanup."]
+    };
+  }
+
+  const rows = boundary.rows || boundary.selectedRows || [];
+  const cacheTargets = rows
+    .filter((row) => row && (row.path || row.targetPath || row.target))
+    .map((row, index) => ({
+      id: row.id || `browser-cache-${index + 1}`,
+      title: row.title || row.name || "Browser cache root",
+      bytes: Number(row.bytes || 0),
+      route: "browser-cache-only",
+      targetPath: row.targetPath || row.target || row.path || ""
+    }));
+  const expectedBytes = Number(boundary.expectedBytes ?? cacheTargets.reduce((sum, row) => sum + Number(row.bytes || 0), 0));
+
+  const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
+    request: {
+      schemaVersion: "spaceguard-browser-cache-request/v1",
+      requestMode: "execute-browser-cache",
+      planId: boundary.planId || "",
+      route: "browser-cache-only",
+      scanFingerprint: boundary.scanFingerprint || "",
+      consentPlanId: boundary.consentPlanId || "",
+      expectedBytes,
+      dryRunOnly: false,
+      mutationAttempted: true,
+      actions: cacheTargets
+    }
+  });
+
+  return normalizeNativeWriteBoundary(result);
+}
+
 export async function getNativeRuntimeCapabilities(host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {

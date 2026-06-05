@@ -1146,7 +1146,7 @@ export const firstSafeExecutorContracts = {
     forbiddenTargets: ["Cookies", "Sessions", "Saved logins", "Extensions", "Profile databases"],
     requiredReceipt: "Current plan dry-run consent",
     mutationBoundary: "disabled-contract",
-    disabledReason: "Browser cache executor is not implemented or write-enabled in this build."
+    disabledReason: "Browser cache executor is implemented only for scanned cache roots and remains feature-flag controlled."
   }
 };
 
@@ -3655,9 +3655,12 @@ export function buildAIAgentIntegration({
     runtimeCapabilities?.realRunEnabled
       && runtimeCapabilities?.destructiveCommands
       && runtimeCapabilities?.safeExecutorsEnabled
-      && (runtimeCapabilities?.executorFlags?.tempCleanupExecutor || runtimeCapabilities?.executorFlags?.projectDependencyExecutor)
+      && (
+        runtimeCapabilities?.executorFlags?.tempCleanupExecutor
+        || runtimeCapabilities?.executorFlags?.projectDependencyExecutor
+        || runtimeCapabilities?.executorFlags?.browserCacheExecutor
+      )
       && !runtimeCapabilities?.executorFlags?.recycleBinExecutor
-      && !runtimeCapabilities?.executorFlags?.browserCacheExecutor
       && !runtimeCapabilities?.executorFlags?.toolNativePruneExecutors
   );
   const unsafeRuntime = Boolean((runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands) && !scopedExecutor);
@@ -15137,6 +15140,9 @@ function getFirstSafeForbiddenRule(route, path) {
     if (text.includes("session")) return "Sessions are forbidden";
     if (text.includes("login") || text.includes("password")) return "Saved logins are forbidden";
     if (text.includes("extension")) return "Extensions are forbidden";
+    if (text.includes("history")) return "History is forbidden";
+    if (text.includes("web data")) return "Browser profile web data is forbidden";
+    if (text.includes("bookmark") || text.includes("preference") || text.includes("favicon")) return "Browser profile metadata is forbidden";
     if (text.includes("identity") || text.includes("profile database")) return "Browser identity stores are forbidden";
   }
   return "";

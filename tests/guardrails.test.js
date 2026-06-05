@@ -4205,6 +4205,28 @@ const assert = require("assert");
     "scoped-executor-visible",
     "AI advisor should label scoped executor visibility without granting authority"
   );
+  const scopedBrowserAi = guard.buildAIAgentIntegration({
+    providerConfig: { connected: true, provider: "openai" },
+    runtimeCapabilities: {
+      realRunEnabled: true,
+      destructiveCommands: true,
+      safeExecutorsEnabled: true,
+      executorFlags: {
+        projectDependencyExecutor: false,
+        tempCleanupExecutor: false,
+        recycleBinExecutor: false,
+        browserCacheExecutor: true,
+        toolNativePruneExecutors: false
+      }
+    }
+  });
+  assert.strictEqual(scopedBrowserAi.status, "advisory-connector-ready", "AI advisor should remain available for scoped browser cache execution");
+  assert.strictEqual(scopedBrowserAi.directToolAccess, false, "AI advisor must not receive direct tool access for browser cache cleanup");
+  assert.strictEqual(
+    scopedBrowserAi.rows.find((row) => row.id === "mutation-boundary").status,
+    "scoped-executor-visible",
+    "AI advisor should label browser cache executor visibility without granting authority"
+  );
 
   console.log("guardrails ok");
 })();
