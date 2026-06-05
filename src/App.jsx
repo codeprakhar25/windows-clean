@@ -5554,17 +5554,19 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
           <QueueStat label="Model" value={config.model} tone={configured ? "safe" : "review"} />
           <QueueStat label="Selected" value={context.selectedActions.length} tone={context.selectedActions.length ? "advanced" : "review"} />
           <QueueStat label="Direct tools" value="blocked" tone="safe" />
           <QueueStat label="Real exec" value={context.runtime.tempCleanupExecutor || context.runtime.projectDependencyExecutor ? "scoped flag" : "off"} tone={context.runtime.tempCleanupExecutor || context.runtime.projectDependencyExecutor ? "restricted" : "safe"} />
+          <QueueStat label="Project targets" value={context.reviewedProjectTargets?.length || 0} tone={context.reviewedProjectTargets?.length ? "advanced" : "review"} />
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
             <span className="font-medium">AI authority boundary</span>
             <Badge variant="safe">advisory only</Badge>
+            <Badge variant="safe">strict JSON</Badge>
             <Badge variant="safe">direct tools blocked</Badge>
             <Badge variant={configured ? "outline" : "review"}>{config.keySource}</Badge>
           </div>
@@ -5613,11 +5615,14 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
               <div className="grid gap-2 md:grid-cols-2">
                 {recommended.slice(0, 4).map((row) => (
                   <div key={`${row.id}-${row.title}`} className="rounded-md border bg-card p-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="mr-auto min-w-0 text-sm font-medium">{row.title}</span>
                       <Badge variant="advanced">{row.priority}</Badge>
+                      <Badge variant="outline">{row.actionType}</Badge>
+                      {row.route ? <Badge variant="outline">{row.route}</Badge> : null}
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">{row.reason}</p>
+                    {row.targetId ? <p className="mt-2 font-mono text-xs text-muted-foreground">target {row.targetId}</p> : null}
                   </div>
                 ))}
               </div>

@@ -1,5 +1,65 @@
 const DEFAULT_OPENAI_MODEL = "gpt-5.5";
 const DEFAULT_OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
+const OPENAI_AGENT_RESPONSE_FORMAT = {
+  type: "json_schema",
+  name: "spaceguard_cleanup_agent_advice",
+  description: "A bounded cleanup advisor response for SpaceGuard. It recommends UI-mediated cleanup actions without tool authority.",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["summary", "nextAction", "confidence", "recommendedActions", "blockedActions", "questions", "warnings"],
+    properties: {
+      summary: { type: "string" },
+      nextAction: { type: "string" },
+      confidence: { type: "string", enum: ["high", "medium", "low"] },
+      recommendedActions: {
+        type: "array",
+        maxItems: 8,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["id", "title", "reason", "priority", "actionType", "targetId", "route"],
+          properties: {
+            id: { type: "string" },
+            title: { type: "string" },
+            reason: { type: "string" },
+            priority: { type: "string", enum: ["high", "medium", "low"] },
+            actionType: {
+              type: "string",
+              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "rescan", "ask-user", "manual-only"]
+            },
+            targetId: { type: "string" },
+            route: { type: "string" }
+          }
+        }
+      },
+      blockedActions: {
+        type: "array",
+        maxItems: 8,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["id", "title", "reason", "priority", "actionType", "targetId", "route"],
+          properties: {
+            id: { type: "string" },
+            title: { type: "string" },
+            reason: { type: "string" },
+            priority: { type: "string", enum: ["high", "medium", "low"] },
+            actionType: {
+              type: "string",
+              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "rescan", "ask-user", "manual-only"]
+            },
+            targetId: { type: "string" },
+            route: { type: "string" }
+          }
+        }
+      },
+      questions: { type: "array", maxItems: 6, items: { type: "string" } },
+      warnings: { type: "array", maxItems: 6, items: { type: "string" } }
+    }
+  }
+};
 
 export function getOpenAIAgentConfig(env = import.meta.env || {}) {
   const apiKey = String(env.VITE_OPENAI_API_KEY || "").trim();
@@ -55,6 +115,21 @@ export function buildOpenAIAgentContext({
       canExecute: Boolean(row.canExecute),
       canSimulate: Boolean(row.canSimulate)
     }));
+  const reviewedProjectTargets = (executorPlan?.rows || [])
+    .filter((row) => row.route === "item-review-project-cache" && Array.isArray(row.reviewTargets))
+    .flatMap((row) =>
+      row.reviewTargets.map((target) => ({
+        id: target.id || row.id,
+        name: target.name || row.title,
+        route: row.route,
+        path: target.path || "",
+        bytes: Number(target.bytes || 0),
+        ageDays: Number(target.ageDays || 0),
+        kind: target.kind || "project dependency folder",
+        reason: target.reason || ""
+      }))
+    )
+    .slice(0, 16);
 
   return {
     schemaVersion: "spaceguard-openai-agent-context/v1",
@@ -64,7 +139,9 @@ export function buildOpenAIAgentContext({
       directFilesystemAccess: false,
       directDeleteAuthority: false,
       userApprovalRequired: true,
-      executorAuthority: "native code only after explicit user action"
+      executorAuthority: "native code only after explicit user action",
+      allowedActions: ["rank-reviewed-targets", "explain-blockers", "ask-user", "recommend-rescan", "recommend-scoped-executor-button"],
+      forbiddenActions: ["delete-files", "approve-gates", "scan-folders", "run-shell", "edit-registry", "change-partitions"]
     },
     machine: {
       scanMode: scanMode || "unknown",
@@ -94,6 +171,7 @@ export function buildOpenAIAgentContext({
     selectedActions: selected,
     topFindings,
     executableRows,
+    reviewedProjectTargets,
     candidateSamples: (candidateSafetyManifest?.rows || []).slice(0, 12).map((row) => ({
       id: row.id,
       title: row.title,
@@ -124,12 +202,17 @@ export async function requestOpenAIAgentAdvice({
   const body = {
     model: config.model || DEFAULT_OPENAI_MODEL,
     store: false,
+    text: {
+      format: OPENAI_AGENT_RESPONSE_FORMAT
+    },
     instructions: [
       "You are the SpaceGuard local Windows cleanup advisor.",
       "You never claim you scanned the computer yourself; you only interpret the provided app context.",
       "You cannot approve gates, modify files, run shell commands, or delete data.",
+      "When a scoped executor is visible, recommend the exact UI button only after the context says current consent and reviewed targets exist.",
+      "Use actionType values from the schema. Keep targetId empty unless you are referring to a provided target id.",
       "Prioritize concrete next steps that move toward real safe cleanup.",
-      "Return only JSON with keys: summary, nextAction, confidence, recommendedActions, blockedActions, questions, warnings."
+      "Return structured JSON that matches the provided response schema."
     ].join(" "),
     input: [
       {
@@ -260,9 +343,33 @@ function normalizeAdviceRows(value) {
       id: String(row?.id || `row-${index + 1}`),
       title: String(row?.title || row?.action || row?.name || "Recommendation"),
       reason: String(row?.reason || row?.why || row?.detail || ""),
-      priority: String(row?.priority || "medium")
+      priority: normalizePriority(row?.priority),
+      actionType: normalizeActionType(row?.actionType || row?.action_type),
+      targetId: String(row?.targetId || row?.target_id || ""),
+      route: String(row?.route || "")
     };
   });
+}
+
+function normalizePriority(value) {
+  const clean = String(value || "").toLowerCase();
+  if (clean === "high" || clean === "medium" || clean === "low") return clean;
+  return "medium";
+}
+
+function normalizeActionType(value) {
+  const clean = String(value || "").toLowerCase();
+  if (
+    clean === "review-target" ||
+    clean === "run-temp-executor" ||
+    clean === "run-project-deps-executor" ||
+    clean === "rescan" ||
+    clean === "ask-user" ||
+    clean === "manual-only"
+  ) {
+    return clean;
+  }
+  return "manual-only";
 }
 
 function normalizeStringList(value) {

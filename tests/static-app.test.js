@@ -289,6 +289,13 @@ assert(app.includes("requestOpenAIAgentAdvice"), "OpenAI agent should call the p
 assert(openAiAgent.includes("https://api.openai.com/v1/responses"), "OpenAI adapter should use the Responses API endpoint");
 assert(openAiAgent.includes("VITE_OPENAI_API_KEY"), "OpenAI adapter should read the Vite env API key");
 assert(openAiAgent.includes("directDeleteAuthority"), "OpenAI context should deny direct delete authority");
+assert(openAiAgent.includes("text: {"), "OpenAI adapter should configure Responses API text output");
+assert(openAiAgent.includes("type: \"json_schema\""), "OpenAI adapter should request strict structured output");
+assert(openAiAgent.includes("spaceguard_cleanup_agent_advice"), "OpenAI adapter should name the cleanup agent schema");
+assert(openAiAgent.includes("reviewedProjectTargets"), "OpenAI context should include reviewed project targets");
+assert(openAiAgent.includes("forbiddenActions"), "OpenAI context should expose forbidden actions");
+assert(app.includes("Project targets"), "OpenAI panel should show reviewed project target count");
+assert(app.includes("strict JSON"), "OpenAI panel should show structured output boundary");
 assert(model.includes("spaceguard-ai-agent-integration/v1"), "model should expose AI integration status");
 assert(app.includes("buildStorageStrategyPlan"), "storage strategy workflow should be wired");
 assert(app.includes("buildManualStrategyChecklist"), "manual strategy checklist should be wired");
