@@ -220,6 +220,7 @@ The demo also includes:
 - Public beta readiness panel that separates web-demo readiness from native read-only beta readiness, including signing, support, uninstall, privacy, and claim boundaries.
 - Redacted support bundle export for diagnostics that excludes local paths and filenames by default.
 - Workflow handoff export that captures the active question, next resume actions, product audit state, and real-cleanup lock without local paths.
+- Beta handoff manifest that labels required exports as public-safe, support-safe, internal evidence, or path-level before any beta sharing.
 - Release review packet that combines scan session, task grants, first-safe contract, write-boundary rejection, validation, rollback, rescan, privilege, privacy, support redaction, public claims, and real-cleanup lock evidence.
 - A dry-run report export with selected actions, locked actions, pending gates, advisor state, decision log, and simulated ledger entries.
 
@@ -377,6 +378,8 @@ The public beta readiness panel is separate from the real-executor release gate.
 The support bundle is the default artifact for support triage. It includes runtime mode, scan coverage, route status, release blockers, and warnings, but it intentionally excludes local paths and filenames. The full dry-run report remains a separate user-started export for cases where path-level diagnosis is required.
 
 The workflow handoff is the default resume artifact. It includes the active agent question, next resume actions, audit state, selected workflow statuses, and the real-cleanup lock without local paths or filenames. It is not support evidence and does not grant cleanup authority.
+
+The beta handoff manifest is the artifact index for public or native-beta sharing. It marks workflow handoff and support bundle as redacted public/support-safe rows, while validation packs, release packets, beta evidence ledgers, and full dry-run reports stay internal or path-level until explicitly approved.
 
 The release review packet is the default artifact for deciding whether the product can move from demo/read-only validation to the next review stage. It can be ready only when every review row passes and real cleanup remains locked. Any runtime write capability, destructive command signal, accepted write-boundary result, contract mismatch, or non-zero write-boundary byte count changes the packet to `unsafe-stop`.
 

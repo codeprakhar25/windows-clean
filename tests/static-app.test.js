@@ -87,6 +87,8 @@ const requiredAppMarkers = [
   "Support bundle",
   "Redaction boundary",
   "Export support bundle",
+  "Beta handoff manifest",
+  "Export beta handoff manifest",
   "Runtime privilege",
   "Release gate",
   "Write readiness",
@@ -330,8 +332,15 @@ assert(app.includes("buildSupportBundle"), "support bundle should be wired");
 assert(app.includes("buildSupportBundleMarkdown"), "support bundle markdown export should be wired");
 assert(app.includes("buildWorkflowHandoffPacket"), "workflow handoff packet should be wired");
 assert(app.includes("buildWorkflowHandoffMarkdown"), "workflow handoff export should be wired");
+assert(app.includes("buildBetaHandoffManifest"), "beta handoff manifest should be wired");
+assert(app.includes("buildBetaHandoffManifestMarkdown"), "beta handoff manifest export should be wired");
+assert(app.includes("BetaHandoffManifestPanel"), "beta handoff manifest panel should be rendered");
+assert(app.includes("spaceguard-beta-handoff-manifest.md"), "beta handoff manifest export should use a stable file name");
 assert(model.includes("nativeBetaEvidenceStatus"), "workflow handoff should carry native beta evidence status");
 assert(model.includes("Complete native beta evidence ledger"), "workflow handoff should surface beta evidence as a resume action");
+assert(model.includes("spaceguard-beta-handoff-manifest/v1"), "model should expose beta handoff manifest schema");
+assert(model.includes("SpaceGuard Beta Handoff Manifest"), "model should export beta handoff manifest markdown");
+assert(model.includes("## Beta Handoff Manifest"), "dry-run report should include beta handoff manifest summary");
 assert(app.includes("WorkflowHandoffPanel"), "workflow handoff panel should be rendered");
 assert(app.includes("Beta evidence"), "workflow handoff panel should show beta evidence state");
 assert(app.includes("Export handoff"), "workflow handoff export action should be visible");
@@ -536,12 +545,15 @@ assert(realDataGuide.includes("Disposable Fixture Run"), "real-data guide should
 assert(realDataGuide.includes("inspect-spaceguard-fixtures.ps1"), "real-data guide should include fixture evidence inspection");
 assert(realDataGuide.includes("DryRunScopeEvidencePath"), "real-data guide should explain dry-run scope evidence inspection");
 assert(realDataGuide.includes("Validation pack import"), "real-data guide should explain validation pack import resume flow");
+assert(realDataGuide.includes("beta handoff manifest"), "real-data guide should include beta handoff manifest export");
 assert(readme.includes("NATIVE_BETA_DISTRIBUTION.md"), "README should link native beta distribution runbook");
+assert(readme.includes("Beta handoff manifest"), "README should describe beta handoff manifest");
 assert(realDataGuide.includes("NATIVE_BETA_DISTRIBUTION.md"), "real-data guide should link native beta distribution runbook");
 assert(nativeBetaRunbook.includes("Native Beta Distribution Runbook"), "native beta runbook should exist");
 assert(nativeBetaRunbook.includes("Install Path"), "native beta runbook should cover install evidence");
 assert(nativeBetaRunbook.includes("Uninstall Path"), "native beta runbook should cover uninstall evidence");
 assert(nativeBetaRunbook.includes("Support Intake"), "native beta runbook should cover support intake");
+assert(nativeBetaRunbook.includes("beta handoff manifest"), "native beta runbook should request the beta handoff manifest");
 assert(nativeBetaRunbook.includes("Evidence To Record In The App"), "native beta runbook should explain app evidence records");
 assert(nativeBetaRunbook.includes("The checkbox alone does not count"), "native beta evidence should require reviewer and artifact detail");
 assert(nativeBetaRunbook.includes("Import exported ledger"), "native beta runbook should explain evidence import resume flow");

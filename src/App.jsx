@@ -43,6 +43,8 @@ import {
   buildCustomRootTriage,
   buildPlanReview,
   buildAgentQuestionQueue,
+  buildBetaHandoffManifest,
+  buildBetaHandoffManifestMarkdown,
   buildAgentTaskRunbook,
   buildDecisionLog,
   buildDemoRehearsalRunbook,
@@ -1325,6 +1327,31 @@ export default function App() {
       runtimeCapabilities.result
     ]
   );
+  const betaHandoffManifest = useMemo(
+    () =>
+      buildBetaHandoffManifest({
+        workflowHandoff,
+        supportBundle,
+        releaseReviewPacket,
+        validationPack,
+        nativeBetaEvidenceLedger,
+        productCompletionAudit,
+        nativeBetaDistributionReadiness,
+        publicBetaReadiness,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [
+      workflowHandoff,
+      supportBundle,
+      releaseReviewPacket,
+      validationPack,
+      nativeBetaEvidenceLedger,
+      productCompletionAudit,
+      nativeBetaDistributionReadiness,
+      publicBetaReadiness,
+      runtimeCapabilities.result
+    ]
+  );
   const families = useMemo(() => buildFamilyGroups(selectedIds, actionList, { approvals, itemReviewsByAction }), [selectedIds, actionList, approvals, itemReviewsByAction]);
   const usedPercent = Math.round((profile.usedBytes / profile.totalBytes) * 100);
   const selectedPercent = Math.min(100, Math.round((totals.selectedBytes / (goalGb * GB)) * 100));
@@ -1969,6 +1996,7 @@ export default function App() {
       productCompletionAudit,
       realDataLaunchRoadmap,
       workflowHandoff,
+      betaHandoffManifest,
       itemReview,
       executorPlan,
       releaseGate,
@@ -2079,6 +2107,23 @@ export default function App() {
       "```"
     ].join("\n");
     downloadTextFile("spaceguard-workflow-handoff.md", body, "text/markdown;charset=utf-8");
+  }
+
+  function exportBetaHandoffManifest() {
+    const exportedManifest = { ...betaHandoffManifest, generatedAt: new Date().toISOString() };
+    const markdown = buildBetaHandoffManifestMarkdown(exportedManifest);
+    const body = [
+      markdown,
+      "",
+      "---",
+      "",
+      "## Structured Beta Handoff JSON",
+      "",
+      "```json",
+      JSON.stringify(exportedManifest, null, 2),
+      "```"
+    ].join("\n");
+    downloadTextFile("spaceguard-beta-handoff-manifest.md", body, "text/markdown;charset=utf-8");
   }
 
   function exportReleaseReviewPacket() {
@@ -2350,6 +2395,8 @@ export default function App() {
             />
 
             <WorkflowHandoffPanel handoff={workflowHandoff} onExport={exportWorkflowHandoff} />
+
+            <BetaHandoffManifestPanel manifest={betaHandoffManifest} onExport={exportBetaHandoffManifest} />
 
             <ScanSessionPanel session={scanSession} />
 
@@ -3522,6 +3569,71 @@ function WorkflowHandoffPanel({ handoff, onExport }) {
         <Button variant="outline" className="w-full" onClick={onExport}>
           <Download className="h-4 w-4" />
           Export handoff
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BetaHandoffManifestPanel({ manifest, onExport }) {
+  const previewRows = manifest.rows || [];
+
+  return (
+    <Card id="beta-handoff-manifest-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Beta handoff manifest
+            </CardTitle>
+            <CardDescription>{manifest.primary}</CardDescription>
+          </div>
+          <Badge variant={manifest.tone}>{manifest.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <QueueStat label="Public" value={manifest.counts.publicShareable} tone={manifest.readyForPublicHandoff ? "safe" : "review"} />
+          <QueueStat label="Internal" value={manifest.counts.internalOnly} tone={manifest.counts.internalOnly ? "review" : "safe"} />
+          <QueueStat label="Path-level" value={manifest.counts.pathLevel} tone={manifest.counts.pathLevel ? "restricted" : "safe"} />
+          <QueueStat label="Waiting" value={manifest.counts.waiting + manifest.counts.missing} tone={manifest.counts.waiting || manifest.counts.missing ? "review" : "safe"} />
+          <QueueStat label="Writes" value={manifest.realCleanupEnabled ? "visible" : "locked"} tone={manifest.realCleanupEnabled ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Share boundary</span>
+            <Badge variant={manifest.redactedPublicArtifacts ? "safe" : "restricted"}>{manifest.redactedPublicArtifacts ? "public rows redacted" : "redaction missing"}</Badge>
+            <Badge variant={manifest.readyForNativeBetaHandoff ? "safe" : "review"}>{manifest.readyForNativeBetaHandoff ? "native beta ready" : "native beta waiting"}</Badge>
+            <Badge variant={manifest.destructiveCommands ? "restricted" : "safe"}>{manifest.destructiveCommands ? "destructive visible" : "no destructive commands"}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Public-safe rows can be shared by default. Internal and path-level rows require explicit operator or user approval.
+          </p>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {previewRows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="mr-auto min-w-0 text-sm font-medium">{row.label}</div>
+                <Badge variant={row.status === "ready" ? "safe" : row.status === "blocked" ? "restricted" : "review"}>{row.status}</Badge>
+                <Badge variant={row.publicShareable ? "safe" : "outline"}>{row.shareScope}</Badge>
+              </div>
+              <p className="mt-2 truncate font-mono text-xs text-muted-foreground">{row.fileName}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{row.detail}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge variant={row.redactedPaths ? "safe" : "restricted"}>{row.redactedPaths ? "redacted" : "path-level"}</Badge>
+                <Badge variant="outline">{row.requiredFor}</Badge>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <Button variant="outline" className="w-full" onClick={onExport}>
+          <Download className="h-4 w-4" />
+          Export beta handoff manifest
         </Button>
       </CardContent>
     </Card>

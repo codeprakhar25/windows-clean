@@ -26,7 +26,7 @@ For source-based beta testers:
 2. Run `npm install`.
 3. Run `npm test`, `npm run demo:rehearsal`, `npm run native:rehearsal`, and `npm run build`.
 4. Start the desktop shell with `npm run native:dev`.
-5. Use the app to run a native read-only scan and export the dry-run report.
+5. Use the app to run a native read-only scan and export the beta handoff manifest, redacted support bundle, workflow handoff, and dry-run report.
 
 For packaged beta testers, the build artifact must be recorded with:
 
@@ -55,10 +55,11 @@ Record uninstall proof with reviewer, artifact path, Windows version, install me
 Default support flow:
 
 1. Ask for the redacted support bundle first.
-2. Ask for the dry-run report only when the user agrees to share local path-level evidence.
-3. Ask for screenshots of gate panels before asking for raw logs.
-4. Do not request full directory listings, browser profiles, registry exports, or cloud sync folders by default.
-5. Escalate any report involving missing files, unexpected mutation, or destructive-command visibility as a release blocker.
+2. Ask for the beta handoff manifest to confirm which artifacts are public-safe, internal-only, or path-level.
+3. Ask for the dry-run report only when the user agrees to share local path-level evidence.
+4. Ask for screenshots of gate panels before asking for raw logs.
+5. Do not request full directory listings, browser profiles, registry exports, or cloud sync folders by default.
+6. Escalate any report involving missing files, unexpected mutation, or destructive-command visibility as a release blocker.
 
 Support responses must describe the current build as read-only unless a separately released real executor has passed write readiness.
 

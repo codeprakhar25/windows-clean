@@ -5364,6 +5364,223 @@ export function buildWorkflowHandoffMarkdown(packet) {
   ].join("\n");
 }
 
+export function buildBetaHandoffManifest({
+  workflowHandoff = null,
+  supportBundle = null,
+  releaseReviewPacket = null,
+  validationPack = null,
+  nativeBetaEvidenceLedger = null,
+  productCompletionAudit = null,
+  nativeBetaDistributionReadiness = null,
+  publicBetaReadiness = null,
+  runtimeCapabilities = {},
+  generatedAt = "set-on-export"
+} = {}) {
+  const unsafeRuntime = Boolean(
+    runtimeCapabilities?.realRunEnabled
+      || runtimeCapabilities?.destructiveCommands
+      || releaseReviewPacket?.status === "unsafe-stop"
+      || productCompletionAudit?.unsafeRows?.length
+  );
+  const nativeBetaEvidenceComplete = Boolean(
+    nativeBetaEvidenceLedger?.schemaVersion
+      && nativeBetaEvidenceLedger?.counts
+      && nativeBetaEvidenceLedger.counts.total > 0
+      && nativeBetaEvidenceLedger.counts.complete === nativeBetaEvidenceLedger.counts.total
+  );
+  const validationRowsComplete = Boolean(validationPack?.schemaVersion && validationPack?.validationChecks?.every((check) => check.evidenceComplete));
+  const releaseReviewReady = Boolean(releaseReviewPacket?.schemaVersion && releaseReviewPacket.status === "review-packet-ready");
+
+  const rows = [
+    buildBetaHandoffRow({
+      id: "workflow-handoff",
+      label: "Workflow handoff",
+      fileName: "spaceguard-workflow-handoff.md",
+      lane: "resume",
+      shareScope: "public-safe",
+      requiredFor: "web-demo",
+      present: Boolean(workflowHandoff?.schemaVersion),
+      complete: Boolean(workflowHandoff?.schemaVersion && workflowHandoff?.redactedPaths && workflowHandoff?.realCleanupEnabled === false),
+      redactedPaths: Boolean(workflowHandoff?.redactedPaths),
+      publicShareable: true,
+      detail: workflowHandoff?.schemaVersion
+        ? "Redacted resume guidance is available without local paths or cleanup authority."
+        : "Export the workflow handoff before sharing a beta handoff."
+    }),
+    buildBetaHandoffRow({
+      id: "support-bundle",
+      label: "Support bundle",
+      fileName: "spaceguard-support-bundle.md",
+      lane: "support",
+      shareScope: "support-safe",
+      requiredFor: "web-demo",
+      present: Boolean(supportBundle?.schemaVersion),
+      complete: Boolean(supportBundle?.schemaVersion && supportBundle?.redactedPaths),
+      redactedPaths: Boolean(supportBundle?.redactedPaths),
+      publicShareable: true,
+      detail: supportBundle?.schemaVersion
+        ? "Redacted diagnostics are available for support triage."
+        : "Export the redacted support bundle before support handoff."
+    }),
+    buildBetaHandoffRow({
+      id: "native-beta-evidence",
+      label: "Native beta evidence ledger",
+      fileName: "spaceguard-native-beta-evidence.md",
+      lane: "distribution",
+      shareScope: "internal-evidence",
+      requiredFor: "native-beta",
+      present: Boolean(nativeBetaEvidenceLedger?.schemaVersion),
+      complete: nativeBetaEvidenceComplete,
+      redactedPaths: false,
+      publicShareable: false,
+      detail: nativeBetaEvidenceLedger?.schemaVersion
+        ? `${nativeBetaEvidenceLedger.counts?.complete || 0}/${nativeBetaEvidenceLedger.counts?.total || 0} native beta evidence row(s) complete.`
+        : "Export the native beta evidence ledger after reviewer and artifact records exist."
+    }),
+    buildBetaHandoffRow({
+      id: "release-review-packet",
+      label: "Release review packet",
+      fileName: "spaceguard-release-review-packet.md",
+      lane: "release",
+      shareScope: "internal-review",
+      requiredFor: "native-beta",
+      present: Boolean(releaseReviewPacket?.schemaVersion),
+      complete: releaseReviewReady,
+      redactedPaths: false,
+      publicShareable: false,
+      detail: releaseReviewPacket?.schemaVersion
+        ? `Release review status is ${releaseReviewPacket.status}.`
+        : "Export the release review packet for internal go/no-go review."
+    }),
+    buildBetaHandoffRow({
+      id: "validation-pack",
+      label: "Validation pack",
+      fileName: "spaceguard-validation-pack.md",
+      lane: "validation",
+      shareScope: "internal-path-level",
+      requiredFor: "native-beta",
+      present: Boolean(validationPack?.schemaVersion),
+      complete: validationRowsComplete,
+      redactedPaths: false,
+      publicShareable: false,
+      detail: validationPack?.schemaVersion
+        ? `${validationPack.validationChecks.filter((check) => check.evidenceComplete).length}/${validationPack.validationChecks.length} validation check(s) have reviewer and artifact detail.`
+        : "Export the validation pack for Windows VM evidence handoff."
+    }),
+    buildBetaHandoffRow({
+      id: "dry-run-report",
+      label: "Dry-run report",
+      fileName: "spaceguard-dry-run-report.md",
+      lane: "operator",
+      shareScope: "user-approved-path-level",
+      requiredFor: "path-diagnosis",
+      present: Boolean(productCompletionAudit?.schemaVersion),
+      complete: Boolean(productCompletionAudit?.demoWorkflowComplete || productCompletionAudit?.readOnlyRealDataReady),
+      redactedPaths: false,
+      publicShareable: false,
+      detail: productCompletionAudit?.schemaVersion
+        ? "Full report is optional path-level evidence and should be shared only after user approval."
+        : "Run the workflow audit before exporting path-level reports."
+    })
+  ].map((row) => unsafeRuntime ? { ...row, status: "blocked", passed: false } : row);
+
+  const publicRows = rows.filter((row) => row.publicShareable);
+  const internalRows = rows.filter((row) => !row.publicShareable);
+  const pathLevelRows = rows.filter((row) => !row.redactedPaths);
+  const missingRows = rows.filter((row) => row.status === "missing");
+  const waitingRows = rows.filter((row) => row.status === "waiting");
+  const blockedRows = rows.filter((row) => row.status === "blocked");
+  const publicReady = !unsafeRuntime && publicRows.every((row) => row.status === "ready");
+  const nativeReady = !unsafeRuntime && rows.filter((row) => row.requiredFor === "native-beta").every((row) => row.status === "ready");
+  const status = unsafeRuntime
+    ? "unsafe-stop"
+    : nativeReady && nativeBetaDistributionReadiness?.readyForNativeBeta
+      ? "native-beta-handoff-ready"
+      : publicReady && (nativeBetaDistributionReadiness?.readyForWebDemo || publicBetaReadiness?.readyForWebDemo)
+        ? "web-demo-handoff-ready"
+        : missingRows.length
+          ? "exports-missing"
+          : waitingRows.length
+            ? "evidence-waiting"
+            : "handoff-review";
+
+  return {
+    schemaVersion: "spaceguard-beta-handoff-manifest/v1",
+    product: "SpaceGuard",
+    generatedAt,
+    status,
+    tone: unsafeRuntime ? "restricted" : status.endsWith("ready") ? "safe" : "review",
+    readyForPublicHandoff: publicReady,
+    readyForNativeBetaHandoff: Boolean(nativeReady && nativeBetaDistributionReadiness?.readyForNativeBeta),
+    realCleanupEnabled: false,
+    destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
+    redactedPublicArtifacts: publicRows.every((row) => row.redactedPaths),
+    rows,
+    publicRows,
+    internalRows,
+    pathLevelRows,
+    missingRows,
+    waitingRows,
+    blockedRows,
+    counts: {
+      total: rows.length,
+      publicShareable: publicRows.length,
+      internalOnly: internalRows.length,
+      pathLevel: pathLevelRows.length,
+      ready: rows.filter((row) => row.status === "ready").length,
+      waiting: waitingRows.length,
+      missing: missingRows.length,
+      blocked: blockedRows.length,
+      realRun: 0
+    },
+    primary: getBetaHandoffPrimary(status, { missingRows, waitingRows, blockedRows }),
+    steps: getBetaHandoffSteps(status, { missingRows, waitingRows, blockedRows })
+  };
+}
+
+export function buildBetaHandoffManifestMarkdown(manifest) {
+  const rowLines = manifest.rows.length
+    ? manifest.rows.map((row) => [
+        `- ${row.label}: ${row.status}`,
+        `  - File: ${row.fileName}`,
+        `  - Scope: ${row.shareScope}`,
+        `  - Public shareable: ${row.publicShareable ? "yes" : "no"}`,
+        `  - Redacted paths: ${row.redactedPaths ? "yes" : "no"}`,
+        `  - Detail: ${row.detail}`
+      ].join("\n")).join("\n")
+    : "- No artifacts.";
+  const steps = manifest.steps.length ? manifest.steps.map((step) => `- ${step}`).join("\n") : "- No next steps.";
+
+  return [
+    "# SpaceGuard Beta Handoff Manifest",
+    "",
+    `Generated: ${manifest.generatedAt}`,
+    `Schema: ${manifest.schemaVersion}`,
+    `Status: ${manifest.status}`,
+    `Public handoff ready: ${manifest.readyForPublicHandoff ? "yes" : "no"}`,
+    `Native beta handoff ready: ${manifest.readyForNativeBetaHandoff ? "yes" : "no"}`,
+    `Real cleanup enabled: ${manifest.realCleanupEnabled ? "yes" : "no"}`,
+    `Redacted public artifacts: ${manifest.redactedPublicArtifacts ? "yes" : "no"}`,
+    "",
+    "## Artifacts",
+    rowLines,
+    "",
+    "## Counts",
+    `Public shareable: ${manifest.counts.publicShareable}`,
+    `Internal only: ${manifest.counts.internalOnly}`,
+    `Path-level: ${manifest.counts.pathLevel}`,
+    `Ready: ${manifest.counts.ready}`,
+    `Waiting: ${manifest.counts.waiting}`,
+    `Missing: ${manifest.counts.missing}`,
+    `Blocked: ${manifest.counts.blocked}`,
+    "",
+    "## Next Steps",
+    steps,
+    "",
+    "Public shareable rows are redacted. Internal and path-level rows require explicit operator or user approval before sharing."
+  ].join("\n");
+}
+
 export function buildExecutorPlan({
   selectedIds = new Set(),
   actionList = actions,
@@ -9467,6 +9684,7 @@ export function buildReport({
   productCompletionAudit = null,
   realDataLaunchRoadmap = null,
   workflowHandoff = null,
+  betaHandoffManifest = null,
   releaseGate = null,
   validationPack = null,
   runtimeCapabilities = null,
@@ -9614,6 +9832,22 @@ export function buildReport({
           workflowHandoff.nextActions.length
             ? workflowHandoff.nextActions.map((step) => `- Next: ${step}`).join("\n")
             : "- No next actions."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Beta Handoff Manifest",
+    betaHandoffManifest
+      ? [
+          `- Status: ${betaHandoffManifest.status}`,
+          `- Public handoff ready: ${betaHandoffManifest.readyForPublicHandoff ? "yes" : "no"}`,
+          `- Native beta handoff ready: ${betaHandoffManifest.readyForNativeBetaHandoff ? "yes" : "no"}`,
+          `- Redacted public artifacts: ${betaHandoffManifest.redactedPublicArtifacts ? "yes" : "no"}`,
+          `- Public shareable: ${betaHandoffManifest.counts.publicShareable}`,
+          `- Internal only: ${betaHandoffManifest.counts.internalOnly}`,
+          `- Path-level: ${betaHandoffManifest.counts.pathLevel}`,
+          betaHandoffManifest.rows.length
+            ? betaHandoffManifest.rows.map((row) => `- ${row.label}: ${row.status} | ${row.shareScope} | file=${row.fileName} | public=${row.publicShareable ? "yes" : "no"} | redacted=${row.redactedPaths ? "yes" : "no"}`).join("\n")
+            : "- No handoff artifacts."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -11819,6 +12053,57 @@ function getWorkflowHandoffPrimary(status, { activeQuestion = null, productCompl
   if (status === "readonly-handoff-ready") return "Read-only native evidence is ready to hand off; write-capable cleanup remains locked.";
   if (productCompletionAudit?.primary) return productCompletionAudit.primary;
   return "Workflow can be resumed from the active question and audit steps.";
+}
+
+function buildBetaHandoffRow({
+  id,
+  label,
+  fileName,
+  lane,
+  shareScope,
+  requiredFor,
+  present = false,
+  complete = false,
+  redactedPaths = false,
+  publicShareable = false,
+  detail = ""
+}) {
+  const status = !present ? "missing" : complete ? "ready" : "waiting";
+  return {
+    id,
+    label,
+    fileName,
+    lane,
+    shareScope,
+    requiredFor,
+    status,
+    passed: status === "ready",
+    present,
+    complete,
+    redactedPaths,
+    publicShareable,
+    detail
+  };
+}
+
+function getBetaHandoffPrimary(status, { missingRows = [], waitingRows = [], blockedRows = [] } = {}) {
+  if (status === "unsafe-stop") return "Unsafe write or cleanup signal visible; beta handoff is blocked.";
+  if (status === "native-beta-handoff-ready") return "Native read-only beta handoff artifacts are ready for internal review.";
+  if (status === "web-demo-handoff-ready") return "Public web-demo handoff artifacts are ready and redacted.";
+  if (missingRows.length) return `${missingRows.length} required handoff artifact(s) still need export.`;
+  if (waitingRows.length) return `${waitingRows.length} handoff artifact(s) need reviewer, artifact, or release evidence.`;
+  if (blockedRows.length) return "Blocked handoff rows must be cleared before sharing.";
+  return "Handoff artifacts are present; review evidence scope before sharing.";
+}
+
+function getBetaHandoffSteps(status, { missingRows = [], waitingRows = [], blockedRows = [] } = {}) {
+  if (status === "unsafe-stop") return ["Stop handoff.", "Inspect safety interlock, release review, runtime capabilities, and write-boundary evidence."];
+  if (missingRows.length) return missingRows.slice(0, 4).map((row) => `Export ${row.fileName}.`);
+  if (waitingRows.length) return waitingRows.slice(0, 4).map((row) => `Complete ${row.label}: ${row.detail}`);
+  if (blockedRows.length) return blockedRows.slice(0, 4).map((row) => `Clear blocked artifact: ${row.label}.`);
+  if (status === "native-beta-handoff-ready") return ["Share public-safe artifacts externally.", "Keep validation, release, and path-level artifacts internal unless explicitly requested."];
+  if (status === "web-demo-handoff-ready") return ["Share workflow handoff and support bundle as redacted public-demo artifacts.", "Keep validation and dry-run reports internal."];
+  return ["Review artifact scopes.", "Share only redacted public-safe rows by default."];
 }
 
 function buildRestrictionPolicyRow({

@@ -3655,6 +3655,40 @@ const assert = require("assert");
   assert.strictEqual(activationHandoff.workflow.tempActivationStatus, "feature-flag-disabled", "workflow handoff should carry temp activation status");
   assert.strictEqual(activationHandoff.workflow.tempActivationAllowed, false, "workflow handoff should keep activation locked");
   assert(activationHandoff.nextActions.some((step) => step.includes("Review temp executor activation")), "workflow handoff should include temp activation as a next action");
+  const betaHandoffManifest = guard.buildBetaHandoffManifest({
+    workflowHandoff: activationHandoff,
+    supportBundle: releasePacketSupportBundle,
+    releaseReviewPacket,
+    validationPack: releasePacketValidationPack,
+    nativeBetaEvidenceLedger: {
+      schemaVersion: "spaceguard-native-beta-evidence/v1",
+      status: "evidence-waiting",
+      counts: { total: 7, complete: 2, needsDetail: 5 },
+      rows: []
+    },
+    productCompletionAudit: activationAwareAudit,
+    nativeBetaDistributionReadiness: { readyForWebDemo: true, readyForNativeBeta: false },
+    publicBetaReadiness: { readyForWebDemo: true, readyForNativeBeta: false },
+    runtimeCapabilities: { available: true, realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(betaHandoffManifest.schemaVersion, "spaceguard-beta-handoff-manifest/v1", "beta handoff manifest should expose a schema version");
+  assert.strictEqual(betaHandoffManifest.readyForPublicHandoff, true, "beta handoff manifest should allow redacted public handoff when public artifacts are ready");
+  assert.strictEqual(betaHandoffManifest.readyForNativeBetaHandoff, false, "beta handoff manifest should not mark native beta ready with incomplete internal evidence");
+  assert.strictEqual(betaHandoffManifest.redactedPublicArtifacts, true, "beta handoff manifest should keep public-shareable artifacts redacted");
+  assert(betaHandoffManifest.publicRows.every((row) => row.publicShareable && row.redactedPaths), "public manifest rows should be redacted and public-shareable");
+  assert(betaHandoffManifest.internalRows.some((row) => row.publicShareable === false), "manifest should separate internal-only artifacts");
+  assert(betaHandoffManifest.pathLevelRows.some((row) => row.id === "validation-pack"), "manifest should identify path-level validation artifacts");
+  assert.strictEqual(betaHandoffManifest.rows.find((row) => row.id === "native-beta-evidence").status, "waiting", "manifest should keep incomplete beta evidence waiting");
+  const betaHandoffMarkdown = guard.buildBetaHandoffManifestMarkdown(betaHandoffManifest);
+  assert(betaHandoffMarkdown.includes("SpaceGuard Beta Handoff Manifest"), "beta handoff markdown should have a title");
+  assert(betaHandoffMarkdown.includes("Public handoff ready: yes"), "beta handoff markdown should report public readiness");
+  const unsafeBetaHandoffManifest = guard.buildBetaHandoffManifest({
+    ...betaHandoffManifest,
+    runtimeCapabilities: { available: true, realRunEnabled: true, destructiveCommands: true }
+  });
+  assert.strictEqual(unsafeBetaHandoffManifest.status, "unsafe-stop", "beta handoff manifest should stop on runtime write signals");
+  assert.strictEqual(unsafeBetaHandoffManifest.readyForPublicHandoff, false, "unsafe beta handoff should not be public-ready");
+  assert.strictEqual(unsafeBetaHandoffManifest.counts.blocked, unsafeBetaHandoffManifest.counts.total, "unsafe beta handoff should block every artifact row");
   const releasePacketMarkdown = guard.buildReleaseReviewPacketMarkdown(releaseReviewPacket);
   assert(releasePacketMarkdown.includes("SpaceGuard Release Review Packet"), "release packet markdown should have a title");
   assert(releasePacketMarkdown.includes("Ready for real execution: no"), "release packet markdown should keep real execution blocked");
