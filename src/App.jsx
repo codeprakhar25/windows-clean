@@ -1391,28 +1391,24 @@ export default function App() {
       planSnapshot
     ]
   );
+  const openAiRecommendationExecutionState = useMemo(
+    () => ({
+      planId: planSnapshot.id,
+      scanFingerprint: scanSession.currentFingerprint,
+      consentPlanId: consentReceipt.planId,
+      largeFileArchiveDestination,
+      permanentRemovalConfirmed: approvals.permanentConfirm
+    }),
+    [planSnapshot.id, scanSession.currentFingerprint, consentReceipt.planId, largeFileArchiveDestination, approvals.permanentConfirm]
+  );
   const openAiRecommendationBroker = useMemo(
     () =>
       buildOpenAIAgentRecommendationBroker({
         advice: aiAdvice.result?.advice,
         context: openAiAgentContext,
-        executionState: {
-          planId: planSnapshot.id,
-          scanFingerprint: scanSession.currentFingerprint,
-          consentPlanId: consentReceipt.planId,
-          largeFileArchiveDestination,
-          permanentRemovalConfirmed: approvals.permanentConfirm
-        }
+        executionState: openAiRecommendationExecutionState
       }),
-    [
-      aiAdvice.result,
-      openAiAgentContext,
-      planSnapshot.id,
-      scanSession.currentFingerprint,
-      consentReceipt.planId,
-      largeFileArchiveDestination,
-      approvals.permanentConfirm
-    ]
+    [aiAdvice.result, openAiAgentContext, openAiRecommendationExecutionState]
   );
   const aiAgentIntegration = useMemo(
     () =>
@@ -2044,11 +2040,17 @@ export default function App() {
         config: openAiConfig
       });
       setAiAdvice({ status: "complete", result, error: "" });
+      const recommendationBroker = buildOpenAIAgentRecommendationBroker({
+        advice: result.advice,
+        context: openAiAgentContext,
+        executionState: openAiRecommendationExecutionState
+      });
       const runRecord = buildOpenAIAgentRunRecord({
         result,
         context: openAiAgentContext,
         userPrompt: aiPrompt,
-        planSnapshot
+        planSnapshot,
+        recommendationBroker
       });
       setOpenAiAgentRunHistory((current) => appendOpenAIAgentRunRecord(current, runRecord, { limit: OPENAI_AGENT_RUN_HISTORY_LIMIT }));
     } catch (error) {

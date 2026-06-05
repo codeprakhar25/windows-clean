@@ -325,6 +325,8 @@ assert(openAiAgent.includes("automated-uninstall"), "OpenAI installed app contex
 assert(openAiAgent.includes("planSnapshot"), "OpenAI context should include current plan snapshot identity");
 assert(openAiAgent.includes("spaceguard-openai-agent-run/v1"), "OpenAI adapter should expose local run provenance records");
 assert(openAiAgent.includes("spaceguard-openai-recommendation-broker/v1"), "OpenAI adapter should expose recommendation broker records");
+assert(openAiAgent.includes("spaceguard-openai-recommendation-broker-summary/v1"), "OpenAI run records should persist compact broker summaries");
+assert(openAiAgent.includes("recommendationBroker: compactOpenAIAgentRecommendationBroker"), "OpenAI run records should include broker provenance");
 assert(openAiAgent.includes("directToolAccess: false"), "OpenAI recommendation broker should deny direct tool access");
 assert(openAiAgent.includes("feature-flag"), "OpenAI recommendation broker should check route feature flags");
 assert(openAiAgent.includes("storesFullContext: false"), "OpenAI run records should not persist full path-level context");

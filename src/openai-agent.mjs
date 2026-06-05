@@ -331,6 +331,7 @@ export function buildOpenAIAgentRunRecord({
   context = null,
   userPrompt = "",
   planSnapshot = null,
+  recommendationBroker = null,
   createdAt = null
 } = {}) {
   const advice = result?.advice && typeof result.advice === "object"
@@ -365,6 +366,7 @@ export function buildOpenAIAgentRunRecord({
     blockedActions: advice.blockedActions,
     questions: advice.questions,
     warnings: advice.warnings,
+    recommendationBroker: compactOpenAIAgentRecommendationBroker(recommendationBroker),
     context: compactOpenAIAgentRunContext(context, planSnapshot)
   };
   return {
@@ -681,6 +683,44 @@ function getManualRecommendationPanel(row = {}) {
   if (targetId.startsWith("custom-root") || route.includes("custom-root")) return "custom-root-triage-panel";
   if (targetId.startsWith("drive-") || route.includes("drive-inventory")) return "drive-inventory-panel";
   return "item-review-panel";
+}
+
+function compactOpenAIAgentRecommendationBroker(broker = null) {
+  if (!broker || typeof broker !== "object") {
+    return {
+      schemaVersion: "spaceguard-openai-recommendation-broker-summary/v1",
+      status: "not-recorded",
+      advisoryOnly: true,
+      directToolAccess: false,
+      counts: { recommendations: 0, ready: 0, blocked: 0, scopedExecutors: 0 },
+      rows: []
+    };
+  }
+  return {
+    schemaVersion: "spaceguard-openai-recommendation-broker-summary/v1",
+    sourceSchemaVersion: broker.schemaVersion || "",
+    status: broker.status || "unknown",
+    advisoryOnly: true,
+    directToolAccess: false,
+    counts: {
+      recommendations: Number(broker.counts?.recommendations || 0),
+      ready: Number(broker.counts?.ready || 0),
+      blocked: Number(broker.counts?.blocked || 0),
+      scopedExecutors: Number(broker.counts?.scopedExecutors || 0)
+    },
+    rows: (broker.rows || []).slice(0, 8).map((row) => ({
+      key: row.key || getOpenAIAgentRecommendationKey(row),
+      actionType: row.actionType || "manual-only",
+      targetId: row.targetId || "",
+      route: row.route || "",
+      kind: row.kind || "",
+      status: row.status || "unknown",
+      canAct: Boolean(row.canAct),
+      targetPanel: row.targetPanel || "",
+      blockedCheckIds: (row.checks || []).filter((check) => !check.passed).map((check) => check.id).slice(0, 8),
+      checkIds: (row.checks || []).map((check) => check.id).slice(0, 12)
+    }))
+  };
 }
 
 export function normalizeOpenAIAgentRunHistory(history = [], { limit = 20 } = {}) {

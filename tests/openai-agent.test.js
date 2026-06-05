@@ -238,6 +238,7 @@ const assert = require("assert");
   assert.strictEqual(nativeRunRecord.context.counts.manualReviewTargets, 1, "OpenAI run records should retain compact context counts");
   assert.strictEqual(nativeRunRecord.context.counts.installedAppReviewRows, 1, "OpenAI run records should retain compact installed app review counts");
   assert.strictEqual(nativeRunRecord.context.privacy.storesFullContext, false, "OpenAI run records should not persist the full path-level context");
+  assert.strictEqual(nativeRunRecord.recommendationBroker.status, "not-recorded", "OpenAI run records should show missing broker provenance explicitly");
   assert.strictEqual(JSON.stringify(nativeRunRecord).includes("C:\\Program Files"), false, "OpenAI run records should not persist local app paths");
   const appendedAgentRuns = openai.appendOpenAIAgentRunRecord([], nativeRunRecord);
   const dedupedAgentRuns = openai.appendOpenAIAgentRunRecord(appendedAgentRuns, nativeRunRecord);
@@ -343,6 +344,18 @@ const assert = require("assert");
   assert.strictEqual(readyBroker.rows[0].canAct, true, "ready broker row should be actionable");
   assert.strictEqual(readyBroker.rows[0].directToolAccess, false, "brokered recommendations should not grant direct tool access");
   assert.strictEqual(readyBroker.counts.ready, 1, "broker should count ready recommendations");
+  const brokeredRunRecord = openai.buildOpenAIAgentRunRecord({
+    result,
+    context: { plan: { id: "plan-npm" }, runtime: { openAiKeySource: ".env:OPENAI_API_KEY" } },
+    userPrompt: "Find safe space to recover.",
+    planSnapshot: { id: "plan-npm" },
+    recommendationBroker: readyBroker,
+    createdAt: "2026-06-05T00:10:00.000Z"
+  });
+  assert.strictEqual(brokeredRunRecord.recommendationBroker.status, "broker-ready", "OpenAI run records should persist broker status");
+  assert.strictEqual(brokeredRunRecord.recommendationBroker.counts.ready, 1, "OpenAI run records should persist broker readiness counts");
+  assert.strictEqual(brokeredRunRecord.recommendationBroker.rows[0].checkIds.includes("feature-flag"), true, "OpenAI run records should retain compact broker check ids");
+  assert.strictEqual(JSON.stringify(brokeredRunRecord).includes("scan-npm"), false, "broker provenance should not persist scan fingerprints");
 
   const blockedBroker = openai.buildOpenAIAgentRecommendationBroker({
     advice: result.advice,
