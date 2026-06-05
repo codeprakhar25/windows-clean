@@ -75,7 +75,7 @@ Use the Native beta distribution panel and fill every evidence row with status, 
 
 The checkbox alone does not count. The readiness gate requires both reviewer and artifact evidence.
 
-If a reviewer resumes on another browser profile or after local storage reset, paste the exported `spaceguard-native-beta-evidence/v1` JSON or markdown file into **Import exported ledger** in the Native beta distribution panel. Imported rows still need reviewer and artifact detail before they count.
+If a reviewer resumes on another browser profile or after local storage reset, paste the exported `spaceguard-native-beta-evidence/v1` JSON or markdown file into **Import exported ledger** in the Native beta distribution panel. For a broader evidence restore, use **Local evidence backup** to restore validation, rollback, manual strategy, custom-root triage, native beta evidence, and run history only. Imported rows still need reviewer and artifact detail before they count, and no import restores scan results, selected actions, consent, or cleanup authority.
 
 ## Release Stop Conditions
 

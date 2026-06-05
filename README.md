@@ -221,6 +221,7 @@ The demo also includes:
 - Redacted support bundle export for diagnostics that excludes local paths and filenames by default.
 - Workflow handoff export that captures the active question, next resume actions, product audit state, and real-cleanup lock without local paths.
 - Beta handoff manifest that labels required exports as public-safe, support-safe, internal evidence, or path-level before any beta sharing.
+- Local evidence backup export/import for validation, rollback, manual strategy, custom-root triage, native beta evidence, and run history only.
 - Release review packet that combines scan session, task grants, first-safe contract, write-boundary rejection, validation, rollback, rescan, privilege, privacy, support redaction, public claims, and real-cleanup lock evidence.
 - A dry-run report export with selected actions, locked actions, pending gates, advisor state, decision log, and simulated ledger entries.
 

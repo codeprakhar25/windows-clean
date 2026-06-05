@@ -3008,6 +3008,56 @@ const assert = require("assert");
   const historyMarkdown = guard.buildLedgerHistoryMarkdown(currentHistorySummary);
   assert(historyMarkdown.includes("SpaceGuard Local Run History"), "history markdown should have a title");
   assert(historyMarkdown.includes(itemPlanSnapshot.id), "history markdown should include plan ids");
+  const localEvidenceBackup = guard.buildLocalEvidenceBackup({
+    validationEvidence: { "windows-native-build": { status: "passed", reviewer: "qa", evidencePath: "evidence/native.log" } },
+    rollbackEvidence: { "windows-temp": { status: "proved", reviewer: "qa", evidencePath: "evidence/rollback.md", restoreLocation: "rescan parity" } },
+    manualStrategyEvidence: { "archive-large-files:backup": "done" },
+    customRootTriageEvidence: { "custom-root-1": { disposition: "archive", owner: "qa", notes: "Move to D drive." } },
+    nativeBetaEvidence: { supportRunbook: { status: "passed", reviewer: "qa", evidencePath: "evidence/support.md" } },
+    runHistory: appendedHistory,
+    generatedAt: "2026-06-05T00:00:00.000Z"
+  });
+  assert.strictEqual(localEvidenceBackup.schemaVersion, "spaceguard-local-evidence-backup/v1", "local evidence backup should expose a schema version");
+  assert.strictEqual(localEvidenceBackup.realCleanupEnabled, false, "local evidence backup must not restore cleanup authority");
+  assert(localEvidenceBackup.excludedState.includes("executionConsent"), "local evidence backup should exclude consent state");
+  assert.strictEqual(localEvidenceBackup.counts.evidenceRows, 5, "local evidence backup should count evidence rows across ledgers");
+  assert.strictEqual(localEvidenceBackup.counts.runHistory, 1, "local evidence backup should include valid run history records");
+  const localEvidenceBackupMarkdown = guard.buildLocalEvidenceBackupMarkdown(localEvidenceBackup);
+  assert(localEvidenceBackupMarkdown.includes("SpaceGuard Local Evidence Backup"), "local evidence backup markdown should have a title");
+  assert(localEvidenceBackupMarkdown.includes("executionConsent"), "local evidence backup markdown should list excluded consent state");
+  const localEvidenceBackupImport = guard.buildLocalEvidenceBackupImport({
+    evidenceText: [
+      "# SpaceGuard Local Evidence Backup",
+      "",
+      "```json",
+      JSON.stringify(localEvidenceBackup),
+      "```"
+    ].join("\n"),
+    currentEvidence: {
+      validationEvidence: { "scanner-fixtures": { status: "draft" } },
+      rollbackEvidence: {},
+      manualStrategyEvidence: {},
+      customRootTriageEvidence: {},
+      nativeBetaEvidence: {}
+    },
+    currentRunHistory: appendedHistory,
+    importedAt: "2026-06-05T01:00:00.000Z"
+  });
+  assert.strictEqual(localEvidenceBackupImport.schemaVersion, "spaceguard-local-evidence-backup-import/v1", "local evidence backup import should expose a schema version");
+  assert.strictEqual(localEvidenceBackupImport.canApply, true, "local evidence backup import should accept exported markdown JSON");
+  assert.strictEqual(localEvidenceBackupImport.evidence.validationEvidence["windows-native-build"].status, "passed", "local backup import should restore validation evidence");
+  assert.strictEqual(localEvidenceBackupImport.evidence.validationEvidence["scanner-fixtures"].status, "draft", "local backup import should preserve current evidence rows");
+  assert.strictEqual(localEvidenceBackupImport.evidence.rollbackEvidence["windows-temp"].status, "proved", "local backup import should restore rollback evidence");
+  assert.strictEqual(localEvidenceBackupImport.counts.importedEvidenceRows, 5, "local backup import should count imported evidence rows");
+  assert.strictEqual(localEvidenceBackupImport.counts.importedRunHistory, 1, "local backup import should count valid imported history records");
+  assert.strictEqual(localEvidenceBackupImport.runHistory.length, 1, "local backup import should dedupe existing run history");
+  const rejectedLocalEvidenceBackupImport = guard.buildLocalEvidenceBackupImport({
+    evidenceText: JSON.stringify({ schemaVersion: "spaceguard-validation-pack/v1" }),
+    currentEvidence: { validationEvidence: { "windows-native-build": { status: "draft" } } },
+    currentRunHistory: appendedHistory
+  });
+  assert.strictEqual(rejectedLocalEvidenceBackupImport.canApply, false, "local evidence backup import should reject wrong schemas");
+  assert.strictEqual(rejectedLocalEvidenceBackupImport.evidence.validationEvidence["windows-native-build"].status, "draft", "rejected local backup import should preserve current evidence");
 
   const passedEvidence = makePassedEvidence(guard.windowsValidationChecks.map((check) => check.id));
   const enabledGate = guard.buildReleaseGate({

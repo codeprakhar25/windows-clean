@@ -5581,6 +5581,163 @@ export function buildBetaHandoffManifestMarkdown(manifest) {
   ].join("\n");
 }
 
+const localEvidenceBackupKeys = [
+  "validationEvidence",
+  "rollbackEvidence",
+  "manualStrategyEvidence",
+  "customRootTriageEvidence",
+  "nativeBetaEvidence"
+];
+
+export function buildLocalEvidenceBackup({
+  validationEvidence = {},
+  rollbackEvidence = {},
+  manualStrategyEvidence = {},
+  customRootTriageEvidence = {},
+  nativeBetaEvidence = {},
+  runHistory = [],
+  generatedAt = "set-on-export"
+} = {}) {
+  const evidence = {
+    validationEvidence: normalizeBackupEvidenceMap(validationEvidence),
+    rollbackEvidence: normalizeBackupEvidenceMap(rollbackEvidence),
+    manualStrategyEvidence: normalizeBackupEvidenceMap(manualStrategyEvidence),
+    customRootTriageEvidence: normalizeBackupEvidenceMap(customRootTriageEvidence),
+    nativeBetaEvidence: normalizeBackupEvidenceMap(nativeBetaEvidence)
+  };
+  const history = buildLedgerHistorySummary(runHistory).records.slice(-25);
+  const rows = [
+    buildLocalEvidenceBackupRow("validationEvidence", "Validation evidence", evidence.validationEvidence),
+    buildLocalEvidenceBackupRow("rollbackEvidence", "Rollback proof evidence", evidence.rollbackEvidence),
+    buildLocalEvidenceBackupRow("manualStrategyEvidence", "Manual strategy evidence", evidence.manualStrategyEvidence),
+    buildLocalEvidenceBackupRow("customRootTriageEvidence", "Custom root triage evidence", evidence.customRootTriageEvidence),
+    buildLocalEvidenceBackupRow("nativeBetaEvidence", "Native beta evidence", evidence.nativeBetaEvidence),
+    {
+      id: "runHistory",
+      label: "Run history",
+      count: history.length,
+      status: history.length ? "ready" : "empty",
+      detail: history.length ? `${history.length} dry-run history record(s) included.` : "No local run history is included."
+    }
+  ];
+  const totalEvidenceRows = localEvidenceBackupKeys.reduce((sum, key) => sum + Object.keys(evidence[key]).length, 0);
+
+  return {
+    schemaVersion: "spaceguard-local-evidence-backup/v1",
+    product: "SpaceGuard",
+    generatedAt,
+    redactedPaths: false,
+    realCleanupEnabled: false,
+    destructiveCommands: false,
+    scope: "local-evidence-only",
+    restoreAuthority: "evidence-ledgers-only",
+    excludedState: ["nativeScan", "selectedIds", "approvals", "executionConsent", "runtimeCapabilities", "nativeWriteBoundary"],
+    evidence,
+    runHistory: history,
+    rows,
+    counts: {
+      evidenceGroups: localEvidenceBackupKeys.length,
+      evidenceRows: totalEvidenceRows,
+      runHistory: history.length,
+      totalRows: totalEvidenceRows + history.length,
+      realRun: 0
+    },
+    warnings: [
+      "This backup may contain local path or artifact references.",
+      "Import restores evidence ledgers and run history only; it does not restore scan results, consent, selected actions, or cleanup authority."
+    ]
+  };
+}
+
+export function buildLocalEvidenceBackupMarkdown(backup) {
+  const rows = backup.rows?.length
+    ? backup.rows.map((row) => `- ${row.label}: ${row.status}, rows=${row.count}`).join("\n")
+    : "- No backup rows.";
+  const warnings = backup.warnings?.length ? backup.warnings.map((warning) => `- ${warning}`).join("\n") : "- None";
+
+  return [
+    "# SpaceGuard Local Evidence Backup",
+    "",
+    `Generated: ${backup.generatedAt}`,
+    `Schema: ${backup.schemaVersion}`,
+    `Scope: ${backup.scope}`,
+    `Restore authority: ${backup.restoreAuthority}`,
+    `Real cleanup enabled: ${backup.realCleanupEnabled ? "yes" : "no"}`,
+    `Evidence rows: ${backup.counts.evidenceRows}`,
+    `Run history records: ${backup.counts.runHistory}`,
+    "",
+    "## Included Evidence",
+    rows,
+    "",
+    "## Excluded State",
+    backup.excludedState.map((item) => `- ${item}`).join("\n"),
+    "",
+    "## Warnings",
+    warnings
+  ].join("\n");
+}
+
+export function buildLocalEvidenceBackupImport({
+  evidenceText = "",
+  evidenceObject = null,
+  currentEvidence = {},
+  currentRunHistory = [],
+  importedAt = new Date().toISOString()
+} = {}) {
+  const parsed = parseLocalEvidenceBackupInput(evidenceObject, evidenceText);
+  if (!parsed.ok) {
+    return buildRejectedLocalEvidenceBackupImport("parse-error", parsed.detail, currentEvidence, currentRunHistory, importedAt);
+  }
+
+  const backup = parsed.value;
+  if (backup.schemaVersion !== "spaceguard-local-evidence-backup/v1") {
+    return buildRejectedLocalEvidenceBackupImport("schema-mismatch", "Local evidence backup must use spaceguard-local-evidence-backup/v1.", currentEvidence, currentRunHistory, importedAt, backup);
+  }
+
+  const sourceEvidence = backup.evidence && typeof backup.evidence === "object" && !Array.isArray(backup.evidence) ? backup.evidence : {};
+  const mergedEvidence = {
+    validationEvidence: mergeEvidenceMaps(currentEvidence.validationEvidence, sourceEvidence.validationEvidence),
+    rollbackEvidence: mergeEvidenceMaps(currentEvidence.rollbackEvidence, sourceEvidence.rollbackEvidence),
+    manualStrategyEvidence: mergeEvidenceMaps(currentEvidence.manualStrategyEvidence, sourceEvidence.manualStrategyEvidence),
+    customRootTriageEvidence: mergeEvidenceMaps(currentEvidence.customRootTriageEvidence, sourceEvidence.customRootTriageEvidence),
+    nativeBetaEvidence: mergeEvidenceMaps(currentEvidence.nativeBetaEvidence, sourceEvidence.nativeBetaEvidence)
+  };
+  const sourceHistory = Array.isArray(backup.runHistory) ? backup.runHistory : [];
+  const mergedRunHistory = sourceHistory.reduce(
+    (history, record) => appendLedgerRunRecord(history, record, { limit: 25 }),
+    buildLedgerHistorySummary(currentRunHistory).records
+  );
+  const importedCounts = Object.fromEntries(localEvidenceBackupKeys.map((key) => [key, Object.keys(normalizeBackupEvidenceMap(sourceEvidence[key])).length]));
+  const importedEvidenceRows = Object.values(importedCounts).reduce((sum, count) => sum + count, 0);
+  const importedRunHistory = sourceHistory.filter(isLedgerRunRecord).length;
+
+  if (!importedEvidenceRows && !importedRunHistory) {
+    return buildRejectedLocalEvidenceBackupImport("empty-backup", "Backup contains no supported evidence rows or run-history records.", currentEvidence, currentRunHistory, importedAt, backup);
+  }
+
+  return {
+    schemaVersion: "spaceguard-local-evidence-backup-import/v1",
+    status: "import-ready",
+    canApply: true,
+    importedAt,
+    generatedAt: backup.generatedAt || "",
+    detail: `${importedEvidenceRows} evidence row(s) and ${importedRunHistory} run-history record(s) imported.`,
+    evidence: mergedEvidence,
+    runHistory: mergedRunHistory,
+    counts: {
+      ...importedCounts,
+      importedEvidenceRows,
+      importedRunHistory,
+      mergedRunHistory: mergedRunHistory.length,
+      ignoredRunHistory: sourceHistory.length - importedRunHistory
+    },
+    warnings: [
+      "Imported evidence may include local path or artifact references.",
+      "Import does not restore scan results, selected actions, consent, runtime capabilities, or write-boundary state."
+    ]
+  };
+}
+
 export function buildExecutorPlan({
   selectedIds = new Set(),
   actionList = actions,
@@ -12083,6 +12240,92 @@ function buildBetaHandoffRow({
     redactedPaths,
     publicShareable,
     detail
+  };
+}
+
+function buildLocalEvidenceBackupRow(id, label, evidence = {}) {
+  const count = Object.keys(normalizeBackupEvidenceMap(evidence)).length;
+  return {
+    id,
+    label,
+    count,
+    status: count ? "ready" : "empty",
+    detail: count ? `${count} local evidence row(s) included.` : "No local evidence rows included."
+  };
+}
+
+function normalizeBackupEvidenceMap(value = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(([, row]) =>
+      row === true ||
+      typeof row === "string" ||
+      (row && typeof row === "object" && !Array.isArray(row))
+    )
+  );
+}
+
+function mergeEvidenceMaps(current = {}, imported = {}) {
+  return {
+    ...normalizeBackupEvidenceMap(current),
+    ...normalizeBackupEvidenceMap(imported)
+  };
+}
+
+function parseLocalEvidenceBackupInput(evidenceObject, evidenceText) {
+  if (evidenceObject && typeof evidenceObject === "object" && !Array.isArray(evidenceObject)) {
+    return { ok: true, value: evidenceObject };
+  }
+  const text = String(evidenceText || "").trim();
+  if (!text) {
+    return { ok: false, detail: "Local evidence backup JSON or markdown export is required." };
+  }
+  const candidates = [
+    text,
+    ...[...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map((match) => match[1]?.trim()).filter(Boolean)
+  ];
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return { ok: true, value: parsed };
+      }
+    } catch {
+      // Continue through possible markdown code fences.
+    }
+  }
+  return { ok: false, detail: "Local evidence backup could not be parsed as JSON." };
+}
+
+function buildRejectedLocalEvidenceBackupImport(status, detail, currentEvidence, currentRunHistory, importedAt, backup = null) {
+  const sourceHistory = Array.isArray(backup?.runHistory) ? backup.runHistory : [];
+  return {
+    schemaVersion: "spaceguard-local-evidence-backup-import/v1",
+    status,
+    canApply: false,
+    importedAt,
+    generatedAt: backup?.generatedAt || "",
+    detail,
+    evidence: {
+      validationEvidence: normalizeBackupEvidenceMap(currentEvidence?.validationEvidence),
+      rollbackEvidence: normalizeBackupEvidenceMap(currentEvidence?.rollbackEvidence),
+      manualStrategyEvidence: normalizeBackupEvidenceMap(currentEvidence?.manualStrategyEvidence),
+      customRootTriageEvidence: normalizeBackupEvidenceMap(currentEvidence?.customRootTriageEvidence),
+      nativeBetaEvidence: normalizeBackupEvidenceMap(currentEvidence?.nativeBetaEvidence)
+    },
+    runHistory: buildLedgerHistorySummary(currentRunHistory).records,
+    counts: {
+      validationEvidence: 0,
+      rollbackEvidence: 0,
+      manualStrategyEvidence: 0,
+      customRootTriageEvidence: 0,
+      nativeBetaEvidence: 0,
+      importedEvidenceRows: 0,
+      importedRunHistory: 0,
+      mergedRunHistory: buildLedgerHistorySummary(currentRunHistory).records.length,
+      ignoredRunHistory: sourceHistory.length
+    },
+    warnings: []
   };
 }
 

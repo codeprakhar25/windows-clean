@@ -72,7 +72,8 @@ In the app:
 28. If resuming from an exported `spaceguard-validation-pack/v1` file, paste the JSON or markdown export into **Validation pack import**. Imported rows still need reviewer and artifact detail before they can pass release gates.
 29. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; current evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
 30. Record native beta distribution evidence with reviewer and artifact paths. Use [NATIVE_BETA_DISTRIBUTION.md](./NATIVE_BETA_DISTRIBUTION.md) for install/uninstall, support, signing, and public-claim evidence.
-31. Export the workflow handoff for resume guidance, the redacted support bundle for diagnostics, and the beta handoff manifest to label which artifacts are public-safe, internal-only, or path-level. Export the release review packet, dry-run report, validation pack, and native beta evidence ledger when review or path-level evidence is needed.
+31. Export the local evidence backup before clearing browser storage or switching profiles. Importing this backup restores evidence ledgers and run history only; it does not restore scan results, selected actions, consent, runtime capability, or cleanup authority.
+32. Export the workflow handoff for resume guidance, the redacted support bundle for diagnostics, and the beta handoff manifest to label which artifacts are public-safe, internal-only, or path-level. Export the release review packet, dry-run report, validation pack, and native beta evidence ledger when review or path-level evidence is needed.
 
 ## Disposable Fixture Run
 
@@ -147,6 +148,7 @@ For each Windows validation run, capture:
 - Redacted support bundle.
 - Redacted workflow handoff.
 - Beta handoff manifest with public-safe, support-safe, internal-evidence, and path-level artifact scopes.
+- Local evidence backup if the reviewer needs to resume evidence ledgers or dry-run history in another browser profile.
 - Manual strategy checklist state for backup, archive, move, uninstall, or partition-prep evidence.
 - Item review decisions and protected-path exclusions.
 - Executor manifest selected routes.

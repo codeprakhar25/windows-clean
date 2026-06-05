@@ -56,6 +56,9 @@ import {
   buildLedgerHistoryMarkdown,
   buildLedgerHistorySummary,
   buildLedgerRunRecord,
+  buildLocalEvidenceBackup,
+  buildLocalEvidenceBackupImport,
+  buildLocalEvidenceBackupMarkdown,
   buildNativeDryRunScopeEvidence,
   buildOperatingChecklist,
   buildPostRunVerificationMarkdown,
@@ -258,6 +261,8 @@ export default function App() {
   const [validationPackImportResult, setValidationPackImportResult] = useState(null);
   const [nativeBetaImportText, setNativeBetaImportText] = useState("");
   const [nativeBetaImportResult, setNativeBetaImportResult] = useState(null);
+  const [localEvidenceBackupImportText, setLocalEvidenceBackupImportText] = useState("");
+  const [localEvidenceBackupImportResult, setLocalEvidenceBackupImportResult] = useState(null);
   const [executionConsent, setExecutionConsent] = useState({ accepted: false, planId: "", acceptedAt: "" });
 
   const scenario = useMemo(() => getScenario(scenarioId), [scenarioId]);
@@ -1352,6 +1357,18 @@ export default function App() {
       runtimeCapabilities.result
     ]
   );
+  const localEvidenceBackup = useMemo(
+    () =>
+      buildLocalEvidenceBackup({
+        validationEvidence,
+        rollbackEvidence,
+        manualStrategyEvidence,
+        customRootTriageEvidence,
+        nativeBetaEvidence,
+        runHistory
+      }),
+    [validationEvidence, rollbackEvidence, manualStrategyEvidence, customRootTriageEvidence, nativeBetaEvidence, runHistory]
+  );
   const families = useMemo(() => buildFamilyGroups(selectedIds, actionList, { approvals, itemReviewsByAction }), [selectedIds, actionList, approvals, itemReviewsByAction]);
   const usedPercent = Math.round((profile.usedBytes / profile.totalBytes) * 100);
   const selectedPercent = Math.min(100, Math.round((totals.selectedBytes / (goalGb * GB)) * 100));
@@ -1785,6 +1802,36 @@ export default function App() {
     setNativeBetaImportResult(null);
   }
 
+  function updateLocalEvidenceBackupImportText(value) {
+    setLocalEvidenceBackupImportText(value);
+    setLocalEvidenceBackupImportResult(null);
+  }
+
+  function importLocalEvidenceBackup() {
+    const result = buildLocalEvidenceBackupImport({
+      evidenceText: localEvidenceBackupImportText,
+      currentEvidence: {
+        validationEvidence,
+        rollbackEvidence,
+        manualStrategyEvidence,
+        customRootTriageEvidence,
+        nativeBetaEvidence
+      },
+      currentRunHistory: runHistory
+    });
+    setLocalEvidenceBackupImportResult(result);
+    if (result.canApply) {
+      setValidationEvidence(result.evidence.validationEvidence);
+      setRollbackEvidence(result.evidence.rollbackEvidence);
+      setManualStrategyEvidence(result.evidence.manualStrategyEvidence);
+      setCustomRootTriageEvidence(result.evidence.customRootTriageEvidence);
+      setNativeBetaEvidence(result.evidence.nativeBetaEvidence);
+      setRunHistory(result.runHistory);
+      setValidationPackImportResult(null);
+      setNativeBetaImportResult(null);
+    }
+  }
+
   function importFixtureEvidence() {
     const result = buildFixtureEvidenceImport({
       evidenceText: fixtureImportText,
@@ -2048,6 +2095,22 @@ export default function App() {
 
   function exportRunHistory() {
     downloadTextFile("spaceguard-run-history.md", buildLedgerHistoryMarkdown(ledgerHistorySummary), "text/markdown;charset=utf-8");
+  }
+
+  function exportLocalEvidenceBackup() {
+    const exportedBackup = { ...localEvidenceBackup, generatedAt: new Date().toISOString() };
+    const body = [
+      buildLocalEvidenceBackupMarkdown(exportedBackup),
+      "",
+      "---",
+      "",
+      "## Structured Local Evidence Backup JSON",
+      "",
+      "```json",
+      JSON.stringify(exportedBackup, null, 2),
+      "```"
+    ].join("\n");
+    downloadTextFile("spaceguard-local-evidence-backup.md", body, "text/markdown;charset=utf-8");
   }
 
   function exportPostRunVerification() {
@@ -2397,6 +2460,15 @@ export default function App() {
             <WorkflowHandoffPanel handoff={workflowHandoff} onExport={exportWorkflowHandoff} />
 
             <BetaHandoffManifestPanel manifest={betaHandoffManifest} onExport={exportBetaHandoffManifest} />
+
+            <LocalEvidenceBackupPanel
+              backup={localEvidenceBackup}
+              importText={localEvidenceBackupImportText}
+              importResult={localEvidenceBackupImportResult}
+              onImportText={updateLocalEvidenceBackupImportText}
+              onImport={importLocalEvidenceBackup}
+              onExport={exportLocalEvidenceBackup}
+            />
 
             <ScanSessionPanel session={scanSession} />
 
@@ -3635,6 +3707,105 @@ function BetaHandoffManifestPanel({ manifest, onExport }) {
           <Download className="h-4 w-4" />
           Export beta handoff manifest
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LocalEvidenceBackupPanel({ backup, importText, importResult, onImportText, onImport, onExport }) {
+  const evidenceRows = backup.rows || [];
+
+  return (
+    <Card id="local-evidence-backup-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-4 w-4" />
+              Local evidence backup
+            </CardTitle>
+            <CardDescription>Export or restore local evidence ledgers without restoring scan, consent, selection, or execution state.</CardDescription>
+          </div>
+          <Badge variant={backup.counts.totalRows ? "review" : "outline"}>{backup.scope}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <QueueStat label="Evidence" value={backup.counts.evidenceRows} tone={backup.counts.evidenceRows ? "review" : "safe"} />
+          <QueueStat label="History" value={backup.counts.runHistory} tone={backup.counts.runHistory ? "review" : "safe"} />
+          <QueueStat label="Groups" value={backup.counts.evidenceGroups} tone="review" />
+          <QueueStat label="Real run" value={backup.counts.realRun} tone="safe" />
+          <QueueStat label="Scope" value="local" tone="review" />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Restore boundary</span>
+            <Badge variant={backup.realCleanupEnabled ? "restricted" : "safe"}>{backup.realCleanupEnabled ? "cleanup visible" : "no cleanup authority"}</Badge>
+            <Badge variant={backup.redactedPaths ? "safe" : "restricted"}>{backup.redactedPaths ? "redacted" : "may include paths"}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Excluded state: {backup.excludedState.join(", ")}.
+          </p>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {evidenceRows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="mr-auto min-w-0 text-sm font-medium">{row.label}</span>
+                <Badge variant={row.status === "ready" ? "safe" : "outline"}>{row.status}</Badge>
+                <Badge variant="outline">{row.count}</Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{row.detail}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid gap-3 xl:grid-cols-2">
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 text-sm font-medium">Export backup</div>
+            <p className="mb-3 text-xs text-muted-foreground">Use this before clearing local storage or moving evidence to another browser profile.</p>
+            <Button variant="outline" className="w-full" onClick={onExport} disabled={!backup.counts.totalRows}>
+              <Download className="h-4 w-4" />
+              Export local evidence backup
+            </Button>
+          </div>
+
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+              <span className="font-medium">Import backup</span>
+              <Badge variant={importResult?.canApply ? "safe" : importResult ? "review" : "outline"}>
+                {importResult?.status || "waiting"}
+              </Badge>
+            </div>
+            <Textarea
+              className="min-h-20 font-mono"
+              value={importText}
+              placeholder="Paste spaceguard-local-evidence-backup/v1 JSON or markdown"
+              aria-label="local evidence backup import"
+              onChange={(event) => onImportText(event.target.value)}
+            />
+            <Button variant="outline" className="mt-2 w-full" onClick={onImport} disabled={!importText.trim()}>
+              <ClipboardList className="h-4 w-4" />
+              Import evidence backup
+            </Button>
+            {importResult ? (
+              <div className="mt-3 rounded-md border bg-card p-2 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={importResult.canApply ? "safe" : "review"}>{importResult.canApply ? "mapped" : "blocked"}</Badge>
+                  <span>{importResult.detail}</span>
+                </div>
+                <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                  <span>Evidence: {importResult.counts.importedEvidenceRows}</span>
+                  <span>History: {importResult.counts.importedRunHistory}</span>
+                  <span>Merged history: {importResult.counts.mergedRunHistory}</span>
+                  <span>Ignored history: {importResult.counts.ignoredRunHistory}</span>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

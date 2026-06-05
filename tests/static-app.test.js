@@ -89,6 +89,8 @@ const requiredAppMarkers = [
   "Export support bundle",
   "Beta handoff manifest",
   "Export beta handoff manifest",
+  "Local evidence backup",
+  "Import evidence backup",
   "Runtime privilege",
   "Release gate",
   "Write readiness",
@@ -336,11 +338,21 @@ assert(app.includes("buildBetaHandoffManifest"), "beta handoff manifest should b
 assert(app.includes("buildBetaHandoffManifestMarkdown"), "beta handoff manifest export should be wired");
 assert(app.includes("BetaHandoffManifestPanel"), "beta handoff manifest panel should be rendered");
 assert(app.includes("spaceguard-beta-handoff-manifest.md"), "beta handoff manifest export should use a stable file name");
+assert(app.includes("buildLocalEvidenceBackup"), "local evidence backup should be wired");
+assert(app.includes("buildLocalEvidenceBackupImport"), "local evidence backup import should be wired");
+assert(app.includes("buildLocalEvidenceBackupMarkdown"), "local evidence backup export should be wired");
+assert(app.includes("LocalEvidenceBackupPanel"), "local evidence backup panel should be rendered");
+assert(app.includes("spaceguard-local-evidence-backup.md"), "local evidence backup export should use a stable file name");
+assert(app.includes("Paste spaceguard-local-evidence-backup/v1 JSON"), "local evidence backup import should accept exported JSON");
 assert(model.includes("nativeBetaEvidenceStatus"), "workflow handoff should carry native beta evidence status");
 assert(model.includes("Complete native beta evidence ledger"), "workflow handoff should surface beta evidence as a resume action");
 assert(model.includes("spaceguard-beta-handoff-manifest/v1"), "model should expose beta handoff manifest schema");
 assert(model.includes("SpaceGuard Beta Handoff Manifest"), "model should export beta handoff manifest markdown");
 assert(model.includes("## Beta Handoff Manifest"), "dry-run report should include beta handoff manifest summary");
+assert(model.includes("spaceguard-local-evidence-backup/v1"), "model should expose local evidence backup schema");
+assert(model.includes("spaceguard-local-evidence-backup-import/v1"), "model should expose local evidence backup import schema");
+assert(model.includes("SpaceGuard Local Evidence Backup"), "model should export local evidence backup markdown");
+assert(model.includes("Import restores evidence ledgers and run history only"), "local evidence backup should not restore execution state");
 assert(app.includes("WorkflowHandoffPanel"), "workflow handoff panel should be rendered");
 assert(app.includes("Beta evidence"), "workflow handoff panel should show beta evidence state");
 assert(app.includes("Export handoff"), "workflow handoff export action should be visible");
@@ -546,14 +558,17 @@ assert(realDataGuide.includes("inspect-spaceguard-fixtures.ps1"), "real-data gui
 assert(realDataGuide.includes("DryRunScopeEvidencePath"), "real-data guide should explain dry-run scope evidence inspection");
 assert(realDataGuide.includes("Validation pack import"), "real-data guide should explain validation pack import resume flow");
 assert(realDataGuide.includes("beta handoff manifest"), "real-data guide should include beta handoff manifest export");
+assert(realDataGuide.includes("local evidence backup"), "real-data guide should include local evidence backup export");
 assert(readme.includes("NATIVE_BETA_DISTRIBUTION.md"), "README should link native beta distribution runbook");
 assert(readme.includes("Beta handoff manifest"), "README should describe beta handoff manifest");
+assert(readme.includes("Local evidence backup"), "README should describe local evidence backup");
 assert(realDataGuide.includes("NATIVE_BETA_DISTRIBUTION.md"), "real-data guide should link native beta distribution runbook");
 assert(nativeBetaRunbook.includes("Native Beta Distribution Runbook"), "native beta runbook should exist");
 assert(nativeBetaRunbook.includes("Install Path"), "native beta runbook should cover install evidence");
 assert(nativeBetaRunbook.includes("Uninstall Path"), "native beta runbook should cover uninstall evidence");
 assert(nativeBetaRunbook.includes("Support Intake"), "native beta runbook should cover support intake");
 assert(nativeBetaRunbook.includes("beta handoff manifest"), "native beta runbook should request the beta handoff manifest");
+assert(nativeBetaRunbook.includes("Local evidence backup"), "native beta runbook should explain broader evidence restore");
 assert(nativeBetaRunbook.includes("Evidence To Record In The App"), "native beta runbook should explain app evidence records");
 assert(nativeBetaRunbook.includes("The checkbox alone does not count"), "native beta evidence should require reviewer and artifact detail");
 assert(nativeBetaRunbook.includes("Import exported ledger"), "native beta runbook should explain evidence import resume flow");
