@@ -451,6 +451,7 @@ const assert = require("assert");
     safe_executors_enabled: false,
     executor_flags: {
       temp_cleanup_executor: false,
+      project_dependency_executor: true,
       recycle_bin_executor: false,
       browser_cache_executor: false,
       tool_native_prune_executors: false
@@ -467,6 +468,7 @@ const assert = require("assert");
     capabilities.executorFlags,
     {
       tempCleanupExecutor: false,
+      projectDependencyExecutor: true,
       recycleBinExecutor: false,
       browserCacheExecutor: false,
       toolNativePruneExecutors: false

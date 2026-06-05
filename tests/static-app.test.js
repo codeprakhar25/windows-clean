@@ -98,6 +98,9 @@ const requiredAppMarkers = [
   "Real temp cleanup",
   "Executor boundary",
   "Run real temp cleanup",
+  "Reviewed project dependencies",
+  "Project executor boundary",
+  "Run reviewed dependency cleanup",
   "Privilege boundary",
   "Privacy boundary",
   "Public beta readiness",
@@ -337,7 +340,17 @@ assert(nativeAdapter.includes("requestMode: \"execute-first-safe\""), "native ad
 assert(rustScanner.includes("execute_first_safe_temp_cleanup"), "Rust native shell should implement the first-safe temp executor branch");
 assert(rustScanner.includes("SPACEGUARD_ENABLE_TEMP_EXECUTOR"), "Rust native shell should require the temp executor feature flag");
 assert(rustScanner.includes("fs::remove_file"), "Rust temp executor should perform file deletion only");
-assert(!rustScanner.includes("remove_dir_all"), "Rust temp executor must not recursively remove directories");
+assert(!rustScanner.includes("remove_dir_all"), "Rust executors must not use broad recursive directory removal");
+assert(app.includes("ProjectDependencyExecutorPanel"), "project dependency executor panel should be rendered");
+assert(app.includes("project-dependency-executor-panel"), "project dependency executor panel should be focusable");
+assert(app.includes("runNativeProjectDependencyExecutor"), "project dependency executor should be wired through the native adapter");
+assert(nativeAdapter.includes("requestMode: \"execute-project-deps\""), "native adapter should send the execute-project-deps request mode");
+assert(nativeAdapter.includes("projectDependencyExecutor"), "native adapter should normalize project dependency executor flag");
+assert(rustScanner.includes("execute_project_dependency_cleanup"), "Rust native shell should implement reviewed project dependency cleanup");
+assert(rustScanner.includes("SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR"), "Rust native shell should require the project dependency executor feature flag");
+assert(rustScanner.includes("project_dependency_scan_item"), "Rust scanner should enrich node_modules review items with project metadata");
+assert(rustScanner.includes("Expo project dependency folder"), "Rust scanner should surface Expo project hints");
+assert(rustScanner.includes("React Native project dependency folder"), "Rust scanner should surface React Native project hints");
 assert(app.includes("buildWriteBoundaryProbe"), "write boundary probe should be wired");
 assert(app.includes("buildValidationEvidencePack"), "validation evidence pack should be wired");
 assert(app.includes("buildValidationPackMarkdown"), "validation pack markdown export should be wired");
@@ -614,8 +627,9 @@ assert(rustScanner.includes("write_capability: false"), "native scanner should r
 assert(rustScanner.includes("destructive_commands: false"), "native scanner should report destructive commands disabled");
 assert(rustScanner.includes("accepted: false"), "native write boundary should reject execution");
 assert(!/\bCommand::new\b|powercfg|reg\.exe/i.test(rustScanner), "native scanner should not contain shell, registry, or powercfg execution");
-assert(!/\bremove_dir\b|\bremove_dir_all\b/i.test(rustScanner), "native temp executor should not remove directories");
-assert(rustScanner.includes("delete_single_temp_file"), "native deletion should be isolated to the temp file executor");
+assert(!/\bremove_dir_all\b/i.test(rustScanner), "native executors should not use recursive directory removal");
+assert(rustScanner.includes("fs::remove_dir(&dir)"), "project dependency executor may remove only traversed empty directories");
+assert(rustScanner.includes("delete_single_temp_file"), "temp deletion should be isolated to the temp file executor");
 assert(packageJson.includes("vite"), "package should use Vite");
 assert(packageJson.includes("@radix-ui/react-slot"), "package should include shadcn primitive dependency");
 assert(packageJson.includes("@tauri-apps/cli"), "package should include Tauri CLI for native setup");
@@ -650,7 +664,7 @@ assert(nativeBetaRunbook.includes("must not delete files"), "native beta runbook
 assert(fixtureScript.includes("dryRunScopeCases"), "fixture seeder should emit dry-run scope validation cases");
 assert(fixtureInspectScript.includes("dryRunScopeCheck"), "fixture inspector should emit dry-run scope validation result");
 assert(fixtureInspectScript.includes("DryRunScopeEvidencePath"), "fixture inspector should accept dry-run scope evidence input");
-assert(realDataGuide.includes("That flag enables only `known-temp-delete`"), "real-data guide should keep execution boundary explicit");
+assert(realDataGuide.includes("Those flags enable only their named routes"), "real-data guide should keep execution boundary explicit");
 assert(fixtureScript.includes("spaceguard-fixture"), "fixture script should seed named SpaceGuard fixture roots");
 assert(fixtureScript.includes("LargeCandidateMB"), "fixture script should support optional large-file validation");
 assert(fixtureScript.includes("destructiveCommands = $false"), "fixture manifest should mark destructive commands disabled");

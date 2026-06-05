@@ -141,6 +141,7 @@ import {
   mergeNativeScanIntoActions,
   runNativeDryRunScopeValidation,
   runNativeExecutorDryRun,
+  runNativeProjectDependencyExecutor,
   runNativeTempCleanupExecutor,
   runNativeReadonlyScan,
   runNativeWriteBoundary
@@ -228,6 +229,7 @@ export default function App() {
   const [nativeScopeEvidenceExport, setNativeScopeEvidenceExport] = useState({ status: "idle", result: null, error: "" });
   const [nativeWriteBoundary, setNativeWriteBoundary] = useState({ status: "idle", result: null, error: "" });
   const [nativeRealExecution, setNativeRealExecution] = useState({ status: "idle", result: null, error: "" });
+  const [nativeProjectDependencyExecution, setNativeProjectDependencyExecution] = useState({ status: "idle", result: null, error: "" });
   const [aiPrompt, setAiPrompt] = useState("Find the fastest safe path to recover real space from this scan.");
   const [aiAdvice, setAiAdvice] = useState({ status: "idle", result: null, error: "" });
   const [runtimeCapabilities, setRuntimeCapabilities] = useState({
@@ -247,6 +249,7 @@ export default function App() {
       safeExecutorsEnabled: false,
       executorFlags: {
         tempCleanupExecutor: false,
+        projectDependencyExecutor: false,
         recycleBinExecutor: false,
         browserCacheExecutor: false,
         toolNativePruneExecutors: false
@@ -1540,6 +1543,7 @@ export default function App() {
     setNativeScopeEvidenceExport({ status: "idle", result: null, error: "" });
     setNativeWriteBoundary({ status: "idle", result: null, error: "" });
     setNativeRealExecution({ status: "idle", result: null, error: "" });
+    setNativeProjectDependencyExecution({ status: "idle", result: null, error: "" });
     setExecutionConsent({ accepted: false, planId: "", acceptedAt: "" });
   }
 
@@ -1796,8 +1800,11 @@ export default function App() {
   }
 
   function armExecutionConsent() {
-    const firstSafeTempRuntime = Boolean(runtimeCapabilities.result.executorFlags?.tempCleanupExecutor && realExecutorCapsule?.route?.id === "known-temp-delete");
-    if (!runReadiness.ready || !planLock.readyForPreflight || (safetyInterlock.status === "unsafe-stop" && !firstSafeTempRuntime)) return;
+    const scopedExecutorRuntime = Boolean(
+      (runtimeCapabilities.result.executorFlags?.tempCleanupExecutor && realExecutorCapsule?.route?.id === "known-temp-delete")
+        || runtimeCapabilities.result.executorFlags?.projectDependencyExecutor
+    );
+    if (!runReadiness.ready || !planLock.readyForPreflight || (safetyInterlock.status === "unsafe-stop" && !scopedExecutorRuntime)) return;
     setExecutionConsent({
       accepted: true,
       planId: planSnapshot.id,
@@ -1896,6 +1903,61 @@ export default function App() {
       window.setTimeout(() => setActiveStage("verify"), 240);
     } catch (error) {
       setNativeRealExecution({
+        status: "error",
+        result: null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  async function executeReviewedProjectDependencies() {
+    if (nativeProjectDependencyExecution.status === "running") return;
+    const projectRows = executorPlan.rows.filter((row) => row.route === "item-review-project-cache" && row.reviewTargets?.length);
+    const projectTargets = projectRows.flatMap((row) => row.reviewTargets || []);
+    if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.projectDependencyExecutor) {
+      setNativeProjectDependencyExecution({
+        status: "blocked",
+        result: null,
+        error: "Project dependency executor is not enabled. Set SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR=1 before launching the Tauri app."
+      });
+      return;
+    }
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !projectRows.length) {
+      setNativeProjectDependencyExecution({
+        status: "blocked",
+        result: null,
+        error: "Project dependency cleanup needs reviewed remove targets plus current plan, scan fingerprint, and consent receipt."
+      });
+      return;
+    }
+
+    setActiveStage("execute");
+    setNativeProjectDependencyExecution({ status: "running", result: null, error: "" });
+    try {
+      const result = await runNativeProjectDependencyExecutor({
+        rows: projectRows,
+        planId: planSnapshot.id,
+        scanFingerprint: scanSession.currentFingerprint,
+        consentPlanId: consentReceipt.planId,
+        expectedBytes: projectTargets.reduce((sum, target) => sum + Number(target.bytes || 0), 0)
+      });
+      setNativeProjectDependencyExecution({ status: "complete", result, error: "" });
+      const executedAt = new Date().toISOString();
+      const nextLedger = result.entries.map((entry, index) => ({
+        id: entry.id,
+        planId: planSnapshot.id,
+        executedAt,
+        time: `T+${String(index + 1).padStart(2, "0")}m`,
+        title: entry.title,
+        result: entry.result,
+        bytes: entry.bytes,
+        method: `${entry.route}: ${entry.note}`
+      }));
+      setLedger(nextLedger);
+      recordLedgerRun(nextLedger);
+      window.setTimeout(() => setActiveStage("verify"), 240);
+    } catch (error) {
+      setNativeProjectDependencyExecution({
         status: "error",
         result: null,
         error: error instanceof Error ? error.message : String(error)
@@ -2918,6 +2980,14 @@ export default function App() {
               contract={firstSafeExecutorContract}
               capsule={realExecutorCapsule}
               onExecute={executeFirstSafeTempCleanup}
+            />
+            <ProjectDependencyExecutorPanel
+              runtimeCapabilities={runtimeCapabilities}
+              execution={nativeProjectDependencyExecution}
+              executorPlan={executorPlan}
+              scanSession={scanSession}
+              consentReceipt={consentReceipt}
+              onExecute={executeReviewedProjectDependencies}
             />
             <ValidationEvidencePanel
               validationPack={validationPack}
@@ -5488,7 +5558,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
           <QueueStat label="Model" value={config.model} tone={configured ? "safe" : "review"} />
           <QueueStat label="Selected" value={context.selectedActions.length} tone={context.selectedActions.length ? "advanced" : "review"} />
           <QueueStat label="Direct tools" value="blocked" tone="safe" />
-          <QueueStat label="Real exec" value={context.runtime.tempCleanupExecutor ? "temp flag" : "off"} tone={context.runtime.tempCleanupExecutor ? "restricted" : "safe"} />
+          <QueueStat label="Real exec" value={context.runtime.tempCleanupExecutor || context.runtime.projectDependencyExecutor ? "scoped flag" : "off"} tone={context.runtime.tempCleanupExecutor || context.runtime.projectDependencyExecutor ? "restricted" : "safe"} />
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
@@ -7333,6 +7403,106 @@ function FirstSafeTempExecutorPanel({ runtimeCapabilities, execution, contract, 
         <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
           {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {running ? "Cleaning temp files" : "Run real temp cleanup"}
+        </Button>
+
+        {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}
+
+        {result?.warnings?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.warnings.slice(0, 3).map((warning) => (
+              <div key={warning} className="rounded-md border bg-card p-3 text-xs text-muted-foreground">{warning}</div>
+            ))}
+          </div>
+        ) : null}
+
+        {result?.entries?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.entries.slice(0, 4).map((entry) => (
+              <div key={`${entry.id}-${entry.result}-${entry.bytes}`} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{entry.title}</span>
+                  <Badge variant={entry.result === "executed" ? "safe" : "review"}>{entry.result}</Badge>
+                  <Badge variant="outline">{formatBytes(entry.bytes)}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{entry.note}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProjectDependencyExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, onExecute }) {
+  const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.projectDependencyExecutor);
+  const rows = executorPlan.rows.filter((row) => row.route === "item-review-project-cache" && row.reviewTargets?.length);
+  const targets = rows.flatMap((row) => row.reviewTargets || []);
+  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentReceipt.planId);
+  const running = execution.status === "running";
+  const result = execution.result;
+  const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+  const expoTargets = targets.filter((target) => /expo|react native/i.test(`${target.kind || ""} ${target.reason || ""}`)).length;
+  const disabled = running || !enabled || !requestReady;
+
+  return (
+    <Card id="project-dependency-executor-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Reviewed project dependencies
+          <Badge variant={enabled ? "restricted" : "review"}>{enabled ? "feature on" : "feature off"}</Badge>
+        </CardTitle>
+        <CardDescription>
+          Deletes only reviewed `node_modules` targets with parent package.json evidence. Useful for stale Expo and React Native projects.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Targets" value={targets.length} tone={targets.length ? "advanced" : "review"} />
+          <QueueStat label="Expo/RN" value={expoTargets} tone={expoTargets ? "advanced" : "review"} />
+          <QueueStat label="Recovered" value={formatBytes(reclaimed)} tone={reclaimed ? "safe" : "review"} />
+          <QueueStat label="Request" value={requestReady ? "ready" : "wait"} tone={requestReady ? "safe" : "review"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Project executor boundary</span>
+            <Badge variant={enabled ? "restricted" : "safe"}>{enabled ? "can remove reviewed deps" : "cannot delete"}</Badge>
+            <Badge variant="outline">item-review-project-cache</Badge>
+            <Badge variant="safe">package.json required</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Enable with `SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR=1` before launching Tauri.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, reviewed remove targets {targets.length}.</span>
+            <span>Only item-review decisions marked Remove are sent to native execution; source folders are not sent as targets.</span>
+          </div>
+        </div>
+
+        {targets.length ? (
+          <div className="flex flex-col gap-2">
+            {targets.slice(0, 4).map((target) => (
+              <div key={target.id} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{target.name}</span>
+                  <Badge variant="outline">{formatBytes(target.bytes)}</Badge>
+                  <Badge variant={/expo|react native/i.test(`${target.kind || ""} ${target.reason || ""}`) ? "advanced" : "outline"}>
+                    {target.kind || "project dependency"}
+                  </Badge>
+                </div>
+                <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{target.path}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{target.reason}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+            Mark reviewed node_modules items as Remove before this executor has a target.
+          </div>
+        )}
+
+        <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
+          {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          {running ? "Cleaning dependencies" : "Run reviewed dependency cleanup"}
         </Button>
 
         {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}

@@ -375,7 +375,7 @@ export const executorPolicies = {
     dryRunSupported: true,
     requiresNativeValidation: true,
     verification: "Confirm selected project folders are gone and source remains.",
-    guardrails: ["Item-level review", "No source files", "No protected client work"]
+    guardrails: ["Item-level review", "Parent package.json required", "No source files", "No protected client work"]
   },
   "android-studio": {
     route: "item-review-tooling-cache",
@@ -607,6 +607,7 @@ export const customRootDispositionOptions = [
 export const releaseFeatureFlags = {
   realExecutors: false,
   tempCleanupExecutor: false,
+  projectDependencyExecutor: false,
   recycleBinExecutor: false,
   browserCacheExecutor: false,
   toolNativePruneExecutors: false,
@@ -3584,16 +3585,16 @@ export function buildAIAgentIntegration({
   runtimeCapabilities = {}
 } = {}) {
   const providerConnected = Boolean(providerConfig?.connected || providerConfig?.apiKeyPresent || providerConfig?.endpoint);
-  const scopedTempExecutor = Boolean(
+  const scopedExecutor = Boolean(
     runtimeCapabilities?.realRunEnabled
       && runtimeCapabilities?.destructiveCommands
       && runtimeCapabilities?.safeExecutorsEnabled
-      && runtimeCapabilities?.executorFlags?.tempCleanupExecutor
+      && (runtimeCapabilities?.executorFlags?.tempCleanupExecutor || runtimeCapabilities?.executorFlags?.projectDependencyExecutor)
       && !runtimeCapabilities?.executorFlags?.recycleBinExecutor
       && !runtimeCapabilities?.executorFlags?.browserCacheExecutor
       && !runtimeCapabilities?.executorFlags?.toolNativePruneExecutors
   );
-  const unsafeRuntime = Boolean((runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands) && !scopedTempExecutor);
+  const unsafeRuntime = Boolean((runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands) && !scopedExecutor);
   const activeQuestion = agentQuestionQueue?.activeQuestion || null;
   const contextPacket = {
     activeQuestion: activeQuestion?.prompt || "",
@@ -3662,11 +3663,11 @@ export function buildAIAgentIntegration({
       id: "mutation-boundary",
       label: "Mutation boundary",
       lane: "safety",
-      status: unsafeRuntime ? "unsafe-stop" : scopedTempExecutor ? "scoped-executor-visible" : "locked",
+      status: unsafeRuntime ? "unsafe-stop" : scopedExecutor ? "scoped-executor-visible" : "locked",
       detail: unsafeRuntime
         ? "Runtime write capability is visible; AI integration must stop."
-        : scopedTempExecutor
-          ? "A scoped temp executor is visible, but AI still has no direct tool access."
+        : scopedExecutor
+          ? "A scoped executor is visible, but AI still has no direct tool access."
           : "Real cleanup, destructive commands, and write execution remain unavailable.",
       action: unsafeRuntime ? "Restore dry-run lock before using AI." : "Keep AI advisory-only and apply suggestions through UI controls."
     })
@@ -6519,6 +6520,19 @@ export function buildExecutorPlan({
     const protectedByUser = isActionProtected(action, protectedPaths);
     const intakeBlocker = getIntakeBlocker(action, intakePolicy);
     const itemReview = getItemReviewForAction(action, reviewsByAction);
+    const reviewTargets = itemReview
+      ? itemReview.items
+          .filter((item) => item.decision === "remove" && !item.protected)
+          .map((item) => ({
+            id: item.id,
+            name: item.name,
+            path: item.path,
+            bytes: Number(item.bytes || 0),
+            ageDays: Number(item.ageDays || 0),
+            kind: item.kind,
+            reason: item.reason
+          }))
+      : [];
     const gate = unresolvedGate(action, approvals, protectedPaths, itemReview, intakePolicy);
     const policyBlocked = action.gate === "blocked" || action.gate === "advisory" || policy.lane === "blocked" || policy.lane === "advisory";
     const realBlockedReason = getRealExecutionBlocker(action, policy, scanMode);
@@ -6541,6 +6555,7 @@ export function buildExecutorPlan({
       bytes: plannedBytes,
       visibleBytes: action.bytes,
       path: action.path,
+      reviewTargets,
       risk: action.risk,
       gate: gate || action.gate,
       powerId: getActionTaskPowerId(action, policy),
@@ -11878,7 +11893,7 @@ export function buildReport({
           `- Detail-needed records: ${validationPack.validationChecks.filter((check) => check.evidenceValue && !check.evidenceComplete).length}`,
           `- VM scenarios: ${validationPack.vmScenarios.length}`,
           `- Fixture roots: ${validationPack.fixtureRoots.length}`,
-          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
+          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, projectDeps=${validationPack.runtime?.executorFlags?.projectDependencyExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
           `- Safety invariants waiting: ${validationPack.safetyInvariants.filter((item) => !item.passed).length}`,
           validationPack.validationChecks.length
             ? validationPack.validationChecks
@@ -14898,6 +14913,7 @@ function normalizeWritePreflightChecks(value = []) {
 function normalizeExecutorFeatureFlags(value = {}) {
   return {
     tempCleanupExecutor: Boolean(value.tempCleanupExecutor || value.temp_cleanup_executor),
+    projectDependencyExecutor: Boolean(value.projectDependencyExecutor || value.project_dependency_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
     browserCacheExecutor: Boolean(value.browserCacheExecutor || value.browser_cache_executor),
     toolNativePruneExecutors: Boolean(value.toolNativePruneExecutors || value.tool_native_prune_executors)

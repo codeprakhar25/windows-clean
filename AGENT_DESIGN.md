@@ -230,6 +230,9 @@ Execution rules:
 - `execute-first-safe` is currently limited to `known-temp-delete`.
 - The first-safe temp executor requires Windows, `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1`, current plan/scan/consent IDs, and target allowlist success.
 - The first-safe temp executor deletes files only, skips symlinks and recent files, never removes folders, and returns a ledger-style native response.
+- `execute-project-deps` is limited to reviewed `node_modules` targets with parent `package.json` evidence.
+- The project dependency executor requires Windows, `SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR=1`, item-review Remove decisions, current plan/scan/consent IDs, and target validation.
+- Expo and React Native package hints can raise priority, but they never auto-approve cleanup.
 - Prefer official commands: Storage Sense/Disk Cleanup, package-manager prune, Docker prune.
 - Direct delete only for known disposable folders and only after checking active locks.
 - Use Recycle Bin or quarantine for review files where possible.
@@ -528,7 +531,11 @@ execute_cleanup_plan
 
 It is a rejecting write boundary for dry-run probes and the native entrypoint for first-safe execution. Rejecting probes must validate dry-run-only state, mutation flags, plan/scan/consent evidence, first-safe route membership, per-action route matches, and selected target paths, then return `accepted: false`, native reject codes, and zero reclaimed bytes for every entry.
 
-For `known-temp-delete`, `requestMode=execute-first-safe` may delete old files under allowlisted temp roots when `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1` is present on Windows. Every other route remains rejecting or advisory.
+For `known-temp-delete`, `requestMode=execute-first-safe` may delete old files under allowlisted temp roots when `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1` is present on Windows.
+
+For `node-modules-old`, `requestMode=execute-project-deps` may remove reviewed dependency targets when `SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR=1` is present on Windows. The target must be a `node_modules` directory, the parent project must contain `package.json`, and the UI must send only item-review targets marked Remove.
+
+Every other route remains rejecting or advisory.
 
 Each rejected write entry returns preflight checks. For the temp scaffold, shape, target allowlist, and mutation lock can pass while feature flag and validation evidence remain blocked or waiting.
 

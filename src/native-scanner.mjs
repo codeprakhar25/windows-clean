@@ -116,13 +116,24 @@ export async function runNativeExecutorDryRun(executorPlan, host = globalThis) {
     request: {
       actions: (executorPlan?.rows || [])
         .filter((row) => row.canSimulate)
-        .map((row) => ({
-          id: row.id,
-          title: row.title,
-          bytes: row.bytes,
-          route: row.route,
-          targetPath: row.targetPath || row.target || row.path || ""
-        }))
+        .flatMap((row) => {
+          if (Array.isArray(row.reviewTargets) && row.reviewTargets.length) {
+            return row.reviewTargets.map((target) => ({
+              id: target.id || row.id,
+              title: target.name || row.title,
+              bytes: Number(target.bytes || 0),
+              route: row.route,
+              targetPath: target.path || ""
+            }));
+          }
+          return [{
+            id: row.id,
+            title: row.title,
+            bytes: row.bytes,
+            route: row.route,
+            targetPath: row.targetPath || row.target || row.path || ""
+          }];
+        })
     }
   });
 
@@ -258,6 +269,53 @@ export async function runNativeTempCleanupExecutor(boundary = {}, host = globalT
         route: route || row.route || "",
         targetPath: row.targetPath || row.target || row.path || ""
       }))
+    }
+  });
+
+  return normalizeNativeWriteBoundary(result);
+}
+
+export async function runNativeProjectDependencyExecutor(boundary = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      accepted: false,
+      reason: "Native project dependency executor is not available in the browser demo.",
+      entries: [],
+      warnings: ["Run the Tauri desktop shell before executing cleanup."]
+    };
+  }
+
+  const rows = boundary.rows || boundary.selectedRows || [];
+  const reviewTargets = rows.flatMap((row) =>
+    Array.isArray(row.reviewTargets)
+      ? row.reviewTargets.map((target) => ({
+          id: target.id || row.id,
+          title: target.name || row.title,
+          bytes: Number(target.bytes || 0),
+          route: "item-review-project-cache",
+          targetPath: target.path || ""
+        }))
+      : []
+  );
+  const expectedBytes = Number(boundary.expectedBytes ?? reviewTargets.reduce((sum, row) => sum + Number(row.bytes || 0), 0));
+
+  const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
+    request: {
+      schemaVersion: "spaceguard-project-deps-request/v1",
+      requestMode: "execute-project-deps",
+      planId: boundary.planId || "",
+      route: "item-review-project-cache",
+      scanFingerprint: boundary.scanFingerprint || "",
+      consentPlanId: boundary.consentPlanId || "",
+      expectedBytes,
+      dryRunOnly: false,
+      mutationAttempted: true,
+      actions: reviewTargets
     }
   });
 
@@ -535,6 +593,7 @@ export function normalizeNativeRuntimeCapabilities(result = {}) {
 function normalizeExecutorFlags(value = {}) {
   return {
     tempCleanupExecutor: Boolean(value.tempCleanupExecutor || value.temp_cleanup_executor),
+    projectDependencyExecutor: Boolean(value.projectDependencyExecutor || value.project_dependency_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
     browserCacheExecutor: Boolean(value.browserCacheExecutor || value.browser_cache_executor),
     toolNativePruneExecutors: Boolean(value.toolNativePruneExecutors || value.tool_native_prune_executors)

@@ -58,6 +58,13 @@ $env:SPACEGUARD_ENABLE_TEMP_EXECUTOR="1"
 npm run native:dev
 ```
 
+Enable reviewed project dependency cleanup for stale `node_modules` targets:
+
+```powershell
+$env:SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR="1"
+npm run native:dev
+```
+
 Build the desktop app:
 
 ```bash
@@ -99,6 +106,8 @@ For `known-temp-delete`, setting `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1` in the Wind
 
 For `known-temp-delete`, the native response exposes an executor scaffold: route `known-temp-delete`, feature flag `tempCleanupExecutor`, and whether mutation is enabled in the current runtime.
 
+For `node-modules-old`, setting `SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR=1` enables reviewed dependency cleanup. The frontend sends only item-review targets marked **Remove**. The native executor accepts only `node_modules` directories whose parent has `package.json`, skips link-like entries, removes files through controlled traversal, removes empty directories bottom-up, and never runs package-manager or shell commands. Native review items also surface Expo and React Native hints from readable `package.json` metadata.
+
 Each rejected write entry also carries native preflight evidence: request-shape checks, target allowlist status, mutation lock, route feature-flag state, and validation-evidence state. Preflight rows show what would block or pass before a future executor runs; they do not create cleanup authority.
 
 The **Write boundary probe** panel can call this rejecting command from the desktop shell. A passing probe is rejection evidence only: accepted is false, every entry is rejected, reclaimed bytes are zero, and no ledger or recovery claim is created.
@@ -125,7 +134,7 @@ runtime_capabilities
 
 It reports platform, scanner availability, dry-run availability, and whether real executors are enabled.
 
-Runtime capabilities also expose per-executor feature flags: `tempCleanupExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`. They default to false independently, so enabling a temp executor cannot accidentally enable browser, Recycle Bin, or tool-native cleanup routes.
+Runtime capabilities also expose per-executor feature flags: `tempCleanupExecutor`, `projectDependencyExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`. They default to false independently, so enabling a temp or project dependency executor cannot accidentally enable browser, Recycle Bin, or tool-native cleanup routes.
 
 It currently scans or reports:
 
@@ -188,6 +197,7 @@ The demo also includes:
 - Native beta distribution readiness for signing, setup docs, install/uninstall, support workflow, read-only scan evidence, no-cleanup claims, and exportable beta evidence records.
 - OpenAI cleanup agent panel for advisory ranking, next-step suggestions, blocked-action explanations, and user questions from real scan context.
 - First-safe temp executor panel for the only current real cleanup path: old files under allowlisted temp roots, feature-flagged in the Windows native runtime.
+- Reviewed project dependency executor panel for stale `node_modules` cleanup, including Expo/React Native project hints and item-level remove targets.
 - Demo rehearsal runbook that proves the browser demo can go from scan to gated plan, dry-run consent, simulated ledger, and report export without native data or real cleanup.
 - Product completion audit that maps the original product requirements to proven, partial, waiting, locked, or unsafe evidence so the app cannot overclaim real cleanup readiness.
 - Safety interlock that summarizes runtime write signals, native write signals, scan freshness, dry-run consent, task power leases, standing permission, run readiness, write-boundary evidence, release review, and write readiness into one stop/hold/dry-run state.

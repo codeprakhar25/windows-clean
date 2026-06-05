@@ -274,6 +274,7 @@ struct RuntimeCapabilities {
 #[serde(rename_all = "camelCase")]
 struct ExecutorFeatureFlags {
     temp_cleanup_executor: bool,
+    project_dependency_executor: bool,
     recycle_bin_executor: bool,
     browser_cache_executor: bool,
     tool_native_prune_executors: bool,
@@ -460,6 +461,9 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
     });
     if request.request_mode.as_deref() == Some("execute-first-safe") {
         return execute_first_safe_temp_cleanup(request);
+    }
+    if request.request_mode.as_deref() == Some("execute-project-deps") {
+        return execute_project_dependency_cleanup(request);
     }
     let route = request.route.clone();
     let plan_id = request.plan_id.clone();
@@ -703,6 +707,171 @@ fn execute_first_safe_temp_cleanup(request: WriteExecutionRequest) -> WriteExecu
     }
 }
 
+fn execute_project_dependency_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let flag_enabled = project_dependency_executor_enabled();
+    let rejections = project_dependency_execution_rejections(&request, flag_enabled);
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-project-deps-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-project-deps".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+
+    let entries = request
+        .actions
+        .into_iter()
+        .map(|action| {
+            let target_path = action.target_path.clone().unwrap_or_default();
+            let target_reject = project_dependency_target_reject_code(&target_path);
+            let route_match = action.route == route && route == "item-review-project-cache";
+            let can_execute = rejections.is_empty() && route_match && target_reject.is_none();
+
+            if can_execute {
+                let deleted = delete_project_dependency_target(&resolve_dry_run_target(&target_path));
+                return WriteExecutionEntry {
+                    id: action.id,
+                    title: action.title,
+                    route: action.route,
+                    result: if deleted.deleted_files > 0 || deleted.deleted_dirs > 0 {
+                        "executed".to_string()
+                    } else {
+                        "no-op".to_string()
+                    },
+                    reject_code: String::new(),
+                    bytes: deleted.deleted_bytes,
+                    preflight_status: "executed".to_string(),
+                    preflight_checks: vec![
+                        write_preflight_check(
+                            "route-project-cache",
+                            "Project cache route",
+                            "passed",
+                            "Action route is item-review-project-cache.",
+                        ),
+                        write_preflight_check(
+                            "target-node-modules",
+                            "Reviewed node_modules target",
+                            "passed",
+                            "Target is a node_modules directory with a parent package.json.",
+                        ),
+                        write_preflight_check(
+                            "feature-flag",
+                            "Executor feature flag",
+                            "passed",
+                            "SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR enabled project dependency cleanup.",
+                        ),
+                    ],
+                    note: format!(
+                        "Project dependency executor removed {} file(s), {} empty dir(s), reclaimed {} byte(s), and skipped {} item(s).",
+                        deleted.deleted_files, deleted.deleted_dirs, deleted.deleted_bytes, deleted.skipped_count
+                    ),
+                };
+            }
+
+            let reject_code = if !route_match {
+                "route-not-project-cache"
+            } else {
+                target_reject
+                    .or_else(|| rejections.first().copied())
+                    .unwrap_or("project-deps-executor-disabled")
+            };
+
+            WriteExecutionEntry {
+                id: action.id,
+                title: action.title,
+                route: action.route,
+                result: "rejected".to_string(),
+                reject_code: reject_code.to_string(),
+                bytes: 0,
+                preflight_status: "target-blocked".to_string(),
+                preflight_checks: vec![
+                    write_preflight_check(
+                        "route-project-cache",
+                        "Project cache route",
+                        if route_match { "passed" } else { "blocked" },
+                        if route_match {
+                            "Action route is item-review-project-cache."
+                        } else {
+                            "Only reviewed project dependency cleanup can use this executor."
+                        },
+                    ),
+                    write_preflight_check(
+                        "target-node-modules",
+                        "Reviewed node_modules target",
+                        if target_reject.is_none() { "passed" } else { "blocked" },
+                        if target_reject.is_none() {
+                            "Target is a reviewed node_modules directory."
+                        } else {
+                            "Target is missing, not node_modules, lacks parent package.json, or is link-like."
+                        },
+                    ),
+                    write_preflight_check(
+                        "feature-flag",
+                        "Executor feature flag",
+                        if flag_enabled { "passed" } else { "blocked" },
+                        if flag_enabled {
+                            "Project dependency executor feature flag is enabled."
+                        } else {
+                            "SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR is not enabled."
+                        },
+                    ),
+                ],
+                note: format!(
+                    "Project dependency cleanup rejected with code {reject_code}. Plan {plan_id}; no bytes were removed for this action."
+                ),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let accepted = rejections.is_empty()
+        && entries
+            .iter()
+            .all(|entry| entry.result == "executed" || entry.result == "no-op");
+    let reclaimed = entries.iter().map(|entry| entry.bytes).sum::<u64>();
+    let mut warnings = project_dependency_execution_warnings(&rejections);
+    if accepted {
+        warnings.push(format!(
+            "Project dependency cleanup completed for plan {plan_id}; reclaimed {reclaimed} byte(s). Run npm install in affected projects before using them."
+        ));
+    }
+
+    WriteExecutionResponse {
+        mode: if accepted {
+            "native-project-deps-executor"
+        } else {
+            "native-project-deps-executor-rejected"
+        },
+        real_run_enabled: flag_enabled,
+        destructive_commands: flag_enabled,
+        accepted,
+        reason: if accepted {
+            format!("Project dependency executor accepted reviewed targets and reclaimed {reclaimed} byte(s).")
+        } else {
+            "Project dependency executor rejected the request before mutation.".to_string()
+        },
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
+        entries,
+        warnings,
+    }
+}
+
 fn write_boundary_rejections(request: &WriteExecutionRequest) -> Vec<&'static str> {
     let mut codes = Vec::new();
     let mode = request.request_mode.as_deref().unwrap_or("capsule-probe");
@@ -852,12 +1021,7 @@ fn write_action_preflight(
     (preflight_status.to_string(), checks)
 }
 
-fn write_preflight_check(
-    id: &str,
-    label: &str,
-    status: &str,
-    detail: &str,
-) -> WritePreflightCheck {
+fn write_preflight_check(id: &str, label: &str, status: &str, detail: &str) -> WritePreflightCheck {
     WritePreflightCheck {
         id: id.to_string(),
         label: label.to_string(),
@@ -869,7 +1033,10 @@ fn write_preflight_check(
 fn is_first_safe_write_route(route: &str) -> bool {
     matches!(
         route,
-        "known-temp-delete" | "shell-recycle-bin" | "browser-cache-only"
+        "known-temp-delete"
+            | "shell-recycle-bin"
+            | "browser-cache-only"
+            | "item-review-project-cache"
     )
 }
 
@@ -893,9 +1060,34 @@ fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
                 },
                 mutation_enabled: enabled,
                 reason: if enabled {
-                    "Temp cleanup executor can delete old files under allowlisted temp roots only.".to_string()
+                    "Temp cleanup executor can delete old files under allowlisted temp roots only."
+                        .to_string()
                 } else {
                     "Temp cleanup executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_TEMP_EXECUTOR is enabled on Windows.".to_string()
+                },
+            })
+        }
+        "item-review-project-cache" => {
+            let enabled = cfg!(target_os = "windows") && project_dependency_executor_enabled();
+            Some(WriteExecutorScaffold {
+                route: "item-review-project-cache".to_string(),
+                title: "Reviewed project dependencies".to_string(),
+                feature_flag: "projectDependencyExecutor".to_string(),
+                status: if enabled {
+                    "feature-flag-enabled".to_string()
+                } else {
+                    "feature-flag-disabled".to_string()
+                },
+                validation_status: if enabled {
+                    "reviewed-node-modules-only".to_string()
+                } else {
+                    "validation-required".to_string()
+                },
+                mutation_enabled: enabled,
+                reason: if enabled {
+                    "Project dependency executor can remove reviewed node_modules folders with parent package.json evidence.".to_string()
+                } else {
+                    "Project dependency executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR is enabled on Windows.".to_string()
                 },
             })
         }
@@ -906,6 +1098,7 @@ fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
 fn write_executor_scaffold_reject_code(route: &str) -> &'static str {
     match route {
         "known-temp-delete" => "temp-executor-feature-flag-disabled",
+        "item-review-project-cache" => "project-deps-executor-disabled",
         _ => "real-executor-disabled",
     }
 }
@@ -934,6 +1127,8 @@ fn normalize_write_target(value: &str) -> String {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
+        .trim_end_matches('\\')
+        .to_string()
 }
 
 fn write_target_forbidden(route: &str, target: &str) -> bool {
@@ -955,6 +1150,12 @@ fn write_target_forbidden(route: &str, target: &str) -> bool {
                 || target.contains("identity")
                 || target.contains("profile database")
         }
+        "item-review-project-cache" => {
+            !target.ends_with("\\node_modules")
+                || target.contains("\\windows\\")
+                || target.contains("\\program files")
+                || target.contains("\\appdata\\roaming\\microsoft")
+        }
         _ => true,
     }
 }
@@ -970,6 +1171,9 @@ fn write_target_allowed(route: &str, target: &str) -> bool {
         "shell-recycle-bin" => target.contains("$recycle.bin") || target.contains("recycle bin"),
         "browser-cache-only" => {
             target.contains("\\cache") || target.contains("cache2") || target.contains("code cache")
+        }
+        "item-review-project-cache" => {
+            target.ends_with("\\node_modules") || target.contains("\\node_modules\\")
         }
         _ => false,
     }
@@ -998,6 +1202,12 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "temp-executor-feature-flag-disabled" => {
             "Write request rejected: tempCleanupExecutor scaffold is feature-flag disabled and still requires validation evidence."
         }
+        "project-deps-executor-disabled" => {
+            "Write request rejected: projectDependencyExecutor scaffold is feature-flag disabled."
+        }
+        "target-not-node-modules" => "Write request rejected: project dependency target is not node_modules.",
+        "target-link-or-not-directory" => "Write request rejected: project dependency target is link-like or not a directory.",
+        "target-missing-package-json" => "Write request rejected: parent project package.json is missing.",
         "no-actions" => "Write request rejected: no selected actions were supplied.",
         _ => "Write request rejected by native boundary validation.",
     }
@@ -1005,7 +1215,23 @@ fn write_boundary_warning(code: &str) -> &'static str {
 
 fn temp_executor_enabled() -> bool {
     env::var("SPACEGUARD_ENABLE_TEMP_EXECUTOR")
-        .map(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn project_dependency_executor_enabled() -> bool {
+    env::var("SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR")
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -1085,11 +1311,184 @@ fn temp_execution_warnings(codes: &[&'static str]) -> Vec<String> {
         .collect()
 }
 
+fn project_dependency_execution_rejections(
+    request: &WriteExecutionRequest,
+    flag_enabled: bool,
+) -> Vec<&'static str> {
+    let mut codes = Vec::new();
+    if !cfg!(target_os = "windows") {
+        codes.push("windows-required");
+    }
+    if !flag_enabled {
+        codes.push("project-deps-executor-disabled");
+    }
+    if request.plan_id.trim().is_empty() {
+        codes.push("missing-plan-id");
+    }
+    if request
+        .scan_fingerprint
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-scan-fingerprint");
+    }
+    if request
+        .consent_plan_id
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-consent-plan-id");
+    }
+    if request.request_mode.as_deref() != Some("execute-project-deps") {
+        codes.push("request-mode-invalid");
+    }
+    if request.route != "item-review-project-cache" {
+        codes.push("route-not-project-cache");
+    }
+    if request.dry_run_only != Some(false) {
+        codes.push("dry-run-disabled-required");
+    }
+    if request.mutation_attempted != Some(true) {
+        codes.push("mutation-confirmation-required");
+    }
+    if request.actions.is_empty() {
+        codes.push("no-actions");
+    }
+    codes
+}
+
+fn project_dependency_execution_warnings(codes: &[&'static str]) -> Vec<String> {
+    if codes.is_empty() {
+        return vec![
+            "Project dependency executor removes reviewed node_modules targets only and requires parent package.json evidence.".to_string(),
+        ];
+    }
+    codes
+        .iter()
+        .map(|code| match *code {
+            "windows-required" => "Project dependency cleanup is Windows-only in this build.",
+            "project-deps-executor-disabled" => {
+                "Set SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR=1 before launching the Tauri app to enable reviewed node_modules cleanup."
+            }
+            "dry-run-disabled-required" => {
+                "Project dependency cleanup requires dryRunOnly=false on the execute-project-deps request."
+            }
+            "mutation-confirmation-required" => {
+                "Project dependency cleanup requires mutationAttempted=true on the execute-project-deps request."
+            }
+            "request-mode-invalid" => "Project dependency cleanup requires requestMode=execute-project-deps.",
+            "route-not-project-cache" => "Project dependency cleanup requires route item-review-project-cache.",
+            _ => write_boundary_warning(code),
+        })
+        .map(String::from)
+        .collect()
+}
+
+fn project_dependency_target_reject_code(value: &str) -> Option<&'static str> {
+    let path = resolve_dry_run_target(value);
+    if path.as_os_str().is_empty() {
+        return Some("target-missing");
+    }
+    if path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| !name.eq_ignore_ascii_case("node_modules"))
+        .unwrap_or(true)
+    {
+        return Some("target-not-node-modules");
+    }
+    let Ok(metadata) = fs::symlink_metadata(&path) else {
+        return Some("target-missing");
+    };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Some("target-link-or-not-directory");
+    }
+    let Some(project_root) = path.parent() else {
+        return Some("target-missing-project-root");
+    };
+    if !project_root.join("package.json").exists() {
+        return Some("target-missing-package-json");
+    }
+    None
+}
+
 #[derive(Default)]
 struct TempDeleteResult {
     deleted_bytes: u64,
     deleted_files: u64,
     skipped_count: u64,
+}
+
+#[derive(Default)]
+struct ProjectDependencyDeleteResult {
+    deleted_bytes: u64,
+    deleted_files: u64,
+    deleted_dirs: u64,
+    skipped_count: u64,
+}
+
+fn delete_project_dependency_target(root: &Path) -> ProjectDependencyDeleteResult {
+    let mut result = ProjectDependencyDeleteResult::default();
+    if project_dependency_target_reject_code(&path_to_string(root)).is_some() {
+        result.skipped_count += 1;
+        return result;
+    }
+
+    let mut queue = VecDeque::from([root.to_path_buf()]);
+    let mut dirs = Vec::new();
+    let mut visited = 0usize;
+    while let Some(path) = queue.pop_front() {
+        if visited >= 200_000 || result.deleted_files >= 100_000 {
+            result.skipped_count += 1;
+            break;
+        }
+        visited += 1;
+
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            result.skipped_count += 1;
+            continue;
+        };
+        if metadata.file_type().is_symlink() {
+            result.skipped_count += 1;
+            continue;
+        }
+        if metadata.is_file() {
+            let bytes = metadata.len();
+            match fs::remove_file(&path) {
+                Ok(_) => {
+                    result.deleted_bytes = result.deleted_bytes.saturating_add(bytes);
+                    result.deleted_files = result.deleted_files.saturating_add(1);
+                }
+                Err(_) => result.skipped_count += 1,
+            }
+            continue;
+        }
+        if metadata.is_dir() {
+            dirs.push(path.clone());
+            match fs::read_dir(&path) {
+                Ok(entries) => {
+                    for entry in entries.flatten() {
+                        queue.push_back(entry.path());
+                    }
+                }
+                Err(_) => result.skipped_count += 1,
+            }
+        }
+    }
+
+    dirs.sort_by(|left, right| right.components().count().cmp(&left.components().count()));
+    for dir in dirs {
+        match fs::remove_dir(&dir) {
+            Ok(_) => result.deleted_dirs = result.deleted_dirs.saturating_add(1),
+            Err(_) => result.skipped_count += 1,
+        }
+    }
+
+    result
 }
 
 fn delete_temp_action_targets(value: &str) -> TempDeleteResult {
@@ -1181,28 +1580,36 @@ fn file_old_enough_for_temp_delete(metadata: &fs::Metadata) -> bool {
 #[tauri::command]
 fn runtime_capabilities() -> RuntimeCapabilities {
     let temp_enabled = cfg!(target_os = "windows") && temp_executor_enabled();
+    let project_dependency_enabled =
+        cfg!(target_os = "windows") && project_dependency_executor_enabled();
+    let real_execution_enabled = temp_enabled || project_dependency_enabled;
     RuntimeCapabilities {
-        mode: if temp_enabled { "native-first-safe-write" } else { "native-readonly" },
+        mode: if real_execution_enabled { "native-scoped-write" } else { "native-readonly" },
         platform: env::consts::OS.to_string(),
         windows: cfg!(target_os = "windows"),
         elevated: is_process_elevated(),
         elevation_source: elevation_source(),
-        real_run_enabled: temp_enabled,
-        destructive_commands: temp_enabled,
+        real_run_enabled: real_execution_enabled,
+        destructive_commands: real_execution_enabled,
         scan_known_roots: true,
         simulate_cleanup_plan: true,
         execute_cleanup_plan: true,
-        safe_executors_enabled: temp_enabled,
+        safe_executors_enabled: real_execution_enabled,
         executor_flags: ExecutorFeatureFlags {
             temp_cleanup_executor: temp_enabled,
+            project_dependency_executor: project_dependency_enabled,
             recycle_bin_executor: false,
             browser_cache_executor: false,
             tool_native_prune_executors: false,
         },
-        reason: if temp_enabled {
+        reason: if temp_enabled && project_dependency_enabled {
+            "Scoped temp and project dependency executors are enabled by environment flags."
+        } else if temp_enabled {
             "First-safe temp cleanup executor is enabled by SPACEGUARD_ENABLE_TEMP_EXECUTOR."
+        } else if project_dependency_enabled {
+            "Reviewed project dependency executor is enabled by SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR."
         } else {
-            "Real executors are disabled until SPACEGUARD_ENABLE_TEMP_EXECUTOR is enabled on Windows."
+            "Real executors are disabled until a scoped executor flag is enabled on Windows."
         }
         .to_string(),
     }
@@ -1765,7 +2172,10 @@ fn drive_inventory_classification(name: &str) -> &'static str {
     if matches!(lower.as_str(), "users" | "documents and settings") {
         return "user-data-review";
     }
-    if matches!(lower.as_str(), "hiberfil.sys" | "pagefile.sys" | "swapfile.sys") {
+    if matches!(
+        lower.as_str(),
+        "hiberfil.sys" | "pagefile.sys" | "swapfile.sys"
+    ) {
         return "advanced-system";
     }
     "unknown-review"
@@ -2271,26 +2681,81 @@ fn review_items_for_path(
     match recipe_id {
         "downloads-installers" => top_file_items(recipe_id, root, kind, request, 12),
         "large-user-files" => large_user_file_items(root, request, 15),
-        "node-modules-old" => vec![ScanItem {
-            id: stable_item_id(recipe_id, root),
-            name: root
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("node_modules")
-                .to_string(),
-            path: path_to_string(root),
-            bytes: stats.bytes,
-            age_days: path_age_days(root).unwrap_or(0),
-            kind: "project dependency folder".to_string(),
-            recommendation: if path_age_days(root).unwrap_or(0) >= 60 {
-                "review".to_string()
-            } else {
-                "keep".to_string()
-            },
-            reason: "Dependency folder can be recreated, but the parent project should be checked first.".to_string(),
-        }],
+        "node-modules-old" => vec![project_dependency_scan_item(recipe_id, root, stats.bytes)],
         "android-studio" => top_child_items(recipe_id, root, request, 10),
         _ => Vec::new(),
+    }
+}
+
+fn project_dependency_scan_item(recipe_id: &str, node_modules: &Path, bytes: u64) -> ScanItem {
+    let age_days = path_age_days(node_modules).unwrap_or(0);
+    let project_root = node_modules.parent().unwrap_or(node_modules);
+    let project_name = project_root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("project");
+    let package_json = project_root.join("package.json");
+    let package_text = fs::read_to_string(&package_json).unwrap_or_default();
+    let package_lower = package_text.to_ascii_lowercase();
+    let has_package_json = package_json.exists();
+    let has_lockfile = [
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        "bun.lockb",
+    ]
+    .iter()
+    .any(|name| project_root.join(name).exists());
+    let expo_hint = package_lower.contains("\"expo\"") || package_lower.contains("expo-router");
+    let react_native_hint = package_lower.contains("react-native");
+    let recommendation = if has_package_json && age_days >= 60 {
+        "review"
+    } else {
+        "keep"
+    };
+    let kind = if expo_hint {
+        "Expo project dependency folder"
+    } else if react_native_hint {
+        "React Native project dependency folder"
+    } else {
+        "project dependency folder"
+    };
+    let mut signals = Vec::new();
+    signals.push(format!("project={project_name}"));
+    if has_package_json {
+        signals.push("package.json".to_string());
+    }
+    if has_lockfile {
+        signals.push("lockfile".to_string());
+    }
+    if expo_hint {
+        signals.push("expo".to_string());
+    }
+    if react_native_hint {
+        signals.push("react-native".to_string());
+    }
+
+    ScanItem {
+        id: stable_item_id(recipe_id, node_modules),
+        name: format!("{project_name}\\node_modules"),
+        path: path_to_string(node_modules),
+        bytes,
+        age_days,
+        kind: kind.to_string(),
+        recommendation: recommendation.to_string(),
+        reason: if recommendation == "review" {
+            format!(
+                "Rebuildable dependency folder is about {age_days} day(s) old; signals: {}.",
+                signals.join(", ")
+            )
+        } else if !has_package_json {
+            "Dependency folder has no readable parent package.json; keep until the project is inspected.".to_string()
+        } else {
+            format!(
+                "Project dependency folder is recent or ambiguous; signals: {}.",
+                signals.join(", ")
+            )
+        },
     }
 }
 

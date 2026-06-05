@@ -47,7 +47,14 @@ $env:SPACEGUARD_ENABLE_TEMP_EXECUTOR="1"
 npm run native:dev
 ```
 
-That flag enables only `known-temp-delete`. It does not enable Recycle Bin cleanup, browser cache deletion, tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, or project-folder deletion.
+Optional reviewed project dependency executor:
+
+```powershell
+$env:SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR="1"
+npm run native:dev
+```
+
+Those flags enable only their named routes: `known-temp-delete` and reviewed `node_modules` cleanup. They do not enable Recycle Bin cleanup, browser cache deletion, tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, or arbitrary project-folder deletion.
 
 ## Read-Only Real Scan
 
@@ -93,9 +100,10 @@ In the app:
 32. If resuming from an exported `spaceguard-validation-pack/v1` file, paste the JSON or markdown export into **Validation pack import**. Imported rows still need reviewer and artifact detail before they can pass release gates.
 33. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; rejection-mode evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
 34. Use **Real temp cleanup** only for the `known-temp-delete` route after a current plan, scan fingerprint, and consent receipt are present. After execution, run a fresh native scan to verify free space.
-35. Record native beta distribution evidence with reviewer and artifact paths. Use [NATIVE_BETA_DISTRIBUTION.md](./NATIVE_BETA_DISTRIBUTION.md) for install/uninstall, support, signing, and public-claim evidence.
-36. Export the local evidence backup before clearing browser storage or switching profiles. Importing this backup restores evidence ledgers and run history only; it does not restore scan results, selected actions, consent, runtime capability, or cleanup authority.
-37. Export the workflow handoff for resume guidance, the redacted support bundle for diagnostics, and the beta handoff manifest to label which artifacts are public-safe, internal-only, or path-level. Export the release review packet, dry-run report, validation pack, and native beta evidence ledger when review or path-level evidence is needed.
+35. Use **Reviewed project dependencies** only after native scan item review shows exact `node_modules` targets, package metadata, and the user has marked those items **Remove**. Expo and React Native hints are advisory context; they do not auto-select a target.
+36. Record native beta distribution evidence with reviewer and artifact paths. Use [NATIVE_BETA_DISTRIBUTION.md](./NATIVE_BETA_DISTRIBUTION.md) for install/uninstall, support, signing, and public-claim evidence.
+37. Export the local evidence backup before clearing browser storage or switching profiles. Importing this backup restores evidence ledgers and run history only; it does not restore scan results, selected actions, consent, runtime capability, or cleanup authority.
+38. Export the workflow handoff for resume guidance, the redacted support bundle for diagnostics, and the beta handoff manifest to label which artifacts are public-safe, internal-only, or path-level. Export the release review packet, dry-run report, validation pack, and native beta evidence ledger when review or path-level evidence is needed.
 
 ## Disposable Fixture Run
 

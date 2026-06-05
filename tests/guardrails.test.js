@@ -4141,5 +4141,28 @@ const assert = require("assert");
     "preflight should allow simulation when only stale ledger entries exist"
   );
 
+  const scopedProjectAi = guard.buildAIAgentIntegration({
+    providerConfig: { connected: true, provider: "openai" },
+    runtimeCapabilities: {
+      realRunEnabled: true,
+      destructiveCommands: true,
+      safeExecutorsEnabled: true,
+      executorFlags: {
+        projectDependencyExecutor: true,
+        tempCleanupExecutor: false,
+        recycleBinExecutor: false,
+        browserCacheExecutor: false,
+        toolNativePruneExecutors: false
+      }
+    }
+  });
+  assert.strictEqual(scopedProjectAi.status, "advisory-connector-ready", "AI advisor should remain available for scoped project dependency execution");
+  assert.strictEqual(scopedProjectAi.directToolAccess, false, "AI advisor must not receive direct tool access");
+  assert.strictEqual(
+    scopedProjectAi.rows.find((row) => row.id === "mutation-boundary").status,
+    "scoped-executor-visible",
+    "AI advisor should label scoped executor visibility without granting authority"
+  );
+
   console.log("guardrails ok");
 })();
