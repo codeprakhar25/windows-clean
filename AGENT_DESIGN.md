@@ -288,6 +288,12 @@ First-safe implementation work-order invariant:
 - A ready work order allows implementation planning only. It cannot expose run buttons, write capability, reclaimed bytes, or release readiness.
 - Unsafe runtime or probe signals must block every work item from being marked `ready-to-build`.
 
+Temp executor activation invariant:
+
+- Activation review applies only to `known-temp-delete` and only after disabled scaffold and per-action native preflight evidence exist.
+- The gate must name the current blocker: missing preflight, disabled `tempCleanupExecutor`, validation/work-order blockers, release/write-readiness blockers, or unsafe runtime.
+- The gate is review evidence only. It must keep `activationAllowed=false`, `mutationEnabled=false`, `realRunAllowed=false`, and `destructiveActionAvailable=false` in this build.
+
 Write boundary probe invariant:
 
 - The probe can call `execute_cleanup_plan` only to prove the native boundary rejects the current request shape.

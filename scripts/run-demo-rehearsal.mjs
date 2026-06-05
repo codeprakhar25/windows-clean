@@ -28,6 +28,7 @@ import {
   buildTaskPowerBroker,
   buildTaskPowerCatalog,
   buildTaskPowerLeaseAudit,
+  buildTempExecutorActivationGate,
   buildValidationEvidencePack,
   buildWriteBoundaryProbe,
   buildWriteReadiness,
@@ -209,6 +210,15 @@ const firstSafeImplementationWorkOrder = buildFirstSafeImplementationWorkOrder({
   writeBoundaryProbe,
   runtimeCapabilities
 });
+const tempExecutorActivationGate = buildTempExecutorActivationGate({
+  runtimeCapabilities,
+  firstSafeValidationGate,
+  firstSafeImplementationWorkOrder,
+  writeBoundaryProbe,
+  releaseGate,
+  writeReadiness,
+  realExecutorCapsule
+});
 const taskPowerCatalog = buildTaskPowerCatalog({
   actionList,
   selectedIds,
@@ -347,6 +357,8 @@ const failures = [
   ["real cleanup locked", !demoRehearsalRunbook.realCleanupEnabled],
   ["first-safe work order validation-blocked", firstSafeImplementationWorkOrder.status === "validation-blocked"],
   ["first-safe work order keeps real run locked", !firstSafeImplementationWorkOrder.realRunAllowed && !firstSafeImplementationWorkOrder.destructiveActionAvailable],
+  ["temp activation preflight missing", tempExecutorActivationGate.status === "preflight-missing"],
+  ["temp activation keeps mutation locked", !tempExecutorActivationGate.activationAllowed && !tempExecutorActivationGate.mutationEnabled],
   ["zero real-run routes", demoRehearsalRunbook.counts.realRun === 0 && planLock.counts.realRun === 0],
   ["history current", runHistory.length === 1 && runHistory[0].planId === planSnapshot.id]
 ].filter(([, passed]) => !passed);
@@ -365,6 +377,7 @@ const summary = {
   safetyStatus: safetyInterlock.status,
   launchStatus: dryRunLaunchGuard.status,
   workOrderStatus: firstSafeImplementationWorkOrder.status,
+  activationGateStatus: tempExecutorActivationGate.status,
   realRunEnabled: false,
   destructiveCommands: false,
   failures: failures.map(([label]) => label)

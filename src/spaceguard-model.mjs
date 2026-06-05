@@ -6422,6 +6422,299 @@ export function buildFirstSafeImplementationWorkOrder({
   };
 }
 
+export function buildTempExecutorActivationGate({
+  runtimeCapabilities = {},
+  firstSafeValidationGate = null,
+  firstSafeImplementationWorkOrder = null,
+  writeBoundaryProbe = null,
+  releaseGate = null,
+  writeReadiness = null,
+  realExecutorCapsule = null
+} = {}) {
+  const routeId = "known-temp-delete";
+  const requirement = getExecutorRouteRequirement(routeId);
+  const contract = firstSafeExecutorContracts[routeId];
+  const observedRouteId =
+    realExecutorCapsule?.route?.id ||
+    firstSafeImplementationWorkOrder?.route?.id ||
+    firstSafeValidationGate?.route?.id ||
+    writeBoundaryProbe?.route?.id ||
+    writeBoundaryProbe?.executorScaffold?.route ||
+    "";
+  const routeSelected = observedRouteId === routeId;
+  const executorFlags = normalizeExecutorFeatureFlags(runtimeCapabilities?.executorFlags || {});
+  const featureFlagEnabled = Boolean(executorFlags.tempCleanupExecutor);
+  const scaffold = normalizeWriteExecutorScaffold(writeBoundaryProbe?.executorScaffold);
+  const scaffoldPresent = Boolean(scaffold && scaffold.route === routeId && scaffold.featureFlag === contract.featureFlag);
+  const tempEntries = Array.isArray(writeBoundaryProbe?.entries)
+    ? writeBoundaryProbe.entries.filter((entry) => entry.route === routeId || (!entry.route && entry.id === "windows-temp"))
+    : [];
+  const preflightChecks = tempEntries.flatMap((entry) => normalizeWritePreflightChecks(entry.preflightChecks));
+  const preflightBlocked = preflightChecks.filter((check) => check.status === "blocked").length;
+  const preflightStatus = tempEntries.find((entry) => entry.preflightStatus)?.preflightStatus || "";
+  const preflightAttached = Boolean(writeBoundaryProbe?.rejectionEvidence && tempEntries.length > 0 && preflightChecks.length > 0);
+  const validationReady = Boolean(firstSafeValidationGate?.implementationPlanningReady);
+  const workOrderReady = Boolean(firstSafeImplementationWorkOrder?.implementationWorkAllowed);
+  const releaseReady = Boolean(releaseGate?.readyForRealRun);
+  const writeReady = Boolean(writeReadiness?.readyForRealExecution);
+  const unsafeSignal = Boolean(
+    runtimeCapabilities?.realRunEnabled ||
+      runtimeCapabilities?.destructiveCommands ||
+      runtimeCapabilities?.safeExecutorsEnabled ||
+      scaffold?.mutationEnabled ||
+      firstSafeValidationGate?.destructiveActionAvailable ||
+      firstSafeImplementationWorkOrder?.destructiveActionAvailable ||
+      realExecutorCapsule?.destructiveActionAvailable ||
+      writeBoundaryProbe?.accepted ||
+      writeBoundaryProbe?.realRunEnabled ||
+      writeBoundaryProbe?.destructiveCommands ||
+      Number(writeBoundaryProbe?.counts?.bytes || 0) > 0 ||
+      writeBoundaryProbe?.status === "unsafe-signal"
+  );
+  const rows = [
+    buildTempExecutorActivationRow({
+      id: "temp-route",
+      label: "Temp route selected",
+      passed: routeSelected,
+      blocked: unsafeSignal,
+      status: routeSelected ? "passed" : "missing-route",
+      detail: routeSelected
+        ? `${requirement.title} is the activation route under review.`
+        : "Select the known temp route before activation can be reviewed.",
+      evidence: observedRouteId || "none"
+    }),
+    buildTempExecutorActivationRow({
+      id: "disabled-scaffold",
+      label: "Disabled native scaffold",
+      passed: scaffoldPresent && !scaffold?.mutationEnabled,
+      blocked: unsafeSignal || Boolean(scaffold?.mutationEnabled),
+      status: scaffoldPresent ? scaffold.status || "present" : "missing-scaffold",
+      detail: scaffoldPresent
+        ? scaffold.reason || "Native write boundary returned a disabled temp executor scaffold."
+        : "Run the native write-boundary probe and capture the disabled temp executor scaffold.",
+      evidence: scaffold?.featureFlag || contract.featureFlag
+    }),
+    buildTempExecutorActivationRow({
+      id: "preflight-evidence",
+      label: "Rejecting preflight evidence",
+      passed: preflightAttached,
+      blocked: unsafeSignal,
+      status: preflightAttached ? preflightStatus || "recorded" : "missing-preflight",
+      detail: preflightAttached
+        ? `${preflightChecks.length} preflight check(s) recorded; ${preflightBlocked} remain blocked before mutation.`
+        : "Activation requires per-action native preflight checks with zero bytes and rejected entries.",
+      evidence: writeBoundaryProbe?.status || "not-run"
+    }),
+    buildTempExecutorActivationRow({
+      id: "feature-flag",
+      label: "Route feature flag",
+      passed: featureFlagEnabled,
+      blocked: unsafeSignal,
+      status: featureFlagEnabled ? "enabled" : "disabled",
+      detail: featureFlagEnabled
+        ? `${contract.featureFlag} is enabled for review, but this gate still does not mutate.`
+        : `${contract.featureFlag} is disabled, so the scaffold cannot turn into a mutating executor.`,
+      evidence: contract.featureFlag
+    }),
+    buildTempExecutorActivationRow({
+      id: "validation-gate",
+      label: "Route validation gate",
+      passed: validationReady,
+      blocked: unsafeSignal,
+      status: firstSafeValidationGate?.status || "missing",
+      detail: validationReady
+        ? "Route-specific Windows validation evidence is ready for implementation review."
+        : firstSafeValidationGate?.primary || "Route validation evidence is still incomplete.",
+      evidence: `${firstSafeValidationGate?.counts?.passedChecks || 0}/${firstSafeValidationGate?.counts?.requiredChecks || 0} checks`
+    }),
+    buildTempExecutorActivationRow({
+      id: "implementation-work-order",
+      label: "Implementation work order",
+      passed: workOrderReady,
+      blocked: unsafeSignal,
+      status: firstSafeImplementationWorkOrder?.status || "missing",
+      detail: workOrderReady
+        ? "Implementation work order is ready for a disabled, test-first temp executor."
+        : firstSafeImplementationWorkOrder?.primary || "Implementation work order is still blocked.",
+      evidence: `${firstSafeImplementationWorkOrder?.counts?.readyToBuild || 0}/${firstSafeImplementationWorkOrder?.counts?.workItems || 0} items`
+    }),
+    buildTempExecutorActivationRow({
+      id: "release-gate",
+      label: "Release gate",
+      passed: releaseReady,
+      blocked: unsafeSignal,
+      status: releaseReady ? "ready" : "closed",
+      detail: releaseReady
+        ? "Release evidence is available for review."
+        : releaseGate?.blockedReason || "Release gate is closed.",
+      evidence: `${releaseGate?.passedCount || 0}/${releaseGate?.totalCount || 0} checks`
+    }),
+    buildTempExecutorActivationRow({
+      id: "write-readiness",
+      label: "Final write readiness",
+      passed: writeReady,
+      blocked: unsafeSignal,
+      status: writeReadiness?.status || "missing",
+      detail: writeReady
+        ? "Write readiness says real execution is ready, but this activation gate still requires separate release action."
+        : writeReadiness?.primary || "Write readiness is not ready for real execution.",
+      evidence: writeReadiness?.readyForRealExecution ? "ready" : "locked"
+    }),
+    buildTempExecutorActivationRow({
+      id: "mutation-lock",
+      label: "Mutation lock",
+      passed: !unsafeSignal,
+      blocked: unsafeSignal,
+      status: unsafeSignal ? "unsafe-signal" : "locked",
+      detail: unsafeSignal
+        ? "A write-capability signal appeared before route activation completed."
+        : "No mutation, destructive command, accepted write, or reclaimed-byte signal is visible.",
+      evidence: "realRunAllowed=false"
+    })
+  ];
+  const blockers = dedupeBlockers([
+    !routeSelected
+      ? {
+          id: "temp-route",
+          label: "Temp route missing",
+          detail: "Activation review only applies to the known-temp-delete route."
+        }
+      : null,
+    unsafeSignal
+      ? {
+          id: "unsafe-runtime",
+          label: "Unsafe write signal",
+          detail: "Runtime, scaffold, probe, or capsule exposes write capability; activation review must stop."
+        }
+      : null,
+    !scaffoldPresent
+      ? {
+          id: "disabled-scaffold",
+          label: "Disabled scaffold missing",
+          detail: "The native write boundary has not returned the disabled temp executor scaffold."
+        }
+      : null,
+    !preflightAttached
+      ? {
+          id: "preflight-evidence",
+          label: "Preflight evidence missing",
+          detail: "The temp route needs native per-action preflight checks before activation can be reviewed."
+        }
+      : null,
+    !featureFlagEnabled
+      ? {
+          id: "feature-flag",
+          label: "Feature flag disabled",
+          detail: `${contract.featureFlag} is off, so the scaffold must stay non-mutating.`
+        }
+      : null,
+    !validationReady
+      ? {
+          id: "validation-gate",
+          label: "Validation gate blocked",
+          detail: firstSafeValidationGate?.primary || "Route validation evidence is incomplete."
+        }
+      : null,
+    !workOrderReady
+      ? {
+          id: "implementation-work-order",
+          label: "Work order blocked",
+          detail: firstSafeImplementationWorkOrder?.primary || "Implementation work order is not ready."
+        }
+      : null,
+    !releaseReady
+      ? {
+          id: "release-gate",
+          label: "Release gate closed",
+          detail: releaseGate?.blockedReason || "Release review is not ready."
+        }
+      : null,
+    !writeReady
+      ? {
+          id: "write-readiness",
+          label: "Write readiness locked",
+          detail: writeReadiness?.primary || "Final write readiness is still locked."
+        }
+      : null
+  ].filter(Boolean));
+  const status = unsafeSignal
+    ? "unsafe-runtime"
+    : !routeSelected
+      ? "route-missing"
+      : !scaffoldPresent || !preflightAttached
+        ? "preflight-missing"
+        : !featureFlagEnabled
+          ? "feature-flag-disabled"
+          : !validationReady || !workOrderReady
+            ? "validation-blocked"
+            : !releaseReady || !writeReady
+              ? "release-blocked"
+              : "activation-review-ready";
+
+  return {
+    schemaVersion: "spaceguard-temp-executor-activation-gate/v1",
+    status,
+    tone: status === "activation-review-ready" ? "safe" : status === "unsafe-runtime" || status === "route-missing" ? "restricted" : "review",
+    route: {
+      id: routeId,
+      title: requirement.title,
+      lane: requirement.lane,
+      phase: requirement.phase,
+      featureFlag: contract.featureFlag
+    },
+    activationAllowed: false,
+    realRunAllowed: false,
+    realRunEnabled: false,
+    mutationEnabled: false,
+    destructiveActionAvailable: false,
+    featureFlag: {
+      id: contract.featureFlag,
+      enabled: featureFlagEnabled
+    },
+    scaffold: {
+      present: scaffoldPresent,
+      status: scaffold?.status || "missing",
+      validationStatus: scaffold?.validationStatus || "",
+      mutationEnabled: Boolean(scaffold?.mutationEnabled),
+      reason: scaffold?.reason || ""
+    },
+    preflight: {
+      attached: preflightAttached,
+      status: preflightStatus || writeBoundaryProbe?.status || "not-run",
+      checks: preflightChecks,
+      blocked: preflightBlocked
+    },
+    validation: {
+      status: firstSafeValidationGate?.status || "missing",
+      ready: validationReady
+    },
+    workOrder: {
+      status: firstSafeImplementationWorkOrder?.status || "missing",
+      ready: workOrderReady
+    },
+    release: {
+      gateReady: releaseReady,
+      writeReady,
+      releaseStatus: releaseGate?.readyForRealRun ? "ready" : "closed",
+      writeStatus: writeReadiness?.status || "missing"
+    },
+    rows,
+    blockedRows: rows.filter((row) => !row.passed),
+    blockers,
+    counts: {
+      checks: rows.length,
+      passed: rows.filter((row) => row.passed).length,
+      blocked: rows.filter((row) => !row.passed).length,
+      blockers: blockers.length,
+      preflightChecks: preflightChecks.length,
+      preflightBlocked,
+      realRun: 0
+    },
+    primary: getTempExecutorActivationGatePrimary(status, { contract, firstSafeValidationGate, writeBoundaryProbe, blockers }),
+    steps: buildTempExecutorActivationGateSteps(status, { blockers, contract })
+  };
+}
+
 export function buildToolCommandInventory({
   actionList = actions,
   executorPlan = null,
@@ -8200,6 +8493,7 @@ export function buildReport({
   firstSafeExecutorContract = null,
   firstSafeValidationGate = null,
   firstSafeImplementationWorkOrder = null,
+  tempExecutorActivationGate = null,
   writeBoundaryProbe = null,
   ledgerHistorySummary = null,
   storageStrategy = null,
@@ -8997,6 +9291,31 @@ export function buildReport({
           firstSafeImplementationWorkOrder.acceptanceTests.length
             ? firstSafeImplementationWorkOrder.acceptanceTests.map((test) => `- Test: ${test.label} | ${test.detail}`).join("\n")
             : "- No acceptance tests."
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Temp Executor Activation Gate",
+    tempExecutorActivationGate
+      ? [
+          `- Status: ${tempExecutorActivationGate.status}`,
+          `- Route: ${tempExecutorActivationGate.route.title} (${tempExecutorActivationGate.route.id})`,
+          `- Activation allowed: ${tempExecutorActivationGate.activationAllowed ? "yes" : "no"}`,
+          `- Real run allowed: ${tempExecutorActivationGate.realRunAllowed ? "yes" : "no"}`,
+          `- Mutation enabled: ${tempExecutorActivationGate.mutationEnabled ? "yes" : "no"}`,
+          `- Destructive action available: ${tempExecutorActivationGate.destructiveActionAvailable ? "yes" : "no"}`,
+          `- Feature flag: ${tempExecutorActivationGate.featureFlag.id} | ${tempExecutorActivationGate.featureFlag.enabled ? "enabled" : "disabled"}`,
+          `- Scaffold: ${tempExecutorActivationGate.scaffold.present ? `${tempExecutorActivationGate.scaffold.status} | mutation=${tempExecutorActivationGate.scaffold.mutationEnabled ? "enabled" : "disabled"}` : "missing"}`,
+          `- Preflight: ${tempExecutorActivationGate.preflight.status} | checks=${tempExecutorActivationGate.counts.preflightChecks} | blocked=${tempExecutorActivationGate.counts.preflightBlocked}`,
+          `- Validation gate: ${tempExecutorActivationGate.validation.status}`,
+          `- Work order: ${tempExecutorActivationGate.workOrder.status}`,
+          `- Write readiness: ${tempExecutorActivationGate.release.writeStatus}`,
+          `- Primary: ${tempExecutorActivationGate.primary}`,
+          tempExecutorActivationGate.rows.length
+            ? tempExecutorActivationGate.rows.map((row) => `- ${row.label}: ${row.status} | ${row.detail}`).join("\n")
+            : "- No activation rows.",
+          tempExecutorActivationGate.blockers.length
+            ? tempExecutorActivationGate.blockers.map((blocker) => `- Blocker: ${blocker.label} | ${blocker.detail}`).join("\n")
+            : "- No activation blockers."
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -11592,6 +11911,66 @@ function buildFirstSafeImplementationWorkOrderSteps(status, requirement, workIte
   return blocked.length
     ? blocked.map((item) => `${item.label}: ${item.detail}`)
     : ["Complete first-safe validation evidence.", "Keep real cleanup locked.", "Regenerate the implementation work order."];
+}
+
+function buildTempExecutorActivationRow({ id, label, passed = false, blocked = false, status = "", detail = "", evidence = "" } = {}) {
+  return {
+    id,
+    label,
+    status: blocked ? "blocked" : passed ? "passed" : status || "waiting",
+    passed: Boolean(passed && !blocked),
+    detail,
+    evidence
+  };
+}
+
+function getTempExecutorActivationGatePrimary(status, { contract = null, firstSafeValidationGate = null, writeBoundaryProbe = null, blockers = [] } = {}) {
+  if (status === "activation-review-ready") {
+    return `${contract?.title || "Temp executor"} has activation evidence for review, but this build still exposes no destructive action.`;
+  }
+  if (status === "unsafe-runtime") return "A write-capability signal appeared before temp executor activation was approved.";
+  if (status === "route-missing") return "Select the known temp route before reviewing temp executor activation.";
+  if (status === "preflight-missing") return writeBoundaryProbe?.primary || "Capture disabled scaffold and native preflight evidence before activation review.";
+  if (status === "feature-flag-disabled") return `${contract?.featureFlag || "tempCleanupExecutor"} is disabled, so the temp scaffold cannot mutate.`;
+  if (status === "validation-blocked") return firstSafeValidationGate?.primary || "Temp executor activation is blocked by route validation or work-order evidence.";
+  if (status === "release-blocked") return "Temp executor activation is blocked by release/write readiness evidence.";
+  const first = blockers[0];
+  return first ? `${first.label}: ${first.detail}` : "Temp executor activation is blocked.";
+}
+
+function buildTempExecutorActivationGateSteps(status, { blockers = [], contract = null } = {}) {
+  if (status === "activation-review-ready") {
+    return [
+      "Prepare a separate release review for the temp route.",
+      "Keep the UI destructive action hidden until release approval is explicit.",
+      "Rerun post-activation rejection, rollback, and rescan proof before any real cleanup build."
+    ];
+  }
+  if (status === "unsafe-runtime") {
+    return [
+      "Stop activation review.",
+      "Disable runtime write capability and destructive command signals.",
+      "Rerun the disabled scaffold and preflight probe after the runtime is dry-run locked."
+    ];
+  }
+  if (status === "preflight-missing") {
+    return [
+      "Run the native write-boundary probe for the known temp route.",
+      "Confirm every entry is rejected with zero bytes.",
+      "Record per-action preflight checks and the disabled executor scaffold."
+    ];
+  }
+  if (status === "feature-flag-disabled") {
+    return [
+      `Keep ${contract?.featureFlag || "tempCleanupExecutor"} disabled in public builds.`,
+      "Finish validation, rollback, and release evidence while the scaffold still rejects.",
+      "Treat flag enablement as a separate release decision."
+    ];
+  }
+  const visibleBlockers = blockers.slice(0, 3);
+  return visibleBlockers.length
+    ? visibleBlockers.map((blocker) => `${blocker.label}: ${blocker.detail}`)
+    : ["Complete activation evidence.", "Keep mutation locked.", "Review the temp route again."];
 }
 
 function normalizeWriteExecutorScaffold(value = null) {

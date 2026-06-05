@@ -2982,6 +2982,50 @@ const assert = require("assert");
   assert.strictEqual(rejectedWriteBoundaryProbe.counts.rejected, 1, "rejected probe should count rejected entries");
   assert.strictEqual(rejectedWriteBoundaryProbe.entries[0].rejectCode, "real-executor-disabled", "rejected probe should preserve native reject codes");
   assert.strictEqual(rejectedWriteBoundaryProbe.counts.bytes, 0, "rejected probe must not reclaim bytes");
+  const missingPreflightActivationGate = guard.buildTempExecutorActivationGate({
+    runtimeCapabilities: {
+      available: true,
+      executeCleanupPlan: true,
+      realRunEnabled: false,
+      destructiveCommands: false,
+      safeExecutorsEnabled: false,
+      executorFlags: { tempCleanupExecutor: false }
+    },
+    firstSafeValidationGate: blockedFirstSafeValidationGate,
+    firstSafeImplementationWorkOrder: blockedFirstSafeWorkOrder,
+    writeBoundaryProbe: defaultWriteBoundaryProbe,
+    releaseGate: enabledGate,
+    writeReadiness: currentBuildWriteReadiness,
+    realExecutorCapsule: currentBuildExecutorCapsule
+  });
+  assert.strictEqual(missingPreflightActivationGate.schemaVersion, "spaceguard-temp-executor-activation-gate/v1", "temp activation gate should expose a schema version");
+  assert.strictEqual(missingPreflightActivationGate.status, "preflight-missing", "temp activation should require native scaffold and preflight evidence");
+  assert.strictEqual(missingPreflightActivationGate.realRunAllowed, false, "missing-preflight activation gate must not allow real cleanup");
+  assert.strictEqual(missingPreflightActivationGate.mutationEnabled, false, "missing-preflight activation gate must keep mutation locked");
+  assert(missingPreflightActivationGate.blockers.some((blocker) => blocker.id === "preflight-evidence"), "missing-preflight activation gate should name the missing preflight blocker");
+  const disabledFlagActivationGate = guard.buildTempExecutorActivationGate({
+    runtimeCapabilities: {
+      available: true,
+      executeCleanupPlan: true,
+      realRunEnabled: false,
+      destructiveCommands: false,
+      safeExecutorsEnabled: false,
+      executorFlags: { tempCleanupExecutor: false }
+    },
+    firstSafeValidationGate: readyFirstSafeValidationGate,
+    firstSafeImplementationWorkOrder: readyFirstSafeWorkOrder,
+    writeBoundaryProbe: rejectedWriteBoundaryProbe,
+    releaseGate: enabledGate,
+    writeReadiness: currentBuildWriteReadiness,
+    realExecutorCapsule: currentBuildExecutorCapsule
+  });
+  assert.strictEqual(disabledFlagActivationGate.status, "feature-flag-disabled", "disabled temp flag should be the blocker after native preflight evidence exists");
+  assert.strictEqual(disabledFlagActivationGate.featureFlag.enabled, false, "temp activation should surface the disabled route flag");
+  assert.strictEqual(disabledFlagActivationGate.scaffold.present, true, "temp activation should see the disabled native scaffold");
+  assert.strictEqual(disabledFlagActivationGate.scaffold.mutationEnabled, false, "temp activation scaffold must remain non-mutating");
+  assert.strictEqual(disabledFlagActivationGate.preflight.blocked, 1, "temp activation should preserve blocked native preflight count");
+  assert.strictEqual(disabledFlagActivationGate.activationAllowed, false, "disabled temp activation must not allow activation");
+  assert(disabledFlagActivationGate.blockers.some((blocker) => blocker.id === "feature-flag"), "disabled temp activation should name the feature flag blocker");
   const targetRejectedWriteBoundaryProbe = guard.buildWriteBoundaryProbe({
     nativeWriteBoundary: {
       status: "complete",
@@ -3087,6 +3131,18 @@ const assert = require("assert");
     runtimeCapabilities: { available: true, executeCleanupPlan: true, realRunEnabled: false, destructiveCommands: false }
   });
   assert.strictEqual(destructiveWriteBoundaryProbe.status, "unsafe-signal", "destructive command signal must be unsafe");
+  const unsafeActivationGate = guard.buildTempExecutorActivationGate({
+    runtimeCapabilities: { available: true, realRunEnabled: true, destructiveCommands: true, executorFlags: { tempCleanupExecutor: false } },
+    firstSafeValidationGate: readyFirstSafeValidationGate,
+    firstSafeImplementationWorkOrder: readyFirstSafeWorkOrder,
+    writeBoundaryProbe: destructiveWriteBoundaryProbe,
+    releaseGate: enabledGate,
+    writeReadiness: currentBuildWriteReadiness,
+    realExecutorCapsule: currentBuildExecutorCapsule
+  });
+  assert.strictEqual(unsafeActivationGate.status, "unsafe-runtime", "unsafe write signals should stop temp activation");
+  assert.strictEqual(unsafeActivationGate.realRunAllowed, false, "unsafe activation gate must not grant real execution");
+  assert(unsafeActivationGate.blockers.some((blocker) => blocker.id === "unsafe-runtime"), "unsafe activation gate should identify runtime write capability");
   const releasePacketRuntime = { available: true, realRunEnabled: false, destructiveCommands: false, executeCleanupPlan: true };
   const releasePacketGate = guard.buildReleaseGate({
     scanMode: "native-readonly",
@@ -3210,6 +3266,7 @@ const assert = require("assert");
     firstSafeExecutorContract: firstSafeContract,
     firstSafeValidationGate: readyFirstSafeValidationGate,
     firstSafeImplementationWorkOrder: readyFirstSafeWorkOrder,
+    tempExecutorActivationGate: disabledFlagActivationGate,
     writeBoundaryProbe: rejectedWriteBoundaryProbe
   });
   assert(writeReadinessReport.includes("## Write Readiness"), "dry-run report should include write readiness");
@@ -3223,6 +3280,9 @@ const assert = require("assert");
   assert(writeReadinessReport.includes("Bytes reclaimed: 0 GB"), "write boundary probe report should not count recovered bytes");
   assert(writeReadinessReport.includes("## First-Safe Implementation Work Order"), "dry-run report should include the first-safe implementation work order");
   assert(writeReadinessReport.includes("Real run allowed: no"), "implementation work order report should keep real execution blocked");
+  assert(writeReadinessReport.includes("## Temp Executor Activation Gate"), "dry-run report should include temp executor activation gate");
+  assert(writeReadinessReport.includes("Activation allowed: no"), "activation gate report should keep activation locked");
+  assert(writeReadinessReport.includes("Feature flag: tempCleanupExecutor | disabled"), "activation gate report should expose the disabled temp flag");
   const hypotheticalRealExecutorPlan = {
     ...tempExecutorPlan,
     realRunEnabled: true,

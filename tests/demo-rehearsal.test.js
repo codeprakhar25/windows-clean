@@ -11,6 +11,7 @@ assert.strictEqual(summary.runbookStatus, "demo-evidence-ready", "demo rehearsal
 assert.strictEqual(summary.safetyStatus, "dry-run-interlocked", "demo rehearsal should be dry-run interlocked");
 assert.strictEqual(summary.launchStatus, "dry-run-launch-ready", "demo rehearsal should be launch-ready");
 assert.strictEqual(summary.workOrderStatus, "validation-blocked", "demo rehearsal should keep first-safe work order blocked by missing Windows evidence");
+assert.strictEqual(summary.activationGateStatus, "preflight-missing", "demo rehearsal should keep temp activation blocked before native preflight evidence");
 assert.strictEqual(summary.realRunEnabled, false, "demo rehearsal must not enable real execution");
 assert.strictEqual(summary.destructiveCommands, false, "demo rehearsal must not expose destructive commands");
 assert(summary.planId.startsWith("plan-"), "demo rehearsal should bind a plan id");

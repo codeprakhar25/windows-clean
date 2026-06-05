@@ -89,6 +89,8 @@ The **First-safe validation gate** sits between the disabled request contract an
 
 The **First-safe work order** turns a passed validation gate into an engineering checklist for the next executor: native implementation boundary, target allowlist, forbidden-target rejection, disposable fixture tests, rollback/rescan proof, feature flag, and kill-switch review. It is not a cleanup command and still reports real run allowed as false.
 
+The **Temp executor activation** gate is the route-specific bridge between the disabled temp scaffold and any future real executor. It requires the known-temp route, disabled scaffold evidence, native preflight rows, the `tempCleanupExecutor` flag, validation gate, work order, release gate, and write readiness. Current builds report activation allowed as false, mutation disabled, and destructive action unavailable.
+
 The native runtime capability command is:
 
 ```txt
@@ -308,6 +310,8 @@ The first-safe executor contract turns that capsule into a concrete request-shap
 The first-safe validation gate converts that route contract plus Windows validation evidence into an implementation-planning decision. It shows each route-required check, fixture coverage, unsafe runtime signals, and blockers while keeping `realRunAllowed=false` even when every route check passes.
 
 The first-safe work order is the handoff from validation into implementation. For the selected route it lists build items, acceptance tests, fixture ids, feature flag, rollback/rescan proof, and write-boundary reprobe requirements. A ready work order means an engineer can start the disabled executor slice; it does not mean the app can delete anything.
+
+The temp executor activation gate is the route-level decision after the work order. It explains why `known-temp-delete` still cannot become a mutating executor: missing preflight, disabled `tempCleanupExecutor`, validation blockers, release blockers, or unsafe runtime signals. Even a review-ready activation state keeps `activationAllowed=false`, `mutationEnabled=false`, and `realRunAllowed=false` in this build.
 
 The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` rejecting stub in the desktop shell, but success means rejection, not cleanup: `accepted=false`, all entries rejected with native reject codes, zero reclaimed bytes, and a native echo that matches the current first-safe executor contract. Target-scope reject codes are diagnostic only and do not count as passing rejection evidence. Probe entries are never ledger recovery.
 

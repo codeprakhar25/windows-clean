@@ -92,6 +92,7 @@ import {
   buildTaskPowerBroker,
   buildTaskPowerCatalog,
   buildTaskPowerLeaseAudit,
+  buildTempExecutorActivationGate,
   buildToolCommandInventory,
   buildUserDecisionReceipt,
   buildValidationEvidencePack,
@@ -675,6 +676,19 @@ export default function App() {
         runtimeCapabilities: runtimeCapabilities.result
       }),
     [firstSafeValidationGate, realExecutorCapsule, firstSafeExecutorContract, writeBoundaryProbe, runtimeCapabilities.result]
+  );
+  const tempExecutorActivationGate = useMemo(
+    () =>
+      buildTempExecutorActivationGate({
+        runtimeCapabilities: runtimeCapabilities.result,
+        firstSafeValidationGate,
+        firstSafeImplementationWorkOrder,
+        writeBoundaryProbe,
+        releaseGate,
+        writeReadiness,
+        realExecutorCapsule
+      }),
+    [runtimeCapabilities.result, firstSafeValidationGate, firstSafeImplementationWorkOrder, writeBoundaryProbe, releaseGate, writeReadiness, realExecutorCapsule]
   );
   const baseAgentQuestionQueue = useMemo(
     () =>
@@ -1757,6 +1771,7 @@ export default function App() {
       firstSafeExecutorContract,
       firstSafeValidationGate,
       firstSafeImplementationWorkOrder,
+      tempExecutorActivationGate,
       writeBoundaryProbe,
       ledgerHistorySummary,
       storageStrategy,
@@ -2267,6 +2282,7 @@ export default function App() {
             <FirstSafeExecutorContractPanel contract={firstSafeExecutorContract} />
             <FirstSafeValidationGatePanel gate={firstSafeValidationGate} />
             <FirstSafeImplementationWorkOrderPanel workOrder={firstSafeImplementationWorkOrder} />
+            <TempExecutorActivationGatePanel gate={tempExecutorActivationGate} />
             <WriteBoundaryProbePanel
               probe={writeBoundaryProbe}
               nativeWriteBoundary={nativeWriteBoundary}
@@ -5519,6 +5535,72 @@ function FirstSafeImplementationWorkOrderPanel({ workOrder }) {
             </div>
           </div>
         ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TempExecutorActivationGatePanel({ gate }) {
+  const visibleRows = gate.blockedRows.length ? gate.blockedRows : gate.rows;
+
+  return (
+    <Card id="temp-executor-activation-gate-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Temp executor activation
+          <Badge variant={gate.tone}>{gate.status}</Badge>
+        </CardTitle>
+        <CardDescription>{gate.primary}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <QueueStat label="Checks" value={`${gate.counts.passed}/${gate.counts.checks}`} tone={gate.counts.blocked ? "review" : "safe"} />
+          <QueueStat label="Flag" value={gate.featureFlag.enabled ? "on" : "off"} tone={gate.featureFlag.enabled ? "review" : "safe"} />
+          <QueueStat label="Preflight" value={gate.preflight.blocked ? `${gate.preflight.blocked} blocked` : gate.preflight.checks.length} tone={gate.preflight.attached ? "review" : "restricted"} />
+          <QueueStat label="Mutation" value={gate.mutationEnabled ? "enabled" : "locked"} tone={gate.mutationEnabled ? "restricted" : "safe"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">{gate.route.title}</span>
+            <Badge variant={gate.activationAllowed ? "restricted" : "safe"}>
+              {gate.activationAllowed ? "activation allowed" : "activation locked"}
+            </Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Feature flag: {gate.featureFlag.id} / {gate.featureFlag.enabled ? "enabled" : "disabled"}</span>
+            <span>Scaffold: {gate.scaffold.present ? `${gate.scaffold.status} / mutation ${gate.scaffold.mutationEnabled ? "enabled" : "disabled"}` : "missing"}</span>
+            <span>Preflight: {gate.preflight.status}</span>
+            <span>Validation: {gate.validation.status}</span>
+            <span>Work order: {gate.workOrder.status}</span>
+            <span>Write readiness: {gate.release.writeStatus}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {visibleRows.slice(0, 5).map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 text-sm font-medium">{row.label}</div>
+                <Badge variant={row.passed ? "safe" : row.status === "blocked" ? "restricted" : "review"}>{row.status}</Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">{row.detail}</p>
+              {row.evidence ? <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{row.evidence}</p> : null}
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 text-sm font-medium">Activation boundary</div>
+          <div className="flex flex-col gap-2">
+            {gate.steps.slice(0, 3).map((step) => (
+              <div key={step} className="grid grid-cols-[18px_1fr] gap-2 text-sm">
+                <Lock className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

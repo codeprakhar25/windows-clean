@@ -63,7 +63,7 @@ In the app:
 19. Add protected paths before planning any review-heavy route.
 20. Use **Custom root triage** for custom read-only findings. Mark each unknown folder Keep, Archive, Move, Inspect, or Escalate; these dispositions stay manual and cannot create executor routes.
 21. Use **Item review** for Downloads, large personal files, project artifacts, and Android Studio findings.
-22. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, **First-safe validation gate**, **First-safe work order**, **Release review packet**, **Validation evidence**, and **Product completion audit** to confirm real cleanup is still locked.
+22. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, **First-safe validation gate**, **First-safe work order**, **Temp executor activation**, **Release review packet**, **Validation evidence**, and **Product completion audit** to confirm real cleanup is still locked.
 23. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
 24. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
 25. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
@@ -155,6 +155,7 @@ For each Windows validation run, capture:
 - Real executor capsule route, code-path status, missing checks, and destructive-action availability.
 - First-safe validation gate status, route-required checks, fixture coverage, unsafe runtime status, and `realRunAllowed=false`.
 - First-safe work order status, build items, acceptance tests, feature flag, boundary reprobe state, and `realRunAllowed=false`.
+- Temp executor activation status, route flag state, scaffold status, preflight count, blockers, `activationAllowed=false`, and `mutationEnabled=false`.
 - Disabled temp executor scaffold status when probing `known-temp-delete`: route, `tempCleanupExecutor`, validation-required state, mutation disabled, and zero bytes.
 - Write-boundary preflight rows for request shape, target allowlist, mutation lock, feature flag, and validation evidence.
 - Write boundary probe state if the desktop runtime exposes `execute_cleanup_plan`; current evidence must show accepted false, rejected entries, zero bytes, matching first-safe contract echo, and no mutation.

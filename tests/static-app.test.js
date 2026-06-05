@@ -90,6 +90,9 @@ const requiredAppMarkers = [
   "write hidden",
   "Real executor capsule",
   "First-safe executor contract",
+  "Temp executor activation",
+  "Activation boundary",
+  "activation locked",
   "Allowed targets",
   "Forbidden targets",
   "Target scope audit",
@@ -234,6 +237,9 @@ assert(app.includes("first-safe-validation-gate-panel"), "first-safe validation 
 assert(app.includes("buildFirstSafeImplementationWorkOrder"), "first-safe implementation work order should be wired");
 assert(app.includes("FirstSafeImplementationWorkOrderPanel"), "first-safe work order panel should be rendered");
 assert(app.includes("first-safe-work-order-panel"), "first-safe work order should be focusable");
+assert(app.includes("buildTempExecutorActivationGate"), "temp executor activation gate should be wired");
+assert(app.includes("TempExecutorActivationGatePanel"), "temp executor activation gate panel should be rendered");
+assert(app.includes("temp-executor-activation-gate-panel"), "temp executor activation gate should be focusable");
 assert(app.includes("buildWriteBoundaryProbe"), "write boundary probe should be wired");
 assert(app.includes("buildValidationEvidencePack"), "validation evidence pack should be wired");
 assert(app.includes("buildValidationPackMarkdown"), "validation pack markdown export should be wired");
@@ -370,6 +376,9 @@ assert(model.includes("Real executor implementation"), "write readiness should r
 assert(model.includes("spaceguard-real-executor-capsule/v1"), "model should expose real executor capsule schema");
 assert(model.includes("spaceguard-first-safe-executor-contract/v1"), "model should expose first-safe executor contract schema");
 assert(model.includes("spaceguard-first-safe-work-order/v1"), "model should expose first-safe implementation work order schema");
+assert(model.includes("spaceguard-temp-executor-activation-gate/v1"), "model should expose temp executor activation gate schema");
+assert(model.includes("feature-flag-disabled"), "temp executor activation should block while the route flag is disabled");
+assert(model.includes("activation-review-ready"), "temp executor activation should have an explicit review-ready state");
 assert(model.includes("spaceguard-first-safe-target-audit/v1"), "model should expose first-safe target audit schema");
 assert(model.includes("targetPath"), "first-safe contract should include native target path evidence");
 assert(model.includes("target-scope-rejected"), "write boundary probe should separate target-scope rejection from passing evidence");
