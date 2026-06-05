@@ -325,6 +325,42 @@ const assert = require("assert");
   assert.strictEqual(result.advice.confidence, "high", "OpenAI adapter should parse strict JSON advice");
   assert.strictEqual(result.advice.recommendedActions[0].actionType, "run-npm-cache-executor", "OpenAI adapter should preserve executor recommendation action type");
   assert.strictEqual(result.advice.recommendedActions[0].route, "bounded-npm-cache-delete", "OpenAI adapter should preserve executor route");
+  const readyBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: result.advice,
+    context: {
+      plan: { id: "plan-npm" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, npmCacheExecutor: true },
+      npmCacheTargets: [{ id: "npm-cache", route: "bounded-npm-cache-delete", bytes: 1024 }]
+    },
+    executionState: {
+      planId: "plan-npm",
+      scanFingerprint: "scan-npm",
+      consentPlanId: "plan-npm"
+    }
+  });
+  assert.strictEqual(readyBroker.schemaVersion, "spaceguard-openai-recommendation-broker/v1", "OpenAI recommendation broker should expose a schema");
+  assert.strictEqual(readyBroker.rows[0].status, "ready", "broker should allow a scoped executor only when deterministic gates pass");
+  assert.strictEqual(readyBroker.rows[0].canAct, true, "ready broker row should be actionable");
+  assert.strictEqual(readyBroker.rows[0].directToolAccess, false, "brokered recommendations should not grant direct tool access");
+  assert.strictEqual(readyBroker.counts.ready, 1, "broker should count ready recommendations");
+
+  const blockedBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: result.advice,
+    context: {
+      plan: { id: "plan-npm" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, npmCacheExecutor: false },
+      npmCacheTargets: [{ id: "npm-cache", route: "bounded-npm-cache-delete", bytes: 1024 }]
+    },
+    executionState: {
+      planId: "plan-npm",
+      scanFingerprint: "scan-npm",
+      consentPlanId: ""
+    }
+  });
+  assert.strictEqual(blockedBroker.rows[0].status, "blocked", "broker should block executor recommendations when a feature flag or consent gate is missing");
+  assert.strictEqual(blockedBroker.rows[0].canAct, false, "blocked broker row should not execute");
+  assert(blockedBroker.rows[0].checks.some((check) => check.id === "feature-flag" && !check.passed), "broker should expose missing feature-flag evidence");
+  assert(blockedBroker.rows[0].checks.some((check) => check.id === "consent" && !check.passed), "broker should expose missing consent evidence");
 
   console.log("openai agent adapter ok");
 })();

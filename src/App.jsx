@@ -158,7 +158,9 @@ import {
   appendOpenAIAgentRunRecord,
   buildOpenAIAgentRunRecord,
   buildOpenAIAgentContext,
+  buildOpenAIAgentRecommendationBroker,
   getOpenAIAgentConfig,
+  getOpenAIAgentRecommendationKey,
   normalizeOpenAIAgentRunHistory,
   requestOpenAIAgentAdvice
 } from "./openai-agent.mjs";
@@ -1389,6 +1391,29 @@ export default function App() {
       planSnapshot
     ]
   );
+  const openAiRecommendationBroker = useMemo(
+    () =>
+      buildOpenAIAgentRecommendationBroker({
+        advice: aiAdvice.result?.advice,
+        context: openAiAgentContext,
+        executionState: {
+          planId: planSnapshot.id,
+          scanFingerprint: scanSession.currentFingerprint,
+          consentPlanId: consentReceipt.planId,
+          largeFileArchiveDestination,
+          permanentRemovalConfirmed: approvals.permanentConfirm
+        }
+      }),
+    [
+      aiAdvice.result,
+      openAiAgentContext,
+      planSnapshot.id,
+      scanSession.currentFingerprint,
+      consentReceipt.planId,
+      largeFileArchiveDestination,
+      approvals.permanentConfirm
+    ]
+  );
   const aiAgentIntegration = useMemo(
     () =>
       buildAIAgentIntegration({
@@ -2035,7 +2060,17 @@ export default function App() {
     }
   }
 
+  function getOpenAIBrokerRow(row = {}) {
+    const key = getOpenAIAgentRecommendationKey(row);
+    return openAiRecommendationBroker.rows.find((item) => item.key === key) || null;
+  }
+
   async function handleOpenAIAgentRecommendation(row = {}) {
+    const brokerRow = getOpenAIBrokerRow(row);
+    if (brokerRow && !brokerRow.canAct) {
+      if (brokerRow.targetPanel) focusWorkflowPanel(brokerRow.targetPanel);
+      return;
+    }
     const actionType = String(row.actionType || "").toLowerCase();
     if (actionType === "rescan") {
       if (nativeCapability.available) {
@@ -3365,6 +3400,7 @@ export default function App() {
               prompt={aiPrompt}
               advice={aiAdvice}
               context={openAiAgentContext}
+              recommendationBroker={openAiRecommendationBroker}
               runHistory={openAiAgentRunHistory}
               onPrompt={setAiPrompt}
               onAsk={askOpenAIAgent}
@@ -6129,11 +6165,13 @@ function AgentQuestionPanel({
   );
 }
 
-function OpenAIAgentPanel({ integration, config, prompt, advice, context, runHistory = [], onPrompt, onAsk, onAction }) {
+function OpenAIAgentPanel({ integration, config, prompt, advice, context, recommendationBroker, runHistory = [], onPrompt, onAsk, onAction }) {
   const running = advice.status === "running";
   const result = advice.result?.advice || null;
   const recommended = result?.recommendedActions || [];
   const blocked = result?.blockedActions || [];
+  const brokerRows = recommendationBroker?.rows || [];
+  const brokerByKey = new Map(brokerRows.map((row) => [row.key, row]));
   const lastRun = runHistory[runHistory.length - 1] || null;
   const nativeConfigured = Boolean(context.runtime.openAiAdvisorConfigured);
   const configured = Boolean(config.configured || nativeConfigured);
@@ -6169,6 +6207,8 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, runHis
           <QueueStat label="npm root" value={context.npmCacheTargets?.length || 0} tone={context.npmCacheTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Recycle" value={context.recycleBinTargets?.length || 0} tone={context.recycleBinTargets?.length ? "restricted" : "review"} />
           <QueueStat label="Cache roots" value={context.browserCacheTargets?.length || 0} tone={context.browserCacheTargets?.length ? "advanced" : "review"} />
+          <QueueStat label="AI ready" value={recommendationBroker?.counts?.ready || 0} tone={recommendationBroker?.counts?.ready ? "safe" : "review"} />
+          <QueueStat label="AI blocked" value={recommendationBroker?.counts?.blocked || 0} tone={recommendationBroker?.counts?.blocked ? "restricted" : "safe"} />
           <QueueStat label="AI runs" value={runHistory.length} tone={runHistory.length ? "safe" : "review"} />
         </div>
 
@@ -6178,6 +6218,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, runHis
             <Badge variant="safe">advisory only</Badge>
             <Badge variant="safe">strict JSON</Badge>
             <Badge variant="safe">direct tools blocked</Badge>
+            <Badge variant={recommendationBroker?.tone || "review"}>{recommendationBroker?.status || "broker-idle"}</Badge>
             <Badge variant={configured ? "outline" : "review"}>{keySource}</Badge>
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
@@ -6230,22 +6271,13 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, runHis
             {recommended.length ? (
               <div className="grid gap-2 md:grid-cols-2">
                 {recommended.slice(0, 4).map((row) => (
-                  <div key={`${row.id}-${row.title}`} className="rounded-md border bg-card p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="mr-auto min-w-0 text-sm font-medium">{row.title}</span>
-                      <Badge variant="advanced">{row.priority}</Badge>
-                      <Badge variant="outline">{row.actionType}</Badge>
-                      {row.route ? <Badge variant="outline">{row.route}</Badge> : null}
-                    </div>
-                    <p className="mt-2 text-xs text-muted-foreground">{row.reason}</p>
-                    {row.targetId ? <p className="mt-2 font-mono text-xs text-muted-foreground">target {row.targetId}</p> : null}
-                    {aiRecommendationActionLabel(row) ? (
-                      <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => onAction(row)} disabled={running}>
-                        <Play className="h-4 w-4" />
-                        {aiRecommendationActionLabel(row)}
-                      </Button>
-                    ) : null}
-                  </div>
+                  <OpenAIRecommendationCard
+                    key={getOpenAIAgentRecommendationKey(row)}
+                    row={row}
+                    brokerRow={brokerByKey.get(getOpenAIAgentRecommendationKey(row))}
+                    running={running}
+                    onAction={onAction}
+                  />
                 ))}
               </div>
             ) : null}
@@ -6261,6 +6293,46 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, runHis
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function OpenAIRecommendationCard({ row, brokerRow, running, onAction }) {
+  const actionLabel = brokerRow?.canAct
+    ? brokerRow.buttonLabel || aiRecommendationActionLabel(row)
+    : brokerRow?.targetPanel
+      ? "Open gate"
+      : aiRecommendationActionLabel(row);
+  const buttonDisabled = running || !actionLabel || (!brokerRow?.canAct && !brokerRow?.targetPanel);
+  const visibleChecks = brokerRow?.checks?.slice(0, 3) || [];
+
+  return (
+    <div className="rounded-md border bg-card p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-auto min-w-0 text-sm font-medium">{row.title}</span>
+        <Badge variant="advanced">{row.priority}</Badge>
+        <Badge variant="outline">{row.actionType}</Badge>
+        {row.route ? <Badge variant="outline">{row.route}</Badge> : null}
+        {brokerRow ? <Badge variant={brokerRow.tone}>{brokerRow.status}</Badge> : null}
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">{row.reason}</p>
+      {row.targetId ? <p className="mt-2 font-mono text-xs text-muted-foreground">target {row.targetId}</p> : null}
+      {brokerRow?.blockedReason ? <p className="mt-2 text-xs text-muted-foreground">{brokerRow.blockedReason}</p> : null}
+      {visibleChecks.length ? (
+        <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
+          {visibleChecks.map((check) => (
+            <span key={check.id}>
+              {check.passed ? "ok" : "wait"} - {check.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {actionLabel ? (
+        <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => onAction(row)} disabled={buttonDisabled}>
+          <Play className="h-4 w-4" />
+          {actionLabel}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 

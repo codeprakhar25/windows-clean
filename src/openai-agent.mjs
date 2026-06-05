@@ -380,6 +380,309 @@ export function appendOpenAIAgentRunRecord(history = [], record = null, { limit 
   return [...existing, record].slice(-limit);
 }
 
+const OPENAI_RECOMMENDATION_EXECUTOR_POLICIES = {
+  "run-temp-executor": {
+    flag: "tempCleanupExecutor",
+    targetLabel: "temp executor route",
+    route: "known-temp-delete",
+    targetList: "executableRows"
+  },
+  "run-downloads-cleanup-executor": {
+    flag: "downloadsCleanupExecutor",
+    targetLabel: "reviewed Downloads Remove targets",
+    route: "item-review-recycle-bin",
+    targetList: "reviewedDownloadsTargets"
+  },
+  "run-large-file-archive-executor": {
+    flag: "largeFileArchiveExecutor",
+    targetLabel: "reviewed large-file Archive/Move targets",
+    route: "item-review-large-files",
+    targetList: "largeFileArchiveTargets",
+    requiresArchiveDestination: true
+  },
+  "run-project-deps-executor": {
+    flag: "projectDependencyExecutor",
+    targetLabel: "reviewed project dependency targets",
+    route: "item-review-project-cache",
+    targetList: "reviewedProjectTargets"
+  },
+  "run-browser-cache-executor": {
+    flag: "browserCacheExecutor",
+    targetLabel: "scanned browser cache roots",
+    route: "browser-cache-only",
+    targetList: "browserCacheTargets"
+  },
+  "run-gradle-cache-executor": {
+    flag: "gradleCacheExecutor",
+    targetLabel: "scanned Gradle cache root",
+    route: "bounded-cache-delete",
+    targetList: "gradleCacheTargets"
+  },
+  "run-npm-cache-executor": {
+    flag: "npmCacheExecutor",
+    targetLabel: "scanned npm cache root",
+    route: "bounded-npm-cache-delete",
+    targetList: "npmCacheTargets"
+  },
+  "run-recycle-bin-executor": {
+    flag: "recycleBinExecutor",
+    targetLabel: "scanned Recycle Bin root",
+    route: "shell-recycle-bin",
+    targetList: "recycleBinTargets",
+    requiresPermanentConfirmation: true
+  }
+};
+
+export function getOpenAIAgentRecommendationKey(row = {}) {
+  return [
+    row.actionType || row.action_type || "manual-only",
+    row.targetId || row.target_id || "",
+    row.route || "",
+    row.id || "",
+    row.title || ""
+  ].map((part) => String(part || "").trim()).join("::");
+}
+
+export function buildOpenAIAgentRecommendationBroker({
+  advice = null,
+  context = null,
+  executionState = {}
+} = {}) {
+  const recommendationRows = normalizeAdviceRows(advice?.recommendedActions || advice?.recommended_actions || advice?.advice?.recommendedActions || []);
+  const rows = recommendationRows.map((row) => buildOpenAIAgentRecommendationBrokerRow(row, context, executionState));
+  const readyRows = rows.filter((row) => row.canAct);
+  const blockedRows = rows.filter((row) => !row.canAct && row.status === "blocked");
+  const executorRows = rows.filter((row) => row.kind === "scoped-executor");
+
+  return {
+    schemaVersion: "spaceguard-openai-recommendation-broker/v1",
+    advisoryOnly: true,
+    directToolAccess: false,
+    rows,
+    counts: {
+      recommendations: rows.length,
+      ready: readyRows.length,
+      blocked: blockedRows.length,
+      scopedExecutors: executorRows.length
+    },
+    status: blockedRows.length ? "broker-has-blocked-actions" : rows.length ? "broker-ready" : "broker-idle",
+    tone: blockedRows.length ? "review" : rows.length ? "safe" : "review",
+    primary: blockedRows.length
+      ? `${blockedRows.length} OpenAI recommendation(s) need deterministic app gates before action.`
+      : rows.length
+        ? `${readyRows.length} OpenAI recommendation(s) can be routed through UI controls.`
+        : "No OpenAI recommendations have been brokered yet."
+  };
+}
+
+function buildOpenAIAgentRecommendationBrokerRow(row = {}, context = null, executionState = {}) {
+  const actionType = normalizeActionType(row.actionType || row.action_type);
+  const policy = OPENAI_RECOMMENDATION_EXECUTOR_POLICIES[actionType] || null;
+  const key = getOpenAIAgentRecommendationKey({ ...row, actionType });
+  if (policy) return buildExecutorRecommendationBrokerRow({ row, actionType, key, policy, context, executionState });
+  if (actionType === "rescan") {
+    return buildBrokerRow({
+      row,
+      actionType,
+      key,
+      kind: "scan",
+      status: "ready",
+      tone: "safe",
+      canAct: true,
+      buttonLabel: context?.runtime?.nativeAvailable ? "Run real scan" : "Run demo scan",
+      targetPanel: "real-data-readiness-panel",
+      blockedReason: "",
+      checks: [
+        buildBrokerCheck("advisory-only", "Advisory boundary", true, "OpenAI can request a scan action, but the app owns the scanner call.")
+      ]
+    });
+  }
+  if (actionType === "review-target") {
+    const targetId = String(row.targetId || row.target_id || row.id || "").trim();
+    return buildBrokerRow({
+      row,
+      actionType,
+      key,
+      kind: "review",
+      status: targetId ? "ready" : "needs-target",
+      tone: targetId ? "safe" : "review",
+      canAct: true,
+      buttonLabel: "Open review",
+      targetPanel: "item-review-panel",
+      blockedReason: targetId ? "" : "OpenAI did not name a review target; opening item review instead.",
+      checks: [
+        buildBrokerCheck("target", "Review target", Boolean(targetId), targetId || "missing target id")
+      ]
+    });
+  }
+  if (actionType === "ask-user") {
+    return buildBrokerRow({
+      row,
+      actionType,
+      key,
+      kind: "question",
+      status: "ready",
+      tone: "safe",
+      canAct: true,
+      buttonLabel: "Open question",
+      targetPanel: "agent-question-panel",
+      blockedReason: "",
+      checks: [buildBrokerCheck("question-panel", "Question panel", true, "Routes through the deterministic question queue.")]
+    });
+  }
+  return buildBrokerRow({
+    row,
+    actionType,
+    key,
+    kind: "manual",
+    status: "manual-only",
+    tone: "advisory",
+    canAct: true,
+    buttonLabel: "Open manual review",
+    targetPanel: getManualRecommendationPanel(row),
+    blockedReason: "Manual-only recommendations never create executor authority.",
+    checks: [buildBrokerCheck("manual-only", "Manual-only boundary", true, "Routes to review panels, not filesystem mutation.")]
+  });
+}
+
+function buildExecutorRecommendationBrokerRow({ row, actionType, key, policy, context, executionState }) {
+  const runtime = context?.runtime || {};
+  const planId = executionState.planId || context?.plan?.id || "";
+  const consentPlanId = executionState.consentPlanId || "";
+  const scanFingerprint = executionState.scanFingerprint || "";
+  const targetCount = getExecutorRecommendationTargetCount(policy, context);
+  const checks = [
+    buildBrokerCheck("native-runtime", "Native runtime", Boolean(runtime.nativeAvailable), runtime.nativeAvailable ? "Tauri native runtime is available." : "Use the desktop shell before running scoped executors."),
+    buildBrokerCheck("real-run-flag", "Scoped real-run flag", Boolean(runtime.realRunEnabled), runtime.realRunEnabled ? "Runtime exposes scoped real execution." : "Scoped real execution is disabled."),
+    buildBrokerCheck("feature-flag", "Route feature flag", Boolean(runtime[policy.flag]), runtime[policy.flag] ? `${policy.flag} is enabled.` : `${policy.flag} is disabled.`),
+    buildBrokerCheck("plan-id", "Current plan", Boolean(planId), planId || "missing plan id"),
+    buildBrokerCheck("scan-fingerprint", "Scan fingerprint", Boolean(scanFingerprint), scanFingerprint || "missing scan fingerprint"),
+    buildBrokerCheck("consent", "Consent receipt", Boolean(planId && consentPlanId && consentPlanId === planId), consentPlanId ? `consent=${consentPlanId}` : "missing consent receipt"),
+    buildBrokerCheck("targets", policy.targetLabel, targetCount > 0, `${targetCount} target(s) available`)
+  ];
+  if (policy.requiresArchiveDestination) {
+    checks.push(buildBrokerCheck(
+      "archive-destination",
+      "Archive destination",
+      Boolean(String(executionState.largeFileArchiveDestination || "").trim()),
+      String(executionState.largeFileArchiveDestination || "").trim() || "missing archive destination"
+    ));
+  }
+  if (policy.requiresPermanentConfirmation) {
+    checks.push(buildBrokerCheck(
+      "permanent-confirmation",
+      "Permanent-removal confirmation",
+      Boolean(executionState.permanentRemovalConfirmed),
+      executionState.permanentRemovalConfirmed ? "Recycle Bin removal was explicitly confirmed." : "Permanent-removal confirmation is missing."
+    ));
+  }
+  const blocked = checks.filter((check) => !check.passed);
+  return buildBrokerRow({
+    row,
+    actionType,
+    key,
+    kind: "scoped-executor",
+    status: blocked.length ? "blocked" : "ready",
+    tone: blocked.length ? "restricted" : "safe",
+    canAct: blocked.length === 0,
+    buttonLabel: getExecutorRecommendationButtonLabel(actionType),
+    targetPanel: getExecutorRecommendationPanel(actionType),
+    blockedReason: blocked[0]?.detail || "",
+    checks
+  });
+}
+
+function buildBrokerRow({ row, actionType, key, kind, status, tone, canAct, buttonLabel, targetPanel, blockedReason, checks }) {
+  return {
+    ...row,
+    key,
+    actionType,
+    kind,
+    status,
+    tone,
+    canAct: Boolean(canAct),
+    buttonLabel,
+    targetPanel,
+    blockedReason,
+    advisoryOnly: true,
+    directToolAccess: false,
+    checks
+  };
+}
+
+function buildBrokerCheck(id, label, passed, detail) {
+  return {
+    id,
+    label,
+    passed: Boolean(passed),
+    detail
+  };
+}
+
+function getExecutorRecommendationTargetCount(policy, context = null) {
+  if (policy.targetList === "executableRows") {
+    return (context?.executableRows || []).filter((row) => row.route === policy.route || row.id === "windows-temp").length;
+  }
+  if (policy.targetList === "reviewedDownloadsTargets") {
+    return (context?.executableRows || []).filter((row) => row.route === policy.route && Number(row.bytes || 0) > 0).length;
+  }
+  return Array.isArray(context?.[policy.targetList]) ? context[policy.targetList].length : 0;
+}
+
+function getExecutorRecommendationButtonLabel(actionType) {
+  switch (actionType) {
+    case "run-temp-executor":
+      return "Run temp cleanup";
+    case "run-downloads-cleanup-executor":
+      return "Move Downloads items";
+    case "run-large-file-archive-executor":
+      return "Archive large files";
+    case "run-project-deps-executor":
+      return "Run project cleanup";
+    case "run-browser-cache-executor":
+      return "Run browser cleanup";
+    case "run-gradle-cache-executor":
+      return "Run Gradle cleanup";
+    case "run-npm-cache-executor":
+      return "Run npm cleanup";
+    case "run-recycle-bin-executor":
+      return "Empty Recycle Bin";
+    default:
+      return "Open recommendation";
+  }
+}
+
+function getExecutorRecommendationPanel(actionType) {
+  switch (actionType) {
+    case "run-temp-executor":
+      return "first-safe-temp-executor-panel";
+    case "run-downloads-cleanup-executor":
+      return "downloads-cleanup-executor-panel";
+    case "run-large-file-archive-executor":
+      return "large-file-archive-executor-panel";
+    case "run-project-deps-executor":
+      return "project-dependency-executor-panel";
+    case "run-browser-cache-executor":
+      return "browser-cache-executor-panel";
+    case "run-gradle-cache-executor":
+      return "gradle-cache-executor-panel";
+    case "run-npm-cache-executor":
+      return "npm-cache-executor-panel";
+    case "run-recycle-bin-executor":
+      return "recycle-bin-executor-panel";
+    default:
+      return "openai-agent-panel";
+  }
+}
+
+function getManualRecommendationPanel(row = {}) {
+  const targetId = String(row.targetId || row.target_id || row.id || "").toLowerCase();
+  const route = String(row.route || "").toLowerCase();
+  if (targetId.startsWith("custom-root") || route.includes("custom-root")) return "custom-root-triage-panel";
+  if (targetId.startsWith("drive-") || route.includes("drive-inventory")) return "drive-inventory-panel";
+  return "item-review-panel";
+}
+
 export function normalizeOpenAIAgentRunHistory(history = [], { limit = 20 } = {}) {
   return (Array.isArray(history) ? history : [])
     .filter(isOpenAIAgentRunRecord)

@@ -291,6 +291,10 @@ assert(app.includes("openai-agent-panel"), "OpenAI agent panel should be focusab
 assert(app.includes("requestOpenAIAgentAdvice"), "OpenAI agent should call the provider adapter");
 assert(app.includes("handleOpenAIAgentRecommendation"), "OpenAI recommendations should map to guarded UI actions");
 assert(app.includes("aiRecommendationActionLabel"), "OpenAI recommendation rows should expose action labels");
+assert(app.includes("buildOpenAIAgentRecommendationBroker"), "OpenAI recommendations should be brokered before UI actions run");
+assert(app.includes("getOpenAIAgentRecommendationKey"), "OpenAI recommendation broker rows should be keyed consistently");
+assert(app.includes("OpenAIRecommendationCard"), "OpenAI recommendation cards should show broker state");
+assert(app.includes("Open gate"), "blocked OpenAI recommendations should route users to the relevant gate");
 assert(app.includes("Run npm cleanup"), "OpenAI recommendations should include npm executor action labels");
 assert(app.includes("Move Downloads items"), "OpenAI recommendations should include reviewed Downloads executor action labels");
 assert(app.includes("onAction={handleOpenAIAgentRecommendation}"), "OpenAI panel should receive the guarded recommendation action handler");
@@ -320,6 +324,9 @@ assert(openAiAgent.includes("installedAppReview"), "OpenAI context should includ
 assert(openAiAgent.includes("automated-uninstall"), "OpenAI installed app context should forbid automated uninstall");
 assert(openAiAgent.includes("planSnapshot"), "OpenAI context should include current plan snapshot identity");
 assert(openAiAgent.includes("spaceguard-openai-agent-run/v1"), "OpenAI adapter should expose local run provenance records");
+assert(openAiAgent.includes("spaceguard-openai-recommendation-broker/v1"), "OpenAI adapter should expose recommendation broker records");
+assert(openAiAgent.includes("directToolAccess: false"), "OpenAI recommendation broker should deny direct tool access");
+assert(openAiAgent.includes("feature-flag"), "OpenAI recommendation broker should check route feature flags");
 assert(openAiAgent.includes("storesFullContext: false"), "OpenAI run records should not persist full path-level context");
 assert(openAiAgent.includes("storesRawModelText: false"), "OpenAI run records should not persist raw model text");
 assert(openAiAgent.includes("driveInventoryRows"), "OpenAI context should include drive inventory rows");
