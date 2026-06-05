@@ -6918,6 +6918,264 @@ export function buildTempExecutorActivationRehearsal({
   };
 }
 
+export function buildRealDataLaunchRoadmap({
+  scanMode = "demo",
+  scanSession = null,
+  scanCoverage = null,
+  demoRehearsalRunbook = null,
+  windowsSetupAssistant = null,
+  publicBetaReadiness = null,
+  validationPack = null,
+  releaseReviewPacket = null,
+  writeReadiness = null,
+  realExecutorCapsule = null,
+  firstSafeValidationGate = null,
+  firstSafeImplementationWorkOrder = null,
+  tempExecutorActivationGate = null,
+  tempExecutorActivationRehearsal = null,
+  writeBoundaryProbe = null,
+  runtimeCapabilities = {}
+} = {}) {
+  const unsafeWriteSignal = Boolean(
+    runtimeCapabilities?.realRunEnabled ||
+      runtimeCapabilities?.destructiveCommands ||
+      runtimeCapabilities?.safeExecutorsEnabled ||
+      releaseReviewPacket?.writeSignalVisible ||
+      tempExecutorActivationGate?.status === "unsafe-runtime" ||
+      tempExecutorActivationRehearsal?.status === "unsafe-runtime" ||
+      writeBoundaryProbe?.accepted ||
+      writeBoundaryProbe?.realRunEnabled ||
+      writeBoundaryProbe?.destructiveCommands ||
+      Number(writeBoundaryProbe?.counts?.bytes || 0) > 0 ||
+      writeBoundaryProbe?.status === "unsafe-signal" ||
+      realExecutorCapsule?.destructiveActionAvailable
+  );
+  const demoEvidenceReady = Boolean(demoRehearsalRunbook?.evidenceComplete);
+  const publicDemoSafe = Boolean(demoRehearsalRunbook?.safeForPublicDemo && !unsafeWriteSignal);
+  const nativeAvailable = Boolean(windowsSetupAssistant?.nativeAvailable || runtimeCapabilities?.available || runtimeCapabilities?.scanKnownRoots);
+  const nativeScanCurrent = Boolean(scanMode === "native-readonly" && scanSession?.readyForPlanning && scanSession?.nativeEvidence);
+  const privacyReady = Boolean(windowsSetupAssistant?.privacyReady);
+  const webDemoReady = Boolean(publicBetaReadiness?.readyForWebDemo);
+  const nativeBetaReady = Boolean(publicBetaReadiness?.readyForNativeBeta);
+  const validationReady = Boolean(firstSafeValidationGate?.implementationPlanningReady || validationPack?.readyForRealRun);
+  const workOrderReady = Boolean(firstSafeImplementationWorkOrder?.implementationWorkAllowed);
+  const activationRehearsed = Boolean(tempExecutorActivationRehearsal?.status === "rehearsal-ready");
+  const nativeBoundaryRejected = Boolean(
+    writeBoundaryProbe?.rejectionEvidence &&
+      writeBoundaryProbe?.counts?.entries > 0 &&
+      Number(writeBoundaryProbe?.counts?.bytes || 0) === 0 &&
+      !writeBoundaryProbe?.accepted
+  );
+  const nativePreflightReady = Boolean(nativeBoundaryRejected && tempExecutorActivationGate?.preflight?.attached);
+  const activationReviewReady = Boolean(tempExecutorActivationGate?.status === "activation-review-ready");
+  const releaseReviewReady = Boolean(releaseReviewPacket?.status === "review-packet-ready");
+  const realCleanupReady = Boolean(writeReadiness?.readyForRealExecution);
+
+  const milestones = [
+    buildRealDataLaunchMilestone({
+      id: "web-demo",
+      label: "Public web demo",
+      status: demoEvidenceReady ? "ready" : publicDemoSafe ? "partial" : "waiting",
+      estimate: demoEvidenceReady ? "ready now" : "same day",
+      confidence: "high",
+      detail: demoEvidenceReady
+        ? "No-real-data workflow has exportable scan, gate, consent, ledger, and report evidence."
+        : "Finish the browser demo scan, approvals, dry-run consent, simulation, and report export."
+    }),
+    buildRealDataLaunchMilestone({
+      id: "native-readonly-beta",
+      label: "Native read-only beta",
+      status: nativeBetaReady ? "ready" : nativeScanCurrent ? "partial" : nativeAvailable ? "waiting" : "locked",
+      estimate: nativeBetaReady ? "ready now" : nativeScanCurrent ? "3-5 days" : nativeAvailable ? "1 week" : "1-2 weeks",
+      confidence: nativeAvailable || nativeScanCurrent ? "medium" : "low",
+      detail: nativeBetaReady
+        ? "Native read-only beta evidence is complete."
+        : nativeScanCurrent
+          ? "Read-only scan evidence exists; finish signing, support, uninstall, and release docs."
+          : "Start the desktop shell and capture current read-only Windows scan evidence."
+    }),
+    buildRealDataLaunchMilestone({
+      id: "first-safe-temp",
+      label: "First-safe temp executor",
+      status: realCleanupReady || activationReviewReady || workOrderReady ? "ready" : activationRehearsed || nativePreflightReady ? "partial" : "locked",
+      estimate: realCleanupReady ? "ready now" : workOrderReady ? "1-2 weeks" : activationRehearsed ? "2-4 weeks" : "3-5 weeks",
+      confidence: workOrderReady || validationReady ? "medium" : "low",
+      detail: realCleanupReady
+        ? "Write readiness is complete for the selected executor route."
+        : workOrderReady
+          ? "Implementation work order is ready, but the executor still needs test-first native implementation."
+          : activationRehearsed
+            ? "Demo activation rehearsal proves the disabled scaffold flow; native preflight and Windows validation still need real evidence."
+            : "Keep the temp executor disabled until the route contract, native preflight, validation, and release review pass."
+    }),
+    buildRealDataLaunchMilestone({
+      id: "multi-route-cleanup",
+      label: "Broader cleanup product",
+      status: realCleanupReady ? "partial" : "locked",
+      estimate: realCleanupReady ? "6-10 weeks after first route" : "future after first-safe route",
+      confidence: "low",
+      detail: "Recycle Bin, browser cache, tool-native prune, uninstall, and partition strategy should follow only after one executor proves rollback and rescan parity."
+    })
+  ];
+
+  const rows = [
+    buildRealDataLaunchRoadmapRow({
+      id: "demo-workflow",
+      label: "No-real-data demo proof",
+      lane: "demo",
+      status: demoEvidenceReady ? "ready" : publicDemoSafe ? "partial" : "waiting",
+      detail: demoRehearsalRunbook?.primary || "Browser demo proof has not been recorded.",
+      evidence: demoRehearsalRunbook?.status || "not-evaluated",
+      nextStep: demoEvidenceReady ? "Export the dry-run report." : "Complete the demo runbook.",
+      estimate: demoEvidenceReady ? "ready now" : "same day"
+    }),
+    buildRealDataLaunchRoadmapRow({
+      id: "native-readonly-scan",
+      label: "Native read-only scan",
+      lane: "real-data",
+      status: nativeScanCurrent ? "ready" : nativeAvailable ? "waiting" : "locked",
+      detail: nativeScanCurrent
+        ? `Current native scan evidence is ready with ${scanCoverage?.confidenceScore || 0}% coverage confidence.`
+        : nativeAvailable
+          ? "Desktop shell is available; run the read-only scan for the current settings."
+          : "Browser mode cannot inspect local folders.",
+      evidence: scanSession?.status || windowsSetupAssistant?.status || "not-captured",
+      nextStep: nativeScanCurrent ? "Use native evidence for dry-run planning." : "Run a native read-only scan on Windows.",
+      estimate: nativeScanCurrent ? "ready now" : nativeAvailable ? "same day" : "1-2 weeks"
+    }),
+    buildRealDataLaunchRoadmapRow({
+      id: "privacy-support",
+      label: "Privacy and support bundle",
+      lane: "release",
+      status: privacyReady && webDemoReady ? "ready" : privacyReady ? "partial" : "waiting",
+      detail: privacyReady
+        ? "Local-only privacy boundary is ready; public release packaging still controls the claim."
+        : "Local-only scan handling, explicit exports, and support bundle evidence must be visible.",
+      evidence: publicBetaReadiness?.status || windowsSetupAssistant?.status || "not-evaluated",
+      nextStep: privacyReady ? "Finish native beta distribution evidence." : "Resolve privacy and support bundle rows.",
+      estimate: privacyReady ? "3-5 days" : "1 week"
+    }),
+    buildRealDataLaunchRoadmapRow({
+      id: "native-write-boundary",
+      label: "Native write-boundary proof",
+      lane: "executor",
+      status: nativePreflightReady ? "ready" : activationRehearsed ? "partial" : nativeAvailable ? "waiting" : "locked",
+      detail: nativePreflightReady
+        ? "Native rejecting write boundary returned preflight checks, zero bytes, and rejected entries."
+        : activationRehearsed
+          ? "Demo rehearsal has synthetic rejection evidence; desktop preflight proof remains separate."
+          : "Probe the rejecting native write boundary only after a first-safe route contract exists.",
+      evidence: nativePreflightReady ? tempExecutorActivationGate.preflight.status : tempExecutorActivationRehearsal?.status || writeBoundaryProbe?.status || "not-run",
+      nextStep: nativePreflightReady ? "Attach validation evidence to the route gate." : "Run or rehearse the rejecting write-boundary path.",
+      estimate: nativePreflightReady ? "ready now" : activationRehearsed ? "same day on Windows VM" : "1 week"
+    }),
+    buildRealDataLaunchRoadmapRow({
+      id: "windows-validation",
+      label: "Windows validation matrix",
+      lane: "validation",
+      status: validationReady ? "ready" : validationPack?.schemaVersion ? "waiting" : "locked",
+      detail: validationReady
+        ? "Route-specific validation evidence is ready for implementation planning."
+        : validationPack?.blockedReason || "Disposable VM, fixture, command inventory, rollback, and rescan evidence is still missing.",
+      evidence: firstSafeValidationGate?.status || validationPack?.blockedReason || "not-evaluated",
+      nextStep: validationReady ? "Generate the disabled implementation work order." : "Record reviewer, artifact, fixture, rollback, and rescan evidence.",
+      estimate: validationReady ? "ready now" : "3-5 days"
+    }),
+    buildRealDataLaunchRoadmapRow({
+      id: "first-safe-work-order",
+      label: "First-safe implementation work order",
+      lane: "implementation",
+      status: workOrderReady ? "ready" : firstSafeImplementationWorkOrder?.schemaVersion ? "waiting" : "locked",
+      detail: firstSafeImplementationWorkOrder?.primary || "Implementation work order has not been generated.",
+      evidence: firstSafeImplementationWorkOrder?.status || "not-evaluated",
+      nextStep: workOrderReady ? "Implement the disabled native temp executor behind the feature flag." : "Clear the validation gate first.",
+      estimate: workOrderReady ? "1-2 weeks" : "after validation"
+    }),
+    buildRealDataLaunchRoadmapRow({
+      id: "temp-activation",
+      label: "Temp executor activation review",
+      lane: "activation",
+      status: activationReviewReady ? "ready" : activationRehearsed ? "partial" : "locked",
+      detail: tempExecutorActivationGate?.primary || "Temp activation gate has not been evaluated.",
+      evidence: tempExecutorActivationGate?.status || tempExecutorActivationRehearsal?.status || "not-evaluated",
+      nextStep: activationReviewReady ? "Prepare a separate release decision." : "Keep feature flag disabled and collect missing activation evidence.",
+      estimate: activationReviewReady ? "ready now" : activationRehearsed ? "2-4 weeks" : "after native proof"
+    }),
+    buildRealDataLaunchRoadmapRow({
+      id: "release-review",
+      label: "Release review and write readiness",
+      lane: "release",
+      status: realCleanupReady ? "ready" : releaseReviewReady ? "partial" : "locked",
+      detail: writeReadiness?.primary || releaseReviewPacket?.primary || "Final write readiness is locked.",
+      evidence: writeReadiness?.status || releaseReviewPacket?.status || "not-evaluated",
+      nextStep: realCleanupReady ? "Use only the validated executor route." : "Keep real cleanup locked until release review and write readiness both pass.",
+      estimate: realCleanupReady ? "ready now" : workOrderReady ? "2-4 weeks" : "future"
+    })
+  ];
+
+  const unsafeRows = unsafeWriteSignal ? rows.map((row) => ({ ...row, status: row.id === "release-review" ? "unsafe" : row.status })) : [];
+  const effectiveRows = unsafeWriteSignal ? rows.map((row) => row.id === "release-review" ? { ...row, status: "unsafe", tone: "restricted" } : row) : rows;
+  const readyRows = effectiveRows.filter((row) => row.status === "ready");
+  const partialRows = effectiveRows.filter((row) => row.status === "partial");
+  const waitingRows = effectiveRows.filter((row) => row.status === "waiting");
+  const lockedRows = effectiveRows.filter((row) => row.status === "locked");
+  const unsafeRoadmapRows = effectiveRows.filter((row) => row.status === "unsafe");
+  const status = unsafeWriteSignal
+    ? "unsafe-stop"
+    : realCleanupReady
+      ? "real-cleanup-release-ready"
+      : workOrderReady
+        ? "first-safe-build-ready"
+        : nativeScanCurrent
+          ? "native-readonly-ready"
+          : demoEvidenceReady
+            ? "demo-ready"
+            : "workflow-open";
+  const progress = effectiveRows.length
+    ? Math.round(((readyRows.length + partialRows.length * 0.5) / effectiveRows.length) * 100)
+    : 0;
+
+  return {
+    schemaVersion: "spaceguard-real-data-launch-roadmap/v1",
+    status,
+    tone: getRealDataLaunchRoadmapTone(status),
+    currentMilestone: getRealDataLaunchCurrentMilestone(status),
+    progress,
+    realCleanupLocked: !realCleanupReady,
+    realRunEnabled: Boolean(runtimeCapabilities?.realRunEnabled || writeReadiness?.realRunEnabled),
+    destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
+    nativeAvailable,
+    nativeScanCurrent,
+    demoEvidenceReady,
+    activationRehearsed,
+    nativePreflightReady,
+    validationReady,
+    workOrderReady,
+    releaseReviewReady,
+    realCleanupReady,
+    estimate: getRealDataLaunchEstimate(status, milestones),
+    confidence: getRealDataLaunchConfidence(status, milestones),
+    milestones,
+    rows: effectiveRows,
+    readyRows,
+    partialRows,
+    waitingRows,
+    lockedRows,
+    unsafeRows: unsafeRoadmapRows.length ? unsafeRoadmapRows : unsafeRows,
+    counts: {
+      total: effectiveRows.length,
+      ready: readyRows.length,
+      partial: partialRows.length,
+      waiting: waitingRows.length,
+      locked: lockedRows.length,
+      unsafe: unsafeRoadmapRows.length,
+      realRun: realCleanupReady ? 1 : 0
+    },
+    primary: getRealDataLaunchRoadmapPrimary(status, { readyRows, partialRows, waitingRows, lockedRows, unsafeRows: unsafeRoadmapRows }),
+    steps: getRealDataLaunchRoadmapSteps(status, effectiveRows)
+  };
+}
+
 export function buildToolCommandInventory({
   actionList = actions,
   executorPlan = null,
@@ -8672,6 +8930,7 @@ export function buildReport({
   windowsSetupAssistant = null,
   demoRehearsalRunbook = null,
   productCompletionAudit = null,
+  realDataLaunchRoadmap = null,
   workflowHandoff = null,
   releaseGate = null,
   validationPack = null,
@@ -9374,6 +9633,24 @@ export function buildReport({
           `- Ready checks: ${publicBetaReadiness.counts.ready}/${publicBetaReadiness.counts.total}`,
           `- Primary: ${publicBetaReadiness.primary}`,
           publicBetaReadiness.rows.map((row) => `- ${row.label}: ${row.status} | ${row.detail}`).join("\n")
+        ].join("\n")
+      : "- Not evaluated.",
+    "",
+    "## Real Data Launch Roadmap",
+    realDataLaunchRoadmap
+      ? [
+          `- Status: ${realDataLaunchRoadmap.status}`,
+          `- Current milestone: ${realDataLaunchRoadmap.currentMilestone}`,
+          `- Progress: ${realDataLaunchRoadmap.progress}%`,
+          `- Estimate: ${realDataLaunchRoadmap.estimate}`,
+          `- Confidence: ${realDataLaunchRoadmap.confidence}`,
+          `- Real cleanup locked: ${realDataLaunchRoadmap.realCleanupLocked ? "yes" : "no"}`,
+          `- Native scan current: ${realDataLaunchRoadmap.nativeScanCurrent ? "yes" : "no"}`,
+          `- Activation rehearsed: ${realDataLaunchRoadmap.activationRehearsed ? "yes" : "no"}`,
+          `- Native preflight ready: ${realDataLaunchRoadmap.nativePreflightReady ? "yes" : "no"}`,
+          `- Primary: ${realDataLaunchRoadmap.primary}`,
+          realDataLaunchRoadmap.milestones.map((milestone) => `- Milestone: ${milestone.label} | ${milestone.status} | eta=${milestone.estimate} | confidence=${milestone.confidence}`).join("\n"),
+          realDataLaunchRoadmap.rows.map((row) => `- ${row.label}: ${row.status} | eta=${row.estimate} | ${row.detail}`).join("\n")
         ].join("\n")
       : "- Not evaluated.",
     "",
@@ -12275,6 +12552,115 @@ function buildTempActivationRehearsalSteps(status, activationGate = null, blocke
   }
   const visible = blockers.slice(0, 3);
   return visible.length ? visible.map((blocker) => `${blocker.label}: ${blocker.detail}`) : ["Build the disabled first-safe contract.", "Keep mutation locked.", "Run the demo rehearsal again."];
+}
+
+function buildRealDataLaunchMilestone({ id, label, status, estimate, confidence, detail }) {
+  return {
+    id,
+    label,
+    status,
+    tone: getRealDataLaunchRowTone(status),
+    estimate,
+    confidence,
+    detail
+  };
+}
+
+function buildRealDataLaunchRoadmapRow({
+  id,
+  label,
+  lane,
+  status,
+  detail,
+  evidence,
+  nextStep,
+  estimate
+}) {
+  return {
+    id,
+    label,
+    lane,
+    status,
+    tone: getRealDataLaunchRowTone(status),
+    detail,
+    evidence,
+    nextStep,
+    estimate,
+    realRunAllowed: false
+  };
+}
+
+function getRealDataLaunchRowTone(status) {
+  if (status === "ready") return "safe";
+  if (status === "unsafe" || status === "locked") return "restricted";
+  if (status === "partial") return "review";
+  return "advisory";
+}
+
+function getRealDataLaunchRoadmapTone(status) {
+  if (status === "real-cleanup-release-ready" || status === "first-safe-build-ready" || status === "native-readonly-ready") return "safe";
+  if (status === "unsafe-stop") return "restricted";
+  return "review";
+}
+
+function getRealDataLaunchCurrentMilestone(status) {
+  if (status === "real-cleanup-release-ready") return "Write-capable release review";
+  if (status === "first-safe-build-ready") return "First-safe executor implementation";
+  if (status === "native-readonly-ready") return "Native read-only beta evidence";
+  if (status === "demo-ready") return "No-real-data demo proof";
+  if (status === "unsafe-stop") return "Safety stop";
+  return "Workflow setup";
+}
+
+function getRealDataLaunchEstimate(status, milestones = []) {
+  const byId = new Map(milestones.map((milestone) => [milestone.id, milestone]));
+  if (status === "real-cleanup-release-ready") return "ready now";
+  if (status === "first-safe-build-ready") return byId.get("first-safe-temp")?.estimate || "1-2 weeks";
+  if (status === "native-readonly-ready") return byId.get("native-readonly-beta")?.estimate || "3-5 days";
+  if (status === "demo-ready") return byId.get("web-demo")?.estimate || "ready now";
+  if (status === "unsafe-stop") return "paused until unsafe signal is removed";
+  return byId.get("native-readonly-beta")?.estimate || "1-2 weeks";
+}
+
+function getRealDataLaunchConfidence(status, milestones = []) {
+  const byId = new Map(milestones.map((milestone) => [milestone.id, milestone]));
+  if (status === "real-cleanup-release-ready") return "medium";
+  if (status === "first-safe-build-ready") return byId.get("first-safe-temp")?.confidence || "medium";
+  if (status === "native-readonly-ready") return byId.get("native-readonly-beta")?.confidence || "medium";
+  if (status === "demo-ready") return byId.get("web-demo")?.confidence || "high";
+  if (status === "unsafe-stop") return "high";
+  return "low";
+}
+
+function getRealDataLaunchRoadmapPrimary(status, { readyRows = [], partialRows = [], waitingRows = [], lockedRows = [], unsafeRows = [] } = {}) {
+  if (status === "unsafe-stop") return `${unsafeRows.length || 1} unsafe write signal requires stopping the real-data launch path.`;
+  if (status === "real-cleanup-release-ready") return "Real cleanup release evidence is ready for the selected validated route.";
+  if (status === "first-safe-build-ready") return "The first-safe temp route can move into disabled executor implementation work.";
+  if (status === "native-readonly-ready") return "Real local data can be scanned read-only; write-capable cleanup remains locked.";
+  if (status === "demo-ready") return "The no-real-data workflow is demo-ready; native evidence is the next product milestone.";
+  if (partialRows.length) return `${readyRows.length} roadmap row(s) ready and ${partialRows.length} partially proven; real cleanup remains locked.`;
+  if (waitingRows.length) return `${waitingRows.length} roadmap row(s) need current evidence before native launch claims.`;
+  return `${lockedRows.length} roadmap row(s) are intentionally locked until earlier evidence exists.`;
+}
+
+function getRealDataLaunchRoadmapSteps(status, rows = []) {
+  if (status === "unsafe-stop") return ["Stop launch work.", "Inspect runtime capabilities and write-boundary evidence.", "Restore dry-run-only signals before continuing."];
+  if (status === "real-cleanup-release-ready") return ["Use only the validated executor route.", "Attach release review evidence to the run ledger.", "Keep broader cleanup routes disabled."];
+  const activeRows = rows
+    .filter((row) => row.status !== "ready")
+    .sort((a, b) => getRealDataRoadmapPriority(a.status) - getRealDataRoadmapPriority(b.status))
+    .slice(0, 4);
+  return activeRows.length
+    ? activeRows.map((row) => `${row.label}: ${row.nextStep}`)
+    : ["Export current evidence.", "Keep real cleanup locked.", "Review the next milestone."];
+}
+
+function getRealDataRoadmapPriority(status) {
+  if (status === "unsafe") return 0;
+  if (status === "waiting") return 1;
+  if (status === "partial") return 2;
+  if (status === "locked") return 3;
+  return 4;
 }
 
 function normalizeWriteExecutorScaffold(value = null) {

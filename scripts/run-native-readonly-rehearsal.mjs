@@ -15,6 +15,7 @@ import {
   buildPlanLock,
   buildPlanSnapshot,
   buildPrivacyBoundary,
+  buildRealDataLaunchRoadmap,
   buildRealExecutorCapsule,
   buildReleaseGate,
   buildRiskBudget,
@@ -378,6 +379,21 @@ export function buildNativeReadonlyRehearsalSummary() {
     planLock
   });
   const ledger = makeExecutionLedgerForActions(selectedIds, actionList, [], { approvals, planSnapshot, executedAt });
+  const realDataLaunchRoadmap = buildRealDataLaunchRoadmap({
+    scanMode: "native-readonly",
+    scanSession,
+    scanCoverage,
+    windowsSetupAssistant,
+    validationPack,
+    writeReadiness,
+    realExecutorCapsule,
+    firstSafeValidationGate,
+    firstSafeImplementationWorkOrder,
+    tempExecutorActivationGate,
+    tempExecutorActivationRehearsal,
+    writeBoundaryProbe,
+    runtimeCapabilities
+  });
 
   const failures = [
     ["native scan current", scanSession.status === "native-current" && scanSession.readyForPlanning],
@@ -401,6 +417,8 @@ export function buildNativeReadonlyRehearsalSummary() {
     ["temp activation keeps mutation locked", !tempExecutorActivationGate.activationAllowed && !tempExecutorActivationGate.mutationEnabled],
     ["temp activation rehearsal ready", tempExecutorActivationRehearsal.status === "rehearsal-ready"],
     ["temp activation rehearsal stays flag-blocked", tempExecutorActivationRehearsal.activationGate?.status === "feature-flag-disabled"],
+    ["real data roadmap reaches native milestone", realDataLaunchRoadmap.status === "native-readonly-ready"],
+    ["real data roadmap keeps cleanup locked", realDataLaunchRoadmap.realCleanupLocked && realDataLaunchRoadmap.counts.realRun === 0],
     ["destructive commands absent", !runtimeCapabilities.destructiveCommands],
     ["zero real-run rows", planLock.counts.realRun === 0 && dryRunLaunchGuard.counts.realRun === 0]
   ].filter(([, passed]) => !passed);
@@ -425,6 +443,9 @@ export function buildNativeReadonlyRehearsalSummary() {
     activationGateStatus: tempExecutorActivationGate.status,
     activationRehearsalStatus: tempExecutorActivationRehearsal.status,
     activationRehearsalGateStatus: tempExecutorActivationRehearsal.activationGate?.status || "not-evaluated",
+    realDataRoadmapStatus: realDataLaunchRoadmap.status,
+    realDataRoadmapEstimate: realDataLaunchRoadmap.estimate,
+    realDataRoadmapMilestone: realDataLaunchRoadmap.currentMilestone,
     realRunEnabled: false,
     destructiveCommands: false,
     failures: failures.map(([label]) => label)

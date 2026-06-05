@@ -17,6 +17,7 @@ import {
   buildLedgerRunRecord,
   buildPlanLock,
   buildPlanSnapshot,
+  buildRealDataLaunchRoadmap,
   buildRealExecutorCapsule,
   buildReleaseGate,
   buildRestrictionPolicyMatrix,
@@ -348,6 +349,21 @@ const demoRehearsalRunbook = buildDemoRehearsalRunbook({
   agentQuestionQueue,
   runtimeCapabilities
 });
+const realDataLaunchRoadmap = buildRealDataLaunchRoadmap({
+  scanMode: "demo",
+  scanSession,
+  demoRehearsalRunbook,
+  windowsSetupAssistant,
+  validationPack,
+  writeReadiness,
+  realExecutorCapsule,
+  firstSafeValidationGate,
+  firstSafeImplementationWorkOrder,
+  tempExecutorActivationGate,
+  tempExecutorActivationRehearsal,
+  writeBoundaryProbe,
+  runtimeCapabilities
+});
 
 const failures = [
   ["scan session ready", scanSession.status === "demo-current" && scanSession.readyForPlanning],
@@ -371,6 +387,8 @@ const failures = [
   ["temp activation keeps mutation locked", !tempExecutorActivationGate.activationAllowed && !tempExecutorActivationGate.mutationEnabled],
   ["temp activation rehearsal ready", tempExecutorActivationRehearsal.status === "rehearsal-ready"],
   ["temp activation rehearsal stays flag-blocked", tempExecutorActivationRehearsal.activationGate?.status === "feature-flag-disabled"],
+  ["real data roadmap reaches demo milestone", realDataLaunchRoadmap.status === "demo-ready"],
+  ["real data roadmap keeps cleanup locked", realDataLaunchRoadmap.realCleanupLocked && realDataLaunchRoadmap.counts.realRun === 0],
   ["zero real-run routes", demoRehearsalRunbook.counts.realRun === 0 && planLock.counts.realRun === 0],
   ["history current", runHistory.length === 1 && runHistory[0].planId === planSnapshot.id]
 ].filter(([, passed]) => !passed);
@@ -392,6 +410,9 @@ const summary = {
   activationGateStatus: tempExecutorActivationGate.status,
   activationRehearsalStatus: tempExecutorActivationRehearsal.status,
   activationRehearsalGateStatus: tempExecutorActivationRehearsal.activationGate?.status || "not-evaluated",
+  realDataRoadmapStatus: realDataLaunchRoadmap.status,
+  realDataRoadmapEstimate: realDataLaunchRoadmap.estimate,
+  realDataRoadmapMilestone: realDataLaunchRoadmap.currentMilestone,
   realRunEnabled: false,
   destructiveCommands: false,
   failures: failures.map(([label]) => label)

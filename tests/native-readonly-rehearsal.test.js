@@ -16,6 +16,8 @@ assert.strictEqual(summary.workOrderStatus, "validation-blocked", "native rehear
 assert.strictEqual(summary.activationGateStatus, "preflight-missing", "native rehearsal should keep temp activation blocked before write preflight evidence");
 assert.strictEqual(summary.activationRehearsalStatus, "rehearsal-ready", "native rehearsal should synthesize disabled temp activation evidence");
 assert.strictEqual(summary.activationRehearsalGateStatus, "feature-flag-disabled", "native activation rehearsal should stop at disabled temp flag");
+assert.strictEqual(summary.realDataRoadmapStatus, "native-readonly-ready", "native rehearsal should expose the native-ready launch roadmap state");
+assert.strictEqual(summary.realDataRoadmapMilestone, "Native read-only beta evidence", "native roadmap should name the current product milestone");
 assert.strictEqual(summary.realRunEnabled, false, "native rehearsal must not enable real execution");
 assert.strictEqual(summary.destructiveCommands, false, "native rehearsal must not expose destructive commands");
 assert(summary.planId.startsWith("plan-"), "native rehearsal should bind a plan id");

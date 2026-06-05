@@ -180,6 +180,10 @@ assert(app.includes("RestrictionPolicyMatrixPanel"), "restriction policy matrix 
 assert(app.includes("runNativeReadonlyScan"), "real read-only scan workflow should be wired");
 assert(app.includes("buildWindowsSetupAssistant"), "Windows setup assistant should be wired");
 assert(app.includes("WindowsSetupAssistantPanel"), "Windows setup assistant panel should be rendered");
+assert(app.includes("buildRealDataLaunchRoadmap"), "real data launch roadmap should be wired");
+assert(app.includes("RealDataLaunchRoadmapPanel"), "real data launch roadmap panel should be rendered");
+assert(app.includes("real-data-launch-roadmap-panel"), "real data launch roadmap should be focusable");
+assert(app.includes("Real data launch roadmap"), "real data roadmap should expose launch status copy");
 assert(app.includes("buildDemoRehearsalRunbook"), "demo rehearsal runbook should be wired");
 assert(app.includes("DemoRehearsalRunbookPanel"), "demo rehearsal runbook panel should be rendered");
 assert(app.includes("buildProductCompletionAudit"), "product completion audit should be wired");

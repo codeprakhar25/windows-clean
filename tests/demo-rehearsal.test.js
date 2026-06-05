@@ -14,6 +14,8 @@ assert.strictEqual(summary.workOrderStatus, "validation-blocked", "demo rehearsa
 assert.strictEqual(summary.activationGateStatus, "preflight-missing", "demo rehearsal should keep temp activation blocked before native preflight evidence");
 assert.strictEqual(summary.activationRehearsalStatus, "rehearsal-ready", "demo rehearsal should synthesize disabled temp activation evidence");
 assert.strictEqual(summary.activationRehearsalGateStatus, "feature-flag-disabled", "demo activation rehearsal should stop at disabled temp flag");
+assert.strictEqual(summary.realDataRoadmapStatus, "demo-ready", "demo rehearsal should expose the demo-ready launch roadmap state");
+assert.strictEqual(summary.realDataRoadmapMilestone, "No-real-data demo proof", "demo roadmap should name the current product milestone");
 assert.strictEqual(summary.realRunEnabled, false, "demo rehearsal must not enable real execution");
 assert.strictEqual(summary.destructiveCommands, false, "demo rehearsal must not expose destructive commands");
 assert(summary.planId.startsWith("plan-"), "demo rehearsal should bind a plan id");

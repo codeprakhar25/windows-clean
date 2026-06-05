@@ -3065,6 +3065,57 @@ const assert = require("assert");
   assert.strictEqual(tempActivationRehearsal.mutationAttempted, false, "temp activation rehearsal must not attempt mutation");
   assert.strictEqual(tempActivationRehearsal.mutationEnabled, false, "temp activation rehearsal must keep mutation disabled");
   assert(tempActivationRehearsal.syntheticWriteBoundaryProbe.counts.preflightChecks > 0, "temp activation rehearsal should include preflight checks");
+  const demoLaunchRoadmap = guard.buildRealDataLaunchRoadmap({
+    scanMode: "demo",
+    scanSession: { status: "demo-current", readyForPlanning: true },
+    demoRehearsalRunbook: {
+      status: "demo-evidence-ready",
+      evidenceComplete: true,
+      safeForPublicDemo: true,
+      primary: "Demo evidence is complete."
+    },
+    windowsSetupAssistant: { status: "browser-demo", nativeAvailable: false, privacyReady: true },
+    validationPack: { schemaVersion: "spaceguard-validation-pack/v1", readyForRealRun: false, blockedReason: "Validation evidence missing." },
+    writeReadiness: currentBuildWriteReadiness,
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    firstSafeValidationGate: blockedFirstSafeValidationGate,
+    firstSafeImplementationWorkOrder: blockedFirstSafeWorkOrder,
+    tempExecutorActivationGate: missingPreflightActivationGate,
+    tempExecutorActivationRehearsal: tempActivationRehearsal,
+    writeBoundaryProbe: defaultWriteBoundaryProbe,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false, safeExecutorsEnabled: false }
+  });
+  assert.strictEqual(demoLaunchRoadmap.schemaVersion, "spaceguard-real-data-launch-roadmap/v1", "real data launch roadmap should expose a schema version");
+  assert.strictEqual(demoLaunchRoadmap.status, "demo-ready", "demo roadmap should stop at the no-real-data milestone");
+  assert.strictEqual(demoLaunchRoadmap.realCleanupLocked, true, "demo roadmap must keep real cleanup locked");
+  assert.strictEqual(demoLaunchRoadmap.counts.realRun, 0, "demo roadmap must not expose real-run rows");
+  assert(demoLaunchRoadmap.rows.some((row) => row.id === "native-readonly-scan" && row.nextStep.includes("native read-only scan")), "demo roadmap should point toward native read-only evidence next");
+  const nativeLaunchRoadmap = guard.buildRealDataLaunchRoadmap({
+    scanMode: "native-readonly",
+    scanSession: { status: "native-current", readyForPlanning: true, nativeEvidence: true },
+    scanCoverage: { confidenceScore: 82 },
+    windowsSetupAssistant: { status: "native-scan-ready", nativeAvailable: true, privacyReady: true },
+    validationPack: { schemaVersion: "spaceguard-validation-pack/v1", readyForRealRun: false, blockedReason: "Validation evidence missing." },
+    writeReadiness: currentBuildWriteReadiness,
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    firstSafeValidationGate: blockedFirstSafeValidationGate,
+    firstSafeImplementationWorkOrder: blockedFirstSafeWorkOrder,
+    tempExecutorActivationGate: missingPreflightActivationGate,
+    tempExecutorActivationRehearsal: tempActivationRehearsal,
+    writeBoundaryProbe: defaultWriteBoundaryProbe,
+    runtimeCapabilities: { available: true, scanKnownRoots: true, realRunEnabled: false, destructiveCommands: false, safeExecutorsEnabled: false }
+  });
+  assert.strictEqual(nativeLaunchRoadmap.status, "native-readonly-ready", "native roadmap should recognize current read-only scan evidence");
+  assert.strictEqual(nativeLaunchRoadmap.nativeScanCurrent, true, "native roadmap should surface current native scan evidence");
+  assert.strictEqual(nativeLaunchRoadmap.realCleanupLocked, true, "native roadmap must keep real cleanup locked");
+  const unsafeLaunchRoadmap = guard.buildRealDataLaunchRoadmap({
+    scanMode: "native-readonly",
+    scanSession: { status: "native-current", readyForPlanning: true, nativeEvidence: true },
+    tempExecutorActivationRehearsal: tempActivationRehearsal,
+    runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true, safeExecutorsEnabled: true }
+  });
+  assert.strictEqual(unsafeLaunchRoadmap.status, "unsafe-stop", "roadmap should stop on runtime write signals");
+  assert(unsafeLaunchRoadmap.unsafeRows.length > 0, "unsafe roadmap should expose an unsafe row");
   const unsafeTempActivationRehearsal = guard.buildTempExecutorActivationRehearsal({
     runtimeCapabilities: { available: true, realRunEnabled: true, destructiveCommands: true },
     firstSafeExecutorContract: firstSafeContract,
@@ -3337,6 +3388,7 @@ const assert = require("assert");
     goalBytes: 10 * guard.GB,
     writeReadiness: currentBuildWriteReadiness,
     realExecutorCapsule: currentBuildExecutorCapsule,
+    realDataLaunchRoadmap: nativeLaunchRoadmap,
     firstSafeExecutorContract: firstSafeContract,
     firstSafeValidationGate: readyFirstSafeValidationGate,
     firstSafeImplementationWorkOrder: readyFirstSafeWorkOrder,
@@ -3348,6 +3400,9 @@ const assert = require("assert");
   assert(writeReadinessReport.includes("Ready for real execution: no"), "write readiness report should keep real execution blocked");
   assert(writeReadinessReport.includes("## Real Executor Capsule"), "dry-run report should include real executor capsule");
   assert(writeReadinessReport.includes("Destructive action available: no"), "executor capsule report should keep destructive action hidden");
+  assert(writeReadinessReport.includes("## Real Data Launch Roadmap"), "dry-run report should include the real-data launch roadmap");
+  assert(writeReadinessReport.includes("Current milestone: Native read-only beta evidence"), "roadmap report should expose the current product milestone");
+  assert(writeReadinessReport.includes("Real cleanup locked: yes"), "roadmap report should keep real cleanup locked");
   assert(writeReadinessReport.includes("## Write Boundary Probe"), "dry-run report should include write boundary probe");
   assert(writeReadinessReport.includes("Rejection evidence: yes"), "write boundary probe report should record rejection evidence");
   assert(writeReadinessReport.includes("Executor scaffold: Known temp roots | feature-flag-disabled | flag=tempCleanupExecutor | mutation=disabled"), "write boundary report should include the disabled temp scaffold");

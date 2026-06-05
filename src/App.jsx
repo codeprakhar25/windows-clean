@@ -70,6 +70,7 @@ import {
   buildReleaseReviewPacket,
   buildReleaseReviewPacketMarkdown,
   buildRecoveryAdvisor,
+  buildRealDataLaunchRoadmap,
   buildRealExecutorCapsule,
   buildRollbackPlan,
   buildItemReview,
@@ -983,6 +984,45 @@ export default function App() {
       }),
     [runReadiness, consentReceipt, safetyInterlock, planLock]
   );
+  const realDataLaunchRoadmap = useMemo(
+    () =>
+      buildRealDataLaunchRoadmap({
+        scanMode: dataMode,
+        scanSession,
+        scanCoverage,
+        demoRehearsalRunbook,
+        windowsSetupAssistant,
+        publicBetaReadiness,
+        validationPack,
+        releaseReviewPacket,
+        writeReadiness,
+        realExecutorCapsule,
+        firstSafeValidationGate,
+        firstSafeImplementationWorkOrder,
+        tempExecutorActivationGate,
+        tempExecutorActivationRehearsal,
+        writeBoundaryProbe,
+        runtimeCapabilities: runtimeCapabilities.result
+      }),
+    [
+      dataMode,
+      scanSession,
+      scanCoverage,
+      demoRehearsalRunbook,
+      windowsSetupAssistant,
+      publicBetaReadiness,
+      validationPack,
+      releaseReviewPacket,
+      writeReadiness,
+      realExecutorCapsule,
+      firstSafeValidationGate,
+      firstSafeImplementationWorkOrder,
+      tempExecutorActivationGate,
+      tempExecutorActivationRehearsal,
+      writeBoundaryProbe,
+      runtimeCapabilities.result
+    ]
+  );
   const agentQuestionQueue = useMemo(
     () =>
       buildAgentQuestionQueue({
@@ -1763,6 +1803,7 @@ export default function App() {
       windowsSetupAssistant,
       demoRehearsalRunbook,
       productCompletionAudit,
+      realDataLaunchRoadmap,
       workflowHandoff,
       itemReview,
       executorPlan,
@@ -2089,6 +2130,8 @@ export default function App() {
             <NativeScannerPanel capability={nativeCapability} nativeScan={nativeScan} />
 
             <WindowsSetupAssistantPanel assistant={windowsSetupAssistant} />
+
+            <RealDataLaunchRoadmapPanel roadmap={realDataLaunchRoadmap} />
 
             <DemoRehearsalRunbookPanel runbook={demoRehearsalRunbook} onExport={exportReport} />
 
@@ -2585,6 +2628,100 @@ function WindowsSetupAssistantPanel({ assistant }) {
                 <Badge variant={command.destructive ? "restricted" : command.status === "available" || command.status === "detected" ? "safe" : "review"}>
                   {command.destructive ? "destructive" : command.status}
                 </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RealDataLaunchRoadmapPanel({ roadmap }) {
+  const activeRows = roadmap.rows.filter((row) => row.status !== "ready").slice(0, 4);
+  const phaseLabel = roadmap.currentMilestone.split(" ")[0] || "Open";
+  const estimateLabel = roadmap.estimate
+    .replace("ready now", "now")
+    .replace("same day", "today")
+    .replace(" weeks", "wk")
+    .replace(" week", "wk")
+    .replace(" days", "d")
+    .split(" after ")[0];
+
+  return (
+    <Card id="real-data-launch-roadmap-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <CircleGauge className="h-4 w-4" />
+              Real data launch roadmap
+            </CardTitle>
+            <CardDescription>{roadmap.primary}</CardDescription>
+          </div>
+          <Badge variant={roadmap.tone}>{roadmap.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <QueueStat label="Phase" value={phaseLabel} tone={roadmap.tone} />
+          <QueueStat label="Estimate" value={estimateLabel} tone={roadmap.confidence === "high" ? "safe" : "review"} />
+          <QueueStat label="Progress" value={`${roadmap.progress}%`} tone={roadmap.progress >= 70 ? "safe" : "review"} />
+          <QueueStat label="Real cleanup" value={roadmap.realCleanupLocked ? "locked" : "ready"} tone={roadmap.realCleanupLocked ? "safe" : "restricted"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 text-sm font-medium">{roadmap.currentMilestone}</div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-medium">Launch confidence</div>
+            <div className="flex flex-wrap gap-1">
+              <Badge variant={roadmap.nativeScanCurrent ? "safe" : "outline"}>
+                {roadmap.nativeScanCurrent ? "native scan current" : "native scan needed"}
+              </Badge>
+              <Badge variant={roadmap.activationRehearsed ? "safe" : "outline"}>
+                {roadmap.activationRehearsed ? "activation rehearsed" : "activation waiting"}
+              </Badge>
+              <Badge variant={roadmap.nativePreflightReady ? "safe" : "outline"}>
+                {roadmap.nativePreflightReady ? "native preflight ready" : "native preflight missing"}
+              </Badge>
+            </div>
+          </div>
+          <Progress value={roadmap.progress} indicatorClassName={roadmap.realCleanupReady ? "bg-emerald-600" : "bg-blue-600"} />
+          <div className="mt-2 text-xs text-muted-foreground">
+            Confidence: {roadmap.confidence}. Estimates are planning ranges and do not unlock real cleanup.
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {roadmap.milestones.map((milestone) => (
+            <div key={milestone.id} className="rounded-md border bg-card p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 text-sm font-medium">{milestone.label}</div>
+                <Badge variant={milestone.tone}>{milestone.status}</Badge>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                <Badge variant="outline">{milestone.estimate}</Badge>
+                <Badge variant="outline">{milestone.confidence}</Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{milestone.detail}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 text-sm font-medium">Next evidence rows</div>
+          <div className="flex flex-col gap-2">
+            {(activeRows.length ? activeRows : roadmap.rows.slice(0, 4)).map((row) => (
+              <div key={row.id} className="rounded-md border bg-card p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 text-sm font-medium">{row.label}</div>
+                  <Badge variant={row.tone}>{row.status}</Badge>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">{row.nextStep}</p>
+                <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-[1fr_auto]">
+                  <span>{row.evidence}</span>
+                  <span>{row.estimate}</span>
+                </div>
               </div>
             ))}
           </div>

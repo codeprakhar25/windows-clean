@@ -93,6 +93,8 @@ The **Temp executor activation** gate is the route-specific bridge between the d
 
 The **Temp activation rehearsal** panel is a browser-safe demo of that same route. It synthesizes rejected write-boundary evidence from the current first-safe contract, feeds it through the real activation gate, and should stop at `feature-flag-disabled`. It is demo-only evidence: no native command runs, no local path is scanned, no mutation is attempted, and it cannot satisfy Windows validation or release readiness.
 
+The **Real data launch roadmap** panel consolidates product status and rough delivery ranges. It separates the web demo, native read-only beta, first-safe temp executor, and broader cleanup product milestones. It is evidence tracking only: estimates do not unlock real cleanup, and the roadmap still reports zero real-run rows until write readiness and release review both pass.
+
 The native runtime capability command is:
 
 ```txt
@@ -159,6 +161,7 @@ The demo also includes:
 - Scenario presets for developer, gaming, and family laptops.
 - Real data readiness panel for the Tauri read-only scanner.
 - Windows setup assistant that separates browser demo, desktop shell, current read-only scan evidence, local privacy/export, native beta readiness, and the real-cleanup lock.
+- Real data launch roadmap with current milestone, progress, rough estimate, confidence, demo/native activation proof, and real-cleanup lock status.
 - Demo rehearsal runbook that proves the browser demo can go from scan to gated plan, dry-run consent, simulated ledger, and report export without native data or real cleanup.
 - Product completion audit that maps the original product requirements to proven, partial, waiting, locked, or unsafe evidence so the app cannot overclaim real cleanup readiness.
 - Safety interlock that summarizes runtime write signals, native write signals, scan freshness, dry-run consent, task power leases, standing permission, run readiness, write-boundary evidence, release review, and write readiness into one stop/hold/dry-run state.
