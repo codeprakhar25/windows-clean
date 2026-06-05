@@ -1,6 +1,7 @@
 const DEFAULT_OPENAI_MODEL = "gpt-5.2";
 const DEFAULT_OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_REASONING_EFFORT = "low";
+const NATIVE_OPENAI_AGENT_COMMAND = "openai_agent_advice";
 const OPENAI_AGENT_RESPONSE_FORMAT = {
   type: "json_schema",
   name: "spaceguard_cleanup_agent_advice",
@@ -80,6 +81,15 @@ export function getOpenAIAgentConfig(env = import.meta.env || {}) {
     reasoningEffort,
     advisoryOnly: true,
     directToolAccess: false
+  };
+}
+
+export function getNativeOpenAIAgentCapability(host = globalThis) {
+  const invoke = host?.__TAURI__?.core?.invoke;
+  return {
+    available: typeof invoke === "function",
+    command: NATIVE_OPENAI_AGENT_COMMAND,
+    transport: typeof invoke === "function" ? "native-tauri" : "browser-fetch"
   };
 }
 
@@ -224,7 +234,10 @@ export function buildOpenAIAgentContext({
       browserCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.browserCacheExecutor),
       gradleCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.gradleCacheExecutor),
       npmCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.npmCacheExecutor),
-      recycleBinExecutor: Boolean(runtimeCapabilities?.executorFlags?.recycleBinExecutor)
+      recycleBinExecutor: Boolean(runtimeCapabilities?.executorFlags?.recycleBinExecutor),
+      openAiAgentAdvice: Boolean(runtimeCapabilities?.openAiAgentAdvice),
+      openAiAdvisorConfigured: Boolean(runtimeCapabilities?.openAiAdvisorConfigured),
+      openAiKeySource: runtimeCapabilities?.openAiKeySource || "missing"
     },
     selectedActions: selected,
     topFindings,
@@ -252,8 +265,25 @@ export async function requestOpenAIAgentAdvice({
   context,
   userPrompt,
   config = getOpenAIAgentConfig(),
-  fetchImpl = globalThis.fetch
+  fetchImpl = globalThis.fetch,
+  host = globalThis
 } = {}) {
+  const nativeCapability = getNativeOpenAIAgentCapability(host);
+  if (nativeCapability.available) {
+    const result = await host.__TAURI__.core.invoke(NATIVE_OPENAI_AGENT_COMMAND, {
+      request: {
+        userPrompt: String(userPrompt || "Find the fastest safe path to recover space from this scan."),
+        context,
+        model: config.model || DEFAULT_OPENAI_MODEL,
+        reasoningEffort: config.reasoningEffort || DEFAULT_OPENAI_REASONING_EFFORT
+      }
+    });
+    return normalizeOpenAIAgentResult(result, {
+      fallbackModel: config.model || DEFAULT_OPENAI_MODEL,
+      transport: nativeCapability.transport
+    });
+  }
+
   if (!config?.apiKey) {
     throw new Error("Set OPENAI_API_KEY in .env and restart the Vite/Tauri dev server.");
   }
@@ -317,7 +347,7 @@ export async function requestOpenAIAgentAdvice({
   }
 
   const text = extractOpenAIResponseText(payload);
-  return {
+  return normalizeOpenAIAgentResult({
     schemaVersion: "spaceguard-openai-agent-advice/v1",
     provider: "openai",
     model: payload?.model || config.model,
@@ -326,7 +356,7 @@ export async function requestOpenAIAgentAdvice({
     rawText: text,
     advice: parseAgentAdvice(text),
     responseId: payload?.id || ""
-  };
+  }, { fallbackModel: config.model, transport: "browser-fetch" });
 }
 
 function toAgentAction(action = {}) {
@@ -356,6 +386,35 @@ function extractOpenAIResponseText(payload = {}) {
   return parts.join("\n").trim();
 }
 
+function normalizeOpenAIAgentResult(result = {}, { fallbackModel = DEFAULT_OPENAI_MODEL, transport = "browser-fetch" } = {}) {
+  const rawText = String(result.rawText || result.raw_text || "");
+  const fallback = {
+    summary: rawText || "OpenAI returned no text.",
+    nextAction: "Review the raw response.",
+    confidence: "low",
+    recommendedActions: [],
+    blockedActions: [],
+    questions: [],
+    warnings: []
+  };
+  const advice = result.advice && typeof result.advice === "object"
+    ? normalizeAgentAdviceObject(result.advice, fallback)
+    : parseAgentAdvice(rawText);
+  return {
+    schemaVersion: result.schemaVersion || result.schema_version || "spaceguard-openai-agent-advice/v1",
+    provider: result.provider || "openai",
+    model: result.model || fallbackModel || DEFAULT_OPENAI_MODEL,
+    requestId: result.requestId || result.request_id || "",
+    createdAt: result.createdAt || result.created_at || new Date().toISOString(),
+    rawText,
+    advice,
+    responseId: result.responseId || result.response_id || "",
+    keySource: result.keySource || result.key_source || "",
+    transport: result.transport || transport,
+    warnings: Array.isArray(result.warnings) ? result.warnings.map((warning) => String(warning || "")).filter(Boolean) : []
+  };
+}
+
 function parseAgentAdvice(text) {
   const fallback = {
     summary: text || "OpenAI returned no text.",
@@ -370,18 +429,22 @@ function parseAgentAdvice(text) {
 
   try {
     const parsed = JSON.parse(stripJsonFence(text));
-    return {
-      summary: String(parsed.summary || fallback.summary),
-      nextAction: String(parsed.nextAction || parsed.next_action || fallback.nextAction),
-      confidence: normalizeConfidence(parsed.confidence),
-      recommendedActions: normalizeAdviceRows(parsed.recommendedActions || parsed.recommended_actions),
-      blockedActions: normalizeAdviceRows(parsed.blockedActions || parsed.blocked_actions),
-      questions: normalizeStringList(parsed.questions),
-      warnings: normalizeStringList(parsed.warnings)
-    };
+    return normalizeAgentAdviceObject(parsed, fallback);
   } catch {
     return fallback;
   }
+}
+
+function normalizeAgentAdviceObject(parsed = {}, fallback) {
+  return {
+    summary: String(parsed.summary || fallback.summary),
+    nextAction: String(parsed.nextAction || parsed.next_action || fallback.nextAction),
+    confidence: normalizeConfidence(parsed.confidence),
+    recommendedActions: normalizeAdviceRows(parsed.recommendedActions || parsed.recommended_actions),
+    blockedActions: normalizeAdviceRows(parsed.blockedActions || parsed.blocked_actions),
+    questions: normalizeStringList(parsed.questions),
+    warnings: normalizeStringList(parsed.warnings)
+  };
 }
 
 function stripJsonFence(text) {

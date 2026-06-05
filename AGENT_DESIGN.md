@@ -42,7 +42,8 @@ The OpenAI integration is advisory, not an executor.
 
 - It receives a bounded context packet: scan mode, selected actions, candidate samples, readiness state, runtime capability flags, and policy boundaries.
 - It receives reviewed project dependency targets only after item-review decisions mark them as Remove.
-- Its Responses API call reads `OPENAI_API_KEY`, `OPENAI_MODEL`, and `OPENAI_REASONING_EFFORT` from the local `.env`/Vite runtime and requests strict JSON schema output named `spaceguard_cleanup_agent_advice`.
+- In the desktop shell, its Responses API call runs through native command `openai_agent_advice`; Rust reads `OPENAI_API_KEY`, `OPENAI_MODEL`, and `OPENAI_REASONING_EFFORT` from the process environment or local `.env` and requests strict JSON schema output named `spaceguard_cleanup_agent_advice`.
+- Browser-only demos may use the legacy `VITE_OPENAI_API_KEY` fallback, but the product path keeps the secret out of the renderer payload.
 - Its allowed action vocabulary is limited to ranking reviewed targets, explaining blockers, asking the user, recommending a rescan, or recommending a scoped executor button.
 - It can rank candidates, explain risk, suggest the next workflow branch, and draft questions for the user.
 - It cannot scan local folders directly.
@@ -199,7 +200,7 @@ Task power invariant:
 - `admin-cleanup` and `advanced-system-strategy` stay locked until the user allows admin/system dry-run routes at intake.
 - `restricted-zones` stays blocked even when selected data has visible size.
 - `manual-storage-strategy` can track evidence and next steps but cannot create executor rows.
-- Every power reports real execution unavailable until a future native executor, validation evidence, rollback proof, privilege boundary, privacy boundary, and consent path all pass.
+- Every power reports real execution unavailable unless a named scoped native executor, validation evidence, rollback proof, privilege boundary, privacy boundary, and consent path all pass.
 - The power broker is the only bridge between selected powers and task grants. It defaults to deny unless a current plan, scan, and consent-bound grant exists, and it cannot create standing permission across tasks.
 - Task grants are issued only as `dry-run-only` authority. They wait on the current scan session and dry-run consent, refuse issuance when runtime write capability is visible, and expire when the plan, selection, approval state, protected paths, or scanner settings change.
 - Task power leases are the current-use audit for those grants. A lease is usable only when the grant evidence still matches the active plan id, scan fingerprint, dry-run consent receipt, broker request, and runtime write lock; stale, waiting, blocked, unsafe, or standing-permission leases must be denied.
@@ -533,7 +534,7 @@ The second native command is:
 simulate_cleanup_plan
 ```
 
-It returns native dry-run ledger entries plus bounded candidate metadata for first-safe routes only. It must reuse the native first-safe target allowlist before candidate enumeration and return target-scope rejection metadata without file samples when the path is missing, forbidden, or not allowlisted. It must report `realRunEnabled: false` and `destructiveCommands: false` unless the dedicated temp executor flag is enabled in the native runtime.
+It returns native dry-run ledger entries plus bounded candidate metadata for first-safe routes only. It must reuse the native first-safe target allowlist before candidate enumeration and return target-scope rejection metadata without file samples when the path is missing, forbidden, or not allowlisted. It must report `realRunEnabled: false` and `destructiveCommands: false` unless a dedicated scoped executor flag is enabled in the native runtime.
 
 The third native command is:
 

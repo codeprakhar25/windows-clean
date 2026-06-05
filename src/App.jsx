@@ -251,10 +251,13 @@ export default function App() {
       elevationSource: "browser-demo",
       realRunEnabled: false,
       destructiveCommands: false,
-      scanKnownRoots: false,
-      simulateCleanupPlan: false,
-      executeCleanupPlan: false,
-      safeExecutorsEnabled: false,
+        scanKnownRoots: false,
+        simulateCleanupPlan: false,
+        executeCleanupPlan: false,
+        openAiAgentAdvice: false,
+        openAiAdvisorConfigured: false,
+        openAiKeySource: "missing",
+        safeExecutorsEnabled: false,
       executorFlags: {
         tempCleanupExecutor: false,
         projectDependencyExecutor: false,
@@ -1343,11 +1346,11 @@ export default function App() {
     () =>
       buildAIAgentIntegration({
         providerConfig: {
-          connected: openAiConfig.connected,
+          connected: openAiConfig.connected || runtimeCapabilities.result.openAiAdvisorConfigured,
           provider: openAiConfig.provider,
           model: openAiConfig.model,
           endpoint: openAiConfig.endpoint,
-          keySource: openAiConfig.keySource,
+          keySource: runtimeCapabilities.result.openAiAdvisorConfigured ? runtimeCapabilities.result.openAiKeySource : openAiConfig.keySource,
           reasoningEffort: openAiConfig.reasoningEffort
         },
         agentQuestionQueue,
@@ -5916,7 +5919,10 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
   const result = advice.result?.advice || null;
   const recommended = result?.recommendedActions || [];
   const blocked = result?.blockedActions || [];
-  const configured = Boolean(config.configured);
+  const nativeConfigured = Boolean(context.runtime.openAiAdvisorConfigured);
+  const configured = Boolean(config.configured || nativeConfigured);
+  const keySource = nativeConfigured ? context.runtime.openAiKeySource : config.keySource;
+  const transport = context.runtime.openAiAgentAdvice ? "native-tauri" : "browser-fetch";
   const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor || context.runtime.gradleCacheExecutor || context.runtime.npmCacheExecutor || context.runtime.recycleBinExecutor);
 
   return (
@@ -5952,10 +5958,11 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
             <Badge variant="safe">advisory only</Badge>
             <Badge variant="safe">strict JSON</Badge>
             <Badge variant="safe">direct tools blocked</Badge>
-            <Badge variant={configured ? "outline" : "review"}>{config.keySource}</Badge>
+            <Badge variant={configured ? "outline" : "review"}>{keySource}</Badge>
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
             <span>Provider: OpenAI Responses API</span>
+            <span>Transport: {transport}</span>
             <span>Endpoint: {config.endpoint.replace(/^https?:\/\//, "")}</span>
             <span>Reasoning: {config.reasoningEffort || "default"}</span>
             <span>Native scan: {context.runtime.nativeAvailable ? "available" : "not available"}</span>

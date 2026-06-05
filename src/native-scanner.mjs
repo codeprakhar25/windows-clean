@@ -515,6 +515,9 @@ export async function getNativeRuntimeCapabilities(host = globalThis) {
       scanKnownRoots: false,
       simulateCleanupPlan: false,
       executeCleanupPlan: false,
+      openAiAgentAdvice: false,
+      openAiAdvisorConfigured: false,
+      openAiKeySource: "missing",
       safeExecutorsEnabled: false,
       executorFlags: defaultExecutorFlags(),
       reason: "Browser demo cannot perform native scans or cleanup."
@@ -762,6 +765,9 @@ export function normalizeNativeRuntimeCapabilities(result = {}) {
     scanKnownRoots: Boolean(result.scanKnownRoots || result.scan_known_roots),
     simulateCleanupPlan: Boolean(result.simulateCleanupPlan || result.simulate_cleanup_plan),
     executeCleanupPlan: Boolean(result.executeCleanupPlan || result.execute_cleanup_plan),
+    openAiAgentAdvice: Boolean(result.openAiAgentAdvice || result.openaiAgentAdvice || result.openai_agent_advice),
+    openAiAdvisorConfigured: Boolean(result.openAiAdvisorConfigured || result.openaiAdvisorConfigured || result.openai_advisor_configured),
+    openAiKeySource: result.openAiKeySource || result.openaiKeySource || result.openai_key_source || "missing",
     safeExecutorsEnabled: Boolean(result.safeExecutorsEnabled || result.safe_executors_enabled),
     executorFlags: normalizeExecutorFlags(result.executorFlags || result.executor_flags),
     reason: result.reason || ""

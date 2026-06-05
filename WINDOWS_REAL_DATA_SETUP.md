@@ -1,6 +1,6 @@
 # Windows Real-Data Setup
 
-This guide is for moving SpaceGuard from browser demo data to real local measurements and the first feature-flagged temp cleanup executor.
+This guide is for moving SpaceGuard from browser demo data to real local measurements and scoped feature-flagged cleanup executors.
 
 ## Safety Boundary
 
@@ -8,10 +8,10 @@ Default native mode is read-only:
 
 - It measures known local roots and C: volume totals.
 - It can produce native dry-run ledger entries.
-- It does not delete files, edit registry keys, resize partitions, run cleanup shell commands, or self-elevate unless the first-safe temp executor flag is explicitly enabled.
+- It does not delete files, edit registry keys, resize partitions, run cleanup shell commands, or self-elevate unless a named scoped executor flag is explicitly enabled.
 - Review-gated findings still require per-item decisions.
 
-Use a disposable Windows 11 VM for fixture validation. Use your real machine only after a read-only smoke test and only for the `known-temp-delete` executor if you accept that it permanently removes old files from allowlisted temp roots.
+Use a disposable Windows 11 VM for fixture validation. Use your real machine only after a read-only smoke test and only for a named scoped executor whose consequence you accept.
 
 ## Prerequisites
 
@@ -121,7 +121,7 @@ In the app:
 24. Add protected paths before planning any review-heavy route.
 25. Use **Custom root triage** for custom read-only findings. Mark each unknown folder Keep, Archive, Move, Inspect, or Escalate; these dispositions stay manual and cannot create executor routes.
 26. Use **Item review** for Downloads, large personal files, project artifacts, Android Studio findings, and installed app footprints. App footprint decisions are manual uninstall follow-up only; folder age is not usage proof.
-27. Use **OpenAI cleanup agent** for advisory ranking and explanation only. The panel reads `OPENAI_API_KEY` from `.env`, sends the bounded scan/plan context plus reviewed project dependency targets and scanned Gradle/npm/browser cache targets to OpenAI when clicked, and defaults to `gpt-5.2` unless `OPENAI_MODEL` is set. The response is strict JSON for ranked actions, blockers, questions, and warnings; executor recommendations may show user-clickable buttons, but those buttons still use the app's existing consent, scan, feature-flag, and target-validation checks. The model cannot scan folders, approve gates, or run cleanup.
+27. Use **OpenAI cleanup agent** for advisory ranking and explanation only. In the desktop shell, the panel calls the native `openai_agent_advice` command; Rust reads `OPENAI_API_KEY` from `.env` or the process environment, sends the bounded scan/plan context plus reviewed project dependency targets and scanned Gradle/npm/browser cache targets to OpenAI, and defaults to `gpt-5.2` unless `OPENAI_MODEL` is set. The response is strict JSON for ranked actions, blockers, questions, and warnings; executor recommendations may show user-clickable buttons, but those buttons still use the app's existing consent, scan, feature-flag, and target-validation checks. The model cannot scan folders, approve gates, or run cleanup.
 28. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, **First-safe validation gate**, **First-safe work order**, **Temp executor activation**, **Release review packet**, **Validation evidence**, and **Product completion audit** to confirm only named feature-flagged scoped executors can run and every other route remains locked.
 29. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
 30. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.

@@ -1,11 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+const DEFAULT_OPENAI_MODEL: &str = "gpt-5.2";
+const DEFAULT_OPENAI_ENDPOINT: &str = "https://api.openai.com/v1/responses";
+const DEFAULT_OPENAI_REASONING_EFFORT: &str = "low";
 
 #[cfg(target_os = "windows")]
 use std::ffi::OsStr;
@@ -266,6 +271,9 @@ struct RuntimeCapabilities {
     scan_known_roots: bool,
     simulate_cleanup_plan: bool,
     execute_cleanup_plan: bool,
+    openai_agent_advice: bool,
+    openai_advisor_configured: bool,
+    openai_key_source: String,
     safe_executors_enabled: bool,
     executor_flags: ExecutorFeatureFlags,
     reason: String,
@@ -281,6 +289,31 @@ struct ExecutorFeatureFlags {
     recycle_bin_executor: bool,
     browser_cache_executor: bool,
     tool_native_prune_executors: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenAIAgentAdviceRequest {
+    user_prompt: Option<String>,
+    context: Value,
+    model: Option<String>,
+    reasoning_effort: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenAIAgentAdviceResponse {
+    schema_version: &'static str,
+    provider: &'static str,
+    model: String,
+    request_id: String,
+    created_at: String,
+    raw_text: String,
+    advice: Value,
+    response_id: String,
+    key_source: String,
+    transport: &'static str,
+    warnings: Vec<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -313,6 +346,7 @@ fn main() {
             scan_known_roots,
             simulate_cleanup_plan,
             execute_cleanup_plan,
+            openai_agent_advice,
             runtime_capabilities
         ])
         .run(tauri::generate_context!())
@@ -452,6 +486,146 @@ fn simulate_cleanup_plan(request: Option<DryRunRequest>) -> DryRunResponse {
                 .to_string(),
         ],
     }
+}
+
+#[tauri::command]
+async fn openai_agent_advice(
+    request: Option<OpenAIAgentAdviceRequest>,
+) -> Result<OpenAIAgentAdviceResponse, String> {
+    let request = request.ok_or_else(|| "OpenAI advisor request is missing.".to_string())?;
+    let context_schema = request
+        .context
+        .get("schemaVersion")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if context_schema != "spaceguard-openai-agent-context/v1" {
+        return Err("OpenAI advisor requires a SpaceGuard context packet.".to_string());
+    }
+
+    let (api_key, key_source) = openai_env_value(&["OPENAI_API_KEY", "VITE_OPENAI_API_KEY"])
+        .ok_or_else(|| {
+            "Set OPENAI_API_KEY in .env or the Tauri process environment.".to_string()
+        })?;
+    let model = openai_env_value(&["OPENAI_MODEL", "VITE_OPENAI_MODEL"])
+        .map(|(value, _)| value)
+        .or_else(|| request.model.filter(|value| !value.trim().is_empty()))
+        .unwrap_or_else(|| DEFAULT_OPENAI_MODEL.to_string());
+    let endpoint = openai_env_value(&["OPENAI_BASE_URL", "VITE_OPENAI_BASE_URL"])
+        .map(|(value, _)| value)
+        .unwrap_or_else(|| DEFAULT_OPENAI_ENDPOINT.to_string());
+    let reasoning_input =
+        openai_env_value(&["OPENAI_REASONING_EFFORT", "VITE_OPENAI_REASONING_EFFORT"])
+            .map(|(value, _)| value)
+            .or_else(|| {
+                request
+                    .reasoning_effort
+                    .filter(|value| !value.trim().is_empty())
+            })
+            .unwrap_or_else(|| DEFAULT_OPENAI_REASONING_EFFORT.to_string());
+    let reasoning_effort = normalize_openai_reasoning_effort(&reasoning_input);
+
+    let input_text = serde_json::to_string_pretty(&json!({
+        "userPrompt": request.user_prompt.unwrap_or_else(|| "Find the fastest safe path to recover space from this scan.".to_string()),
+        "context": request.context
+    }))
+    .map_err(|error| format!("OpenAI context serialization failed: {error}"))?;
+
+    let mut body = json!({
+        "model": model,
+        "store": false,
+        "text": {
+            "format": openai_response_format()
+        },
+        "instructions": [
+            "You are the SpaceGuard local Windows cleanup advisor.",
+            "You never claim you scanned the computer yourself; you only interpret the provided app context.",
+            "You cannot approve gates, modify files, run shell commands, or delete data.",
+            "When a scoped executor is visible, recommend the exact UI button only after the context says current consent and route-specific targets exist.",
+            "Use actionType values from the schema. Keep targetId empty unless you are referring to a provided target id.",
+            "Prioritize concrete next steps that move toward real safe cleanup.",
+            "Return structured JSON that matches the provided response schema."
+        ].join(" "),
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": input_text
+                    }
+                ]
+            }
+        ],
+        "max_output_tokens": 1200
+    });
+    if reasoning_effort != "default" {
+        if let Some(body_object) = body.as_object_mut() {
+            body_object.insert(
+                "reasoning".to_string(),
+                json!({ "effort": reasoning_effort }),
+            );
+        }
+    }
+
+    let response = reqwest::Client::new()
+        .post(&endpoint)
+        .bearer_auth(api_key)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|error| format!("OpenAI request failed: {error}"))?;
+    let status = response.status();
+    let request_id = response
+        .headers()
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let payload = response
+        .json::<Value>()
+        .await
+        .map_err(|error| format!("OpenAI response parse failed: {error}"))?;
+    if !status.is_success() {
+        let message = payload
+            .get("error")
+            .and_then(|error| error.get("message"))
+            .and_then(Value::as_str)
+            .or_else(|| payload.get("message").and_then(Value::as_str))
+            .unwrap_or("OpenAI request failed.");
+        return Err(if request_id.is_empty() {
+            format!("{message} HTTP {status}.")
+        } else {
+            format!("{message} HTTP {status}. Request id: {request_id}")
+        });
+    }
+
+    let raw_text = extract_openai_response_text(&payload);
+    let advice = parse_openai_advice(&raw_text);
+    let model = payload
+        .get("model")
+        .and_then(Value::as_str)
+        .unwrap_or(DEFAULT_OPENAI_MODEL)
+        .to_string();
+    let response_id = payload
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+
+    Ok(OpenAIAgentAdviceResponse {
+        schema_version: "spaceguard-openai-agent-advice/v1",
+        provider: "openai",
+        model,
+        request_id,
+        created_at: generated_at(),
+        raw_text,
+        advice,
+        response_id,
+        key_source,
+        transport: "native-tauri",
+        warnings: vec!["OpenAI advice is advisory only; native executors still require explicit user action, consent, feature flags, and target validation.".to_string()],
+    })
 }
 
 #[tauri::command]
@@ -3374,6 +3548,196 @@ fn file_old_enough_for_temp_delete(metadata: &fs::Metadata) -> bool {
     age.as_secs() >= 24 * 60 * 60
 }
 
+fn openai_response_format() -> Value {
+    json!({
+        "type": "json_schema",
+        "name": "spaceguard_cleanup_agent_advice",
+        "description": "A bounded cleanup advisor response for SpaceGuard. It recommends UI-mediated cleanup actions without tool authority.",
+        "strict": true,
+        "schema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["summary", "nextAction", "confidence", "recommendedActions", "blockedActions", "questions", "warnings"],
+            "properties": {
+                "summary": { "type": "string" },
+                "nextAction": { "type": "string" },
+                "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+                "recommendedActions": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "items": openai_advice_row_schema()
+                },
+                "blockedActions": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "items": openai_advice_row_schema()
+                },
+                "questions": { "type": "array", "maxItems": 6, "items": { "type": "string" } },
+                "warnings": { "type": "array", "maxItems": 6, "items": { "type": "string" } }
+            }
+        }
+    })
+}
+
+fn openai_advice_row_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "reason", "priority", "actionType", "targetId", "route"],
+        "properties": {
+            "id": { "type": "string" },
+            "title": { "type": "string" },
+            "reason": { "type": "string" },
+            "priority": { "type": "string", "enum": ["high", "medium", "low"] },
+            "actionType": {
+                "type": "string",
+                "enum": ["review-target", "run-temp-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+            },
+            "targetId": { "type": "string" },
+            "route": { "type": "string" }
+        }
+    })
+}
+
+fn extract_openai_response_text(payload: &Value) -> String {
+    if let Some(text) = payload.get("output_text").and_then(Value::as_str) {
+        return text.trim().to_string();
+    }
+    let mut parts = Vec::new();
+    if let Some(output) = payload.get("output").and_then(Value::as_array) {
+        for item in output {
+            if let Some(content) = item.get("content").and_then(Value::as_array) {
+                for content_item in content {
+                    if let Some(text) = content_item.get("text").and_then(Value::as_str) {
+                        parts.push(text.to_string());
+                    }
+                    if let Some(text) = content_item.get("output_text").and_then(Value::as_str) {
+                        parts.push(text.to_string());
+                    }
+                }
+            }
+        }
+    }
+    parts.join("\n").trim().to_string()
+}
+
+fn parse_openai_advice(text: &str) -> Value {
+    let clean = strip_json_fence(text);
+    serde_json::from_str::<Value>(&clean).unwrap_or_else(|_| {
+        json!({
+            "summary": if text.trim().is_empty() { "OpenAI returned no text." } else { text.trim() },
+            "nextAction": "Review the raw response.",
+            "confidence": "low",
+            "recommendedActions": [],
+            "blockedActions": [],
+            "questions": [],
+            "warnings": []
+        })
+    })
+}
+
+fn strip_json_fence(text: &str) -> String {
+    let mut clean = text.trim();
+    if let Some(rest) = clean.strip_prefix("```json") {
+        clean = rest.trim();
+    } else if let Some(rest) = clean.strip_prefix("```") {
+        clean = rest.trim();
+    }
+    if let Some(rest) = clean.strip_suffix("```") {
+        clean = rest.trim();
+    }
+    clean.to_string()
+}
+
+fn normalize_openai_reasoning_effort(value: &str) -> String {
+    let clean = value.trim().to_lowercase();
+    match clean.as_str() {
+        "default" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" => clean,
+        _ => DEFAULT_OPENAI_REASONING_EFFORT.to_string(),
+    }
+}
+
+fn openai_env_value(names: &[&str]) -> Option<(String, String)> {
+    for name in names {
+        if let Ok(value) = env::var(name) {
+            let value = value.trim().to_string();
+            if !value.is_empty() {
+                return Some((value, (*name).to_string()));
+            }
+        }
+    }
+    for path in dotenv_candidate_paths() {
+        for name in names {
+            if let Some(value) = dotenv_value(&path, name) {
+                return Some((value, format!(".env:{name}")));
+            }
+        }
+    }
+    None
+}
+
+fn dotenv_candidate_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    if let Ok(current) = env::current_dir() {
+        let mut cursor = Some(current.as_path());
+        let mut depth = 0;
+        while let Some(path) = cursor {
+            if depth > 2 {
+                break;
+            }
+            push_unique_path(&mut paths, path.join(".env"));
+            cursor = path.parent();
+            depth += 1;
+        }
+    }
+    if let Ok(exe) = env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            push_unique_path(&mut paths, dir.join(".env"));
+        }
+    }
+    paths
+}
+
+fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
+    if !paths.iter().any(|existing| existing == &path) {
+        paths.push(path);
+    }
+}
+
+fn dotenv_value(path: &Path, name: &str) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    for line in content.lines() {
+        let clean = line.trim();
+        if clean.is_empty() || clean.starts_with('#') {
+            continue;
+        }
+        let clean = clean.strip_prefix("export ").unwrap_or(clean);
+        let Some((key, value)) = clean.split_once('=') else {
+            continue;
+        };
+        if key.trim() != name {
+            continue;
+        }
+        let value = unquote_env_value(value.trim()).trim().to_string();
+        if !value.is_empty() {
+            return Some(value);
+        }
+    }
+    None
+}
+
+fn unquote_env_value(value: &str) -> String {
+    let bytes = value.as_bytes();
+    if bytes.len() >= 2
+        && ((bytes[0] == b'"' && bytes[bytes.len() - 1] == b'"')
+            || (bytes[0] == b'\'' && bytes[bytes.len() - 1] == b'\''))
+    {
+        value[1..value.len() - 1].to_string()
+    } else {
+        value.to_string()
+    }
+}
+
 #[tauri::command]
 fn runtime_capabilities() -> RuntimeCapabilities {
     let temp_enabled = cfg!(target_os = "windows") && temp_executor_enabled();
@@ -3383,6 +3747,10 @@ fn runtime_capabilities() -> RuntimeCapabilities {
     let gradle_cache_enabled = cfg!(target_os = "windows") && gradle_cache_executor_enabled();
     let npm_cache_enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
     let recycle_bin_enabled = cfg!(target_os = "windows") && recycle_bin_executor_enabled();
+    let openai_key_source = openai_env_value(&["OPENAI_API_KEY", "VITE_OPENAI_API_KEY"])
+        .map(|(_, source)| source)
+        .unwrap_or_else(|| "missing".to_string());
+    let openai_advisor_configured = openai_key_source != "missing";
     let real_execution_enabled = temp_enabled
         || project_dependency_enabled
         || browser_cache_enabled
@@ -3404,6 +3772,9 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         scan_known_roots: true,
         simulate_cleanup_plan: true,
         execute_cleanup_plan: true,
+        openai_agent_advice: true,
+        openai_advisor_configured,
+        openai_key_source,
         safe_executors_enabled: real_execution_enabled,
         executor_flags: ExecutorFeatureFlags {
             temp_cleanup_executor: temp_enabled,

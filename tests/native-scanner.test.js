@@ -673,6 +673,9 @@ const assert = require("assert");
     scan_known_roots: true,
     simulate_cleanup_plan: true,
     execute_cleanup_plan: true,
+    openai_agent_advice: true,
+    openai_advisor_configured: true,
+    openai_key_source: ".env:OPENAI_API_KEY",
     safe_executors_enabled: false,
     executor_flags: {
       temp_cleanup_executor: false,
@@ -691,6 +694,9 @@ const assert = require("assert");
   assert.strictEqual(capabilities.scanKnownRoots, true, "native capabilities should expose scanner availability");
   assert.strictEqual(capabilities.simulateCleanupPlan, true, "native capabilities should expose dry-run availability");
   assert.strictEqual(capabilities.executeCleanupPlan, true, "native capabilities should expose rejecting write boundary availability");
+  assert.strictEqual(capabilities.openAiAgentAdvice, true, "native capabilities should expose OpenAI advisor availability");
+  assert.strictEqual(capabilities.openAiAdvisorConfigured, true, "native capabilities should expose OpenAI key configuration without the key");
+  assert.strictEqual(capabilities.openAiKeySource, ".env:OPENAI_API_KEY", "native capabilities should expose only the OpenAI key source");
   assert.deepStrictEqual(
     capabilities.executorFlags,
     {

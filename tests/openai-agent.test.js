@@ -23,6 +23,86 @@ const assert = require("assert");
   assert.strictEqual(legacyConfig.model, "gpt-5-mini", "OpenAI advisor should keep the legacy model fallback");
   assert.strictEqual(legacyConfig.reasoningEffort, "none", "OpenAI advisor should keep the legacy reasoning fallback");
 
+  assert.strictEqual(openai.getNativeOpenAIAgentCapability({}).available, false, "browser host should not expose the native OpenAI command");
+  assert.strictEqual(
+    openai.getNativeOpenAIAgentCapability({ __TAURI__: { core: { invoke() {} } } }).available,
+    true,
+    "Tauri host should expose the native OpenAI command"
+  );
+
+  let nativeInvocation = null;
+  const nativeResult = await openai.requestOpenAIAgentAdvice({
+    config: openai.getOpenAIAgentConfig({ OPENAI_API_KEY: "renderer-key-should-not-cross" }),
+    userPrompt: "Use the native advisor.",
+    context: { schemaVersion: "spaceguard-openai-agent-context/v1", runtime: { openAiAgentAdvice: true } },
+    host: {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            nativeInvocation = { command, payload };
+            return Promise.resolve({
+              schemaVersion: "spaceguard-openai-agent-advice/v1",
+              provider: "openai",
+              model: "gpt-5.2",
+              requestId: "req_native_openai",
+              responseId: "resp_native_openai",
+              createdAt: "unix:1",
+              rawText: JSON.stringify({
+                summary: "Native advisor returned a scoped plan.",
+                nextAction: "Run a native scan first.",
+                confidence: "medium",
+                recommendedActions: [
+                  {
+                    id: "rescan",
+                    title: "Refresh scan",
+                    reason: "Native scan evidence should be current.",
+                    priority: "high",
+                    actionType: "rescan",
+                    targetId: "",
+                    route: ""
+                  }
+                ],
+                blockedActions: [],
+                questions: [],
+                warnings: []
+              }),
+              advice: {
+                summary: "Native advisor returned a scoped plan.",
+                nextAction: "Run a native scan first.",
+                confidence: "medium",
+                recommendedActions: [
+                  {
+                    id: "rescan",
+                    title: "Refresh scan",
+                    reason: "Native scan evidence should be current.",
+                    priority: "high",
+                    actionType: "rescan",
+                    targetId: "",
+                    route: ""
+                  }
+                ],
+                blockedActions: [],
+                questions: [],
+                warnings: []
+              },
+              keySource: ".env:OPENAI_API_KEY",
+              transport: "native-tauri",
+              warnings: ["advisory only"]
+            });
+          }
+        }
+      }
+    }
+  });
+  assert.strictEqual(nativeInvocation.command, "openai_agent_advice", "OpenAI adapter should prefer the native Tauri advisor command");
+  assert.strictEqual(nativeInvocation.payload.request.userPrompt, "Use the native advisor.", "native OpenAI request should pass the user prompt");
+  assert.strictEqual(nativeInvocation.payload.request.context.schemaVersion, "spaceguard-openai-agent-context/v1", "native OpenAI request should pass bounded context");
+  assert.strictEqual(nativeInvocation.payload.request.model, "gpt-5.2", "native OpenAI request should pass model preference without a key");
+  assert.strictEqual(JSON.stringify(nativeInvocation.payload).includes("renderer-key-should-not-cross"), false, "renderer API key must not be sent to the native command");
+  assert.strictEqual(nativeResult.transport, "native-tauri", "native OpenAI result should preserve transport");
+  assert.strictEqual(nativeResult.keySource, ".env:OPENAI_API_KEY", "native OpenAI result should expose key source only");
+  assert.strictEqual(nativeResult.advice.recommendedActions[0].actionType, "rescan", "native OpenAI result should normalize advice rows");
+
   await assert.rejects(
     () => openai.requestOpenAIAgentAdvice({ context: {}, userPrompt: "rank cleanup" }),
     /OPENAI_API_KEY/,

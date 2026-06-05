@@ -297,7 +297,9 @@ assert(openAiAgent.includes("VITE_OPENAI_API_KEY"), "OpenAI adapter should keep 
 assert(openAiAgent.includes("gpt-5.2"), "OpenAI adapter should default to the current GPT-5.2 model");
 assert(openAiAgent.includes("OPENAI_REASONING_EFFORT"), "OpenAI adapter should support configurable reasoning effort");
 assert(openAiAgent.includes("body.reasoning"), "OpenAI adapter should send configured reasoning effort");
-assert(viteConfig.includes('envPrefix: ["VITE_", "OPENAI_"]'), "Vite should expose OPENAI_* env vars for the local advisor panel");
+assert(openAiAgent.includes("openai_agent_advice"), "OpenAI adapter should prefer the native Tauri advisor command");
+assert(openAiAgent.includes("getNativeOpenAIAgentCapability"), "OpenAI adapter should expose native advisor capability detection");
+assert(!viteConfig.includes('envPrefix: ["VITE_", "OPENAI_"]'), "Vite must not expose OPENAI_* secrets to the renderer");
 assert(openAiAgent.includes("directDeleteAuthority"), "OpenAI context should deny direct delete authority");
 assert(openAiAgent.includes("text: {"), "OpenAI adapter should configure Responses API text output");
 assert(openAiAgent.includes("type: \"json_schema\""), "OpenAI adapter should request strict structured output");
@@ -319,6 +321,7 @@ assert(app.includes("Recycle"), "OpenAI panel should show Recycle Bin target cou
 assert(app.includes("Cache roots"), "OpenAI panel should show browser cache target count");
 assert(app.includes("strict JSON"), "OpenAI panel should show structured output boundary");
 assert(app.includes("Reasoning:"), "OpenAI panel should show configured reasoning effort");
+assert(app.includes("Transport:"), "OpenAI panel should show native/browser transport");
 assert(app.includes("OPENAI_MODEL"), "OpenAI panel should mention the primary model env setting");
 assert(app.includes("agent-question-panel"), "OpenAI ask-user recommendations should be able to focus the question panel");
 assert(app.includes("item-review-panel"), "OpenAI review-target recommendations should be able to focus item review");
@@ -678,6 +681,9 @@ assert(nativeAdapter.includes("targetPath"), "native adapter should pass selecte
 assert(nativeAdapter.includes("executorScaffold"), "native adapter should normalize write executor scaffold metadata");
 assert(nativeAdapter.includes("preflightChecks"), "native adapter should normalize write preflight checks");
 assert(nativeAdapter.includes("runtime_capabilities"), "native adapter should invoke runtime capability command");
+assert(nativeAdapter.includes("openAiAgentAdvice"), "native adapter should normalize OpenAI advisor command availability");
+assert(nativeAdapter.includes("openAiAdvisorConfigured"), "native adapter should normalize OpenAI key configuration");
+assert(nativeAdapter.includes("openAiKeySource"), "native adapter should normalize OpenAI key source");
 assert(nativeAdapter.includes("executorFlags"), "native adapter should normalize per-executor feature flags");
 assert(nativeAdapter.includes("items.map"), "native adapter should preserve item-level review candidates");
 assert(tauriConfig.includes('"withGlobalTauri": true'), "Tauri config should expose the global bridge used by the adapter");
@@ -696,6 +702,11 @@ assert(rustScanner.includes("skipped_count"), "Rust native dry-run should report
 assert(rustScanner.includes("target_scope_status"), "Rust native dry-run should report target-scope status");
 assert(rustScanner.includes("write_action_target_reject_code(&action.route, &action.target_path)"), "Rust native dry-run should reuse target-scope rejection before candidate enumeration");
 assert(rustScanner.includes("execute_cleanup_plan"), "Rust rejecting write boundary command should exist");
+assert(rustScanner.includes("openai_agent_advice"), "Rust native OpenAI advisor command should exist");
+assert(rustScanner.includes("OPENAI_API_KEY"), "Rust native OpenAI advisor should read OPENAI_API_KEY");
+assert(rustScanner.includes("dotenv_candidate_paths"), "Rust native OpenAI advisor should read local .env files");
+assert(rustScanner.includes("reqwest::Client::new"), "Rust native OpenAI advisor should call OpenAI from native code");
+assert(rustScanner.includes("openai_response_format"), "Rust native OpenAI advisor should request strict structured output");
 assert(rustScanner.includes("contract_echo"), "Rust rejecting write boundary should echo the first-safe contract");
 assert(rustScanner.includes("WriteExecutorScaffold"), "Rust write boundary should expose disabled executor scaffold metadata");
 assert(rustScanner.includes("WritePreflightCheck"), "Rust write boundary should expose per-action preflight checks");
