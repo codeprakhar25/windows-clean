@@ -4250,6 +4250,30 @@ const assert = require("assert");
     "scoped-executor-visible",
     "AI advisor should label Gradle cache executor visibility without granting authority"
   );
+  const scopedNpmAi = guard.buildAIAgentIntegration({
+    providerConfig: { connected: true, provider: "openai" },
+    runtimeCapabilities: {
+      realRunEnabled: true,
+      destructiveCommands: true,
+      safeExecutorsEnabled: true,
+      executorFlags: {
+        projectDependencyExecutor: false,
+        tempCleanupExecutor: false,
+        gradleCacheExecutor: false,
+        npmCacheExecutor: true,
+        recycleBinExecutor: false,
+        browserCacheExecutor: false,
+        toolNativePruneExecutors: false
+      }
+    }
+  });
+  assert.strictEqual(scopedNpmAi.status, "advisory-connector-ready", "AI advisor should remain available for scoped npm cache execution");
+  assert.strictEqual(scopedNpmAi.directToolAccess, false, "AI advisor must not receive direct tool access for npm cache cleanup");
+  assert.strictEqual(
+    scopedNpmAi.rows.find((row) => row.id === "mutation-boundary").status,
+    "scoped-executor-visible",
+    "AI advisor should label npm cache executor visibility without granting authority"
+  );
 
   console.log("guardrails ok");
 })();

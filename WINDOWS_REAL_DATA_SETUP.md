@@ -61,6 +61,13 @@ $env:SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR="1"
 npm run native:dev
 ```
 
+Optional npm cache executor:
+
+```powershell
+$env:SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR="1"
+npm run native:dev
+```
+
 Optional browser cache executor:
 
 ```powershell
@@ -68,7 +75,7 @@ $env:SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR="1"
 npm run native:dev
 ```
 
-Those flags enable only their named routes: `known-temp-delete`, reviewed `node_modules` cleanup, current-user Gradle cache cleanup, and scanned browser cache roots. They do not enable Recycle Bin cleanup, tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, browser identity-store deletion, project source deletion, or arbitrary project-folder deletion.
+Those flags enable only their named routes: `known-temp-delete`, reviewed `node_modules` cleanup, current-user Gradle cache cleanup, current-user npm `_cacache` cleanup, and scanned browser cache roots. They do not enable Recycle Bin cleanup, pnpm or Docker tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, browser identity-store deletion, project source deletion, or arbitrary project-folder deletion.
 
 ## Read-Only Real Scan
 
@@ -106,7 +113,7 @@ In the app:
 24. Add protected paths before planning any review-heavy route.
 25. Use **Custom root triage** for custom read-only findings. Mark each unknown folder Keep, Archive, Move, Inspect, or Escalate; these dispositions stay manual and cannot create executor routes.
 26. Use **Item review** for Downloads, large personal files, project artifacts, Android Studio findings, and installed app footprints. App footprint decisions are manual uninstall follow-up only; folder age is not usage proof.
-27. Use **OpenAI cleanup agent** for advisory ranking and explanation only. The panel sends the bounded scan/plan context plus reviewed project dependency targets to OpenAI when clicked. The response is strict JSON for ranked actions, blockers, questions, and warnings; the model cannot scan folders, approve gates, or run cleanup.
+27. Use **OpenAI cleanup agent** for advisory ranking and explanation only. The panel sends the bounded scan/plan context plus reviewed project dependency targets and scanned Gradle/npm/browser cache targets to OpenAI when clicked. The response is strict JSON for ranked actions, blockers, questions, and warnings; the model cannot scan folders, approve gates, or run cleanup.
 28. Use **Agent questions**, **Manual strategy checklist**, **Executor policy**, **Tool command inventory**, **Rollback plan**, **Public beta readiness**, **Release gate**, **Write readiness**, **Real executor capsule**, **First-safe executor contract**, **First-safe validation gate**, **First-safe work order**, **Temp executor activation**, **Release review packet**, **Validation evidence**, and **Product completion audit** to confirm every route except feature-flagged temp cleanup is still locked.
 29. Paste the `spaceguard-fixture-evidence/v1` JSON into **Fixture evidence import** with reviewer and artifact id. This can fill only the scanner-fixture validation record.
 30. Record rollback proof in **Rollback plan** only after restore, backup, or permanent-removal acknowledgement evidence exists; fill reviewer, evidence path or artifact id, and the route-specific reference.
@@ -187,7 +194,7 @@ For each Windows validation run, capture:
 - Drive inventory rows, including top-level bucket status, bytes, classification, and confirmation that executor routes remain zero.
 - Storage pressure diagnosis status, ranked causes, current plan gap, and confirmation that diagnosis has zero executor and real-run rows.
 - Native evidence quality status, planning-ready flag, measured coverage, missing evidence rows, mutation lock, and confirmation that executor and real-run rows remain zero.
-- Runtime executor flags for `tempCleanupExecutor`, `projectDependencyExecutor`, `gradleCacheExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`; capture each independently.
+- Runtime executor flags for `tempCleanupExecutor`, `projectDependencyExecutor`, `gradleCacheExecutor`, `npmCacheExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`; capture each independently.
 - Active agent question and question queue state.
 - Per-check validation evidence records with reviewer, timestamp, artifact path, and notes.
 - Public beta readiness state.
@@ -214,6 +221,7 @@ For each Windows validation run, capture:
 - Temp activation rehearsal status if using the no-real-data demo path; this evidence must be labeled demo-only and must not replace native write-boundary proof.
 - Disabled temp executor scaffold status when probing `known-temp-delete`: route, `tempCleanupExecutor`, validation-required state, mutation disabled, and zero bytes.
 - Gradle cache executor status when selected: route `bounded-cache-delete`, `gradleCacheExecutor`, scanned `.gradle\caches` target evidence, old-file threshold, skipped lock/recent counts, and reclaimed bytes from the native response.
+- npm cache executor status when selected: route `bounded-npm-cache-delete`, `npmCacheExecutor`, scanned `%LocalAppData%\npm-cache\_cacache` target evidence, 14-day threshold, skipped index/recent counts, and reclaimed bytes from the native response.
 - Browser cache executor status when selected: route `browser-cache-only`, `browserCacheExecutor`, scanned cache-root target count, identity-store rejection boundary, and reclaimed bytes from the native response.
 - Write-boundary preflight rows for request shape, target allowlist, mutation lock, feature flag, and validation evidence.
 - Write boundary probe state if the desktop runtime exposes `execute_cleanup_plan`; current evidence must show accepted false, rejected entries, zero bytes, matching first-safe contract echo, and no mutation.

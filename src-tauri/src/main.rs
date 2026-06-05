@@ -276,6 +276,7 @@ struct ExecutorFeatureFlags {
     temp_cleanup_executor: bool,
     project_dependency_executor: bool,
     gradle_cache_executor: bool,
+    npm_cache_executor: bool,
     recycle_bin_executor: bool,
     browser_cache_executor: bool,
     tool_native_prune_executors: bool,
@@ -477,6 +478,9 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
     }
     if request.request_mode.as_deref() == Some("execute-gradle-cache") {
         return execute_gradle_cache_cleanup(request);
+    }
+    if request.request_mode.as_deref() == Some("execute-npm-cache") {
+        return execute_npm_cache_cleanup(request);
     }
     let route = request.route.clone();
     let plan_id = request.plan_id.clone();
@@ -1218,6 +1222,174 @@ fn execute_gradle_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutio
     }
 }
 
+fn execute_npm_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let flag_enabled = npm_cache_executor_enabled();
+    let rejections = npm_cache_execution_rejections(&request, flag_enabled);
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-npm-cache-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-npm-cache".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+
+    let entries = request
+        .actions
+        .into_iter()
+        .map(|action| {
+            let target_path = action.target_path.clone().unwrap_or_default();
+            let target_reject = npm_cache_target_reject_code(&target_path);
+            let route_match = action.route == route && route == "bounded-npm-cache-delete";
+            let can_execute = rejections.is_empty() && route_match && target_reject.is_none();
+
+            if can_execute {
+                let deleted = delete_npm_cache_target(&resolve_dry_run_target(&target_path));
+                return WriteExecutionEntry {
+                    id: action.id,
+                    title: action.title,
+                    route: action.route,
+                    result: if deleted.deleted_files > 0 || deleted.deleted_dirs > 0 {
+                        "executed".to_string()
+                    } else {
+                        "no-op".to_string()
+                    },
+                    reject_code: String::new(),
+                    bytes: deleted.deleted_bytes,
+                    preflight_status: "executed".to_string(),
+                    preflight_checks: vec![
+                        write_preflight_check(
+                            "route-bounded-npm-cache",
+                            "Bounded npm cache route",
+                            "passed",
+                            "Action route is bounded-npm-cache-delete.",
+                        ),
+                        write_preflight_check(
+                            "target-npm-cache",
+                            "npm _cacache target",
+                            "passed",
+                            "Target is the current user's npm-cache\\_cacache directory.",
+                        ),
+                        write_preflight_check(
+                            "feature-flag",
+                            "Executor feature flag",
+                            "passed",
+                            "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR enabled npm cache cleanup.",
+                        ),
+                    ],
+                    note: format!(
+                        "npm cache executor deleted {} old file(s), {} empty cache dir(s), reclaimed {} byte(s), and skipped {} item(s).",
+                        deleted.deleted_files,
+                        deleted.deleted_dirs,
+                        deleted.deleted_bytes,
+                        deleted.skipped_count
+                    ),
+                };
+            }
+
+            let reject_code = if !route_match {
+                "route-not-bounded-npm-cache"
+            } else {
+                target_reject
+                    .or_else(|| rejections.first().copied())
+                    .unwrap_or("npm-cache-executor-disabled")
+            };
+
+            WriteExecutionEntry {
+                id: action.id,
+                title: action.title,
+                route: action.route,
+                result: "rejected".to_string(),
+                reject_code: reject_code.to_string(),
+                bytes: 0,
+                preflight_status: "target-blocked".to_string(),
+                preflight_checks: vec![
+                    write_preflight_check(
+                        "route-bounded-npm-cache",
+                        "Bounded npm cache route",
+                        if route_match { "passed" } else { "blocked" },
+                        if route_match {
+                            "Action route is bounded-npm-cache-delete."
+                        } else {
+                            "Only bounded-npm-cache-delete can use this executor."
+                        },
+                    ),
+                    write_preflight_check(
+                        "target-npm-cache",
+                        "npm _cacache target",
+                        if target_reject.is_none() { "passed" } else { "blocked" },
+                        if target_reject.is_none() {
+                            "Target is the current user's npm _cacache."
+                        } else {
+                            "Target is missing, forbidden, not the current user's npm-cache\\_cacache directory, or link-like."
+                        },
+                    ),
+                    write_preflight_check(
+                        "feature-flag",
+                        "Executor feature flag",
+                        if flag_enabled { "passed" } else { "blocked" },
+                        if flag_enabled {
+                            "npm cache executor feature flag is enabled."
+                        } else {
+                            "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR is not enabled."
+                        },
+                    ),
+                ],
+                note: format!(
+                    "npm cache cleanup rejected with code {reject_code}. Plan {plan_id}; no bytes were removed for this action."
+                ),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let accepted = rejections.is_empty()
+        && entries
+            .iter()
+            .all(|entry| entry.result == "executed" || entry.result == "no-op");
+    let reclaimed = entries.iter().map(|entry| entry.bytes).sum::<u64>();
+    let mut warnings = npm_cache_execution_warnings(&rejections);
+    if accepted {
+        warnings.push(format!(
+            "npm cache cleanup completed for plan {plan_id}; reclaimed {reclaimed} byte(s). Run a fresh native scan and npm install if you need cache rehydration proof."
+        ));
+    }
+
+    WriteExecutionResponse {
+        mode: if accepted {
+            "native-npm-cache-executor"
+        } else {
+            "native-npm-cache-executor-rejected"
+        },
+        real_run_enabled: flag_enabled,
+        destructive_commands: flag_enabled,
+        accepted,
+        reason: if accepted {
+            format!("npm cache executor accepted the bounded _cacache target and reclaimed {reclaimed} byte(s).")
+        } else {
+            "npm cache executor rejected the request before mutation.".to_string()
+        },
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
+        entries,
+        warnings,
+    }
+}
+
 fn write_boundary_rejections(request: &WriteExecutionRequest) -> Vec<&'static str> {
     let mut codes = Vec::new();
     let mode = request.request_mode.as_deref().unwrap_or("capsule-probe");
@@ -1384,6 +1556,7 @@ fn is_first_safe_write_route(route: &str) -> bool {
             | "browser-cache-only"
             | "item-review-project-cache"
             | "bounded-cache-delete"
+            | "bounded-npm-cache-delete"
     )
 }
 
@@ -1486,6 +1659,30 @@ fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
                 },
             })
         }
+        "bounded-npm-cache-delete" => {
+            let enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
+            Some(WriteExecutorScaffold {
+                route: "bounded-npm-cache-delete".to_string(),
+                title: "Bounded npm cache".to_string(),
+                feature_flag: "npmCacheExecutor".to_string(),
+                status: if enabled {
+                    "feature-flag-enabled".to_string()
+                } else {
+                    "feature-flag-disabled".to_string()
+                },
+                validation_status: if enabled {
+                    "npm-cacache-only".to_string()
+                } else {
+                    "validation-required".to_string()
+                },
+                mutation_enabled: enabled,
+                reason: if enabled {
+                    "npm cache executor can remove old files and empty dirs under the current user's npm-cache\\_cacache root only.".to_string()
+                } else {
+                    "npm cache executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR is enabled on Windows.".to_string()
+                },
+            })
+        }
         _ => None,
     }
 }
@@ -1496,6 +1693,7 @@ fn write_executor_scaffold_reject_code(route: &str) -> &'static str {
         "item-review-project-cache" => "project-deps-executor-disabled",
         "browser-cache-only" => "browser-cache-executor-disabled",
         "bounded-cache-delete" => "gradle-cache-executor-disabled",
+        "bounded-npm-cache-delete" => "npm-cache-executor-disabled",
         _ => "real-executor-disabled",
     }
 }
@@ -1510,6 +1708,9 @@ fn write_action_target_reject_code(
     }
     if route == "bounded-cache-delete" {
         return gradle_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
+    }
+    if route == "bounded-npm-cache-delete" {
+        return npm_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
     }
     if write_target_forbidden(route, &target) {
         return Some("target-forbidden");
@@ -1567,6 +1768,17 @@ fn write_target_forbidden(route: &str, target: &str) -> bool {
                 || target.contains("\\windows\\")
                 || target.contains("\\program files")
         }
+        "bounded-npm-cache-delete" => {
+            target.contains("downloads")
+                || target.contains("documents")
+                || target.contains("desktop")
+                || target.contains("node_modules")
+                || target.contains("\\windows\\")
+                || target.contains("\\program files")
+                || target.contains("\\programdata\\")
+                || target.contains("\\appdata\\roaming\\npm")
+                || target.contains("\\npm\\node_modules")
+        }
         "item-review-project-cache" => {
             !target.ends_with("\\node_modules")
                 || target.contains("\\windows\\")
@@ -1594,6 +1806,9 @@ fn write_target_allowed(route: &str, target: &str) -> bool {
         }
         "bounded-cache-delete" => {
             target.ends_with("\\.gradle\\caches") || target.contains("\\.gradle\\caches\\")
+        }
+        "bounded-npm-cache-delete" => {
+            target.ends_with("\\npm-cache\\_cacache") || target.contains("\\npm-cache\\_cacache\\")
         }
         "item-review-project-cache" => {
             target.ends_with("\\node_modules") || target.contains("\\node_modules\\")
@@ -1634,6 +1849,9 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "gradle-cache-executor-disabled" => {
             "Write request rejected: gradleCacheExecutor scaffold is feature-flag disabled."
         }
+        "npm-cache-executor-disabled" => {
+            "Write request rejected: npmCacheExecutor scaffold is feature-flag disabled."
+        }
         "target-not-node-modules" => "Write request rejected: project dependency target is not node_modules.",
         "target-not-browser-cache" => "Write request rejected: browser cache target is not a cache directory.",
         "route-not-browser-cache" => "Write request rejected: browser cache cleanup requires route browser-cache-only.",
@@ -1642,6 +1860,12 @@ fn write_boundary_warning(code: &str) -> &'static str {
         }
         "route-not-bounded-cache" => {
             "Write request rejected: Gradle cache cleanup requires route bounded-cache-delete."
+        }
+        "target-not-npm-cache" => {
+            "Write request rejected: npm cache target is not the current user's npm-cache\\_cacache directory."
+        }
+        "route-not-bounded-npm-cache" => {
+            "Write request rejected: npm cache cleanup requires route bounded-npm-cache-delete."
         }
         "target-link-or-not-directory" => {
             "Write request rejected: target is link-like or not a directory."
@@ -1687,6 +1911,17 @@ fn browser_cache_executor_enabled() -> bool {
 
 fn gradle_cache_executor_enabled() -> bool {
     env::var("SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR")
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn npm_cache_executor_enabled() -> bool {
+    env::var("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR")
         .map(|value| {
             matches!(
                 value.to_ascii_lowercase().as_str(),
@@ -2003,6 +2238,85 @@ fn gradle_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
         .collect()
 }
 
+fn npm_cache_execution_rejections(
+    request: &WriteExecutionRequest,
+    flag_enabled: bool,
+) -> Vec<&'static str> {
+    let mut codes = Vec::new();
+    if !cfg!(target_os = "windows") {
+        codes.push("windows-required");
+    }
+    if !flag_enabled {
+        codes.push("npm-cache-executor-disabled");
+    }
+    if request.plan_id.trim().is_empty() {
+        codes.push("missing-plan-id");
+    }
+    if request
+        .scan_fingerprint
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-scan-fingerprint");
+    }
+    if request
+        .consent_plan_id
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-consent-plan-id");
+    }
+    if request.request_mode.as_deref() != Some("execute-npm-cache") {
+        codes.push("request-mode-invalid");
+    }
+    if request.route != "bounded-npm-cache-delete" {
+        codes.push("route-not-bounded-npm-cache");
+    }
+    if request.dry_run_only != Some(false) {
+        codes.push("dry-run-disabled-required");
+    }
+    if request.mutation_attempted != Some(true) {
+        codes.push("mutation-confirmation-required");
+    }
+    if request.actions.is_empty() {
+        codes.push("no-actions");
+    }
+    codes
+}
+
+fn npm_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
+    if codes.is_empty() {
+        return vec![
+            "npm cache executor removes old files and empty cache subdirectories under npm-cache\\_cacache only; global packages, project node_modules, and package-manager commands remain forbidden.".to_string(),
+        ];
+    }
+    codes
+        .iter()
+        .map(|code| match *code {
+            "windows-required" => "npm cache cleanup is Windows-only in this build.",
+            "npm-cache-executor-disabled" => {
+                "Set SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1 before launching the Tauri app to enable npm cache cleanup."
+            }
+            "dry-run-disabled-required" => {
+                "npm cache cleanup requires dryRunOnly=false on the execute-npm-cache request."
+            }
+            "mutation-confirmation-required" => {
+                "npm cache cleanup requires mutationAttempted=true on the execute-npm-cache request."
+            }
+            "request-mode-invalid" => "npm cache cleanup requires requestMode=execute-npm-cache.",
+            "route-not-bounded-npm-cache" => {
+                "npm cache cleanup requires route bounded-npm-cache-delete."
+            }
+            _ => write_boundary_warning(code),
+        })
+        .map(String::from)
+        .collect()
+}
+
 fn project_dependency_target_reject_code(value: &str) -> Option<&'static str> {
     let path = resolve_dry_run_target(value);
     if path.as_os_str().is_empty() {
@@ -2108,6 +2422,46 @@ fn gradle_cache_target_reject_code(value: &str) -> Option<&'static str> {
     None
 }
 
+fn npm_cache_target_reject_code(value: &str) -> Option<&'static str> {
+    let path = resolve_dry_run_target(value);
+    if path.as_os_str().is_empty() {
+        return Some("target-missing");
+    }
+
+    let original = normalize_write_target(value);
+    let resolved = normalize_write_target(&path_to_string(&path));
+    if write_target_forbidden("bounded-npm-cache-delete", &original)
+        || write_target_forbidden("bounded-npm-cache-delete", &resolved)
+    {
+        return Some("target-forbidden");
+    }
+    if !write_target_allowed("bounded-npm-cache-delete", &original)
+        && !write_target_allowed("bounded-npm-cache-delete", &resolved)
+    {
+        return Some("target-not-npm-cache");
+    }
+
+    let Some(local_app_data) = env_path("LOCALAPPDATA").or_else(|| {
+        env_path("USERPROFILE")
+            .or_else(|| env_path("HOME"))
+            .map(|profile| profile.join("AppData").join("Local"))
+    }) else {
+        return Some("target-not-npm-cache");
+    };
+    let expected = local_app_data.join("npm-cache").join("_cacache");
+    if !same_normalized_path(&path, &expected) {
+        return Some("target-not-npm-cache");
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(&path) else {
+        return Some("target-missing");
+    };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Some("target-link-or-not-directory");
+    }
+    None
+}
+
 #[derive(Default)]
 struct TempDeleteResult {
     deleted_bytes: u64,
@@ -2133,6 +2487,14 @@ struct BrowserCacheDeleteResult {
 
 #[derive(Default)]
 struct GradleCacheDeleteResult {
+    deleted_bytes: u64,
+    deleted_files: u64,
+    deleted_dirs: u64,
+    skipped_count: u64,
+}
+
+#[derive(Default)]
+struct NpmCacheDeleteResult {
     deleted_bytes: u64,
     deleted_files: u64,
     deleted_dirs: u64,
@@ -2332,6 +2694,103 @@ fn gradle_cache_file_forbidden(path: &Path) -> bool {
         .unwrap_or(true)
 }
 
+fn delete_npm_cache_target(root: &Path) -> NpmCacheDeleteResult {
+    let mut result = NpmCacheDeleteResult::default();
+    if npm_cache_target_reject_code(&path_to_string(root)).is_some() {
+        result.skipped_count += 1;
+        return result;
+    }
+
+    let mut queue = VecDeque::from([root.to_path_buf()]);
+    let mut dirs = Vec::new();
+    let mut visited = 0usize;
+    while let Some(path) = queue.pop_front() {
+        if visited >= 250_000 || result.deleted_files >= 120_000 {
+            result.skipped_count += 1;
+            break;
+        }
+        visited += 1;
+
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            result.skipped_count += 1;
+            continue;
+        };
+        if metadata.file_type().is_symlink() {
+            result.skipped_count += 1;
+            continue;
+        }
+        if metadata.is_file() {
+            delete_single_npm_cache_file(&path, &metadata, &mut result);
+            continue;
+        }
+        if metadata.is_dir() {
+            dirs.push(path.clone());
+            match fs::read_dir(&path) {
+                Ok(entries) => {
+                    for entry in entries.flatten() {
+                        queue.push_back(entry.path());
+                    }
+                }
+                Err(_) => result.skipped_count += 1,
+            }
+        }
+    }
+
+    dirs.sort_by(|left, right| right.components().count().cmp(&left.components().count()));
+    for dir in dirs {
+        if dir == root {
+            continue;
+        }
+        match fs::remove_dir(&dir) {
+            Ok(_) => result.deleted_dirs = result.deleted_dirs.saturating_add(1),
+            Err(_) => result.skipped_count += 1,
+        }
+    }
+
+    result
+}
+
+fn delete_single_npm_cache_file(
+    path: &Path,
+    metadata: &fs::Metadata,
+    result: &mut NpmCacheDeleteResult,
+) {
+    if !file_old_enough_for_npm_cache_delete(metadata) || npm_cache_file_forbidden(path) {
+        result.skipped_count += 1;
+        return;
+    }
+    let bytes = metadata.len();
+    match fs::remove_file(path) {
+        Ok(_) => {
+            result.deleted_bytes = result.deleted_bytes.saturating_add(bytes);
+            result.deleted_files = result.deleted_files.saturating_add(1);
+        }
+        Err(_) => result.skipped_count += 1,
+    }
+}
+
+fn file_old_enough_for_npm_cache_delete(metadata: &fs::Metadata) -> bool {
+    let Ok(modified) = metadata.modified() else {
+        return false;
+    };
+    let Ok(age) = SystemTime::now().duration_since(modified) else {
+        return false;
+    };
+    age.as_secs() >= 14 * 24 * 60 * 60
+}
+
+fn npm_cache_file_forbidden(path: &Path) -> bool {
+    let clean_path = normalize_path(&path_to_string(path));
+    if !clean_path.contains("\\_cacache\\content-v2\\") && !clean_path.contains("\\_cacache\\tmp\\")
+    {
+        return true;
+    }
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.to_ascii_lowercase().ends_with(".lock"))
+        .unwrap_or(true)
+}
+
 fn delete_project_dependency_target(root: &Path) -> ProjectDependencyDeleteResult {
     let mut result = ProjectDependencyDeleteResult::default();
     if project_dependency_target_reject_code(&path_to_string(root)).is_some() {
@@ -2485,8 +2944,12 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         cfg!(target_os = "windows") && project_dependency_executor_enabled();
     let browser_cache_enabled = cfg!(target_os = "windows") && browser_cache_executor_enabled();
     let gradle_cache_enabled = cfg!(target_os = "windows") && gradle_cache_executor_enabled();
-    let real_execution_enabled =
-        temp_enabled || project_dependency_enabled || browser_cache_enabled || gradle_cache_enabled;
+    let npm_cache_enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
+    let real_execution_enabled = temp_enabled
+        || project_dependency_enabled
+        || browser_cache_enabled
+        || gradle_cache_enabled
+        || npm_cache_enabled;
     RuntimeCapabilities {
         mode: if real_execution_enabled {
             "native-scoped-write"
@@ -2507,6 +2970,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
             temp_cleanup_executor: temp_enabled,
             project_dependency_executor: project_dependency_enabled,
             gradle_cache_executor: gradle_cache_enabled,
+            npm_cache_executor: npm_cache_enabled,
             recycle_bin_executor: false,
             browser_cache_executor: browser_cache_enabled,
             tool_native_prune_executors: false,
@@ -2923,7 +3387,7 @@ fn exact_specs(target_drive: &str) -> Vec<ExactSpec> {
         specs.push(ExactSpec {
             recipe_id: "npm-cache",
             title: "npm package cache",
-            path: local.join("npm-cache"),
+            path: local.join("npm-cache").join("_cacache"),
             kind: MeasureKind::FullTree,
         });
         specs.push(ExactSpec {

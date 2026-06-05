@@ -143,7 +143,7 @@ The UI must also expose a recovery advisor and decision log:
 - `restriction matrix`: explicit refusal surface for hard-blocked, manual-only, review-gated, intake-gated, and future-disabled cleanup classes.
 - `executor policy`: dry-run route, future executor lane, blocked reason, guardrails, and verification requirement.
 - `release gate`: feature flags, runtime capability, validation evidence, and disposable VM coverage before real execution.
-- `executor feature flags`: native-reported per-route switches for temp, Recycle Bin, browser cache, and tool-native executors; no shared safe-executor toggle can unlock multiple routes.
+- `executor feature flags`: native-reported per-route switches for temp, reviewed project dependencies, Gradle cache, npm cache, Recycle Bin, browser cache, and tool-native executors; no shared safe-executor toggle can unlock multiple routes.
 - `write readiness`: final real-execution gate combining implementation, runtime write capability, validation, rollback, rescan parity, privilege, privacy, and consent.
 - `real executor capsule`: selected first-safe implementation route, code-path state, fixtures, validation blockers, and destructive-action availability.
 - `write boundary probe`: native rejection evidence for the future write request shape; passing evidence means rejected entries and zero bytes, not cleanup readiness.
@@ -238,6 +238,8 @@ Execution rules:
 - The project dependency executor requires Windows, `SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR=1`, item-review Remove decisions, current plan/scan/consent IDs, and target validation.
 - `execute-gradle-cache` is limited to the current user's scanned `.gradle\caches` root.
 - The Gradle cache executor requires Windows, `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=1`, current plan/scan/consent IDs, selected `gradle-cache` action, native Gradle cache evidence, and target validation that rejects project folders, daemon state, wrapper files, init scripts, lock files, `node_modules`, and system/program paths.
+- `execute-npm-cache` is limited to the current user's scanned `%LocalAppData%\npm-cache\_cacache` root.
+- The npm cache executor requires Windows, `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1`, current plan/scan/consent IDs, selected `npm-cache` action, native npm cache evidence, and target validation that rejects global packages, project `node_modules`, index metadata, system paths, Program Files, and non-`_cacache` paths.
 - `execute-browser-cache` is limited to scanned browser cache roots.
 - The browser cache executor requires Windows, `SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR=1`, current plan/scan/consent IDs, selected browser-cache action, native cache-root evidence, and target validation that rejects cookies, sessions, logins, extensions, history, bookmarks, preferences, favicons, and profile stores.
 - Expo and React Native package hints can raise priority, but they never auto-approve cleanup.
@@ -545,6 +547,8 @@ For `node-modules-old`, `requestMode=execute-project-deps` may remove reviewed d
 
 For `gradle-cache`, `requestMode=execute-gradle-cache` may remove old files and empty cache subdirectories when `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=1` is present on Windows. The UI must send the concrete native scan finding for the current user's `.gradle\caches` root only.
 
+For `npm-cache`, `requestMode=execute-npm-cache` may remove old content blobs and cache temp files when `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1` is present on Windows. The UI must send the concrete native scan finding for the current user's `%LocalAppData%\npm-cache\_cacache` root only.
+
 For `browser-cache`, `requestMode=execute-browser-cache` may remove files and empty cache subdirectories when `SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR=1` is present on Windows. The UI must send concrete native scan findings for cache roots only, not generic browser labels or identity-store paths.
 
 Every other route remains rejecting or advisory.
@@ -608,8 +612,9 @@ Executor routes are classified before simulation:
 - `known-temp-delete`: scoped feature-flagged candidate for known temp roots only.
 - `shell-recycle-bin`: future candidate for Recycle Bin only.
 - `bounded-cache-delete`: scoped feature-flagged candidate for current-user Gradle cache only.
+- `bounded-npm-cache-delete`: scoped feature-flagged candidate for current-user npm `_cacache` content/temp files only.
 - `browser-cache-only`: scoped feature-flagged candidate for scanned browser cache roots only.
-- `tool-native-prune`: future candidate for npm, pnpm, and Docker build cache commands.
+- `tool-native-prune`: future candidate for pnpm and Docker build cache commands.
 - `item-review-project-cache`: scoped feature-flagged candidate only after item-level review marks `node_modules` targets Remove.
 - `item-review-*`: future candidate only after item-level review.
 - `advanced-*`: checklist-only until backup and typed acknowledgement are proven.

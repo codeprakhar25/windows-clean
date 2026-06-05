@@ -520,6 +520,55 @@ const assert = require("assert");
   assert.strictEqual(gradleExecutionInvocation.payload.request.actions[0].targetPath.endsWith("\\.gradle\\caches"), true, "Gradle cache executor should pass concrete Gradle cache root path");
   assert.strictEqual(gradleExecution.accepted, true, "Gradle cache executor should normalize accepted responses");
   assert.strictEqual(gradleExecution.entries[0].route, "bounded-cache-delete", "Gradle cache executor should normalize executed route");
+  let npmExecutionInvocation = null;
+  const npmExecution = await native.runNativeNpmCacheExecutor(
+    {
+      row: { id: "npm-cache", title: "npm package cache", path: "C:\\Users\\real\\AppData\\Local\\npm-cache\\_cacache", bytes: 456 },
+      planId: "plan-npm",
+      scanFingerprint: "scan-npm",
+      consentPlanId: "plan-npm",
+      expectedBytes: 456
+    },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            npmExecutionInvocation = { command, payload };
+            return Promise.resolve({
+              mode: "native-npm-cache-executor",
+              real_run_enabled: true,
+              destructive_commands: true,
+              accepted: true,
+              reason: "accepted",
+              contract_echo: {
+                schema_version: payload.request.schemaVersion,
+                request_mode: payload.request.requestMode,
+                plan_id: payload.request.planId,
+                route: payload.request.route,
+                scan_fingerprint: payload.request.scanFingerprint,
+                consent_plan_id: payload.request.consentPlanId,
+                expected_bytes: payload.request.expectedBytes,
+                dry_run_only: payload.request.dryRunOnly,
+                mutation_attempted: payload.request.mutationAttempted,
+                action_count: payload.request.actions.length
+              },
+              entries: [{ id: "npm-cache", title: "npm package cache", route: "bounded-npm-cache-delete", result: "executed", reject_code: "", bytes: 222, note: "deleted old npm cache" }],
+              warnings: ["npm cache done"]
+            });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(npmExecutionInvocation.command, "execute_cleanup_plan", "npm cache executor should invoke execute_cleanup_plan");
+  assert.strictEqual(npmExecutionInvocation.payload.request.schemaVersion, "spaceguard-npm-cache-request/v1", "npm cache executor should use its schema");
+  assert.strictEqual(npmExecutionInvocation.payload.request.requestMode, "execute-npm-cache", "npm cache executor should send execute-npm-cache mode");
+  assert.strictEqual(npmExecutionInvocation.payload.request.route, "bounded-npm-cache-delete", "npm cache executor should stay on bounded-npm-cache-delete route");
+  assert.strictEqual(npmExecutionInvocation.payload.request.dryRunOnly, false, "npm cache executor should be a mutating request");
+  assert.strictEqual(npmExecutionInvocation.payload.request.mutationAttempted, true, "npm cache executor should require mutation confirmation");
+  assert.strictEqual(npmExecutionInvocation.payload.request.actions[0].targetPath.endsWith("\\npm-cache\\_cacache"), true, "npm cache executor should pass concrete _cacache root path");
+  assert.strictEqual(npmExecution.accepted, true, "npm cache executor should normalize accepted responses");
+  assert.strictEqual(npmExecution.entries[0].route, "bounded-npm-cache-delete", "npm cache executor should normalize executed route");
   const scaffoldedWrite = native.normalizeNativeWriteBoundary({
     mode: "native-write-rejected",
     real_run_enabled: false,
@@ -579,6 +628,7 @@ const assert = require("assert");
       temp_cleanup_executor: false,
       project_dependency_executor: true,
       gradle_cache_executor: true,
+      npm_cache_executor: true,
       recycle_bin_executor: false,
       browser_cache_executor: true,
       tool_native_prune_executors: false
@@ -597,6 +647,7 @@ const assert = require("assert");
       tempCleanupExecutor: false,
       projectDependencyExecutor: true,
       gradleCacheExecutor: true,
+      npmCacheExecutor: true,
       recycleBinExecutor: false,
       browserCacheExecutor: true,
       toolNativePruneExecutors: false

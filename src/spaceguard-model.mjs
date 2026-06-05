@@ -330,14 +330,14 @@ export const executorPolicies = {
     guardrails: ["Age threshold", "User profile only", "No project source directories"]
   },
   "npm-cache": {
-    route: "tool-native-prune",
-    lane: "tool-native",
-    label: "npm cache command",
+    route: "bounded-npm-cache-delete",
+    lane: "rebuildable",
+    label: "Bounded npm cache cleanup",
     realRunEnabled: false,
     dryRunSupported: true,
     requiresNativeValidation: true,
-    verification: "Run package-manager verification before size comparison.",
-    guardrails: ["Prefer npm cache verify", "No global package removal", "No project node_modules deletion"]
+    verification: "Rescan npm _cacache and run npm install if cache rehydration proof is needed.",
+    guardrails: ["Age threshold", "Current-user _cacache only", "No global package removal", "No project node_modules deletion"]
   },
   "pnpm-store": {
     route: "tool-native-prune",
@@ -620,7 +620,7 @@ export const restrictionPolicyRules = [
     id: "tool-native-shell",
     title: "Tool-native shell commands",
     lane: "future-disabled",
-    actionIds: ["npm-cache", "pnpm-store", "docker-build-cache"],
+    actionIds: ["pnpm-store", "docker-build-cache"],
     reason: "Official tool commands need validation evidence before any executor can call them.",
     allowedOperations: ["Document inspect/prune command shape.", "Use dry-run inventory and validation fixtures."],
     forbiddenOperations: ["Run shell cleanup commands in the current build.", "Delete package stores, Docker data, or project folders directly."]
@@ -660,6 +660,7 @@ export const releaseFeatureFlags = {
   tempCleanupExecutor: false,
   projectDependencyExecutor: false,
   gradleCacheExecutor: false,
+  npmCacheExecutor: false,
   recycleBinExecutor: false,
   browserCacheExecutor: false,
   toolNativePruneExecutors: false,
@@ -672,13 +673,13 @@ export const toolNativeCommandSpecs = [
     id: "npm-cache",
     tool: "npm",
     actionId: "npm-cache",
-    route: "tool-native-prune",
+    route: "bounded-npm-cache-delete",
     title: "npm cache",
     inspectCommand: "npm cache verify",
-    futureCommand: "npm cache clean --force",
-    status: "future-disabled",
-    evidence: "Verify cache index first; compare native cache root size before and after.",
-    guardrails: ["No global package removal", "No project node_modules deletion", "No shell execution in current build"]
+    futureCommand: "bounded _cacache cleanup only",
+    status: "manual-boundary",
+    evidence: "Use native scan evidence for %LocalAppData%\\npm-cache\\_cacache; compare cache root size before and after.",
+    guardrails: ["No global package removal", "No project node_modules deletion", "No shell execution in current build", "Keep npm index metadata"]
   },
   {
     id: "pnpm-store",
@@ -896,7 +897,7 @@ export const windowsValidationFixtures = [
     id: "developer-tooling-fixture",
     lane: "executor",
     label: "Developer tool caches",
-    seedPaths: ["%UserProfile%\\.gradle\\caches", "%LocalAppData%\\npm-cache", "%LocalAppData%\\pnpm\\store", "Docker Desktop build cache"],
+    seedPaths: ["%UserProfile%\\.gradle\\caches", "%LocalAppData%\\npm-cache\\_cacache", "%LocalAppData%\\pnpm\\store", "Docker Desktop build cache"],
     setup: "Install or seed Gradle, npm, pnpm, and Docker build-cache data without creating Docker volumes as cleanup candidates.",
     assertions: [
       "Tool-native routes are classified as dry-run only.",
@@ -992,11 +993,22 @@ export const executorRouteRequirements = {
     fixtureIds: ["developer-tooling-fixture", "protected-path-fixture"],
     preconditions: ["Native Windows scan", "User profile root", "Age threshold", "No project source match"]
   },
+  "bounded-npm-cache-delete": {
+    title: "Bounded npm cache",
+    lane: "rebuildable",
+    phase: "second-safe",
+    implementation: "Delete only old npm _cacache content blobs and cache temp files under the current user's LocalAppData root.",
+    rollback: "npm redownloads missing package tarballs on the next install; cache index metadata remains untouched.",
+    proof: "Developer-tool fixture must show global packages, project node_modules, and npm index metadata are not touched.",
+    requiredValidationIds: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "tool-native-dry-runs", "ledger-rescan-parity"],
+    fixtureIds: ["developer-tooling-fixture", "protected-path-fixture"],
+    preconditions: ["Native Windows scan", "Current-user LocalAppData root", "Age threshold", "No project or global package path"]
+  },
   "tool-native-prune": {
     title: "Tool-native prune commands",
     lane: "tool-native",
     phase: "second-safe",
-    implementation: "Prefer official dry-run or prune commands for npm, pnpm, and Docker build cache instead of raw directory wipes.",
+    implementation: "Prefer official dry-run or prune commands for pnpm and Docker build cache instead of raw directory wipes.",
     rollback: "Tool caches rebuild; Docker volumes and running containers remain outside this route.",
     proof: "Command evidence must show volumes, project source, and running workloads are not selected.",
     requiredValidationIds: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "tool-native-dry-runs", "ledger-rescan-parity"],
@@ -1212,13 +1224,13 @@ export const actions = [
     id: "npm-cache",
     title: "npm package cache",
     family: "Developer caches",
-    path: "%LocalAppData%\\npm-cache",
+    path: "%LocalAppData%\\npm-cache\\_cacache",
     bytes: 5.1 * GB,
     risk: "rebuildable",
     gate: "groupConfirm",
-    method: "Prefer npm cache verify; clean only when space is the priority",
+    method: "Remove old npm _cacache content blobs and temp files",
     consequence: "Packages may be fetched again on the next install.",
-    recommendation: "Verify first, then clean if the target is still unmet.",
+    recommendation: "Clean old _cacache entries when package cache is a top space source.",
     selectedByDefault: true,
     executableInDemo: true
   },
@@ -3661,6 +3673,7 @@ export function buildAIAgentIntegration({
         || runtimeCapabilities?.executorFlags?.projectDependencyExecutor
         || runtimeCapabilities?.executorFlags?.browserCacheExecutor
         || runtimeCapabilities?.executorFlags?.gradleCacheExecutor
+        || runtimeCapabilities?.executorFlags?.npmCacheExecutor
       )
       && !runtimeCapabilities?.executorFlags?.recycleBinExecutor
       && !runtimeCapabilities?.executorFlags?.toolNativePruneExecutors
@@ -8562,7 +8575,7 @@ export function buildToolCommandInventory({
     const action = actionList.find((item) => item.id === spec.actionId) || null;
     const selectedRow = selectedRows.find((row) => row.id === spec.actionId || row.route === spec.route);
     const selected = Boolean(selectedRow);
-    const supported = spec.route === "tool-native-prune" || spec.route === "bounded-cache-delete" || spec.route === "windows-cleanup-api";
+    const supported = spec.route === "tool-native-prune" || spec.route === "bounded-cache-delete" || spec.route === "bounded-npm-cache-delete" || spec.route === "windows-cleanup-api";
     const status = !supported
       ? "unsupported"
       : selected
@@ -8601,7 +8614,7 @@ export function buildToolCommandInventory({
       shellExecutors: 0
     },
     primary: selectedRowsForCommands.length
-      ? "Selected tool-native routes have command inventory, but shell execution is disabled."
+      ? "Selected tool or bounded-cache routes have command inventory, but shell execution is disabled."
       : "Tool-native command inventory is available for future Windows validation.",
     steps: [
       "Use native read-only scan evidence before any command validation.",
@@ -11967,7 +11980,7 @@ export function buildReport({
           `- Detail-needed records: ${validationPack.validationChecks.filter((check) => check.evidenceValue && !check.evidenceComplete).length}`,
           `- VM scenarios: ${validationPack.vmScenarios.length}`,
           `- Fixture roots: ${validationPack.fixtureRoots.length}`,
-          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, projectDeps=${validationPack.runtime?.executorFlags?.projectDependencyExecutor ? "on" : "off"}, gradle=${validationPack.runtime?.executorFlags?.gradleCacheExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
+          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, projectDeps=${validationPack.runtime?.executorFlags?.projectDependencyExecutor ? "on" : "off"}, gradle=${validationPack.runtime?.executorFlags?.gradleCacheExecutor ? "on" : "off"}, npm=${validationPack.runtime?.executorFlags?.npmCacheExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
           `- Safety invariants waiting: ${validationPack.safetyInvariants.filter((item) => !item.passed).length}`,
           validationPack.validationChecks.length
             ? validationPack.validationChecks
@@ -12489,7 +12502,7 @@ function getTaskCapabilityForbiddenOperations(row, power) {
   if (row.route === "browser-cache-only" || power.id === "safe-cleanup") {
     forbidden.push("Touch cookies, sessions, saved logins, browser profiles, or extension data.");
   }
-  if (row.route === "tool-native-prune" || row.route === "item-review-project-cache") {
+  if (row.route === "tool-native-prune" || row.route === "item-review-project-cache" || row.route === "bounded-npm-cache-delete") {
     forbidden.push("Delete project source folders, Docker volumes, or package globals.");
   }
   if (power.id === "advanced-system-strategy") {
@@ -14993,6 +15006,7 @@ function normalizeExecutorFeatureFlags(value = {}) {
     tempCleanupExecutor: Boolean(value.tempCleanupExecutor || value.temp_cleanup_executor),
     projectDependencyExecutor: Boolean(value.projectDependencyExecutor || value.project_dependency_executor),
     gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
+    npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
     browserCacheExecutor: Boolean(value.browserCacheExecutor || value.browser_cache_executor),
     toolNativePruneExecutors: Boolean(value.toolNativePruneExecutors || value.tool_native_prune_executors)
