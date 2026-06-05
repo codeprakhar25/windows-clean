@@ -83,6 +83,13 @@ $env:SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR="1"
 npm run native:dev
 ```
 
+Optional pnpm store executor:
+
+```powershell
+$env:SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR="1"
+npm run native:dev
+```
+
 Optional Recycle Bin executor:
 
 ```powershell
@@ -97,7 +104,7 @@ $env:SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR="1"
 npm run native:dev
 ```
 
-Those flags enable only their named routes: `known-temp-delete`, reviewed Downloads installer/archive moves through Recycle Bin semantics, reviewed large-file archive to an explicit other-drive destination, reviewed `node_modules` cleanup, current-user Gradle cache cleanup, current-user npm `_cacache` cleanup, Shell Recycle Bin emptying for the selected drive, and scanned browser cache roots. They do not enable pnpm or Docker tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, browser identity-store deletion, project source deletion, arbitrary Downloads folder deletion, arbitrary personal-folder deletion, or arbitrary project-folder deletion.
+Those flags enable only their named routes: `known-temp-delete`, reviewed Downloads installer/archive moves through Recycle Bin semantics, reviewed large-file archive to an explicit other-drive destination, reviewed `node_modules` cleanup, current-user Gradle cache cleanup, current-user npm `_cacache` cleanup, current-user pnpm store cleanup, Shell Recycle Bin emptying for the selected drive, and scanned browser cache roots. They do not enable Docker tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, browser identity-store deletion, project source deletion, arbitrary Downloads folder deletion, arbitrary personal-folder deletion, or arbitrary project-folder deletion.
 
 ## Read-Only Real Scan
 
@@ -218,7 +225,7 @@ For each Windows validation run, capture:
 - Drive inventory rows, including top-level bucket status, bytes, classification, and confirmation that executor routes remain zero.
 - Storage pressure diagnosis status, ranked causes, current plan gap, and confirmation that diagnosis has zero executor and real-run rows.
 - Native evidence quality status, planning-ready flag, measured coverage, missing evidence rows, mutation lock, and confirmation that executor and real-run rows remain zero.
-- Runtime executor flags for `tempCleanupExecutor`, `downloadsCleanupExecutor`, `largeFileArchiveExecutor`, `projectDependencyExecutor`, `gradleCacheExecutor`, `npmCacheExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`; capture each independently.
+- Runtime executor flags for `tempCleanupExecutor`, `downloadsCleanupExecutor`, `largeFileArchiveExecutor`, `projectDependencyExecutor`, `gradleCacheExecutor`, `npmCacheExecutor`, `pnpmStoreExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`; capture each independently.
 - Active agent question and question queue state.
 - Per-check validation evidence records with reviewer, timestamp, artifact path, and notes.
 - Public beta readiness state.
@@ -249,6 +256,7 @@ For each Windows validation run, capture:
 - Disabled temp executor scaffold status when probing `known-temp-delete`: route, `tempCleanupExecutor`, validation-required state, mutation disabled, and zero bytes.
 - Gradle cache executor status when selected: route `bounded-cache-delete`, `gradleCacheExecutor`, scanned `.gradle\caches` target evidence, old-file threshold, skipped lock/recent counts, and reclaimed bytes from the native response.
 - npm cache executor status when selected: route `bounded-npm-cache-delete`, `npmCacheExecutor`, scanned `%LocalAppData%\npm-cache\_cacache` target evidence, 14-day threshold, skipped index/recent counts, and reclaimed bytes from the native response.
+- pnpm store executor status when selected: route `bounded-pnpm-store-delete`, `pnpmStoreExecutor`, scanned `%LocalAppData%\pnpm\store` target evidence, 30-day threshold, skipped metadata/recent counts, and reclaimed bytes from the native response.
 - Reviewed Downloads executor status when selected: route `item-review-recycle-bin`, `downloadsCleanupExecutor`, exact reviewed file targets, 30-day threshold, Shell Recycle Bin move evidence, and reclaimed bytes from the native response.
 - Reviewed large-file archive status when selected: route `item-review-large-files`, `largeFileArchiveExecutor`, exact Move/Archive targets, archive destination, 90-day threshold, 1GB threshold, copy verification, source removal evidence, and reclaimed bytes from the native response.
 - Recycle Bin executor status when selected: route `shell-recycle-bin`, `recycleBinExecutor`, scanned Recycle Bin target evidence, permanent-removal confirmation, native `permanentRemovalConfirmed=true`, and reclaimed bytes from the Shell API response.

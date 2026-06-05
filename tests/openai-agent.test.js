@@ -375,5 +375,34 @@ const assert = require("assert");
   assert(blockedBroker.rows[0].checks.some((check) => check.id === "feature-flag" && !check.passed), "broker should expose missing feature-flag evidence");
   assert(blockedBroker.rows[0].checks.some((check) => check.id === "consent" && !check.passed), "broker should expose missing consent evidence");
 
+  const pnpmBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "pnpm-store",
+          title: "Clean pnpm store",
+          reason: "The scanned pnpm store has a scoped executor.",
+          priority: "medium",
+          actionType: "run-pnpm-store-executor",
+          targetId: "pnpm-store",
+          route: "bounded-pnpm-store-delete"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-pnpm" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, pnpmStoreExecutor: true },
+      pnpmStoreTargets: [{ id: "pnpm-store", route: "bounded-pnpm-store-delete", bytes: 2048 }]
+    },
+    executionState: {
+      planId: "plan-pnpm",
+      scanFingerprint: "scan-pnpm",
+      consentPlanId: "plan-pnpm"
+    }
+  });
+  assert.strictEqual(pnpmBroker.rows[0].targetPanel, "pnpm-store-executor-panel", "broker should route pnpm recommendations to the pnpm executor panel");
+  assert.strictEqual(pnpmBroker.rows[0].canAct, true, "broker should allow pnpm executor only when deterministic gates pass");
+  assert.strictEqual(pnpmBroker.rows[0].buttonLabel, "Run pnpm cleanup", "broker should label pnpm executor recommendations");
+
   console.log("openai agent adapter ok");
 })();

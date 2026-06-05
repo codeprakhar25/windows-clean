@@ -29,7 +29,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -50,7 +50,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -203,6 +203,18 @@ export function buildOpenAIAgentContext({
       status: finding.status || "unknown"
     }))
     .slice(0, 1);
+  const pnpmStoreTargets = (nativeScan?.findings || [])
+    .filter((finding) => finding.recipeId === "pnpm-store")
+    .filter((finding) => (finding.status === "measured" || finding.status === "limited") && finding.path)
+    .map((finding) => ({
+      id: "pnpm-store",
+      title: finding.title || "pnpm global store",
+      route: "bounded-pnpm-store-delete",
+      path: finding.path,
+      bytes: Number(finding.bytes || 0),
+      status: finding.status || "unknown"
+    }))
+    .slice(0, 1);
   const recycleBinTargets = (nativeScan?.findings || [])
     .filter((finding) => finding.recipeId === "recycle-bin")
     .filter((finding) => (finding.status === "measured" || finding.status === "limited") && finding.path)
@@ -294,6 +306,7 @@ export function buildOpenAIAgentContext({
       browserCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.browserCacheExecutor),
       gradleCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.gradleCacheExecutor),
       npmCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.npmCacheExecutor),
+      pnpmStoreExecutor: Boolean(runtimeCapabilities?.executorFlags?.pnpmStoreExecutor),
       recycleBinExecutor: Boolean(runtimeCapabilities?.executorFlags?.recycleBinExecutor),
       openAiAgentAdvice: Boolean(runtimeCapabilities?.openAiAgentAdvice),
       openAiAdvisorConfigured: Boolean(runtimeCapabilities?.openAiAdvisorConfigured),
@@ -306,6 +319,7 @@ export function buildOpenAIAgentContext({
     largeFileArchiveTargets,
     gradleCacheTargets,
     npmCacheTargets,
+    pnpmStoreTargets,
     recycleBinTargets,
     browserCacheTargets,
     manualReviewTargets,
@@ -425,6 +439,12 @@ const OPENAI_RECOMMENDATION_EXECUTOR_POLICIES = {
     targetLabel: "scanned npm cache root",
     route: "bounded-npm-cache-delete",
     targetList: "npmCacheTargets"
+  },
+  "run-pnpm-store-executor": {
+    flag: "pnpmStoreExecutor",
+    targetLabel: "scanned pnpm store root",
+    route: "bounded-pnpm-store-delete",
+    targetList: "pnpmStoreTargets"
   },
   "run-recycle-bin-executor": {
     flag: "recycleBinExecutor",
@@ -647,6 +667,8 @@ function getExecutorRecommendationButtonLabel(actionType) {
       return "Run Gradle cleanup";
     case "run-npm-cache-executor":
       return "Run npm cleanup";
+    case "run-pnpm-store-executor":
+      return "Run pnpm cleanup";
     case "run-recycle-bin-executor":
       return "Empty Recycle Bin";
     default:
@@ -670,6 +692,8 @@ function getExecutorRecommendationPanel(actionType) {
       return "gradle-cache-executor-panel";
     case "run-npm-cache-executor":
       return "npm-cache-executor-panel";
+    case "run-pnpm-store-executor":
+      return "pnpm-store-executor-panel";
     case "run-recycle-bin-executor":
       return "recycle-bin-executor-panel";
     default:
@@ -760,6 +784,7 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
       largeFileArchiveTargets: Array.isArray(context?.largeFileArchiveTargets) ? context.largeFileArchiveTargets.length : 0,
       gradleCacheTargets: Array.isArray(context?.gradleCacheTargets) ? context.gradleCacheTargets.length : 0,
       npmCacheTargets: Array.isArray(context?.npmCacheTargets) ? context.npmCacheTargets.length : 0,
+      pnpmStoreTargets: Array.isArray(context?.pnpmStoreTargets) ? context.pnpmStoreTargets.length : 0,
       recycleBinTargets: Array.isArray(context?.recycleBinTargets) ? context.recycleBinTargets.length : 0,
       browserCacheTargets: Array.isArray(context?.browserCacheTargets) ? context.browserCacheTargets.length : 0,
       manualReviewTargets: Array.isArray(context?.manualReviewTargets) ? context.manualReviewTargets.length : 0,
@@ -1134,6 +1159,7 @@ function normalizeActionType(value) {
     clean === "run-browser-cache-executor" ||
     clean === "run-gradle-cache-executor" ||
     clean === "run-npm-cache-executor" ||
+    clean === "run-pnpm-store-executor" ||
     clean === "run-recycle-bin-executor" ||
     clean === "rescan" ||
     clean === "ask-user" ||

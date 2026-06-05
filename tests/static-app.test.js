@@ -337,6 +337,7 @@ assert(openAiAgent.includes("run-gradle-cache-executor"), "OpenAI schema should 
 assert(openAiAgent.includes("run-downloads-cleanup-executor"), "OpenAI schema should allow reviewed Downloads executor recommendations");
 assert(openAiAgent.includes("run-large-file-archive-executor"), "OpenAI schema should allow reviewed large-file archive recommendations");
 assert(openAiAgent.includes("run-npm-cache-executor"), "OpenAI schema should allow npm cache executor recommendations");
+assert(openAiAgent.includes("run-pnpm-store-executor"), "OpenAI schema should allow pnpm store executor recommendations");
 assert(openAiAgent.includes("run-recycle-bin-executor"), "OpenAI schema should allow Recycle Bin executor recommendations");
 assert(openAiAgent.includes("run-browser-cache-executor"), "OpenAI schema should allow browser cache executor recommendations");
 assert(openAiAgent.includes("manual-only"), "OpenAI schema should allow manual-only recommendations");
@@ -346,6 +347,8 @@ assert(app.includes("manualReviewTargets"), "OpenAI manual-only recommendations 
 assert(app.includes("Project targets"), "OpenAI panel should show reviewed project target count");
 assert(app.includes("Gradle root"), "OpenAI panel should show Gradle cache target count");
 assert(app.includes("npm root"), "OpenAI panel should show npm cache target count");
+assert(app.includes("pnpm root"), "OpenAI panel should show pnpm store target count");
+assert(openAiAgent.includes("pnpmStoreTargets"), "OpenAI context should include scanned pnpm store targets");
 assert(app.includes("Recycle"), "OpenAI panel should show Recycle Bin target count");
 assert(app.includes("Cache roots"), "OpenAI panel should show browser cache target count");
 assert(app.includes("Reviewed Downloads cleanup"), "App should expose reviewed Downloads executor panel");
@@ -470,6 +473,19 @@ assert(rustScanner.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "Rust nativ
 assert(rustScanner.includes("npm_cache_target_reject_code"), "Rust native shell should validate npm cache targets");
 assert(rustScanner.includes("target-not-npm-cache"), "Rust native shell should reject non-npm cache targets");
 assert(rustScanner.includes("file_old_enough_for_npm_cache_delete"), "Rust npm cache cleanup should enforce the age threshold");
+assert(app.includes("PnpmStoreExecutorPanel"), "pnpm store executor panel should be rendered");
+assert(app.includes("pnpm-store-executor-panel"), "pnpm store executor panel should be focusable");
+assert(app.includes("Run pnpm store cleanup"), "pnpm store executor should expose a user-triggered cleanup button");
+assert(app.includes("pnpm executor boundary"), "pnpm store executor should show the route boundary");
+assert(app.includes("runNativePnpmStoreExecutor"), "pnpm store executor should be wired through the native adapter");
+assert(nativeAdapter.includes("requestMode: \"execute-pnpm-store\""), "native adapter should send the execute-pnpm-store request mode");
+assert(nativeAdapter.includes("spaceguard-pnpm-store-request/v1"), "native adapter should send the pnpm store request schema");
+assert(nativeAdapter.includes("pnpmStoreExecutor"), "native adapter should normalize pnpm store executor flag");
+assert(rustScanner.includes("execute_pnpm_store_cleanup"), "Rust native shell should implement pnpm store cleanup");
+assert(rustScanner.includes("SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR"), "Rust native shell should require the pnpm store executor feature flag");
+assert(rustScanner.includes("pnpm_store_target_reject_code"), "Rust native shell should validate pnpm store targets");
+assert(rustScanner.includes("target-not-pnpm-store"), "Rust native shell should reject non-pnpm store targets");
+assert(rustScanner.includes("file_old_enough_for_pnpm_store_delete"), "Rust pnpm store cleanup should enforce the age threshold");
 assert(app.includes("RecycleBinExecutorPanel"), "Recycle Bin executor panel should be rendered");
 assert(app.includes("recycle-bin-executor-panel"), "Recycle Bin executor panel should be focusable");
 assert(app.includes("Empty Recycle Bin"), "Recycle Bin executor should expose a user-triggered cleanup button");

@@ -298,6 +298,7 @@ struct ExecutorFeatureFlags {
     large_file_archive_executor: bool,
     gradle_cache_executor: bool,
     npm_cache_executor: bool,
+    pnpm_store_executor: bool,
     recycle_bin_executor: bool,
     browser_cache_executor: bool,
     tool_native_prune_executors: bool,
@@ -688,6 +689,9 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
     }
     if request.request_mode.as_deref() == Some("execute-npm-cache") {
         return execute_npm_cache_cleanup(request);
+    }
+    if request.request_mode.as_deref() == Some("execute-pnpm-store") {
+        return execute_pnpm_store_cleanup(request);
     }
     if request.request_mode.as_deref() == Some("execute-recycle-bin") {
         return execute_recycle_bin_cleanup(request);
@@ -2013,6 +2017,174 @@ fn execute_npm_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionRe
     }
 }
 
+fn execute_pnpm_store_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let flag_enabled = pnpm_store_executor_enabled();
+    let rejections = pnpm_store_execution_rejections(&request, flag_enabled);
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-pnpm-store-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-pnpm-store".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+
+    let entries = request
+        .actions
+        .into_iter()
+        .map(|action| {
+            let target_path = action.target_path.clone().unwrap_or_default();
+            let target_reject = pnpm_store_target_reject_code(&target_path);
+            let route_match = action.route == route && route == "bounded-pnpm-store-delete";
+            let can_execute = rejections.is_empty() && route_match && target_reject.is_none();
+
+            if can_execute {
+                let deleted = delete_pnpm_store_target(&resolve_dry_run_target(&target_path));
+                return WriteExecutionEntry {
+                    id: action.id,
+                    title: action.title,
+                    route: action.route,
+                    result: if deleted.deleted_files > 0 || deleted.deleted_dirs > 0 {
+                        "executed".to_string()
+                    } else {
+                        "no-op".to_string()
+                    },
+                    reject_code: String::new(),
+                    bytes: deleted.deleted_bytes,
+                    preflight_status: "executed".to_string(),
+                    preflight_checks: vec![
+                        write_preflight_check(
+                            "route-bounded-pnpm-store",
+                            "Bounded pnpm store route",
+                            "passed",
+                            "Action route is bounded-pnpm-store-delete.",
+                        ),
+                        write_preflight_check(
+                            "target-pnpm-store",
+                            "pnpm store target",
+                            "passed",
+                            "Target is the current user's LocalAppData\\pnpm\\store directory.",
+                        ),
+                        write_preflight_check(
+                            "feature-flag",
+                            "Executor feature flag",
+                            "passed",
+                            "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR enabled pnpm store cleanup.",
+                        ),
+                    ],
+                    note: format!(
+                        "pnpm store executor deleted {} old content/temp file(s), {} empty store dir(s), reclaimed {} byte(s), and skipped {} item(s).",
+                        deleted.deleted_files,
+                        deleted.deleted_dirs,
+                        deleted.deleted_bytes,
+                        deleted.skipped_count
+                    ),
+                };
+            }
+
+            let reject_code = if !route_match {
+                "route-not-bounded-pnpm-store"
+            } else {
+                target_reject
+                    .or_else(|| rejections.first().copied())
+                    .unwrap_or("pnpm-store-executor-disabled")
+            };
+
+            WriteExecutionEntry {
+                id: action.id,
+                title: action.title,
+                route: action.route,
+                result: "rejected".to_string(),
+                reject_code: reject_code.to_string(),
+                bytes: 0,
+                preflight_status: "target-blocked".to_string(),
+                preflight_checks: vec![
+                    write_preflight_check(
+                        "route-bounded-pnpm-store",
+                        "Bounded pnpm store route",
+                        if route_match { "passed" } else { "blocked" },
+                        if route_match {
+                            "Action route is bounded-pnpm-store-delete."
+                        } else {
+                            "Only bounded-pnpm-store-delete can use this executor."
+                        },
+                    ),
+                    write_preflight_check(
+                        "target-pnpm-store",
+                        "pnpm store target",
+                        if target_reject.is_none() { "passed" } else { "blocked" },
+                        if target_reject.is_none() {
+                            "Target is the current user's pnpm store."
+                        } else {
+                            "Target is missing, forbidden, not the current user's LocalAppData\\pnpm\\store directory, or link-like."
+                        },
+                    ),
+                    write_preflight_check(
+                        "feature-flag",
+                        "Executor feature flag",
+                        if flag_enabled { "passed" } else { "blocked" },
+                        if flag_enabled {
+                            "pnpm store executor feature flag is enabled."
+                        } else {
+                            "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR is not enabled."
+                        },
+                    ),
+                ],
+                note: format!(
+                    "pnpm store cleanup rejected with code {reject_code}. Plan {plan_id}; no bytes were removed for this action."
+                ),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let accepted = rejections.is_empty()
+        && entries
+            .iter()
+            .all(|entry| entry.result == "executed" || entry.result == "no-op");
+    let reclaimed = entries.iter().map(|entry| entry.bytes).sum::<u64>();
+    let mut warnings = pnpm_store_execution_warnings(&rejections);
+    if accepted {
+        warnings.push(format!(
+            "pnpm store cleanup completed for plan {plan_id}; reclaimed {reclaimed} byte(s). Run a fresh native scan and pnpm install if you need store rehydration proof."
+        ));
+    }
+
+    WriteExecutionResponse {
+        mode: if accepted {
+            "native-pnpm-store-executor"
+        } else {
+            "native-pnpm-store-executor-rejected"
+        },
+        real_run_enabled: flag_enabled,
+        destructive_commands: flag_enabled,
+        accepted,
+        reason: if accepted {
+            format!("pnpm store executor accepted the bounded store target and reclaimed {reclaimed} byte(s).")
+        } else {
+            "pnpm store executor rejected the request before mutation.".to_string()
+        },
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
+        entries,
+        warnings,
+    }
+}
+
 fn execute_recycle_bin_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
     let route = request.route.clone();
     let plan_id = request.plan_id.clone();
@@ -2378,6 +2550,7 @@ fn is_first_safe_write_route(route: &str) -> bool {
             | "item-review-project-cache"
             | "bounded-cache-delete"
             | "bounded-npm-cache-delete"
+            | "bounded-pnpm-store-delete"
     )
 }
 
@@ -2576,6 +2749,30 @@ fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
                 },
             })
         }
+        "bounded-pnpm-store-delete" => {
+            let enabled = cfg!(target_os = "windows") && pnpm_store_executor_enabled();
+            Some(WriteExecutorScaffold {
+                route: "bounded-pnpm-store-delete".to_string(),
+                title: "Bounded pnpm store".to_string(),
+                feature_flag: "pnpmStoreExecutor".to_string(),
+                status: if enabled {
+                    "feature-flag-enabled".to_string()
+                } else {
+                    "feature-flag-disabled".to_string()
+                },
+                validation_status: if enabled {
+                    "pnpm-store-only".to_string()
+                } else {
+                    "validation-required".to_string()
+                },
+                mutation_enabled: enabled,
+                reason: if enabled {
+                    "pnpm store executor can remove old content/temp files and empty dirs under the current user's LocalAppData\\pnpm\\store root only.".to_string()
+                } else {
+                    "pnpm store executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR is enabled on Windows.".to_string()
+                },
+            })
+        }
         _ => None,
     }
 }
@@ -2590,6 +2787,7 @@ fn write_executor_scaffold_reject_code(route: &str) -> &'static str {
         "browser-cache-only" => "browser-cache-executor-disabled",
         "bounded-cache-delete" => "gradle-cache-executor-disabled",
         "bounded-npm-cache-delete" => "npm-cache-executor-disabled",
+        "bounded-pnpm-store-delete" => "pnpm-store-executor-disabled",
         _ => "real-executor-disabled",
     }
 }
@@ -2607,6 +2805,9 @@ fn write_action_target_reject_code(
     }
     if route == "bounded-npm-cache-delete" {
         return npm_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
+    }
+    if route == "bounded-pnpm-store-delete" {
+        return pnpm_store_target_reject_code(target_path.as_deref().unwrap_or(""));
     }
     if route == "shell-recycle-bin" {
         return recycle_bin_target_reject_code(target_path.as_deref().unwrap_or(""));
@@ -2709,6 +2910,17 @@ fn write_target_forbidden(route: &str, target: &str) -> bool {
                 || target.contains("\\appdata\\roaming\\npm")
                 || target.contains("\\npm\\node_modules")
         }
+        "bounded-pnpm-store-delete" => {
+            target.contains("downloads")
+                || target.contains("documents")
+                || target.contains("desktop")
+                || target.contains("node_modules")
+                || target.contains("\\windows\\")
+                || target.contains("\\program files")
+                || target.contains("\\programdata\\")
+                || target.contains("\\appdata\\roaming\\pnpm")
+                || target.contains("\\pnpm\\global")
+        }
         "item-review-project-cache" => {
             !target.ends_with("\\node_modules")
                 || target.contains("\\windows\\")
@@ -2748,6 +2960,9 @@ fn write_target_allowed(route: &str, target: &str) -> bool {
         }
         "bounded-npm-cache-delete" => {
             target.ends_with("\\npm-cache\\_cacache") || target.contains("\\npm-cache\\_cacache\\")
+        }
+        "bounded-pnpm-store-delete" => {
+            target.ends_with("\\pnpm\\store") || target.contains("\\pnpm\\store\\")
         }
         "item-review-project-cache" => {
             target.ends_with("\\node_modules") || target.contains("\\node_modules\\")
@@ -2802,6 +3017,9 @@ fn write_boundary_warning(code: &str) -> &'static str {
         }
         "npm-cache-executor-disabled" => {
             "Write request rejected: npmCacheExecutor scaffold is feature-flag disabled."
+        }
+        "pnpm-store-executor-disabled" => {
+            "Write request rejected: pnpmStoreExecutor scaffold is feature-flag disabled."
         }
         "target-not-node-modules" => "Write request rejected: project dependency target is not node_modules.",
         "target-not-browser-cache" => "Write request rejected: browser cache target is not a cache directory.",
@@ -2871,6 +3089,12 @@ fn write_boundary_warning(code: &str) -> &'static str {
         }
         "route-not-bounded-npm-cache" => {
             "Write request rejected: npm cache cleanup requires route bounded-npm-cache-delete."
+        }
+        "target-not-pnpm-store" => {
+            "Write request rejected: pnpm store target is not the current user's LocalAppData\\pnpm\\store directory."
+        }
+        "route-not-bounded-pnpm-store" => {
+            "Write request rejected: pnpm store cleanup requires route bounded-pnpm-store-delete."
         }
         "target-link-or-not-directory" => {
             "Write request rejected: target is link-like or not a directory."
@@ -2949,6 +3173,17 @@ fn gradle_cache_executor_enabled() -> bool {
 
 fn npm_cache_executor_enabled() -> bool {
     env::var("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR")
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn pnpm_store_executor_enabled() -> bool {
+    env::var("SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR")
         .map(|value| {
             matches!(
                 value.to_ascii_lowercase().as_str(),
@@ -3525,6 +3760,85 @@ fn npm_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
         .collect()
 }
 
+fn pnpm_store_execution_rejections(
+    request: &WriteExecutionRequest,
+    flag_enabled: bool,
+) -> Vec<&'static str> {
+    let mut codes = Vec::new();
+    if !cfg!(target_os = "windows") {
+        codes.push("windows-required");
+    }
+    if !flag_enabled {
+        codes.push("pnpm-store-executor-disabled");
+    }
+    if request.plan_id.trim().is_empty() {
+        codes.push("missing-plan-id");
+    }
+    if request
+        .scan_fingerprint
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-scan-fingerprint");
+    }
+    if request
+        .consent_plan_id
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-consent-plan-id");
+    }
+    if request.request_mode.as_deref() != Some("execute-pnpm-store") {
+        codes.push("request-mode-invalid");
+    }
+    if request.route != "bounded-pnpm-store-delete" {
+        codes.push("route-not-bounded-pnpm-store");
+    }
+    if request.dry_run_only != Some(false) {
+        codes.push("dry-run-disabled-required");
+    }
+    if request.mutation_attempted != Some(true) {
+        codes.push("mutation-confirmation-required");
+    }
+    if request.actions.is_empty() {
+        codes.push("no-actions");
+    }
+    codes
+}
+
+fn pnpm_store_execution_warnings(codes: &[&'static str]) -> Vec<String> {
+    if codes.is_empty() {
+        return vec![
+            "pnpm store executor removes old content/temp files and empty cache subdirectories under LocalAppData\\pnpm\\store only; project node_modules, global bins, metadata, and package-manager commands remain forbidden.".to_string(),
+        ];
+    }
+    codes
+        .iter()
+        .map(|code| match *code {
+            "windows-required" => "pnpm store cleanup is Windows-only in this build.",
+            "pnpm-store-executor-disabled" => {
+                "Set SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR=1 before launching the Tauri app to enable pnpm store cleanup."
+            }
+            "dry-run-disabled-required" => {
+                "pnpm store cleanup requires dryRunOnly=false on the execute-pnpm-store request."
+            }
+            "mutation-confirmation-required" => {
+                "pnpm store cleanup requires mutationAttempted=true on the execute-pnpm-store request."
+            }
+            "request-mode-invalid" => "pnpm store cleanup requires requestMode=execute-pnpm-store.",
+            "route-not-bounded-pnpm-store" => {
+                "pnpm store cleanup requires route bounded-pnpm-store-delete."
+            }
+            _ => write_boundary_warning(code),
+        })
+        .map(String::from)
+        .collect()
+}
+
 fn recycle_bin_execution_rejections(
     request: &WriteExecutionRequest,
     flag_enabled: bool,
@@ -3741,6 +4055,46 @@ fn npm_cache_target_reject_code(value: &str) -> Option<&'static str> {
     let expected = local_app_data.join("npm-cache").join("_cacache");
     if !same_normalized_path(&path, &expected) {
         return Some("target-not-npm-cache");
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(&path) else {
+        return Some("target-missing");
+    };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Some("target-link-or-not-directory");
+    }
+    None
+}
+
+fn pnpm_store_target_reject_code(value: &str) -> Option<&'static str> {
+    let path = resolve_dry_run_target(value);
+    if path.as_os_str().is_empty() {
+        return Some("target-missing");
+    }
+
+    let original = normalize_write_target(value);
+    let resolved = normalize_write_target(&path_to_string(&path));
+    if write_target_forbidden("bounded-pnpm-store-delete", &original)
+        || write_target_forbidden("bounded-pnpm-store-delete", &resolved)
+    {
+        return Some("target-forbidden");
+    }
+    if !write_target_allowed("bounded-pnpm-store-delete", &original)
+        && !write_target_allowed("bounded-pnpm-store-delete", &resolved)
+    {
+        return Some("target-not-pnpm-store");
+    }
+
+    let Some(local_app_data) = env_path("LOCALAPPDATA").or_else(|| {
+        env_path("USERPROFILE")
+            .or_else(|| env_path("HOME"))
+            .map(|profile| profile.join("AppData").join("Local"))
+    }) else {
+        return Some("target-not-pnpm-store");
+    };
+    let expected = local_app_data.join("pnpm").join("store");
+    if !same_normalized_path(&path, &expected) {
+        return Some("target-not-pnpm-store");
     }
 
     let Ok(metadata) = fs::symlink_metadata(&path) else {
@@ -3975,6 +4329,14 @@ struct GradleCacheDeleteResult {
 
 #[derive(Default)]
 struct NpmCacheDeleteResult {
+    deleted_bytes: u64,
+    deleted_files: u64,
+    deleted_dirs: u64,
+    skipped_count: u64,
+}
+
+#[derive(Default)]
+struct PnpmStoreDeleteResult {
     deleted_bytes: u64,
     deleted_files: u64,
     deleted_dirs: u64,
@@ -4293,6 +4655,114 @@ fn npm_cache_file_forbidden(path: &Path) -> bool {
         .and_then(|name| name.to_str())
         .map(|name| name.to_ascii_lowercase().ends_with(".lock"))
         .unwrap_or(true)
+}
+
+fn delete_pnpm_store_target(root: &Path) -> PnpmStoreDeleteResult {
+    let mut result = PnpmStoreDeleteResult::default();
+    if pnpm_store_target_reject_code(&path_to_string(root)).is_some() {
+        result.skipped_count += 1;
+        return result;
+    }
+
+    let mut queue = VecDeque::from([root.to_path_buf()]);
+    let mut dirs = Vec::new();
+    let mut visited = 0usize;
+    while let Some(path) = queue.pop_front() {
+        if visited >= 250_000 || result.deleted_files >= 120_000 {
+            result.skipped_count += 1;
+            break;
+        }
+        visited += 1;
+
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            result.skipped_count += 1;
+            continue;
+        };
+        if metadata.file_type().is_symlink() {
+            result.skipped_count += 1;
+            continue;
+        }
+        if metadata.is_file() {
+            delete_single_pnpm_store_file(&path, &metadata, &mut result);
+            continue;
+        }
+        if metadata.is_dir() {
+            dirs.push(path.clone());
+            match fs::read_dir(&path) {
+                Ok(entries) => {
+                    for entry in entries.flatten() {
+                        queue.push_back(entry.path());
+                    }
+                }
+                Err(_) => result.skipped_count += 1,
+            }
+        }
+    }
+
+    dirs.sort_by(|left, right| right.components().count().cmp(&left.components().count()));
+    for dir in dirs {
+        if dir == root {
+            continue;
+        }
+        match fs::remove_dir(&dir) {
+            Ok(_) => result.deleted_dirs = result.deleted_dirs.saturating_add(1),
+            Err(_) => result.skipped_count += 1,
+        }
+    }
+
+    result
+}
+
+fn delete_single_pnpm_store_file(
+    path: &Path,
+    metadata: &fs::Metadata,
+    result: &mut PnpmStoreDeleteResult,
+) {
+    if !file_old_enough_for_pnpm_store_delete(metadata) || pnpm_store_file_forbidden(path) {
+        result.skipped_count += 1;
+        return;
+    }
+    let bytes = metadata.len();
+    match fs::remove_file(path) {
+        Ok(_) => {
+            result.deleted_bytes = result.deleted_bytes.saturating_add(bytes);
+            result.deleted_files = result.deleted_files.saturating_add(1);
+        }
+        Err(_) => result.skipped_count += 1,
+    }
+}
+
+fn file_old_enough_for_pnpm_store_delete(metadata: &fs::Metadata) -> bool {
+    let Ok(modified) = metadata.modified() else {
+        return false;
+    };
+    let Ok(age) = SystemTime::now().duration_since(modified) else {
+        return false;
+    };
+    age.as_secs() >= 30 * 24 * 60 * 60
+}
+
+fn pnpm_store_file_forbidden(path: &Path) -> bool {
+    let clean_path = normalize_path(&path_to_string(path));
+    let allowed_content = clean_path.contains("\\pnpm\\store\\v3\\files\\")
+        || clean_path.contains("\\pnpm\\store\\files\\")
+        || clean_path.contains("\\pnpm\\store\\tmp\\")
+        || clean_path.contains("\\pnpm\\store\\temp\\");
+    if !allowed_content {
+        return true;
+    }
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.to_ascii_lowercase())
+        .unwrap_or_default();
+    file_name.is_empty()
+        || file_name.ends_with(".lock")
+        || file_name.ends_with(".json")
+        || file_name.ends_with(".yaml")
+        || file_name.ends_with(".yml")
+        || file_name.ends_with(".log")
+        || file_name == "metadata"
 }
 
 fn recycle_bin_drive_root(value: &str) -> Option<String> {
@@ -4690,7 +5160,7 @@ fn openai_advice_row_schema() -> Value {
             "priority": { "type": "string", "enum": ["high", "medium", "low"] },
             "actionType": {
                 "type": "string",
-                "enum": ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+                "enum": ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             "targetId": { "type": "string" },
             "route": { "type": "string" }
@@ -4849,6 +5319,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
     let browser_cache_enabled = cfg!(target_os = "windows") && browser_cache_executor_enabled();
     let gradle_cache_enabled = cfg!(target_os = "windows") && gradle_cache_executor_enabled();
     let npm_cache_enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
+    let pnpm_store_enabled = cfg!(target_os = "windows") && pnpm_store_executor_enabled();
     let recycle_bin_enabled = cfg!(target_os = "windows") && recycle_bin_executor_enabled();
     let openai_key_source = openai_env_value(&["OPENAI_API_KEY", "VITE_OPENAI_API_KEY"])
         .map(|(_, source)| source)
@@ -4861,6 +5332,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         || browser_cache_enabled
         || gradle_cache_enabled
         || npm_cache_enabled
+        || pnpm_store_enabled
         || recycle_bin_enabled;
     RuntimeCapabilities {
         mode: if real_execution_enabled {
@@ -4888,6 +5360,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
             large_file_archive_executor: large_file_archive_enabled,
             gradle_cache_executor: gradle_cache_enabled,
             npm_cache_executor: npm_cache_enabled,
+            pnpm_store_executor: pnpm_store_enabled,
             recycle_bin_executor: recycle_bin_enabled,
             browser_cache_executor: browser_cache_enabled,
             tool_native_prune_executors: false,

@@ -340,14 +340,14 @@ export const executorPolicies = {
     guardrails: ["Age threshold", "Current-user _cacache only", "No global package removal", "No project node_modules deletion"]
   },
   "pnpm-store": {
-    route: "tool-native-prune",
-    lane: "tool-native",
-    label: "pnpm store prune",
+    route: "bounded-pnpm-store-delete",
+    lane: "rebuildable",
+    label: "Bounded pnpm store cleanup",
     realRunEnabled: false,
     dryRunSupported: true,
     requiresNativeValidation: true,
-    verification: "Rescan store after tool-native prune.",
-    guardrails: ["Tool-native prune only", "No direct store wipe", "No project source directories"]
+    verification: "Rescan pnpm store and run pnpm install if store rehydration proof is needed.",
+    guardrails: ["Age threshold", "Current-user store only", "No global bin removal", "No project node_modules deletion"]
   },
   "docker-build-cache": {
     route: "tool-native-prune",
@@ -663,6 +663,7 @@ export const releaseFeatureFlags = {
   projectDependencyExecutor: false,
   gradleCacheExecutor: false,
   npmCacheExecutor: false,
+  pnpmStoreExecutor: false,
   recycleBinExecutor: false,
   browserCacheExecutor: false,
   toolNativePruneExecutors: false,
@@ -687,13 +688,13 @@ export const toolNativeCommandSpecs = [
     id: "pnpm-store",
     tool: "pnpm",
     actionId: "pnpm-store",
-    route: "tool-native-prune",
+    route: "bounded-pnpm-store-delete",
     title: "pnpm store",
     inspectCommand: "pnpm store status",
-    futureCommand: "pnpm store prune",
-    status: "future-disabled",
-    evidence: "Inventory store status first; prune only through pnpm when validation exists.",
-    guardrails: ["No direct store wipe", "No project source deletion", "No shell execution in current build"]
+    futureCommand: "bounded store cleanup only",
+    status: "manual-boundary",
+    evidence: "Use native scan evidence for %LocalAppData%\\pnpm\\store; compare store size before and after.",
+    guardrails: ["No global bin removal", "No project node_modules deletion", "No shell execution in current build", "Keep store metadata"]
   },
   {
     id: "docker-build-cache",
@@ -1006,6 +1007,17 @@ export const executorRouteRequirements = {
     fixtureIds: ["developer-tooling-fixture", "protected-path-fixture"],
     preconditions: ["Native Windows scan", "Current-user LocalAppData root", "Age threshold", "No project or global package path"]
   },
+  "bounded-pnpm-store-delete": {
+    title: "Bounded pnpm store",
+    lane: "rebuildable",
+    phase: "second-safe",
+    implementation: "Delete only old pnpm store content and temp files under the current user's LocalAppData pnpm store root.",
+    rollback: "pnpm redownloads missing packages on the next install; project node_modules and global bins remain untouched.",
+    proof: "Developer-tool fixture must show project node_modules, global bins, and store metadata are not touched.",
+    requiredValidationIds: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "tool-native-dry-runs", "ledger-rescan-parity"],
+    fixtureIds: ["developer-tooling-fixture", "protected-path-fixture"],
+    preconditions: ["Native Windows scan", "Current-user LocalAppData root", "Age threshold", "No project or global package path"]
+  },
   "tool-native-prune": {
     title: "Tool-native prune commands",
     lane: "tool-native",
@@ -1244,9 +1256,9 @@ export const actions = [
     bytes: 8.8 * GB,
     risk: "rebuildable",
     gate: "groupConfirm",
-    method: "Prune unreferenced packages through the package manager",
+    method: "Remove old pnpm store content and temp files from the scanned user store",
     consequence: "Some projects may fetch packages again.",
-    recommendation: "Use package-manager prune rather than deleting the whole store.",
+    recommendation: "Clean old store content only when the scanned pnpm store is a top space source.",
     selectedByDefault: true,
     executableInDemo: true
   },
@@ -3823,6 +3835,7 @@ export function buildAIAgentIntegration({
         || runtimeCapabilities?.executorFlags?.browserCacheExecutor
         || runtimeCapabilities?.executorFlags?.gradleCacheExecutor
         || runtimeCapabilities?.executorFlags?.npmCacheExecutor
+        || runtimeCapabilities?.executorFlags?.pnpmStoreExecutor
         || runtimeCapabilities?.executorFlags?.recycleBinExecutor
       )
       && !runtimeCapabilities?.executorFlags?.toolNativePruneExecutors
@@ -8892,7 +8905,12 @@ export function buildToolCommandInventory({
     const action = actionList.find((item) => item.id === spec.actionId) || null;
     const selectedRow = selectedRows.find((row) => row.id === spec.actionId || row.route === spec.route);
     const selected = Boolean(selectedRow);
-    const supported = spec.route === "tool-native-prune" || spec.route === "bounded-cache-delete" || spec.route === "bounded-npm-cache-delete" || spec.route === "windows-cleanup-api";
+    const supported =
+      spec.route === "tool-native-prune" ||
+      spec.route === "bounded-cache-delete" ||
+      spec.route === "bounded-npm-cache-delete" ||
+      spec.route === "bounded-pnpm-store-delete" ||
+      spec.route === "windows-cleanup-api";
     const status = !supported
       ? "unsupported"
       : selected
@@ -12360,7 +12378,7 @@ export function buildReport({
           `- Detail-needed records: ${validationPack.validationChecks.filter((check) => check.evidenceValue && !check.evidenceComplete).length}`,
           `- VM scenarios: ${validationPack.vmScenarios.length}`,
           `- Fixture roots: ${validationPack.fixtureRoots.length}`,
-          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, downloads=${validationPack.runtime?.executorFlags?.downloadsCleanupExecutor ? "on" : "off"}, largeArchive=${validationPack.runtime?.executorFlags?.largeFileArchiveExecutor ? "on" : "off"}, projectDeps=${validationPack.runtime?.executorFlags?.projectDependencyExecutor ? "on" : "off"}, gradle=${validationPack.runtime?.executorFlags?.gradleCacheExecutor ? "on" : "off"}, npm=${validationPack.runtime?.executorFlags?.npmCacheExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
+          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, downloads=${validationPack.runtime?.executorFlags?.downloadsCleanupExecutor ? "on" : "off"}, largeArchive=${validationPack.runtime?.executorFlags?.largeFileArchiveExecutor ? "on" : "off"}, projectDeps=${validationPack.runtime?.executorFlags?.projectDependencyExecutor ? "on" : "off"}, gradle=${validationPack.runtime?.executorFlags?.gradleCacheExecutor ? "on" : "off"}, npm=${validationPack.runtime?.executorFlags?.npmCacheExecutor ? "on" : "off"}, pnpm=${validationPack.runtime?.executorFlags?.pnpmStoreExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
           `- Safety invariants waiting: ${validationPack.safetyInvariants.filter((item) => !item.passed).length}`,
           validationPack.validationChecks.length
             ? validationPack.validationChecks
@@ -12885,7 +12903,12 @@ function getTaskCapabilityForbiddenOperations(row, power) {
   if (row.route === "browser-cache-only" || power.id === "safe-cleanup") {
     forbidden.push("Touch cookies, sessions, saved logins, browser profiles, or extension data.");
   }
-  if (row.route === "tool-native-prune" || row.route === "item-review-project-cache" || row.route === "bounded-npm-cache-delete") {
+  if (
+    row.route === "tool-native-prune" ||
+    row.route === "item-review-project-cache" ||
+    row.route === "bounded-npm-cache-delete" ||
+    row.route === "bounded-pnpm-store-delete"
+  ) {
     forbidden.push("Delete project source folders, Docker volumes, or package globals.");
   }
   if (power.id === "advanced-system-strategy") {
@@ -15429,6 +15452,7 @@ function normalizeExecutorFeatureFlags(value = {}) {
     largeFileArchiveExecutor: Boolean(value.largeFileArchiveExecutor || value.large_file_archive_executor),
     gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
     npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
+    pnpmStoreExecutor: Boolean(value.pnpmStoreExecutor || value.pnpm_store_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
     browserCacheExecutor: Boolean(value.browserCacheExecutor || value.browser_cache_executor),
     toolNativePruneExecutors: Boolean(value.toolNativePruneExecutors || value.tool_native_prune_executors)
@@ -15444,6 +15468,7 @@ function getScopedRealExecutorRoutes(runtimeCapabilities = {}) {
     flags.projectDependencyExecutor ? "item-review-project-cache" : "",
     flags.gradleCacheExecutor ? "bounded-cache-delete" : "",
     flags.npmCacheExecutor ? "bounded-npm-cache-delete" : "",
+    flags.pnpmStoreExecutor ? "bounded-pnpm-store-delete" : "",
     flags.recycleBinExecutor ? "shell-recycle-bin" : "",
     flags.browserCacheExecutor ? "browser-cache-only" : "",
     flags.toolNativePruneExecutors ? "tool-native-prune" : ""

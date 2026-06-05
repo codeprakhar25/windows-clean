@@ -148,6 +148,7 @@ import {
   runNativeGradleCacheExecutor,
   runNativeLargeFileArchiveExecutor,
   runNativeNpmCacheExecutor,
+  runNativePnpmStoreExecutor,
   runNativeProjectDependencyExecutor,
   runNativeRecycleBinExecutor,
   runNativeTempCleanupExecutor,
@@ -251,6 +252,7 @@ export default function App() {
   const [nativeBrowserCacheExecution, setNativeBrowserCacheExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeGradleCacheExecution, setNativeGradleCacheExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeNpmCacheExecution, setNativeNpmCacheExecution] = useState({ status: "idle", result: null, error: "" });
+  const [nativePnpmStoreExecution, setNativePnpmStoreExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeRecycleBinExecution, setNativeRecycleBinExecution] = useState({ status: "idle", result: null, error: "" });
   const [aiPrompt, setAiPrompt] = useState("Find the fastest safe path to recover real space from this scan.");
   const [aiAdvice, setAiAdvice] = useState({ status: "idle", result: null, error: "" });
@@ -280,6 +282,7 @@ export default function App() {
         largeFileArchiveExecutor: false,
         gradleCacheExecutor: false,
         npmCacheExecutor: false,
+        pnpmStoreExecutor: false,
         recycleBinExecutor: false,
         browserCacheExecutor: false,
         toolNativePruneExecutors: false
@@ -746,6 +749,7 @@ export default function App() {
           largeFileArchiveExecutor: Boolean(executorFlags.largeFileArchiveExecutor),
           gradleCacheExecutor: Boolean(executorFlags.gradleCacheExecutor),
           npmCacheExecutor: Boolean(executorFlags.npmCacheExecutor),
+          pnpmStoreExecutor: Boolean(executorFlags.pnpmStoreExecutor),
           recycleBinExecutor: Boolean(executorFlags.recycleBinExecutor),
           browserCacheExecutor: Boolean(executorFlags.browserCacheExecutor),
           toolNativePruneExecutors: Boolean(executorFlags.toolNativePruneExecutors)
@@ -1984,6 +1988,7 @@ export default function App() {
         || runtimeCapabilities.result.executorFlags?.browserCacheExecutor
         || runtimeCapabilities.result.executorFlags?.gradleCacheExecutor
         || runtimeCapabilities.result.executorFlags?.npmCacheExecutor
+        || runtimeCapabilities.result.executorFlags?.pnpmStoreExecutor
         || runtimeCapabilities.result.executorFlags?.recycleBinExecutor
     );
     if (!runReadiness.ready || !planLock.readyForPreflight || (safetyInterlock.status === "unsafe-stop" && !scopedExecutorRuntime)) return;
@@ -2140,6 +2145,11 @@ export default function App() {
     if (actionType === "run-npm-cache-executor") {
       focusWorkflowPanel("npm-cache-executor-panel");
       await executeNpmCacheCleanup();
+      return;
+    }
+    if (actionType === "run-pnpm-store-executor") {
+      focusWorkflowPanel("pnpm-store-executor-panel");
+      await executePnpmStoreCleanup();
       return;
     }
     if (actionType === "run-recycle-bin-executor") {
@@ -2469,6 +2479,59 @@ export default function App() {
       commitExecutionLedger(buildNativeExecutionLedger(result, executedAt), { executedAt, source: "native-npm-cache-executor" });
     } catch (error) {
       setNativeNpmCacheExecution({
+        status: "error",
+        result: null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  async function executePnpmStoreCleanup() {
+    if (nativePnpmStoreExecution.status === "running") return;
+    const pnpmRows = executorPlan.rows.filter((row) => row.id === "pnpm-store" && row.route === "bounded-pnpm-store-delete");
+    const finding = (nativeScan.result?.findings || [])
+      .find((row) => row.recipeId === "pnpm-store" && (row.status === "measured" || row.status === "limited") && row.path);
+    const pnpmTarget = finding
+      ? {
+          id: "pnpm-store",
+          title: finding.title || "pnpm global store",
+          path: finding.path,
+          bytes: Number(finding.bytes || 0)
+        }
+      : null;
+
+    if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.pnpmStoreExecutor) {
+      setNativePnpmStoreExecution({
+        status: "blocked",
+        result: null,
+        error: "pnpm store executor is not enabled. Set SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR=1 before launching the Tauri app."
+      });
+      return;
+    }
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !pnpmRows.length || !pnpmTarget) {
+      setNativePnpmStoreExecution({
+        status: "blocked",
+        result: null,
+        error: "pnpm store cleanup needs the pnpm-store action selected, native pnpm store evidence, current plan, scan fingerprint, and consent receipt."
+      });
+      return;
+    }
+
+    setActiveStage("execute");
+    setNativePnpmStoreExecution({ status: "running", result: null, error: "" });
+    try {
+      const result = await runNativePnpmStoreExecutor({
+        row: pnpmTarget,
+        planId: planSnapshot.id,
+        scanFingerprint: scanSession.currentFingerprint,
+        consentPlanId: consentReceipt.planId,
+        expectedBytes: pnpmTarget.bytes
+      });
+      setNativePnpmStoreExecution({ status: "complete", result, error: "" });
+      const executedAt = new Date().toISOString();
+      commitExecutionLedger(buildNativeExecutionLedger(result, executedAt), { executedAt, source: "native-pnpm-store-executor" });
+    } catch (error) {
+      setNativePnpmStoreExecution({
         status: "error",
         result: null,
         error: error instanceof Error ? error.message : String(error)
@@ -3588,6 +3651,15 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               onExecute={executeNpmCacheCleanup}
+            />
+            <PnpmStoreExecutorPanel
+              runtimeCapabilities={runtimeCapabilities}
+              execution={nativePnpmStoreExecution}
+              executorPlan={executorPlan}
+              nativeScan={nativeScan}
+              scanSession={scanSession}
+              consentReceipt={consentReceipt}
+              onExecute={executePnpmStoreCleanup}
             />
             <DownloadsCleanupExecutorPanel
               runtimeCapabilities={runtimeCapabilities}
@@ -6179,7 +6251,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, recomm
   const configured = Boolean(config.configured || nativeConfigured);
   const keySource = nativeConfigured ? context.runtime.openAiKeySource : config.keySource;
   const transport = context.runtime.openAiAgentAdvice ? "native-tauri" : "browser-fetch";
-  const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.downloadsCleanupExecutor || context.runtime.largeFileArchiveExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor || context.runtime.gradleCacheExecutor || context.runtime.npmCacheExecutor || context.runtime.recycleBinExecutor);
+  const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.downloadsCleanupExecutor || context.runtime.largeFileArchiveExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor || context.runtime.gradleCacheExecutor || context.runtime.npmCacheExecutor || context.runtime.pnpmStoreExecutor || context.runtime.recycleBinExecutor);
 
   return (
     <Card id="openai-agent-panel">
@@ -6207,6 +6279,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, recomm
           <QueueStat label="Project targets" value={context.reviewedProjectTargets?.length || 0} tone={context.reviewedProjectTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Gradle root" value={context.gradleCacheTargets?.length || 0} tone={context.gradleCacheTargets?.length ? "advanced" : "review"} />
           <QueueStat label="npm root" value={context.npmCacheTargets?.length || 0} tone={context.npmCacheTargets?.length ? "advanced" : "review"} />
+          <QueueStat label="pnpm root" value={context.pnpmStoreTargets?.length || 0} tone={context.pnpmStoreTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Recycle" value={context.recycleBinTargets?.length || 0} tone={context.recycleBinTargets?.length ? "restricted" : "review"} />
           <QueueStat label="Cache roots" value={context.browserCacheTargets?.length || 0} tone={context.browserCacheTargets?.length ? "advanced" : "review"} />
           <QueueStat label="AI ready" value={recommendationBroker?.counts?.ready || 0} tone={recommendationBroker?.counts?.ready ? "safe" : "review"} />
@@ -6356,6 +6429,8 @@ function aiRecommendationActionLabel(row = {}) {
       return "Run Gradle cleanup";
     case "run-npm-cache-executor":
       return "Run npm cleanup";
+    case "run-pnpm-store-executor":
+      return "Run pnpm cleanup";
     case "run-recycle-bin-executor":
       return "Empty Recycle Bin";
     case "rescan":
@@ -8522,6 +8597,108 @@ function NpmCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, n
         <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
           {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {running ? "Cleaning npm cache" : "Run npm cache cleanup"}
+        </Button>
+
+        {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}
+
+        {result?.warnings?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.warnings.slice(0, 3).map((warning) => (
+              <div key={warning} className="rounded-md border bg-card p-3 text-xs text-muted-foreground">{warning}</div>
+            ))}
+          </div>
+        ) : null}
+
+        {result?.entries?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.entries.slice(0, 4).map((entry) => (
+              <div key={`${entry.id}-${entry.result}-${entry.bytes}`} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{entry.title}</span>
+                  <Badge variant={entry.result === "executed" ? "safe" : "review"}>{entry.result}</Badge>
+                  <Badge variant="outline">{formatBytes(entry.bytes)}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{entry.note}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PnpmStoreExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, onExecute }) {
+  const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.pnpmStoreExecutor);
+  const rows = executorPlan.rows.filter((row) => row.id === "pnpm-store" && row.route === "bounded-pnpm-store-delete");
+  const finding = (nativeScan.result?.findings || [])
+    .find((row) => row.recipeId === "pnpm-store" && (row.status === "measured" || row.status === "limited") && row.path);
+  const target = finding
+    ? {
+        id: "pnpm-store",
+        title: finding.title || "pnpm global store",
+        path: finding.path,
+        bytes: Number(finding.bytes || 0),
+        status: finding.status
+      }
+    : null;
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentReceipt.planId);
+  const running = execution.status === "running";
+  const result = execution.result;
+  const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+  const disabled = running || !enabled || !requestReady;
+
+  return (
+    <Card id="pnpm-store-executor-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          pnpm store cleanup
+          <Badge variant={enabled ? "restricted" : "review"}>{enabled ? "feature on" : "feature off"}</Badge>
+        </CardTitle>
+        <CardDescription>
+          Deletes old content and temp files only under the current user's pnpm store root. Global bins, project folders, metadata, and shell commands are rejected.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Selected" value={rows.length} tone={rows.length ? "advanced" : "review"} />
+          <QueueStat label="Root" value={target ? "scanned" : "missing"} tone={target ? "safe" : "review"} />
+          <QueueStat label="Recovered" value={formatBytes(reclaimed)} tone={reclaimed ? "safe" : "review"} />
+          <QueueStat label="Request" value={requestReady ? "ready" : "wait"} tone={requestReady ? "safe" : "review"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">pnpm executor boundary</span>
+            <Badge variant={enabled ? "restricted" : "safe"}>{enabled ? "can delete old store" : "cannot delete"}</Badge>
+            <Badge variant="outline">bounded-pnpm-store-delete</Badge>
+            <Badge variant="safe">30+ day files</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Enable with `SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR=1` before launching Tauri.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, selected pnpm route {rows.length ? "yes" : "no"}.</span>
+            <span>Allowed target is the native-scanned current user `%LocalAppData%\\pnpm\\store`; metadata, global bins, and project `node_modules` stay untouched.</span>
+          </div>
+        </div>
+
+        {target ? (
+          <div className="rounded-md border bg-card p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-auto min-w-0 text-sm font-medium">{target.title}</span>
+              <Badge variant="outline">{formatBytes(target.bytes)}</Badge>
+              <Badge variant={target.status === "limited" ? "review" : "safe"}>{target.status}</Badge>
+            </div>
+            <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{target.path}</p>
+          </div>
+        ) : (
+          <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+            Run a native read-only scan that measures `%LocalAppData%\\pnpm\\store` before this executor has a concrete target.
+          </div>
+        )}
+
+        <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
+          {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          {running ? "Cleaning pnpm store" : "Run pnpm store cleanup"}
         </Button>
 
         {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}

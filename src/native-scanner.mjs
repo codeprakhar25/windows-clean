@@ -550,6 +550,50 @@ export async function runNativeNpmCacheExecutor(boundary = {}, host = globalThis
   return normalizeNativeWriteBoundary(result);
 }
 
+export async function runNativePnpmStoreExecutor(boundary = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      accepted: false,
+      reason: "Native pnpm store executor is not available in the browser demo.",
+      entries: [],
+      warnings: ["Run the Tauri desktop shell before executing pnpm store cleanup."]
+    };
+  }
+
+  const row = boundary.row || boundary.selectedRow || {};
+  const targetPath = row.targetPath || row.target || row.path || "";
+  const action = {
+    id: row.id || "pnpm-store",
+    title: row.title || "pnpm global store",
+    bytes: Number(row.bytes || boundary.expectedBytes || 0),
+    route: "bounded-pnpm-store-delete",
+    targetPath
+  };
+  const expectedBytes = Number(boundary.expectedBytes ?? action.bytes);
+
+  const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
+    request: {
+      schemaVersion: "spaceguard-pnpm-store-request/v1",
+      requestMode: "execute-pnpm-store",
+      planId: boundary.planId || "",
+      route: "bounded-pnpm-store-delete",
+      scanFingerprint: boundary.scanFingerprint || "",
+      consentPlanId: boundary.consentPlanId || "",
+      expectedBytes,
+      dryRunOnly: false,
+      mutationAttempted: true,
+      actions: [action]
+    }
+  });
+
+  return normalizeNativeWriteBoundary(result);
+}
+
 export async function runNativeRecycleBinExecutor(boundary = {}, host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {
@@ -897,6 +941,7 @@ function normalizeExecutorFlags(value = {}) {
     largeFileArchiveExecutor: Boolean(value.largeFileArchiveExecutor || value.large_file_archive_executor),
     gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
     npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
+    pnpmStoreExecutor: Boolean(value.pnpmStoreExecutor || value.pnpm_store_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
     browserCacheExecutor: Boolean(value.browserCacheExecutor || value.browser_cache_executor),
     toolNativePruneExecutors: Boolean(value.toolNativePruneExecutors || value.tool_native_prune_executors)
