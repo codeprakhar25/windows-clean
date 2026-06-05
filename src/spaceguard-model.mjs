@@ -4568,6 +4568,57 @@ export function buildReviewItemsByAction(actionList = actions, nativeScan = null
   );
 }
 
+export function buildInstalledAppReviewDossier({ itemReviewsByAction = null, nativeScan = null } = {}) {
+  const review = itemReviewsByAction?.["installed-app-footprints"];
+  const sourceItems = review?.items?.length
+    ? review.items
+    : (nativeScan?.findings || [])
+        .filter((finding) => finding.recipeId === "installed-app-footprints")
+        .flatMap((finding) => finding.items || []);
+  const rows = sourceItems
+    .map(normalizeInstalledAppDossierRow)
+    .sort((left, right) => {
+      const rank = { "manual-uninstall-selected": 0, "needs-user-confirmation": 1, "keep-or-low-confidence": 2 };
+      return (rank[left.status] ?? 9) - (rank[right.status] ?? 9) || right.bytes - left.bytes;
+    })
+    .slice(0, 16);
+  const selectedRows = rows.filter((row) => row.status === "manual-uninstall-selected");
+  const reviewRows = rows.filter((row) => row.status === "needs-user-confirmation");
+  const status = selectedRows.length
+    ? "manual-uninstall-follow-up"
+    : reviewRows.length
+      ? "needs-user-review"
+      : rows.length
+        ? "no-strong-candidate"
+        : "no-app-footprints";
+
+  return {
+    schemaVersion: "spaceguard-installed-app-review/v1",
+    status,
+    manualOnly: true,
+    canCreateExecutor: false,
+    totalBytes: rows.reduce((sum, row) => sum + row.bytes, 0),
+    reviewBytes: reviewRows.reduce((sum, row) => sum + row.bytes, 0),
+    manualSelectedBytes: selectedRows.reduce((sum, row) => sum + row.bytes, 0),
+    rows,
+    counts: {
+      total: rows.length,
+      review: reviewRows.length,
+      selected: selectedRows.length,
+      registryMatched: rows.filter((row) => row.registryMatch !== "none").length,
+      uninstallEntry: rows.filter((row) => row.uninstallEntry === "present").length,
+      usageProofMissing: rows.filter((row) => row.usageProof === "not proven").length
+    },
+    guardrails: [
+      "No automated uninstall.",
+      "No direct Program Files deletion.",
+      "Modification age is not usage proof.",
+      "Use Windows Settings or the vendor uninstaller, then rescan."
+    ],
+    nextStep: getInstalledAppDossierNextStep(status)
+  };
+}
+
 export function buildItemReview(actionId, actionList = actions, nativeScan = null, protectedPaths = [], approvals = {}) {
   const action = actionList.find((item) => item.id === actionId) || actionList.find((item) => item.gate === "review") || actionList[0];
   if (!action) {
@@ -4625,6 +4676,66 @@ export function buildItemReview(actionId, actionList = actions, nativeScan = nul
         : `${items.length} candidate item(s), ${formatBytes(decisionSummary.removeBytes)} selected for cleanup and ${formatBytes(decisionSummary.moveBytes + decisionSummary.archiveBytes)} marked for manual move/archive.`
       : "This root has no item-level candidates yet."
   };
+}
+
+function normalizeInstalledAppDossierRow(item = {}) {
+  const signals = normalizeReviewSignals(item.signals || item.reviewSignals || item.review_signals);
+  const decision = item.decision || "undecided";
+  const recommendation = item.recommendation || "review";
+  const usageProof = getReviewSignalValue(signals, "usage proof") || "not proven";
+  const uninstallEntry = getReviewSignalValue(signals, "uninstall entry") || "unknown";
+  const registryMatch = getReviewSignalValue(signals, "registry match") || "none";
+  const publisher = getReviewSignalValue(signals, "publisher");
+  const installDate = getReviewSignalValue(signals, "install date");
+  const windowsEstimate = getReviewSignalValue(signals, "Windows estimate");
+  const ageDays = Number(item.ageDays ?? item.age_days ?? 0);
+  const bytes = Number(item.bytes || 0);
+  const status = decision === "remove"
+    ? "manual-uninstall-selected"
+    : recommendation === "review"
+      ? "needs-user-confirmation"
+      : "keep-or-low-confidence";
+
+  return {
+    id: item.id || item.path || item.name || "installed-app",
+    name: item.name || item.title || "Installed app",
+    path: item.path || "",
+    bytes,
+    ageDays,
+    kind: item.kind || "installed app footprint",
+    recommendation,
+    decision,
+    status,
+    confidence: status === "manual-uninstall-selected" ? "user-selected" : uninstallEntry === "present" && registryMatch !== "none" ? "medium" : "low",
+    usageProof,
+    uninstallEntry,
+    registryMatch,
+    publisher,
+    installDate,
+    windowsEstimate,
+    officialAction: getReviewSignalValue(signals, "official action") || "Windows Settings or vendor uninstaller",
+    reason: item.reason || "Installed app footprint is manual review evidence only.",
+    nextStep: getInstalledAppRowNextStep(status),
+    signals
+  };
+}
+
+function getReviewSignalValue(signals = [], label = "") {
+  const match = signals.find((signal) => signal.label.toLowerCase() === label.toLowerCase());
+  return match?.value || "";
+}
+
+function getInstalledAppDossierNextStep(status) {
+  if (status === "manual-uninstall-follow-up") return "Open Windows Settings or the vendor uninstaller for selected apps, then rescan.";
+  if (status === "needs-user-review") return "Ask the user which review candidates they recognize as unused before marking uninstall follow-up.";
+  if (status === "no-strong-candidate") return "Keep app candidates unless the user recognizes an app as unused.";
+  return "Run a native read-only scan to discover installed app footprints.";
+}
+
+function getInstalledAppRowNextStep(status) {
+  if (status === "manual-uninstall-selected") return "Manual uninstall follow-up through Windows Settings or vendor uninstaller, then rescan.";
+  if (status === "needs-user-confirmation") return "Ask the user whether this app is still needed before marking uninstall.";
+  return "Keep unless the user explicitly confirms it is unused.";
 }
 
 export function getExecutorPolicy(action) {

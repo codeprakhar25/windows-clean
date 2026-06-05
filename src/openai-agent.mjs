@@ -217,6 +217,7 @@ export function buildOpenAIAgentContext({
     }))
     .slice(0, 1);
   const manualReviewTargets = buildManualReviewTargets({ nativeScan, itemReviewsByAction });
+  const installedAppReview = buildInstalledAppReviewContext(manualReviewTargets);
   const driveInventoryRows = (driveInventorySummary?.topRows || driveInventorySummary?.rows || [])
     .slice(0, 8)
     .map((row) => ({
@@ -308,6 +309,7 @@ export function buildOpenAIAgentContext({
     recycleBinTargets,
     browserCacheTargets,
     manualReviewTargets,
+    installedAppReview,
     driveInventoryRows,
     customRootRows,
     candidateSamples: (candidateSafetyManifest?.rows || []).slice(0, 12).map((row) => ({
@@ -418,6 +420,7 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
       recycleBinTargets: Array.isArray(context?.recycleBinTargets) ? context.recycleBinTargets.length : 0,
       browserCacheTargets: Array.isArray(context?.browserCacheTargets) ? context.browserCacheTargets.length : 0,
       manualReviewTargets: Array.isArray(context?.manualReviewTargets) ? context.manualReviewTargets.length : 0,
+      installedAppReviewRows: Array.isArray(context?.installedAppReview?.rows) ? context.installedAppReview.rows.length : 0,
       driveInventoryRows: Array.isArray(context?.driveInventoryRows) ? context.driveInventoryRows.length : 0,
       customRootRows: Array.isArray(context?.customRootRows) ? context.customRootRows.length : 0,
       candidateSamples: Array.isArray(context?.candidateSamples) ? context.candidateSamples.length : 0
@@ -578,6 +581,58 @@ function buildManualReviewTargets({ nativeScan = null, itemReviewsByAction = nul
       reason: item.reason || "Installed app footprint is manual review evidence, not an automated cleanup target.",
       signals: normalizeAgentReviewSignals(item.signals)
     }));
+}
+
+function buildInstalledAppReviewContext(manualReviewTargets = []) {
+  const rows = manualReviewTargets
+    .map((target) => {
+      const usageProof = getAgentSignalValue(target.signals, "usage proof") || "not proven";
+      const uninstallEntry = getAgentSignalValue(target.signals, "uninstall entry") || "unknown";
+      const registryMatch = getAgentSignalValue(target.signals, "registry match") || "none";
+      const status = target.decision === "remove"
+        ? "manual-uninstall-selected"
+        : target.recommendation === "review"
+          ? "needs-user-confirmation"
+          : "keep-or-low-confidence";
+      return {
+        id: target.id,
+        name: target.name,
+        route: target.route,
+        path: target.path,
+        bytes: Number(target.bytes || 0),
+        ageDays: Number(target.ageDays || 0),
+        kind: target.kind,
+        status,
+        decision: target.decision || "undecided",
+        usageProof,
+        uninstallEntry,
+        registryMatch,
+        manualOnly: true,
+        canCreateExecutor: false,
+        officialAction: target.officialAction || "Use Windows Settings or the vendor uninstaller only.",
+        reason: target.reason || ""
+      };
+    })
+    .slice(0, 12);
+  return {
+    schemaVersion: "spaceguard-installed-app-review-context/v1",
+    manualOnly: true,
+    canCreateExecutor: false,
+    rows,
+    counts: {
+      total: rows.length,
+      review: rows.filter((row) => row.status === "needs-user-confirmation").length,
+      selected: rows.filter((row) => row.status === "manual-uninstall-selected").length,
+      uninstallEntry: rows.filter((row) => row.uninstallEntry === "present").length,
+      usageProofMissing: rows.filter((row) => row.usageProof === "not proven").length
+    },
+    forbiddenActions: ["automated-uninstall", "delete-program-files", "run-uninstall-string", "edit-registry"]
+  };
+}
+
+function getAgentSignalValue(signals = [], label = "") {
+  const match = (Array.isArray(signals) ? signals : []).find((signal) => signal.label.toLowerCase() === label.toLowerCase());
+  return match?.value || "";
 }
 
 function normalizeAgentReviewSignals(value = []) {

@@ -4181,6 +4181,12 @@ const assert = require("assert");
   const appReviews = guard.buildReviewItemsByAction(guard.actions, null, [], appReviewApprovals);
   assert(appReviews["installed-app-footprints"].removeBytes > 0, "app footprint review should show manual uninstall candidate bytes");
   assert.strictEqual(appReviews["installed-app-footprints"].selectedBytes, 0, "manual app uninstall candidates must not become executor bytes");
+  const appDossier = guard.buildInstalledAppReviewDossier({ itemReviewsByAction: appReviews });
+  assert.strictEqual(appDossier.manualOnly, true, "installed app review dossier should stay manual-only");
+  assert.strictEqual(appDossier.canCreateExecutor, false, "installed app review dossier must not create executor authority");
+  assert.strictEqual(appDossier.status, "manual-uninstall-follow-up", "selected app reviews should become manual uninstall follow-up");
+  assert(appDossier.manualSelectedBytes > 0, "installed app review dossier should show manual follow-up bytes");
+  assert(appDossier.rows.every((row) => row.usageProof === "not proven" || row.usageProof), "installed app review rows should expose usage-proof state");
   assert.strictEqual(
     guard.computeTotals(new Set(["installed-app-footprints"]), guard.actions, {
       approvals: appReviewApprovals,

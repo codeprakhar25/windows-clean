@@ -316,6 +316,8 @@ assert(openAiAgent.includes("npmCacheTargets"), "OpenAI context should include s
 assert(openAiAgent.includes("recycleBinTargets"), "OpenAI context should include scanned Recycle Bin targets");
 assert(openAiAgent.includes("browserCacheTargets"), "OpenAI context should include scanned browser cache targets");
 assert(openAiAgent.includes("manualReviewTargets"), "OpenAI context should include manual review targets");
+assert(openAiAgent.includes("installedAppReview"), "OpenAI context should include installed app review summary");
+assert(openAiAgent.includes("automated-uninstall"), "OpenAI installed app context should forbid automated uninstall");
 assert(openAiAgent.includes("planSnapshot"), "OpenAI context should include current plan snapshot identity");
 assert(openAiAgent.includes("spaceguard-openai-agent-run/v1"), "OpenAI adapter should expose local run provenance records");
 assert(openAiAgent.includes("storesFullContext: false"), "OpenAI run records should not persist full path-level context");
@@ -486,8 +488,12 @@ assert(rustScanner.includes("file_old_enough_for_browser_cache_delete"), "Rust b
 assert(!rustScanner.includes("Command::new"), "Rust cleanup executors must not shell out for cleanup");
 assert(model.includes("installed-app-footprints"), "model should include installed app footprint review");
 assert(model.includes("manual-app-uninstall"), "installed app footprints should stay manual uninstall guidance");
+assert(model.includes("spaceguard-installed-app-review/v1"), "model should expose installed app review dossier schema");
+assert(model.includes("buildInstalledAppReviewDossier"), "model should build installed app review dossier");
 assert(model.includes("Modification age is not usage proof"), "installed app policy should not overclaim usage detection");
 assert(app.includes("Mark uninstall"), "item review should label app footprint decisions as manual uninstall follow-up");
+assert(app.includes("App uninstall review"), "App should expose installed app review dossier panel");
+assert(app.includes("installed-app-review-dossier"), "installed app review dossier should be focusable");
 assert(app.includes("SpaceGuard will not delete Program Files folders"), "item review should preserve the Program Files deletion boundary");
 assert(app.includes("ReviewSignalBadges"), "item review should render structured review signal badges");
 assert(rustScanner.includes("measure_installed_app_footprints"), "Rust scanner should measure installed app footprints read-only");

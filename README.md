@@ -216,7 +216,7 @@ For review-gated roots, the scanner can also return item-level candidates:
 - Top Android Studio cache or emulator entries.
 - Large installed app footprints for manual uninstall review, enriched with read-only Windows uninstall metadata when available.
 
-These candidates are metadata-only. Large personal files and installed app footprints are discovery-only until the user makes per-item decisions. Installed app folder modification age is a weak hint, not proof of usage. When Windows uninstall metadata is available, SpaceGuard reads display name, publisher, display version, install location, install date, estimated size, and whether an uninstall entry exists; it does not store or run uninstall command strings. App review items also carry structured signals such as usage proof, registry match, publisher, install date, uninstall entry, measured size, and official manual action so the UI and OpenAI advisor can reason over explicit evidence instead of parsing prose. App cleanup stays manual through Windows Settings or the vendor uninstaller; SpaceGuard does not delete Program Files folders or run uninstallers.
+These candidates are metadata-only. Large personal files and installed app footprints are discovery-only until the user makes per-item decisions. Installed app folder modification age is a weak hint, not proof of usage. When Windows uninstall metadata is available, SpaceGuard reads display name, publisher, display version, install location, install date, estimated size, and whether an uninstall entry exists; it does not store or run uninstall command strings. App review items also carry structured signals such as usage proof, registry match, publisher, install date, uninstall entry, measured size, and official manual action so the UI and OpenAI advisor can reason over explicit evidence instead of parsing prose. The app uninstall review dossier ranks those candidates, shows missing usage proof explicitly, and tracks manual uninstall follow-up bytes without creating executor recovery. App cleanup stays manual through Windows Settings or the vendor uninstaller; SpaceGuard does not delete Program Files folders or run uninstallers.
 
 ## Product Shape
 
@@ -247,7 +247,7 @@ The demo also includes:
 - Reviewed large-file archive executor panel for selected old 1GB+ personal files marked Move or Archive, copied to an explicit destination on another drive and then removed from the source only after copy verification.
 - Reviewed project dependency executor panel for stale `node_modules` cleanup, including Expo/React Native project hints and item-level remove targets.
 - Browser cache executor panel for scanned cache roots only, with cookies, sessions, logins, extensions, history, and profile stores blocked by native target validation.
-- Installed app footprint review for large app folders, with manual uninstall guidance and no automated uninstall or Program Files deletion.
+- Installed app footprint review and app uninstall dossier for large app folders, with manual uninstall guidance and no automated uninstall or Program Files deletion.
 - Demo rehearsal runbook that proves the browser demo can go from scan to gated plan, dry-run consent, simulated ledger, and report export without native data or real cleanup.
 - Product completion audit that maps the original product requirements to proven, partial, waiting, locked, or unsafe evidence so the app cannot overclaim real cleanup readiness.
 - Safety interlock that summarizes runtime write signals, native write signals, scan freshness, dry-run consent, task power leases, standing permission, run readiness, write-boundary evidence, release review, and write readiness into one stop/hold/dry-run state.
@@ -424,7 +424,7 @@ The fixture evidence import accepts the JSON produced by `scripts/inspect-spaceg
 
 Dry-run records are also saved to local browser storage as an append-only run history. A saved record can block a duplicate simulation for the same plan after reload, but it cannot unlock real execution. The history export is audit evidence only; real cleanup still requires native Windows validation and a post-run rescan.
 
-Broad deletion remains disabled. The executor layer classifies selected actions as dry-run routes, scoped feature-flagged executors, future safe-executor candidates, gated routes, or blocked routes. Temp files, Recycle Bin emptying, reviewed `node_modules`, Gradle cache roots, npm `_cacache`, and browser cache roots are the only write-capable families, and only when their Windows runtime flags are enabled.
+Broad deletion remains disabled. The executor layer classifies selected actions as dry-run routes, scoped feature-flagged executors, future safe-executor candidates, gated routes, or blocked routes. Temp files, reviewed Downloads files, reviewed large-file archives, Recycle Bin emptying, reviewed `node_modules`, Gradle cache roots, npm `_cacache`, and browser cache roots are the only write-capable families, and only when their Windows runtime flags are enabled.
 
 The executor manifest is the real-data implementation map. It covers all route families, not just selected actions:
 

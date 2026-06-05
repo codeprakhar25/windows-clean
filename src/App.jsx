@@ -39,6 +39,7 @@ import {
   buildFirstSafeImplementationWorkOrder,
   buildFirstSafeValidationGate,
   buildFixtureEvidenceImport,
+  buildInstalledAppReviewDossier,
   buildIntakePolicy,
   buildCustomRootTriage,
   buildPlanReview,
@@ -443,6 +444,10 @@ export default function App() {
   const itemReviewsByAction = useMemo(
     () => buildReviewItemsByAction(actionList, nativeScan.result, protectedPaths, approvals),
     [actionList, nativeScan.result, protectedPaths, approvals]
+  );
+  const installedAppReviewDossier = useMemo(
+    () => buildInstalledAppReviewDossier({ itemReviewsByAction, nativeScan: nativeScan.result }),
+    [itemReviewsByAction, nativeScan.result]
   );
   const taskPowerCatalog = useMemo(
     () =>
@@ -3401,6 +3406,11 @@ export default function App() {
               onSelectAction={selectReviewAction}
               onDecision={setReviewItemDecision}
               onApplyDecisions={applyReviewItemDecisions}
+            />
+
+            <InstalledAppReviewDossierPanel
+              dossier={installedAppReviewDossier}
+              onFocusReview={() => setFocusedReviewId("installed-app-footprints")}
             />
 
             <Card>
@@ -6652,6 +6662,73 @@ function ItemReviewPanel({ itemReview, selected, onSelectAction, onDecision, onA
           ) : (
             <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
               No item-level candidates are available for this root yet.
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function InstalledAppReviewDossierPanel({ dossier, onFocusReview }) {
+  const rows = dossier.rows || [];
+  return (
+    <Card id="installed-app-review-dossier">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              App uninstall review
+            </CardTitle>
+            <CardDescription>{dossier.nextStep}</CardDescription>
+          </div>
+          <Badge variant={dossier.status === "manual-uninstall-follow-up" ? "review" : dossier.status === "needs-user-review" ? "advanced" : "outline"}>
+            {dossier.status}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid gap-2 md:grid-cols-4">
+          <ReviewStat label="Candidates" value={String(dossier.counts.total)} />
+          <ReviewStat label="Review" value={String(dossier.counts.review)} />
+          <ReviewStat label="Selected" value={formatBytes(dossier.manualSelectedBytes)} />
+          <ReviewStat label="Uninstall entry" value={String(dossier.counts.uninstallEntry)} />
+        </div>
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="restricted">manual only</Badge>
+            <Badge variant="outline">no direct deletion</Badge>
+            <Badge variant="outline">usage proof not assumed</Badge>
+            <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={onFocusReview}>
+              <Eye className="h-4 w-4" />
+              Review apps
+            </Button>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {rows.length ? rows.slice(0, 6).map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="mr-auto min-w-0 text-sm font-medium">{row.name}</div>
+                <Badge variant={row.status === "manual-uninstall-selected" ? "review" : row.status === "needs-user-confirmation" ? "advanced" : "outline"}>
+                  {row.status}
+                </Badge>
+                <Badge variant={row.uninstallEntry === "present" ? "safe" : "review"}>{row.uninstallEntry}</Badge>
+                <Badge variant={row.confidence === "medium" ? "review" : "outline"}>{row.confidence}</Badge>
+                <span className="text-sm font-medium text-muted-foreground">{formatBytes(row.bytes)}</span>
+              </div>
+              <div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
+                <div>Usage proof: {row.usageProof}</div>
+                <div>Registry: {row.registryMatch}</div>
+                <div>Age: {row.ageDays}d</div>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">{row.nextStep}</p>
+              <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{row.path}</p>
+            </div>
+          )) : (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              No installed app footprint candidates are available.
             </div>
           )}
         </div>

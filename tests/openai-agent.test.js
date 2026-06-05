@@ -77,6 +77,8 @@ const assert = require("assert");
             reason: "Manual uninstall candidate",
             signals: [
               { label: "usage proof", value: "not proven", tone: "restricted" },
+              { label: "registry match", value: "Windows uninstall metadata", tone: "safe" },
+              { label: "uninstall entry", value: "present", tone: "safe" },
               { label: "official action", value: "Windows Settings or vendor uninstaller", tone: "restricted" }
             ]
           }
@@ -141,6 +143,12 @@ const assert = require("assert");
   assert.strictEqual(manualContext.manualReviewTargets[0].selectedForRemoval, false, "manual uninstall decisions must not be represented as automatic removal authority");
   assert.strictEqual(manualContext.manualReviewTargets[0].signals[0].label, "usage proof", "OpenAI context should include structured app review signals");
   assert.strictEqual(manualContext.manualReviewTargets[0].signals[0].value, "not proven", "OpenAI context should not overclaim app usage proof");
+  assert.strictEqual(manualContext.installedAppReview.manualOnly, true, "installed app review context should stay manual-only");
+  assert.strictEqual(manualContext.installedAppReview.canCreateExecutor, false, "installed app review context must not create executor authority");
+  assert.strictEqual(manualContext.installedAppReview.rows[0].status, "manual-uninstall-selected", "installed app review context should preserve manual uninstall selections");
+  assert.strictEqual(manualContext.installedAppReview.rows[0].usageProof, "not proven", "installed app review context should preserve missing usage proof");
+  assert.strictEqual(manualContext.installedAppReview.rows[0].uninstallEntry, "present", "installed app review context should preserve uninstall-entry evidence");
+  assert(manualContext.installedAppReview.forbiddenActions.includes("automated-uninstall"), "installed app review context should forbid automated uninstall");
   assert.strictEqual(manualContext.largeFileArchiveTargets[0].route, "item-review-large-files", "OpenAI context should include reviewed large-file archive targets");
   assert.strictEqual(manualContext.largeFileArchiveTargets[0].decision, "archive", "OpenAI context should preserve archive decisions");
   assert.strictEqual(manualContext.driveInventoryRows[0].canCreateExecutor, false, "drive inventory rows should be advisory-only in OpenAI context");
@@ -228,6 +236,7 @@ const assert = require("assert");
   assert.strictEqual(nativeRunRecord.schemaVersion, "spaceguard-openai-agent-run/v1", "OpenAI run records should expose a schema version");
   assert.strictEqual(nativeRunRecord.planId, "plan-openai-manual", "OpenAI run records should bind advice to a plan id");
   assert.strictEqual(nativeRunRecord.context.counts.manualReviewTargets, 1, "OpenAI run records should retain compact context counts");
+  assert.strictEqual(nativeRunRecord.context.counts.installedAppReviewRows, 1, "OpenAI run records should retain compact installed app review counts");
   assert.strictEqual(nativeRunRecord.context.privacy.storesFullContext, false, "OpenAI run records should not persist the full path-level context");
   assert.strictEqual(JSON.stringify(nativeRunRecord).includes("C:\\Program Files"), false, "OpenAI run records should not persist local app paths");
   const appendedAgentRuns = openai.appendOpenAIAgentRunRecord([], nativeRunRecord);

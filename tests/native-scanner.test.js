@@ -246,6 +246,11 @@ const assert = require("assert");
   assert.strictEqual(appFootprintReview.items[0].signals[0].label, "usage proof", "app footprint review should preserve structured review signals");
   assert.strictEqual(appFootprintReview.items[0].signals[0].value, "not proven", "app footprint signals should make usage uncertainty explicit");
   assert.strictEqual(appFootprintReview.selectedBytes, 0, "app footprint candidates should not become executor recovery bytes");
+  const appReviewDossier = guard.buildInstalledAppReviewDossier({ itemReviewsByAction: { "installed-app-footprints": appFootprintReview } });
+  assert.strictEqual(appReviewDossier.status, "needs-user-review", "native app footprint candidates should populate app review dossier");
+  assert.strictEqual(appReviewDossier.rows[0].usageProof, "not proven", "app review dossier should keep usage uncertainty explicit");
+  assert.strictEqual(appReviewDossier.rows[0].uninstallEntry, "present", "app review dossier should keep uninstall-entry evidence");
+  assert.strictEqual(appReviewDossier.canCreateExecutor, false, "app review dossier must not create executor routes");
 
   const normalizedWithItems = native.normalizeNativeScan({
     findings: [
