@@ -456,6 +456,14 @@ assert(app.includes("SpaceGuard will not delete Program Files folders"), "item r
 assert(rustScanner.includes("measure_installed_app_footprints"), "Rust scanner should measure installed app footprints read-only");
 assert(rustScanner.includes("InstalledAppFootprints"), "Rust scanner should use an installed-app footprint measure kind");
 assert(rustScanner.includes("installed_app_scan_item"), "Rust scanner should emit app footprint review candidates");
+assert(rustScanner.includes("installed_app_registry_inventory"), "Rust scanner should enrich installed app review with read-only uninstall metadata");
+assert(rustScanner.includes("RegOpenKeyExW"), "Rust scanner should read Windows uninstall metadata through the registry API");
+assert(rustScanner.includes("RegQueryValueExW"), "Rust scanner should query uninstall metadata values read-only");
+assert(rustScanner.includes("RegEnumKeyExW"), "Rust scanner should enumerate uninstall metadata keys read-only");
+assert(rustScanner.includes("DisplayName"), "Rust scanner should read installed app display names");
+assert(rustScanner.includes("Publisher"), "Rust scanner should read installed app publisher metadata");
+assert(rustScanner.includes("Windows uninstall metadata"), "Rust scanner should label uninstall metadata as app review evidence");
+assert(!/\bRegDelete|RegSetValue|RegCreateKey|RegConnectRegistry|reg\.exe/i.test(rustScanner), "installed app metadata reader must not write registry keys or shell out to reg.exe");
 assert(rustScanner.includes("Windows Settings or the vendor uninstaller"), "Rust scanner should keep app cleanup as manual uninstall guidance");
 assert(app.includes("buildWriteBoundaryProbe"), "write boundary probe should be wired");
 assert(app.includes("buildValidationEvidencePack"), "validation evidence pack should be wired");
@@ -746,7 +754,7 @@ assert(rustScanner.includes("real_run_enabled: false"), "native dry-run should r
 assert(rustScanner.includes("write_capability: false"), "native scanner should report write capability disabled");
 assert(rustScanner.includes("destructive_commands: false"), "native scanner should report destructive commands disabled");
 assert(rustScanner.includes("accepted: false"), "native write boundary should reject execution");
-assert(!/\bCommand::new\b|powercfg|reg\.exe/i.test(rustScanner), "native scanner should not contain shell, registry, or powercfg execution");
+assert(!/\bCommand::new\b|powercfg|reg\.exe/i.test(rustScanner), "native scanner should not contain shell, reg.exe, or powercfg execution");
 assert(!/\bremove_dir_all\b/i.test(rustScanner), "native executors should not use recursive directory removal");
 assert(rustScanner.includes("fs::remove_dir(&dir)"), "project dependency executor may remove only traversed empty directories");
 assert(rustScanner.includes("delete_single_temp_file"), "temp deletion should be isolated to the temp file executor");

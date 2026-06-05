@@ -8,7 +8,7 @@ Default native mode is read-only:
 
 - It measures known local roots and C: volume totals.
 - It can produce native dry-run ledger entries.
-- It does not delete files, edit registry keys, resize partitions, run cleanup shell commands, or self-elevate unless a named scoped executor flag is explicitly enabled.
+- It does not delete files, edit registry keys, resize partitions, run cleanup shell commands, or self-elevate unless a named scoped executor flag is explicitly enabled. Installed-app discovery may read Windows uninstall metadata locally, but it never runs uninstall strings or changes registry values.
 - Review-gated findings still require per-item decisions.
 
 Use a disposable Windows 11 VM for fixture validation. Use your real machine only after a read-only smoke test and only for a named scoped executor whose consequence you accept.
@@ -117,7 +117,7 @@ In the app:
 20. Check **Operating checklist** to confirm the safe next action, active user decision, ledger state, and zero real-run rows are visible in one place.
 21. Check **User decision receipt** to confirm selected tasks, approvals, item decisions, protected paths, admin intake, consent, active question, and real-run lock are recorded without granting cleanup authority.
 22. Check **Task runbook** to confirm each selected cleanup target has its own next question, allowed operations, forbidden operations, evidence needs, and no cross-task authority.
-23. Check **Restriction matrix** to confirm browser identity, Docker volumes, pagefile or registry tuning, partition writes, custom roots, app uninstall review, admin/system work, personal/project data, and tool-native commands stay in the correct refusal or gated lane.
+23. Check **Restriction matrix** to confirm browser identity, Docker volumes, pagefile or registry tuning, partition writes, custom roots, app uninstall review, admin/system work, personal/project data, and tool-native commands stay in the correct refusal or gated lane. Read-only uninstall metadata can inform app review; it is not uninstall authority.
 24. Add protected paths before planning any review-heavy route.
 25. Use **Custom root triage** for custom read-only findings. Mark each unknown folder Keep, Archive, Move, Inspect, or Escalate; these dispositions stay manual and cannot create executor routes.
 26. Use **Item review** for Downloads, large personal files, project artifacts, Android Studio findings, and installed app footprints. App footprint decisions are manual uninstall follow-up only; folder age is not usage proof.

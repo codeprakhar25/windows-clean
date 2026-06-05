@@ -340,6 +340,17 @@ struct SizeStats {
     limited: bool,
 }
 
+#[derive(Clone, Debug, Default)]
+struct InstalledAppMetadata {
+    display_name: String,
+    publisher: String,
+    display_version: String,
+    install_location: String,
+    install_date: String,
+    estimated_bytes: u64,
+    uninstall_available: bool,
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -4042,6 +4053,272 @@ fn wide_null(value: &str) -> Vec<u16> {
         .collect()
 }
 
+#[cfg(target_os = "windows")]
+type RegistryKeyHandle = isize;
+
+#[cfg(target_os = "windows")]
+const HKEY_CURRENT_USER: RegistryKeyHandle = 0x8000_0001_u32 as i32 as isize;
+#[cfg(target_os = "windows")]
+const HKEY_LOCAL_MACHINE: RegistryKeyHandle = 0x8000_0002_u32 as i32 as isize;
+#[cfg(target_os = "windows")]
+const KEY_READ: u32 = 0x0002_0019;
+#[cfg(target_os = "windows")]
+const KEY_WOW64_64KEY: u32 = 0x0000_0100;
+#[cfg(target_os = "windows")]
+const KEY_WOW64_32KEY: u32 = 0x0000_0200;
+#[cfg(target_os = "windows")]
+const ERROR_SUCCESS: i32 = 0;
+#[cfg(target_os = "windows")]
+const ERROR_NO_MORE_ITEMS: i32 = 259;
+#[cfg(target_os = "windows")]
+const REG_SZ: u32 = 1;
+#[cfg(target_os = "windows")]
+const REG_EXPAND_SZ: u32 = 2;
+#[cfg(target_os = "windows")]
+const REG_DWORD: u32 = 4;
+
+#[cfg(target_os = "windows")]
+#[link(name = "Advapi32")]
+extern "system" {
+    fn RegOpenKeyExW(
+        h_key: RegistryKeyHandle,
+        lp_sub_key: *const u16,
+        ul_options: u32,
+        sam_desired: u32,
+        phk_result: *mut RegistryKeyHandle,
+    ) -> i32;
+    fn RegEnumKeyExW(
+        h_key: RegistryKeyHandle,
+        dw_index: u32,
+        lp_name: *mut u16,
+        lpcch_name: *mut u32,
+        lp_reserved: *mut u32,
+        lp_class: *mut u16,
+        lpcch_class: *mut u32,
+        lpft_last_write_time: *mut std::ffi::c_void,
+    ) -> i32;
+    fn RegQueryValueExW(
+        h_key: RegistryKeyHandle,
+        lp_value_name: *const u16,
+        lp_reserved: *mut u32,
+        lp_type: *mut u32,
+        lp_data: *mut u8,
+        lpcb_data: *mut u32,
+    ) -> i32;
+    fn RegCloseKey(h_key: RegistryKeyHandle) -> i32;
+}
+
+#[cfg(target_os = "windows")]
+fn installed_app_registry_inventory() -> Vec<InstalledAppMetadata> {
+    const UNINSTALL_KEY: &str = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
+    let roots = [
+        (HKEY_LOCAL_MACHINE, KEY_READ | KEY_WOW64_64KEY),
+        (HKEY_LOCAL_MACHINE, KEY_READ | KEY_WOW64_32KEY),
+        (HKEY_CURRENT_USER, KEY_READ | KEY_WOW64_64KEY),
+        (HKEY_CURRENT_USER, KEY_READ | KEY_WOW64_32KEY),
+    ];
+    let mut rows = Vec::new();
+
+    for (root, access) in roots {
+        rows.extend(read_uninstall_registry_view(root, UNINSTALL_KEY, access));
+    }
+
+    dedupe_installed_app_metadata(rows)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn installed_app_registry_inventory() -> Vec<InstalledAppMetadata> {
+    Vec::new()
+}
+
+#[cfg(target_os = "windows")]
+fn read_uninstall_registry_view(
+    root: RegistryKeyHandle,
+    subkey: &str,
+    access: u32,
+) -> Vec<InstalledAppMetadata> {
+    let Some(base_key) = registry_open_key(root, subkey, access) else {
+        return Vec::new();
+    };
+    let mut rows = Vec::new();
+    let mut index = 0_u32;
+
+    loop {
+        let mut name = vec![0_u16; 512];
+        let mut name_len = name.len() as u32;
+        let result = unsafe {
+            RegEnumKeyExW(
+                base_key,
+                index,
+                name.as_mut_ptr(),
+                &mut name_len,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        if result == ERROR_NO_MORE_ITEMS {
+            break;
+        }
+        index = index.saturating_add(1);
+        if result != ERROR_SUCCESS {
+            continue;
+        }
+
+        let child_name = String::from_utf16_lossy(&name[..name_len as usize]);
+        if let Some(child_key) = registry_open_key(base_key, &child_name, KEY_READ) {
+            if let Some(metadata) = read_installed_app_metadata(child_key) {
+                rows.push(metadata);
+            }
+            unsafe {
+                RegCloseKey(child_key);
+            }
+        }
+    }
+
+    unsafe {
+        RegCloseKey(base_key);
+    }
+    rows
+}
+
+#[cfg(target_os = "windows")]
+fn registry_open_key(
+    root: RegistryKeyHandle,
+    subkey: &str,
+    access: u32,
+) -> Option<RegistryKeyHandle> {
+    let wide = wide_null(subkey);
+    let mut handle = 0_isize;
+    let result = unsafe { RegOpenKeyExW(root, wide.as_ptr(), 0, access, &mut handle) };
+    if result == ERROR_SUCCESS && handle != 0 {
+        Some(handle)
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn read_installed_app_metadata(key: RegistryKeyHandle) -> Option<InstalledAppMetadata> {
+    let display_name = registry_query_string(key, "DisplayName")?;
+    if display_name.trim().is_empty() {
+        return None;
+    }
+    if registry_query_dword(key, "SystemComponent").unwrap_or(0) == 1 {
+        return None;
+    }
+
+    let estimated_kb = registry_query_dword(key, "EstimatedSize").unwrap_or(0);
+    let uninstall_available = registry_query_string(key, "UninstallString")
+        .or_else(|| registry_query_string(key, "QuietUninstallString"))
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+
+    Some(InstalledAppMetadata {
+        display_name,
+        publisher: registry_query_string(key, "Publisher").unwrap_or_default(),
+        display_version: registry_query_string(key, "DisplayVersion").unwrap_or_default(),
+        install_location: registry_query_string(key, "InstallLocation").unwrap_or_default(),
+        install_date: registry_query_string(key, "InstallDate").unwrap_or_default(),
+        estimated_bytes: u64::from(estimated_kb).saturating_mul(1024),
+        uninstall_available,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn registry_query_string(key: RegistryKeyHandle, name: &str) -> Option<String> {
+    let wide_name = wide_null(name);
+    let mut value_type = 0_u32;
+    let mut byte_len = 0_u32;
+    let result = unsafe {
+        RegQueryValueExW(
+            key,
+            wide_name.as_ptr(),
+            std::ptr::null_mut(),
+            &mut value_type,
+            std::ptr::null_mut(),
+            &mut byte_len,
+        )
+    };
+    if result != ERROR_SUCCESS
+        || byte_len == 0
+        || (value_type != REG_SZ && value_type != REG_EXPAND_SZ)
+    {
+        return None;
+    }
+
+    let mut bytes = vec![0_u8; byte_len as usize + 2];
+    let result = unsafe {
+        RegQueryValueExW(
+            key,
+            wide_name.as_ptr(),
+            std::ptr::null_mut(),
+            &mut value_type,
+            bytes.as_mut_ptr(),
+            &mut byte_len,
+        )
+    };
+    if result != ERROR_SUCCESS || (value_type != REG_SZ && value_type != REG_EXPAND_SZ) {
+        return None;
+    }
+
+    let u16_len = (byte_len as usize) / 2;
+    let mut wide = Vec::with_capacity(u16_len);
+    for chunk in bytes[..u16_len * 2].chunks_exact(2) {
+        wide.push(u16::from_le_bytes([chunk[0], chunk[1]]));
+    }
+    while wide.last() == Some(&0) {
+        wide.pop();
+    }
+
+    Some(String::from_utf16_lossy(&wide).trim().to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn registry_query_dword(key: RegistryKeyHandle, name: &str) -> Option<u32> {
+    let wide_name = wide_null(name);
+    let mut value_type = 0_u32;
+    let mut byte_len = 4_u32;
+    let mut bytes = [0_u8; 4];
+    let result = unsafe {
+        RegQueryValueExW(
+            key,
+            wide_name.as_ptr(),
+            std::ptr::null_mut(),
+            &mut value_type,
+            bytes.as_mut_ptr(),
+            &mut byte_len,
+        )
+    };
+    if result != ERROR_SUCCESS || value_type != REG_DWORD || byte_len != 4 {
+        return None;
+    }
+    Some(u32::from_le_bytes(bytes))
+}
+
+fn dedupe_installed_app_metadata(rows: Vec<InstalledAppMetadata>) -> Vec<InstalledAppMetadata> {
+    let mut deduped = Vec::new();
+    for row in rows {
+        let key = format!(
+            "{}|{}",
+            row.display_name.to_ascii_lowercase(),
+            normalize_registry_path_match(&row.install_location)
+        );
+        if deduped.iter().any(|existing: &InstalledAppMetadata| {
+            format!(
+                "{}|{}",
+                existing.display_name.to_ascii_lowercase(),
+                normalize_registry_path_match(&existing.install_location)
+            ) == key
+        }) {
+            continue;
+        }
+        deduped.push(row);
+    }
+    deduped
+}
+
 fn hresult_succeeded(value: i32) -> bool {
     value >= 0
 }
@@ -4597,6 +4874,7 @@ fn measure_installed_app_footprints(
     let mut dirs = 0_u64;
     let mut errors = 0_u64;
     let mut limited = false;
+    let registry_inventory = installed_app_registry_inventory();
 
     for root in roots {
         let normalized = normalize_path(&path_to_string(&root));
@@ -4640,7 +4918,11 @@ fn measure_installed_app_footprints(
             errors = errors.saturating_add(stats.errors);
             limited = limited || stats.limited;
             if stats.bytes > 0 {
-                items.push(installed_app_scan_item(&path, stats.bytes));
+                items.push(installed_app_scan_item(
+                    &path,
+                    stats.bytes,
+                    &registry_inventory,
+                ));
             }
         }
     }
@@ -4670,10 +4952,10 @@ fn measure_installed_app_footprints(
         dirs,
         errors,
         note: if limited {
-            "Read-only installed app footprint discovery with depth, entry, and candidate caps. Modification age is a weak signal, not proof of app usage."
+            "Read-only installed app footprint discovery with depth, entry, and candidate caps. Windows uninstall metadata may enrich candidates, but modification age is still not proof of app usage."
                 .to_string()
         } else {
-            "Read-only installed app footprint discovery. Modification age is a weak signal; uninstall decisions stay manual."
+            "Read-only installed app footprint discovery. Windows uninstall metadata may enrich candidates, but uninstall decisions stay manual."
                 .to_string()
         },
         items,
@@ -4691,18 +4973,30 @@ fn installed_app_measure_request(request: &ScanRequest) -> ScanRequest {
     }
 }
 
-fn installed_app_scan_item(path: &Path, bytes: u64) -> ScanItem {
+fn installed_app_scan_item(
+    path: &Path,
+    bytes: u64,
+    registry_inventory: &[InstalledAppMetadata],
+) -> ScanItem {
     let age_days = path_age_days(path).unwrap_or(0);
-    let name = path
+    let folder_name = path
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("installed app");
+    let metadata = find_installed_app_metadata(path, folder_name, registry_inventory);
+    let name = metadata
+        .as_ref()
+        .map(|item| item.display_name.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(folder_name);
     let recommendation = if bytes >= 1024 * 1024 * 1024 && age_days >= 45 {
         "review"
     } else {
         "keep"
     };
-    let kind = installed_app_kind(name, path);
+    let kind = installed_app_kind(folder_name, path);
+    let reason =
+        installed_app_review_reason(path, bytes, age_days, recommendation, metadata.as_ref());
 
     ScanItem {
         id: stable_item_id("installed-app-footprints", path),
@@ -4712,15 +5006,99 @@ fn installed_app_scan_item(path: &Path, bytes: u64) -> ScanItem {
         age_days,
         kind: kind.to_string(),
         recommendation: recommendation.to_string(),
-        reason: if recommendation == "review" {
-            format!(
-                "Large app footprint last modified about {age_days} day(s) ago. Treat this as an uninstall review hint only; use Windows Settings or the vendor uninstaller."
-            )
-        } else {
-            "Recent, small, or ambiguous app footprint. Keep unless the user recognizes it as unused."
-                .to_string()
-        },
+        reason,
     }
+}
+
+fn installed_app_review_reason(
+    path: &Path,
+    bytes: u64,
+    age_days: u64,
+    recommendation: &str,
+    metadata: Option<&InstalledAppMetadata>,
+) -> String {
+    let mut details = Vec::new();
+    if recommendation == "review" {
+        details.push(format!(
+            "Large app footprint last modified about {age_days} day(s) ago."
+        ));
+    } else {
+        details.push("Recent, small, or ambiguous app footprint.".to_string());
+    }
+
+    if let Some(metadata) = metadata {
+        if !metadata.publisher.is_empty() {
+            details.push(format!("publisher={}", metadata.publisher));
+        }
+        if !metadata.display_version.is_empty() {
+            details.push(format!("version={}", metadata.display_version));
+        }
+        if !metadata.install_date.is_empty() {
+            details.push(format!("installDate={}", metadata.install_date));
+        }
+        if metadata.estimated_bytes > 0 {
+            details.push(format!(
+                "windowsEstimatedSize={} bytes",
+                metadata.estimated_bytes
+            ));
+        }
+        if metadata.uninstall_available {
+            details.push("Windows uninstall entry is present.".to_string());
+        }
+    } else {
+        details.push("No matching Windows uninstall metadata was found.".to_string());
+    }
+
+    details.push(format!(
+        "Measured folder bytes={} at {}.",
+        bytes,
+        path_to_string(path)
+    ));
+    details.push(
+        "Treat this as an uninstall review hint only; use Windows Settings or the vendor uninstaller. SpaceGuard must not delete Program Files folders or run uninstall commands."
+            .to_string(),
+    );
+    details.join(" ")
+}
+
+fn find_installed_app_metadata(
+    path: &Path,
+    folder_name: &str,
+    registry_inventory: &[InstalledAppMetadata],
+) -> Option<InstalledAppMetadata> {
+    let path_text = path_to_string(path);
+    let path_key = normalize_registry_path_match(&path_text);
+    let folder_key = folder_name.to_ascii_lowercase();
+
+    registry_inventory
+        .iter()
+        .find(|metadata| {
+            let install_location = normalize_registry_path_match(&metadata.install_location);
+            !install_location.is_empty()
+                && (path_key == install_location
+                    || path_key.starts_with(&format!("{install_location}\\"))
+                    || install_location.starts_with(&format!("{path_key}\\")))
+        })
+        .or_else(|| {
+            registry_inventory.iter().find(|metadata| {
+                let display_name = metadata.display_name.to_ascii_lowercase();
+                !folder_key.is_empty()
+                    && !display_name.is_empty()
+                    && (display_name == folder_key
+                        || display_name.contains(&folder_key)
+                        || folder_key.contains(&display_name))
+            })
+        })
+        .cloned()
+}
+
+fn normalize_registry_path_match(value: &str) -> String {
+    value
+        .trim()
+        .trim_matches('"')
+        .replace('/', "\\")
+        .trim_end_matches('\\')
+        .to_ascii_lowercase()
 }
 
 fn installed_app_kind(name: &str, path: &Path) -> &'static str {
