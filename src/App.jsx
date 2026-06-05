@@ -715,6 +715,7 @@ export default function App() {
         validationPack,
         fixtureImportResult,
         writeBoundaryProbe,
+        tempExecutorActivationGate,
         intakePolicy
       }),
     [
@@ -740,6 +741,7 @@ export default function App() {
       validationPack,
       fixtureImportResult,
       writeBoundaryProbe,
+      tempExecutorActivationGate,
       intakePolicy
     ]
   );
@@ -1124,6 +1126,7 @@ export default function App() {
         safetyInterlock,
         writeReadiness,
         realExecutorCapsule,
+        tempExecutorActivationGate,
         planLock,
         runtimeCapabilities: runtimeCapabilities.result
       }),
@@ -1159,6 +1162,7 @@ export default function App() {
       safetyInterlock,
       writeReadiness,
       realExecutorCapsule,
+      tempExecutorActivationGate,
       planLock,
       runtimeCapabilities.result
     ]
@@ -1173,6 +1177,7 @@ export default function App() {
         scanSession,
         supportBundle,
         releaseReviewPacket,
+        tempExecutorActivationGate,
         runReadiness,
         consentReceipt,
         ledgerHistorySummary,
@@ -1186,6 +1191,7 @@ export default function App() {
       scanSession,
       supportBundle,
       releaseReviewPacket,
+      tempExecutorActivationGate,
       runReadiness,
       consentReceipt,
       ledgerHistorySummary,
@@ -4135,6 +4141,7 @@ function questionActionLabel(question) {
     return question.id === "import-fixture-evidence" ? "Open validation import" : "Open validation evidence";
   }
   if (question.action === "focus-panel" && question.targetPanel === "custom-root-triage-panel") return "Open custom triage";
+  if (question.action === "focus-panel" && question.targetPanel === "temp-executor-activation-gate-panel") return "Open temp activation";
   if (question.action === "arm-consent") return "Arm dry-run";
   if (question.action === "simulate") return "Simulate";
   if (question.action === "run-real-scan") return "Run real scan";

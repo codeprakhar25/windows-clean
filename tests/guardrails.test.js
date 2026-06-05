@@ -3026,6 +3026,21 @@ const assert = require("assert");
   assert.strictEqual(disabledFlagActivationGate.preflight.blocked, 1, "temp activation should preserve blocked native preflight count");
   assert.strictEqual(disabledFlagActivationGate.activationAllowed, false, "disabled temp activation must not allow activation");
   assert(disabledFlagActivationGate.blockers.some((blocker) => blocker.id === "feature-flag"), "disabled temp activation should name the feature flag blocker");
+  const activationQuestionQueue = guard.buildAgentQuestionQueue({
+    scanned: true,
+    scanning: false,
+    scanMode: "native-readonly",
+    nativeCapability: { available: true },
+    runtimeCapabilities: { available: true, executeCleanupPlan: true, realRunEnabled: false, destructiveCommands: false },
+    actionList: developerActions,
+    selectedIds: new Set(["windows-temp"]),
+    approvals: { groupConfirm: true, reviewed: {}, reviewItems: {}, typed: {} },
+    readiness: { ready: true, unresolved: [] },
+    writeBoundaryProbe: rejectedWriteBoundaryProbe,
+    tempExecutorActivationGate: disabledFlagActivationGate,
+    intakePolicy: intakeAllowedPolicy
+  });
+  assert(activationQuestionQueue.questions.some((question) => question.id === "review-temp-activation" && question.targetPanel === "temp-executor-activation-gate-panel"), "question queue should focus the temp activation gate after preflight evidence exists");
   const targetRejectedWriteBoundaryProbe = guard.buildWriteBoundaryProbe({
     nativeWriteBoundary: {
       status: "complete",
@@ -3240,6 +3255,30 @@ const assert = require("assert");
   assert.strictEqual(releaseReviewPacket.rows.find((row) => row.id === "write-boundary-rejection").status, "passed", "release packet should include write-boundary rejection proof");
   assert.strictEqual(releaseReviewPacket.rows.find((row) => row.id === "real-cleanup-locked").status, "passed", "release packet should prove real cleanup remains locked");
   assert.strictEqual(releaseReviewPacket.rows.find((row) => row.id === "validation-pack").status, "waiting", "release packet should keep incomplete validation visible");
+  const activationAwareAudit = guard.buildProductCompletionAudit({
+    scanned: true,
+    scanMode: "native-readonly",
+    actionList: developerActions,
+    selectedIds: new Set(["windows-temp"]),
+    releaseReviewPacket,
+    validationPack: releasePacketValidationPack,
+    writeReadiness: currentBuildWriteReadiness,
+    realExecutorCapsule: currentBuildExecutorCapsule,
+    tempExecutorActivationGate: disabledFlagActivationGate,
+    runtimeCapabilities: { available: true, realRunEnabled: false, destructiveCommands: false }
+  });
+  const activationAuditRow = activationAwareAudit.rows.find((row) => row.id === "temp-executor-activation");
+  assert.strictEqual(activationAuditRow.status, "future-locked", "product audit should keep temp activation future-locked");
+  assert.strictEqual(activationAuditRow.evidence, "feature-flag-disabled", "product audit should expose temp activation status");
+  const activationHandoff = guard.buildWorkflowHandoffPacket({
+    agentQuestionQueue: activationQuestionQueue,
+    productCompletionAudit: activationAwareAudit,
+    tempExecutorActivationGate: disabledFlagActivationGate,
+    runtimeCapabilities: { available: true, realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(activationHandoff.workflow.tempActivationStatus, "feature-flag-disabled", "workflow handoff should carry temp activation status");
+  assert.strictEqual(activationHandoff.workflow.tempActivationAllowed, false, "workflow handoff should keep activation locked");
+  assert(activationHandoff.nextActions.some((step) => step.includes("Review temp executor activation")), "workflow handoff should include temp activation as a next action");
   const releasePacketMarkdown = guard.buildReleaseReviewPacketMarkdown(releaseReviewPacket);
   assert(releasePacketMarkdown.includes("SpaceGuard Release Review Packet"), "release packet markdown should have a title");
   assert(releasePacketMarkdown.includes("Ready for real execution: no"), "release packet markdown should keep real execution blocked");

@@ -3130,6 +3130,7 @@ export function buildAgentQuestionQueue({
   validationPack = null,
   fixtureImportResult = null,
   writeBoundaryProbe = null,
+  tempExecutorActivationGate = null,
   intakePolicy = null
 } = {}) {
   const selected = actionList.filter((action) => selectedIds.has(action.id));
@@ -3470,6 +3471,27 @@ export function buildAgentQuestionQueue({
       detail: "The probe must return accepted=false, every entry rejected, and zero reclaimed bytes.",
       action: "probe-write-boundary",
       options: ["Probe write boundary", "Leave unprobed"]
+    });
+  }
+
+  const activationNeedsReview = Boolean(
+    tempExecutorActivationGate?.schemaVersion &&
+      tempExecutorActivationGate.status !== "activation-review-ready" &&
+      tempExecutorActivationGate.status !== "route-missing" &&
+      tempExecutorActivationGate.status !== "unsafe-runtime"
+  );
+  const probeIsPrimaryActivationAction = tempExecutorActivationGate?.status === "preflight-missing" && writeBoundaryProbe?.commandAvailable;
+  if (activationNeedsReview && !probeIsPrimaryActivationAction) {
+    addQuestion({
+      id: "review-temp-activation",
+      lane: "validation",
+      priority: 47,
+      title: "Review temp executor activation",
+      prompt: "Should I open the temp executor activation gate?",
+      detail: tempExecutorActivationGate.primary || "Temp executor activation remains blocked.",
+      action: "focus-panel",
+      targetPanel: "temp-executor-activation-gate-panel",
+      options: ["Open temp activation gate"]
     });
   }
 
@@ -4809,6 +4831,7 @@ export function buildProductCompletionAudit({
   safetyInterlock = null,
   writeReadiness = null,
   realExecutorCapsule = null,
+  tempExecutorActivationGate = null,
   planLock = null,
   runtimeCapabilities = {}
 } = {}) {
@@ -4980,6 +5003,20 @@ export function buildProductCompletionAudit({
       nextStep: "Fill reviewer, artifact path, rollback, fixture, signing, support, and rescan evidence."
     }),
     buildProductCompletionAuditRow({
+      id: "temp-executor-activation",
+      requirement: "Keep the first temp executor behind activation evidence",
+      status: tempExecutorActivationGate?.status === "unsafe-runtime"
+        ? "unsafe"
+        : tempExecutorActivationGate?.schemaVersion && tempExecutorActivationGate?.activationAllowed === false && tempExecutorActivationGate?.mutationEnabled === false
+          ? "future-locked"
+          : "waiting-evidence",
+      detail: tempExecutorActivationGate
+        ? `${tempExecutorActivationGate.status}; ${tempExecutorActivationGate.counts?.blockers || 0} blocker(s), preflight=${tempExecutorActivationGate.preflight?.status || "not-run"}.`
+        : "Temp executor activation gate has not been evaluated.",
+      evidence: tempExecutorActivationGate?.status || "activation gate missing",
+      nextStep: tempExecutorActivationGate?.primary || "Wire activation evidence before any temp executor can be reviewed."
+    }),
+    buildProductCompletionAuditRow({
       id: "real-cleanup",
       requirement: "Perform real cleanup only after all gates pass",
       status: unsafeRuntime ? "unsafe" : realCleanupComplete ? "proven" : "future-locked",
@@ -5043,6 +5080,7 @@ export function buildWorkflowHandoffPacket({
   scanSession = null,
   supportBundle = null,
   releaseReviewPacket = null,
+  tempExecutorActivationGate = null,
   runReadiness = null,
   consentReceipt = null,
   ledgerHistorySummary = null,
@@ -5065,10 +5103,14 @@ export function buildWorkflowHandoffPacket({
             ? "readonly-handoff-ready"
             : "workflow-open";
   const auditSteps = productCompletionAudit?.steps || [];
+  const activationStep =
+    tempExecutorActivationGate?.schemaVersion && tempExecutorActivationGate.status !== "activation-review-ready"
+      ? `Review temp executor activation: ${tempExecutorActivationGate.primary}`
+      : "";
   const activeStep = activeQuestion
     ? `${activeQuestion.prompt} ${activeQuestion.action && activeQuestion.action !== "none" ? `Action: ${activeQuestion.action}.` : "Record evidence in the indicated panel."}`
     : "";
-  const nextActions = [activeStep, ...auditSteps]
+  const nextActions = [activeStep, activationStep, ...auditSteps]
     .filter(Boolean)
     .filter((step, index, list) => list.indexOf(step) === index)
     .slice(0, 6);
@@ -5104,6 +5146,8 @@ export function buildWorkflowHandoffPacket({
       auditStatus: productCompletionAudit?.status || "not-evaluated",
       supportStatus: supportBundle?.summary?.status || "not-evaluated",
       releaseReviewStatus: releaseReviewPacket?.status || "not-evaluated",
+      tempActivationStatus: tempExecutorActivationGate?.status || "not-evaluated",
+      tempActivationAllowed: Boolean(tempExecutorActivationGate?.activationAllowed),
       runReady: Boolean(runReadiness?.ready),
       consentReady: Boolean(consentReceipt?.ready)
     },
@@ -5158,6 +5202,8 @@ export function buildWorkflowHandoffMarkdown(packet) {
     `Demo: ${packet.workflow.demoStatus}`,
     `Audit: ${packet.workflow.auditStatus}`,
     `Release review: ${packet.workflow.releaseReviewStatus}`,
+    `Temp activation: ${packet.workflow.tempActivationStatus}`,
+    `Temp activation allowed: ${packet.workflow.tempActivationAllowed ? "yes" : "no"}`,
     `Run ready: ${packet.workflow.runReady ? "yes" : "no"}`,
     `Consent ready: ${packet.workflow.consentReady ? "yes" : "no"}`,
     "",
@@ -8608,6 +8654,7 @@ export function buildReport({
           `- Real cleanup locked: ${workflowHandoff.realCleanupLocked ? "yes" : "no"}`,
           `- Real cleanup enabled: ${workflowHandoff.realCleanupEnabled ? "yes" : "no"}`,
           `- Active question: ${workflowHandoff.activeQuestion?.prompt || "none"}`,
+          `- Temp activation: ${workflowHandoff.workflow?.tempActivationStatus || "not-evaluated"}`,
           `- Questions: ${workflowHandoff.counts.questions}`,
           `- Actionable questions: ${workflowHandoff.counts.actionableQuestions}`,
           workflowHandoff.nextActions.length
