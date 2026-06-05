@@ -1885,6 +1885,52 @@ export default function App() {
     }
   }
 
+  async function handleOpenAIAgentRecommendation(row = {}) {
+    const actionType = String(row.actionType || "").toLowerCase();
+    if (actionType === "rescan") {
+      if (nativeCapability.available) {
+        await runRealReadonlyScan();
+      } else {
+        await runScan();
+      }
+      return;
+    }
+    if (actionType === "review-target") {
+      const actionId = row.targetId || row.id;
+      if (actionId) setFocusedReviewId(actionId);
+      focusWorkflowPanel("item-review-panel");
+      return;
+    }
+    if (actionType === "ask-user") {
+      focusWorkflowPanel("agent-question-panel");
+      return;
+    }
+    if (actionType === "run-temp-executor") {
+      focusWorkflowPanel("first-safe-temp-executor-panel");
+      await executeFirstSafeTempCleanup();
+      return;
+    }
+    if (actionType === "run-project-deps-executor") {
+      focusWorkflowPanel("project-dependency-executor-panel");
+      await executeReviewedProjectDependencies();
+      return;
+    }
+    if (actionType === "run-browser-cache-executor") {
+      focusWorkflowPanel("browser-cache-executor-panel");
+      await executeBrowserCacheCleanup();
+      return;
+    }
+    if (actionType === "run-gradle-cache-executor") {
+      focusWorkflowPanel("gradle-cache-executor-panel");
+      await executeGradleCacheCleanup();
+      return;
+    }
+    if (actionType === "run-npm-cache-executor") {
+      focusWorkflowPanel("npm-cache-executor-panel");
+      await executeNpmCacheCleanup();
+    }
+  }
+
   async function executeFirstSafeTempCleanup() {
     if (nativeRealExecution.status === "running") return;
     if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.tempCleanupExecutor) {
@@ -3044,6 +3090,7 @@ export default function App() {
               context={openAiAgentContext}
               onPrompt={setAiPrompt}
               onAsk={askOpenAIAgent}
+              onAction={handleOpenAIAgentRecommendation}
             />
 
             <StorageStrategyPanel strategy={storageStrategy} />
@@ -5692,7 +5739,7 @@ function AgentQuestionPanel({
   }
 
   return (
-    <Card>
+    <Card id="agent-question-panel">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -5771,7 +5818,7 @@ function AgentQuestionPanel({
   );
 }
 
-function OpenAIAgentPanel({ integration, config, prompt, advice, context, onPrompt, onAsk }) {
+function OpenAIAgentPanel({ integration, config, prompt, advice, context, onPrompt, onAsk, onAction }) {
   const running = advice.status === "running";
   const result = advice.result?.advice || null;
   const recommended = result?.recommendedActions || [];
@@ -5866,6 +5913,12 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">{row.reason}</p>
                     {row.targetId ? <p className="mt-2 font-mono text-xs text-muted-foreground">target {row.targetId}</p> : null}
+                    {aiRecommendationActionLabel(row) ? (
+                      <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => onAction(row)} disabled={running}>
+                        <Play className="h-4 w-4" />
+                        {aiRecommendationActionLabel(row)}
+                      </Button>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -5883,6 +5936,29 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
       </CardContent>
     </Card>
   );
+}
+
+function aiRecommendationActionLabel(row = {}) {
+  switch (row.actionType) {
+    case "review-target":
+      return "Open review";
+    case "run-temp-executor":
+      return "Run temp cleanup";
+    case "run-project-deps-executor":
+      return "Run project cleanup";
+    case "run-browser-cache-executor":
+      return "Run browser cleanup";
+    case "run-gradle-cache-executor":
+      return "Run Gradle cleanup";
+    case "run-npm-cache-executor":
+      return "Run npm cleanup";
+    case "rescan":
+      return "Run scan";
+    case "ask-user":
+      return "Open question";
+    default:
+      return "";
+  }
 }
 
 function AdviceList({ title, rows = [] }) {
@@ -6049,7 +6125,7 @@ function ReviewWorkbenchPanel({ workbench, focusedId, onFocus }) {
   const rows = workbench.rows.filter((row) => row.status !== "available").slice(0, 7);
 
   return (
-    <Card>
+    <Card id="review-workbench-panel">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -6136,7 +6212,7 @@ function ItemReviewPanel({ itemReview, selected, onSelectAction, onDecision, onA
   }
 
   return (
-    <Card>
+    <Card id="item-review-panel">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>

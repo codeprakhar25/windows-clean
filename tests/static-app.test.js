@@ -286,6 +286,10 @@ assert(app.includes("buildAIAgentIntegration"), "AI agent integration audit shou
 assert(app.includes("OpenAIAgentPanel"), "OpenAI agent panel should be rendered");
 assert(app.includes("openai-agent-panel"), "OpenAI agent panel should be focusable");
 assert(app.includes("requestOpenAIAgentAdvice"), "OpenAI agent should call the provider adapter");
+assert(app.includes("handleOpenAIAgentRecommendation"), "OpenAI recommendations should map to guarded UI actions");
+assert(app.includes("aiRecommendationActionLabel"), "OpenAI recommendation rows should expose action labels");
+assert(app.includes("Run npm cleanup"), "OpenAI recommendations should include npm executor action labels");
+assert(app.includes("onAction={handleOpenAIAgentRecommendation}"), "OpenAI panel should receive the guarded recommendation action handler");
 assert(openAiAgent.includes("https://api.openai.com/v1/responses"), "OpenAI adapter should use the Responses API endpoint");
 assert(openAiAgent.includes("VITE_OPENAI_API_KEY"), "OpenAI adapter should read the Vite env API key");
 assert(openAiAgent.includes("directDeleteAuthority"), "OpenAI context should deny direct delete authority");
@@ -305,6 +309,8 @@ assert(app.includes("Gradle root"), "OpenAI panel should show Gradle cache targe
 assert(app.includes("npm root"), "OpenAI panel should show npm cache target count");
 assert(app.includes("Cache roots"), "OpenAI panel should show browser cache target count");
 assert(app.includes("strict JSON"), "OpenAI panel should show structured output boundary");
+assert(app.includes("agent-question-panel"), "OpenAI ask-user recommendations should be able to focus the question panel");
+assert(app.includes("item-review-panel"), "OpenAI review-target recommendations should be able to focus item review");
 assert(model.includes("spaceguard-ai-agent-integration/v1"), "model should expose AI integration status");
 assert(app.includes("buildStorageStrategyPlan"), "storage strategy workflow should be wired");
 assert(app.includes("buildManualStrategyChecklist"), "manual strategy checklist should be wired");
