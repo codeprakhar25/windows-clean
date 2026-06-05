@@ -275,6 +275,7 @@ struct RuntimeCapabilities {
 struct ExecutorFeatureFlags {
     temp_cleanup_executor: bool,
     project_dependency_executor: bool,
+    gradle_cache_executor: bool,
     recycle_bin_executor: bool,
     browser_cache_executor: bool,
     tool_native_prune_executors: bool,
@@ -473,6 +474,9 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
     }
     if request.request_mode.as_deref() == Some("execute-browser-cache") {
         return execute_browser_cache_cleanup(request);
+    }
+    if request.request_mode.as_deref() == Some("execute-gradle-cache") {
+        return execute_gradle_cache_cleanup(request);
     }
     let route = request.route.clone();
     let plan_id = request.plan_id.clone();
@@ -1046,6 +1050,174 @@ fn execute_browser_cache_cleanup(request: WriteExecutionRequest) -> WriteExecuti
     }
 }
 
+fn execute_gradle_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let flag_enabled = gradle_cache_executor_enabled();
+    let rejections = gradle_cache_execution_rejections(&request, flag_enabled);
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-gradle-cache-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-gradle-cache".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+
+    let entries = request
+        .actions
+        .into_iter()
+        .map(|action| {
+            let target_path = action.target_path.clone().unwrap_or_default();
+            let target_reject = gradle_cache_target_reject_code(&target_path);
+            let route_match = action.route == route && route == "bounded-cache-delete";
+            let can_execute = rejections.is_empty() && route_match && target_reject.is_none();
+
+            if can_execute {
+                let deleted = delete_gradle_cache_target(&resolve_dry_run_target(&target_path));
+                return WriteExecutionEntry {
+                    id: action.id,
+                    title: action.title,
+                    route: action.route,
+                    result: if deleted.deleted_files > 0 || deleted.deleted_dirs > 0 {
+                        "executed".to_string()
+                    } else {
+                        "no-op".to_string()
+                    },
+                    reject_code: String::new(),
+                    bytes: deleted.deleted_bytes,
+                    preflight_status: "executed".to_string(),
+                    preflight_checks: vec![
+                        write_preflight_check(
+                            "route-bounded-cache",
+                            "Bounded cache route",
+                            "passed",
+                            "Action route is bounded-cache-delete.",
+                        ),
+                        write_preflight_check(
+                            "target-gradle-cache",
+                            "Gradle cache target",
+                            "passed",
+                            "Target is the current user's .gradle\\caches directory.",
+                        ),
+                        write_preflight_check(
+                            "feature-flag",
+                            "Executor feature flag",
+                            "passed",
+                            "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR enabled Gradle cache cleanup.",
+                        ),
+                    ],
+                    note: format!(
+                        "Gradle cache executor deleted {} old file(s), {} empty cache dir(s), reclaimed {} byte(s), and skipped {} item(s).",
+                        deleted.deleted_files,
+                        deleted.deleted_dirs,
+                        deleted.deleted_bytes,
+                        deleted.skipped_count
+                    ),
+                };
+            }
+
+            let reject_code = if !route_match {
+                "route-not-bounded-cache"
+            } else {
+                target_reject
+                    .or_else(|| rejections.first().copied())
+                    .unwrap_or("gradle-cache-executor-disabled")
+            };
+
+            WriteExecutionEntry {
+                id: action.id,
+                title: action.title,
+                route: action.route,
+                result: "rejected".to_string(),
+                reject_code: reject_code.to_string(),
+                bytes: 0,
+                preflight_status: "target-blocked".to_string(),
+                preflight_checks: vec![
+                    write_preflight_check(
+                        "route-bounded-cache",
+                        "Bounded cache route",
+                        if route_match { "passed" } else { "blocked" },
+                        if route_match {
+                            "Action route is bounded-cache-delete."
+                        } else {
+                            "Only bounded-cache-delete can use this executor."
+                        },
+                    ),
+                    write_preflight_check(
+                        "target-gradle-cache",
+                        "Gradle cache target",
+                        if target_reject.is_none() { "passed" } else { "blocked" },
+                        if target_reject.is_none() {
+                            "Target is the current user's Gradle cache."
+                        } else {
+                            "Target is missing, forbidden, not the current user's .gradle\\caches directory, or link-like."
+                        },
+                    ),
+                    write_preflight_check(
+                        "feature-flag",
+                        "Executor feature flag",
+                        if flag_enabled { "passed" } else { "blocked" },
+                        if flag_enabled {
+                            "Gradle cache executor feature flag is enabled."
+                        } else {
+                            "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR is not enabled."
+                        },
+                    ),
+                ],
+                note: format!(
+                    "Gradle cache cleanup rejected with code {reject_code}. Plan {plan_id}; no bytes were removed for this action."
+                ),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let accepted = rejections.is_empty()
+        && entries
+            .iter()
+            .all(|entry| entry.result == "executed" || entry.result == "no-op");
+    let reclaimed = entries.iter().map(|entry| entry.bytes).sum::<u64>();
+    let mut warnings = gradle_cache_execution_warnings(&rejections);
+    if accepted {
+        warnings.push(format!(
+            "Gradle cache cleanup completed for plan {plan_id}; reclaimed {reclaimed} byte(s). Run a fresh native scan and a Gradle build if you need cache rehydration proof."
+        ));
+    }
+
+    WriteExecutionResponse {
+        mode: if accepted {
+            "native-gradle-cache-executor"
+        } else {
+            "native-gradle-cache-executor-rejected"
+        },
+        real_run_enabled: flag_enabled,
+        destructive_commands: flag_enabled,
+        accepted,
+        reason: if accepted {
+            format!("Gradle cache executor accepted the bounded cache target and reclaimed {reclaimed} byte(s).")
+        } else {
+            "Gradle cache executor rejected the request before mutation.".to_string()
+        },
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
+        entries,
+        warnings,
+    }
+}
+
 fn write_boundary_rejections(request: &WriteExecutionRequest) -> Vec<&'static str> {
     let mut codes = Vec::new();
     let mode = request.request_mode.as_deref().unwrap_or("capsule-probe");
@@ -1211,6 +1383,7 @@ fn is_first_safe_write_route(route: &str) -> bool {
             | "shell-recycle-bin"
             | "browser-cache-only"
             | "item-review-project-cache"
+            | "bounded-cache-delete"
     )
 }
 
@@ -1289,6 +1462,30 @@ fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
                 },
             })
         }
+        "bounded-cache-delete" => {
+            let enabled = cfg!(target_os = "windows") && gradle_cache_executor_enabled();
+            Some(WriteExecutorScaffold {
+                route: "bounded-cache-delete".to_string(),
+                title: "Bounded Gradle cache".to_string(),
+                feature_flag: "gradleCacheExecutor".to_string(),
+                status: if enabled {
+                    "feature-flag-enabled".to_string()
+                } else {
+                    "feature-flag-disabled".to_string()
+                },
+                validation_status: if enabled {
+                    "gradle-cache-only".to_string()
+                } else {
+                    "validation-required".to_string()
+                },
+                mutation_enabled: enabled,
+                reason: if enabled {
+                    "Gradle cache executor can remove old files and empty dirs under the current user's .gradle\\caches root only.".to_string()
+                } else {
+                    "Gradle cache executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR is enabled on Windows.".to_string()
+                },
+            })
+        }
         _ => None,
     }
 }
@@ -1298,6 +1495,7 @@ fn write_executor_scaffold_reject_code(route: &str) -> &'static str {
         "known-temp-delete" => "temp-executor-feature-flag-disabled",
         "item-review-project-cache" => "project-deps-executor-disabled",
         "browser-cache-only" => "browser-cache-executor-disabled",
+        "bounded-cache-delete" => "gradle-cache-executor-disabled",
         _ => "real-executor-disabled",
     }
 }
@@ -1309,6 +1507,9 @@ fn write_action_target_reject_code(
     let target = normalize_write_target(target_path.as_deref().unwrap_or(""));
     if target.is_empty() {
         return Some("target-missing");
+    }
+    if route == "bounded-cache-delete" {
+        return gradle_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
     }
     if write_target_forbidden(route, &target) {
         return Some("target-forbidden");
@@ -1354,6 +1555,18 @@ fn write_target_forbidden(route: &str, target: &str) -> bool {
                 || target.contains("preference")
                 || target.contains("favicon")
         }
+        "bounded-cache-delete" => {
+            target.contains("downloads")
+                || target.contains("documents")
+                || target.contains("desktop")
+                || target.contains("node_modules")
+                || target.contains("\\.gradle\\init.d")
+                || target.contains("\\.gradle\\gradle.properties")
+                || target.contains("\\.gradle\\daemon")
+                || target.contains("\\.gradle\\wrapper")
+                || target.contains("\\windows\\")
+                || target.contains("\\program files")
+        }
         "item-review-project-cache" => {
             !target.ends_with("\\node_modules")
                 || target.contains("\\windows\\")
@@ -1378,6 +1591,9 @@ fn write_target_allowed(route: &str, target: &str) -> bool {
                 || target.contains("cache2")
                 || target.contains("cache_data")
                 || target.contains("code cache")
+        }
+        "bounded-cache-delete" => {
+            target.ends_with("\\.gradle\\caches") || target.contains("\\.gradle\\caches\\")
         }
         "item-review-project-cache" => {
             target.ends_with("\\node_modules") || target.contains("\\node_modules\\")
@@ -1415,9 +1631,18 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "browser-cache-executor-disabled" => {
             "Write request rejected: browserCacheExecutor scaffold is feature-flag disabled."
         }
+        "gradle-cache-executor-disabled" => {
+            "Write request rejected: gradleCacheExecutor scaffold is feature-flag disabled."
+        }
         "target-not-node-modules" => "Write request rejected: project dependency target is not node_modules.",
         "target-not-browser-cache" => "Write request rejected: browser cache target is not a cache directory.",
         "route-not-browser-cache" => "Write request rejected: browser cache cleanup requires route browser-cache-only.",
+        "target-not-gradle-cache" => {
+            "Write request rejected: Gradle cache target is not the current user's .gradle\\caches directory."
+        }
+        "route-not-bounded-cache" => {
+            "Write request rejected: Gradle cache cleanup requires route bounded-cache-delete."
+        }
         "target-link-or-not-directory" => {
             "Write request rejected: target is link-like or not a directory."
         }
@@ -1451,6 +1676,17 @@ fn project_dependency_executor_enabled() -> bool {
 
 fn browser_cache_executor_enabled() -> bool {
     env::var("SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR")
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn gradle_cache_executor_enabled() -> bool {
+    env::var("SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR")
         .map(|value| {
             matches!(
                 value.to_ascii_lowercase().as_str(),
@@ -1690,6 +1926,83 @@ fn browser_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
         .collect()
 }
 
+fn gradle_cache_execution_rejections(
+    request: &WriteExecutionRequest,
+    flag_enabled: bool,
+) -> Vec<&'static str> {
+    let mut codes = Vec::new();
+    if !cfg!(target_os = "windows") {
+        codes.push("windows-required");
+    }
+    if !flag_enabled {
+        codes.push("gradle-cache-executor-disabled");
+    }
+    if request.plan_id.trim().is_empty() {
+        codes.push("missing-plan-id");
+    }
+    if request
+        .scan_fingerprint
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-scan-fingerprint");
+    }
+    if request
+        .consent_plan_id
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-consent-plan-id");
+    }
+    if request.request_mode.as_deref() != Some("execute-gradle-cache") {
+        codes.push("request-mode-invalid");
+    }
+    if request.route != "bounded-cache-delete" {
+        codes.push("route-not-bounded-cache");
+    }
+    if request.dry_run_only != Some(false) {
+        codes.push("dry-run-disabled-required");
+    }
+    if request.mutation_attempted != Some(true) {
+        codes.push("mutation-confirmation-required");
+    }
+    if request.actions.is_empty() {
+        codes.push("no-actions");
+    }
+    codes
+}
+
+fn gradle_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
+    if codes.is_empty() {
+        return vec![
+            "Gradle cache executor removes old cache files and empty cache subdirectories only; daemon, wrapper, init scripts, project sources, and package folders remain forbidden.".to_string(),
+        ];
+    }
+    codes
+        .iter()
+        .map(|code| match *code {
+            "windows-required" => "Gradle cache cleanup is Windows-only in this build.",
+            "gradle-cache-executor-disabled" => {
+                "Set SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=1 before launching the Tauri app to enable Gradle cache cleanup."
+            }
+            "dry-run-disabled-required" => {
+                "Gradle cache cleanup requires dryRunOnly=false on the execute-gradle-cache request."
+            }
+            "mutation-confirmation-required" => {
+                "Gradle cache cleanup requires mutationAttempted=true on the execute-gradle-cache request."
+            }
+            "request-mode-invalid" => "Gradle cache cleanup requires requestMode=execute-gradle-cache.",
+            "route-not-bounded-cache" => "Gradle cache cleanup requires route bounded-cache-delete.",
+            _ => write_boundary_warning(code),
+        })
+        .map(String::from)
+        .collect()
+}
+
 fn project_dependency_target_reject_code(value: &str) -> Option<&'static str> {
     let path = resolve_dry_run_target(value);
     if path.as_os_str().is_empty() {
@@ -1759,6 +2072,42 @@ fn browser_cache_target_reject_code(value: &str) -> Option<&'static str> {
     None
 }
 
+fn gradle_cache_target_reject_code(value: &str) -> Option<&'static str> {
+    let path = resolve_dry_run_target(value);
+    if path.as_os_str().is_empty() {
+        return Some("target-missing");
+    }
+
+    let original = normalize_write_target(value);
+    let resolved = normalize_write_target(&path_to_string(&path));
+    if write_target_forbidden("bounded-cache-delete", &original)
+        || write_target_forbidden("bounded-cache-delete", &resolved)
+    {
+        return Some("target-forbidden");
+    }
+    if !write_target_allowed("bounded-cache-delete", &original)
+        && !write_target_allowed("bounded-cache-delete", &resolved)
+    {
+        return Some("target-not-gradle-cache");
+    }
+
+    let Some(profile) = env_path("USERPROFILE").or_else(|| env_path("HOME")) else {
+        return Some("target-not-gradle-cache");
+    };
+    let expected = profile.join(".gradle").join("caches");
+    if !same_normalized_path(&path, &expected) {
+        return Some("target-not-gradle-cache");
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(&path) else {
+        return Some("target-missing");
+    };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Some("target-link-or-not-directory");
+    }
+    None
+}
+
 #[derive(Default)]
 struct TempDeleteResult {
     deleted_bytes: u64,
@@ -1776,6 +2125,14 @@ struct ProjectDependencyDeleteResult {
 
 #[derive(Default)]
 struct BrowserCacheDeleteResult {
+    deleted_bytes: u64,
+    deleted_files: u64,
+    deleted_dirs: u64,
+    skipped_count: u64,
+}
+
+#[derive(Default)]
+struct GradleCacheDeleteResult {
     deleted_bytes: u64,
     deleted_files: u64,
     deleted_dirs: u64,
@@ -1878,6 +2235,101 @@ fn file_old_enough_for_browser_cache_delete(metadata: &fs::Metadata) -> bool {
         return false;
     };
     age.as_secs() >= 10 * 60
+}
+
+fn delete_gradle_cache_target(root: &Path) -> GradleCacheDeleteResult {
+    let mut result = GradleCacheDeleteResult::default();
+    if gradle_cache_target_reject_code(&path_to_string(root)).is_some() {
+        result.skipped_count += 1;
+        return result;
+    }
+
+    let mut queue = VecDeque::from([root.to_path_buf()]);
+    let mut dirs = Vec::new();
+    let mut visited = 0usize;
+    while let Some(path) = queue.pop_front() {
+        if visited >= 250_000 || result.deleted_files >= 120_000 {
+            result.skipped_count += 1;
+            break;
+        }
+        visited += 1;
+
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            result.skipped_count += 1;
+            continue;
+        };
+        if metadata.file_type().is_symlink() {
+            result.skipped_count += 1;
+            continue;
+        }
+        if metadata.is_file() {
+            delete_single_gradle_cache_file(&path, &metadata, &mut result);
+            continue;
+        }
+        if metadata.is_dir() {
+            dirs.push(path.clone());
+            match fs::read_dir(&path) {
+                Ok(entries) => {
+                    for entry in entries.flatten() {
+                        queue.push_back(entry.path());
+                    }
+                }
+                Err(_) => result.skipped_count += 1,
+            }
+        }
+    }
+
+    dirs.sort_by(|left, right| right.components().count().cmp(&left.components().count()));
+    for dir in dirs {
+        if dir == root {
+            continue;
+        }
+        match fs::remove_dir(&dir) {
+            Ok(_) => result.deleted_dirs = result.deleted_dirs.saturating_add(1),
+            Err(_) => result.skipped_count += 1,
+        }
+    }
+
+    result
+}
+
+fn delete_single_gradle_cache_file(
+    path: &Path,
+    metadata: &fs::Metadata,
+    result: &mut GradleCacheDeleteResult,
+) {
+    if !file_old_enough_for_gradle_cache_delete(metadata) || gradle_cache_file_forbidden(path) {
+        result.skipped_count += 1;
+        return;
+    }
+    let bytes = metadata.len();
+    match fs::remove_file(path) {
+        Ok(_) => {
+            result.deleted_bytes = result.deleted_bytes.saturating_add(bytes);
+            result.deleted_files = result.deleted_files.saturating_add(1);
+        }
+        Err(_) => result.skipped_count += 1,
+    }
+}
+
+fn file_old_enough_for_gradle_cache_delete(metadata: &fs::Metadata) -> bool {
+    let Ok(modified) = metadata.modified() else {
+        return false;
+    };
+    let Ok(age) = SystemTime::now().duration_since(modified) else {
+        return false;
+    };
+    age.as_secs() >= 30 * 24 * 60 * 60
+}
+
+fn gradle_cache_file_forbidden(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| {
+            let clean = name.to_ascii_lowercase();
+            clean.ends_with(".lock") || clean == "gc.properties"
+        })
+        .unwrap_or(true)
 }
 
 fn delete_project_dependency_target(root: &Path) -> ProjectDependencyDeleteResult {
@@ -2032,8 +2484,9 @@ fn runtime_capabilities() -> RuntimeCapabilities {
     let project_dependency_enabled =
         cfg!(target_os = "windows") && project_dependency_executor_enabled();
     let browser_cache_enabled = cfg!(target_os = "windows") && browser_cache_executor_enabled();
+    let gradle_cache_enabled = cfg!(target_os = "windows") && gradle_cache_executor_enabled();
     let real_execution_enabled =
-        temp_enabled || project_dependency_enabled || browser_cache_enabled;
+        temp_enabled || project_dependency_enabled || browser_cache_enabled || gradle_cache_enabled;
     RuntimeCapabilities {
         mode: if real_execution_enabled {
             "native-scoped-write"
@@ -2053,6 +2506,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         executor_flags: ExecutorFeatureFlags {
             temp_cleanup_executor: temp_enabled,
             project_dependency_executor: project_dependency_enabled,
+            gradle_cache_executor: gradle_cache_enabled,
             recycle_bin_executor: false,
             browser_cache_executor: browser_cache_enabled,
             tool_native_prune_executors: false,
@@ -3651,6 +4105,10 @@ fn normalize_path(value: &str) -> String {
         .replace('/', "\\")
         .trim_end_matches('\\')
         .to_ascii_lowercase()
+}
+
+fn same_normalized_path(left: &Path, right: &Path) -> bool {
+    normalize_path(&path_to_string(left)) == normalize_path(&path_to_string(right))
 }
 
 fn generated_at() -> String {

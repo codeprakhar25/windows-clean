@@ -659,6 +659,7 @@ export const releaseFeatureFlags = {
   realExecutors: false,
   tempCleanupExecutor: false,
   projectDependencyExecutor: false,
+  gradleCacheExecutor: false,
   recycleBinExecutor: false,
   browserCacheExecutor: false,
   toolNativePruneExecutors: false,
@@ -3659,6 +3660,7 @@ export function buildAIAgentIntegration({
         runtimeCapabilities?.executorFlags?.tempCleanupExecutor
         || runtimeCapabilities?.executorFlags?.projectDependencyExecutor
         || runtimeCapabilities?.executorFlags?.browserCacheExecutor
+        || runtimeCapabilities?.executorFlags?.gradleCacheExecutor
       )
       && !runtimeCapabilities?.executorFlags?.recycleBinExecutor
       && !runtimeCapabilities?.executorFlags?.toolNativePruneExecutors
@@ -11965,7 +11967,7 @@ export function buildReport({
           `- Detail-needed records: ${validationPack.validationChecks.filter((check) => check.evidenceValue && !check.evidenceComplete).length}`,
           `- VM scenarios: ${validationPack.vmScenarios.length}`,
           `- Fixture roots: ${validationPack.fixtureRoots.length}`,
-          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, projectDeps=${validationPack.runtime?.executorFlags?.projectDependencyExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
+          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, projectDeps=${validationPack.runtime?.executorFlags?.projectDependencyExecutor ? "on" : "off"}, gradle=${validationPack.runtime?.executorFlags?.gradleCacheExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
           `- Safety invariants waiting: ${validationPack.safetyInvariants.filter((item) => !item.passed).length}`,
           validationPack.validationChecks.length
             ? validationPack.validationChecks
@@ -14990,6 +14992,7 @@ function normalizeExecutorFeatureFlags(value = {}) {
   return {
     tempCleanupExecutor: Boolean(value.tempCleanupExecutor || value.temp_cleanup_executor),
     projectDependencyExecutor: Boolean(value.projectDependencyExecutor || value.project_dependency_executor),
+    gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
     browserCacheExecutor: Boolean(value.browserCacheExecutor || value.browser_cache_executor),
     toolNativePruneExecutors: Boolean(value.toolNativePruneExecutors || value.tool_native_prune_executors)

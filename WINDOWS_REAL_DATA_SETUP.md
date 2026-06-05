@@ -54,6 +54,13 @@ $env:SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR="1"
 npm run native:dev
 ```
 
+Optional Gradle cache executor:
+
+```powershell
+$env:SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR="1"
+npm run native:dev
+```
+
 Optional browser cache executor:
 
 ```powershell
@@ -61,7 +68,7 @@ $env:SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR="1"
 npm run native:dev
 ```
 
-Those flags enable only their named routes: `known-temp-delete`, reviewed `node_modules` cleanup, and scanned browser cache roots. They do not enable Recycle Bin cleanup, tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, browser identity-store deletion, or arbitrary project-folder deletion.
+Those flags enable only their named routes: `known-temp-delete`, reviewed `node_modules` cleanup, current-user Gradle cache cleanup, and scanned browser cache roots. They do not enable Recycle Bin cleanup, tool-native package-manager commands, registry edits, partition changes, hibernation/pagefile changes, browser identity-store deletion, project source deletion, or arbitrary project-folder deletion.
 
 ## Read-Only Real Scan
 
@@ -180,7 +187,7 @@ For each Windows validation run, capture:
 - Drive inventory rows, including top-level bucket status, bytes, classification, and confirmation that executor routes remain zero.
 - Storage pressure diagnosis status, ranked causes, current plan gap, and confirmation that diagnosis has zero executor and real-run rows.
 - Native evidence quality status, planning-ready flag, measured coverage, missing evidence rows, mutation lock, and confirmation that executor and real-run rows remain zero.
-- Runtime executor flags for `tempCleanupExecutor`, `projectDependencyExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`; capture each independently.
+- Runtime executor flags for `tempCleanupExecutor`, `projectDependencyExecutor`, `gradleCacheExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`; capture each independently.
 - Active agent question and question queue state.
 - Per-check validation evidence records with reviewer, timestamp, artifact path, and notes.
 - Public beta readiness state.
@@ -206,6 +213,7 @@ For each Windows validation run, capture:
 - Temp executor activation status, route flag state, scaffold status, preflight count, blockers, `activationAllowed=false`, and `mutationEnabled=false`.
 - Temp activation rehearsal status if using the no-real-data demo path; this evidence must be labeled demo-only and must not replace native write-boundary proof.
 - Disabled temp executor scaffold status when probing `known-temp-delete`: route, `tempCleanupExecutor`, validation-required state, mutation disabled, and zero bytes.
+- Gradle cache executor status when selected: route `bounded-cache-delete`, `gradleCacheExecutor`, scanned `.gradle\caches` target evidence, old-file threshold, skipped lock/recent counts, and reclaimed bytes from the native response.
 - Browser cache executor status when selected: route `browser-cache-only`, `browserCacheExecutor`, scanned cache-root target count, identity-store rejection boundary, and reclaimed bytes from the native response.
 - Write-boundary preflight rows for request shape, target allowlist, mutation lock, feature flag, and validation evidence.
 - Write boundary probe state if the desktop runtime exposes `execute_cleanup_plan`; current evidence must show accepted false, rejected entries, zero bytes, matching first-safe contract echo, and no mutation.

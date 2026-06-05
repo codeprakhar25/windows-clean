@@ -27,7 +27,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "run-browser-cache-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -48,7 +48,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "run-browser-cache-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["review-target", "run-temp-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -143,6 +143,18 @@ export function buildOpenAIAgentContext({
       status: finding.status || "unknown"
     }))
     .slice(0, 16);
+  const gradleCacheTargets = (nativeScan?.findings || [])
+    .filter((finding) => finding.recipeId === "gradle-cache")
+    .filter((finding) => (finding.status === "measured" || finding.status === "limited") && finding.path)
+    .map((finding) => ({
+      id: "gradle-cache",
+      title: finding.title || "Gradle dependency and build cache",
+      route: "bounded-cache-delete",
+      path: finding.path,
+      bytes: Number(finding.bytes || 0),
+      status: finding.status || "unknown"
+    }))
+    .slice(0, 1);
 
   return {
     schemaVersion: "spaceguard-openai-agent-context/v1",
@@ -180,12 +192,14 @@ export function buildOpenAIAgentContext({
       destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
       tempCleanupExecutor: Boolean(runtimeCapabilities?.executorFlags?.tempCleanupExecutor),
       projectDependencyExecutor: Boolean(runtimeCapabilities?.executorFlags?.projectDependencyExecutor),
-      browserCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.browserCacheExecutor)
+      browserCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.browserCacheExecutor),
+      gradleCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.gradleCacheExecutor)
     },
     selectedActions: selected,
     topFindings,
     executableRows,
     reviewedProjectTargets,
+    gradleCacheTargets,
     browserCacheTargets,
     candidateSamples: (candidateSafetyManifest?.rows || []).slice(0, 12).map((row) => ({
       id: row.id,
@@ -379,6 +393,7 @@ function normalizeActionType(value) {
     clean === "run-temp-executor" ||
     clean === "run-project-deps-executor" ||
     clean === "run-browser-cache-executor" ||
+    clean === "run-gradle-cache-executor" ||
     clean === "rescan" ||
     clean === "ask-user" ||
     clean === "manual-only"

@@ -471,6 +471,55 @@ const assert = require("assert");
   assert.strictEqual(browserExecutionInvocation.payload.request.actions[0].targetPath.endsWith("\\Cache\\Cache_Data"), true, "browser cache executor should pass concrete cache root path");
   assert.strictEqual(browserExecution.accepted, true, "browser cache executor should normalize accepted responses");
   assert.strictEqual(browserExecution.entries[0].route, "browser-cache-only", "browser cache executor should normalize executed route");
+  let gradleExecutionInvocation = null;
+  const gradleExecution = await native.runNativeGradleCacheExecutor(
+    {
+      row: { id: "gradle-cache", title: "Gradle dependency and build cache", path: "C:\\Users\\real\\.gradle\\caches", bytes: 789 },
+      planId: "plan-gradle",
+      scanFingerprint: "scan-gradle",
+      consentPlanId: "plan-gradle",
+      expectedBytes: 789
+    },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            gradleExecutionInvocation = { command, payload };
+            return Promise.resolve({
+              mode: "native-gradle-cache-executor",
+              real_run_enabled: true,
+              destructive_commands: true,
+              accepted: true,
+              reason: "accepted",
+              contract_echo: {
+                schema_version: payload.request.schemaVersion,
+                request_mode: payload.request.requestMode,
+                plan_id: payload.request.planId,
+                route: payload.request.route,
+                scan_fingerprint: payload.request.scanFingerprint,
+                consent_plan_id: payload.request.consentPlanId,
+                expected_bytes: payload.request.expectedBytes,
+                dry_run_only: payload.request.dryRunOnly,
+                mutation_attempted: payload.request.mutationAttempted,
+                action_count: payload.request.actions.length
+              },
+              entries: [{ id: "gradle-cache", title: "Gradle dependency and build cache", route: "bounded-cache-delete", result: "executed", reject_code: "", bytes: 321, note: "deleted old cache" }],
+              warnings: ["gradle cache done"]
+            });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(gradleExecutionInvocation.command, "execute_cleanup_plan", "Gradle cache executor should invoke execute_cleanup_plan");
+  assert.strictEqual(gradleExecutionInvocation.payload.request.schemaVersion, "spaceguard-gradle-cache-request/v1", "Gradle cache executor should use its schema");
+  assert.strictEqual(gradleExecutionInvocation.payload.request.requestMode, "execute-gradle-cache", "Gradle cache executor should send execute-gradle-cache mode");
+  assert.strictEqual(gradleExecutionInvocation.payload.request.route, "bounded-cache-delete", "Gradle cache executor should stay on bounded-cache-delete route");
+  assert.strictEqual(gradleExecutionInvocation.payload.request.dryRunOnly, false, "Gradle cache executor should be a mutating request");
+  assert.strictEqual(gradleExecutionInvocation.payload.request.mutationAttempted, true, "Gradle cache executor should require mutation confirmation");
+  assert.strictEqual(gradleExecutionInvocation.payload.request.actions[0].targetPath.endsWith("\\.gradle\\caches"), true, "Gradle cache executor should pass concrete Gradle cache root path");
+  assert.strictEqual(gradleExecution.accepted, true, "Gradle cache executor should normalize accepted responses");
+  assert.strictEqual(gradleExecution.entries[0].route, "bounded-cache-delete", "Gradle cache executor should normalize executed route");
   const scaffoldedWrite = native.normalizeNativeWriteBoundary({
     mode: "native-write-rejected",
     real_run_enabled: false,
@@ -529,6 +578,7 @@ const assert = require("assert");
     executor_flags: {
       temp_cleanup_executor: false,
       project_dependency_executor: true,
+      gradle_cache_executor: true,
       recycle_bin_executor: false,
       browser_cache_executor: true,
       tool_native_prune_executors: false
@@ -546,6 +596,7 @@ const assert = require("assert");
     {
       tempCleanupExecutor: false,
       projectDependencyExecutor: true,
+      gradleCacheExecutor: true,
       recycleBinExecutor: false,
       browserCacheExecutor: true,
       toolNativePruneExecutors: false

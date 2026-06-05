@@ -142,6 +142,7 @@ import {
   runNativeDryRunScopeValidation,
   runNativeBrowserCacheExecutor,
   runNativeExecutorDryRun,
+  runNativeGradleCacheExecutor,
   runNativeProjectDependencyExecutor,
   runNativeTempCleanupExecutor,
   runNativeReadonlyScan,
@@ -232,6 +233,7 @@ export default function App() {
   const [nativeRealExecution, setNativeRealExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeProjectDependencyExecution, setNativeProjectDependencyExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeBrowserCacheExecution, setNativeBrowserCacheExecution] = useState({ status: "idle", result: null, error: "" });
+  const [nativeGradleCacheExecution, setNativeGradleCacheExecution] = useState({ status: "idle", result: null, error: "" });
   const [aiPrompt, setAiPrompt] = useState("Find the fastest safe path to recover real space from this scan.");
   const [aiAdvice, setAiAdvice] = useState({ status: "idle", result: null, error: "" });
   const [runtimeCapabilities, setRuntimeCapabilities] = useState({
@@ -252,6 +254,7 @@ export default function App() {
       executorFlags: {
         tempCleanupExecutor: false,
         projectDependencyExecutor: false,
+        gradleCacheExecutor: false,
         recycleBinExecutor: false,
         browserCacheExecutor: false,
         toolNativePruneExecutors: false
@@ -692,6 +695,7 @@ export default function App() {
         featureFlags: {
           realExecutors: Boolean(runtimeCapabilities.result.realRunEnabled),
           tempCleanupExecutor: Boolean(executorFlags.tempCleanupExecutor),
+          gradleCacheExecutor: Boolean(executorFlags.gradleCacheExecutor),
           recycleBinExecutor: Boolean(executorFlags.recycleBinExecutor),
           browserCacheExecutor: Boolean(executorFlags.browserCacheExecutor),
           toolNativePruneExecutors: Boolean(executorFlags.toolNativePruneExecutors)
@@ -1549,6 +1553,7 @@ export default function App() {
     setNativeRealExecution({ status: "idle", result: null, error: "" });
     setNativeProjectDependencyExecution({ status: "idle", result: null, error: "" });
     setNativeBrowserCacheExecution({ status: "idle", result: null, error: "" });
+    setNativeGradleCacheExecution({ status: "idle", result: null, error: "" });
     setExecutionConsent({ accepted: false, planId: "", acceptedAt: "" });
   }
 
@@ -1809,6 +1814,7 @@ export default function App() {
       (runtimeCapabilities.result.executorFlags?.tempCleanupExecutor && realExecutorCapsule?.route?.id === "known-temp-delete")
         || runtimeCapabilities.result.executorFlags?.projectDependencyExecutor
         || runtimeCapabilities.result.executorFlags?.browserCacheExecutor
+        || runtimeCapabilities.result.executorFlags?.gradleCacheExecutor
     );
     if (!runReadiness.ready || !planLock.readyForPreflight || (safetyInterlock.status === "unsafe-stop" && !scopedExecutorRuntime)) return;
     setExecutionConsent({
@@ -2028,6 +2034,71 @@ export default function App() {
       window.setTimeout(() => setActiveStage("verify"), 240);
     } catch (error) {
       setNativeBrowserCacheExecution({
+        status: "error",
+        result: null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  async function executeGradleCacheCleanup() {
+    if (nativeGradleCacheExecution.status === "running") return;
+    const gradleRows = executorPlan.rows.filter((row) => row.id === "gradle-cache" && row.route === "bounded-cache-delete");
+    const finding = (nativeScan.result?.findings || [])
+      .find((row) => row.recipeId === "gradle-cache" && (row.status === "measured" || row.status === "limited") && row.path);
+    const gradleTarget = finding
+      ? {
+          id: "gradle-cache",
+          title: finding.title || "Gradle dependency and build cache",
+          path: finding.path,
+          bytes: Number(finding.bytes || 0)
+        }
+      : null;
+
+    if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.gradleCacheExecutor) {
+      setNativeGradleCacheExecution({
+        status: "blocked",
+        result: null,
+        error: "Gradle cache executor is not enabled. Set SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=1 before launching the Tauri app."
+      });
+      return;
+    }
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !gradleRows.length || !gradleTarget) {
+      setNativeGradleCacheExecution({
+        status: "blocked",
+        result: null,
+        error: "Gradle cache cleanup needs the gradle-cache action selected, native Gradle cache evidence, current plan, scan fingerprint, and consent receipt."
+      });
+      return;
+    }
+
+    setActiveStage("execute");
+    setNativeGradleCacheExecution({ status: "running", result: null, error: "" });
+    try {
+      const result = await runNativeGradleCacheExecutor({
+        row: gradleTarget,
+        planId: planSnapshot.id,
+        scanFingerprint: scanSession.currentFingerprint,
+        consentPlanId: consentReceipt.planId,
+        expectedBytes: gradleTarget.bytes
+      });
+      setNativeGradleCacheExecution({ status: "complete", result, error: "" });
+      const executedAt = new Date().toISOString();
+      const nextLedger = result.entries.map((entry, index) => ({
+        id: entry.id,
+        planId: planSnapshot.id,
+        executedAt,
+        time: `T+${String(index + 1).padStart(2, "0")}m`,
+        title: entry.title,
+        result: entry.result,
+        bytes: entry.bytes,
+        method: `${entry.route}: ${entry.note}`
+      }));
+      setLedger(nextLedger);
+      recordLedgerRun(nextLedger);
+      window.setTimeout(() => setActiveStage("verify"), 240);
+    } catch (error) {
+      setNativeGradleCacheExecution({
         status: "error",
         result: null,
         error: error instanceof Error ? error.message : String(error)
@@ -3050,6 +3121,15 @@ export default function App() {
               contract={firstSafeExecutorContract}
               capsule={realExecutorCapsule}
               onExecute={executeFirstSafeTempCleanup}
+            />
+            <GradleCacheExecutorPanel
+              runtimeCapabilities={runtimeCapabilities}
+              execution={nativeGradleCacheExecution}
+              executorPlan={executorPlan}
+              nativeScan={nativeScan}
+              scanSession={scanSession}
+              consentReceipt={consentReceipt}
+              onExecute={executeGradleCacheCleanup}
             />
             <ProjectDependencyExecutorPanel
               runtimeCapabilities={runtimeCapabilities}
@@ -5617,7 +5697,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
   const recommended = result?.recommendedActions || [];
   const blocked = result?.blockedActions || [];
   const configured = Boolean(config.configured);
-  const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor);
+  const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor || context.runtime.gradleCacheExecutor);
 
   return (
     <Card id="openai-agent-panel">
@@ -5634,12 +5714,13 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-7">
           <QueueStat label="Model" value={config.model} tone={configured ? "safe" : "review"} />
           <QueueStat label="Selected" value={context.selectedActions.length} tone={context.selectedActions.length ? "advanced" : "review"} />
           <QueueStat label="Direct tools" value="blocked" tone="safe" />
           <QueueStat label="Real exec" value={scopedRealFlag ? "scoped flag" : "off"} tone={scopedRealFlag ? "restricted" : "safe"} />
           <QueueStat label="Project targets" value={context.reviewedProjectTargets?.length || 0} tone={context.reviewedProjectTargets?.length ? "advanced" : "review"} />
+          <QueueStat label="Gradle root" value={context.gradleCacheTargets?.length || 0} tone={context.gradleCacheTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Cache roots" value={context.browserCacheTargets?.length || 0} tone={context.browserCacheTargets?.length ? "advanced" : "review"} />
         </div>
 
@@ -7498,6 +7579,108 @@ function FirstSafeTempExecutorPanel({ runtimeCapabilities, execution, contract, 
         <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
           {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {running ? "Cleaning temp files" : "Run real temp cleanup"}
+        </Button>
+
+        {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}
+
+        {result?.warnings?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.warnings.slice(0, 3).map((warning) => (
+              <div key={warning} className="rounded-md border bg-card p-3 text-xs text-muted-foreground">{warning}</div>
+            ))}
+          </div>
+        ) : null}
+
+        {result?.entries?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.entries.slice(0, 4).map((entry) => (
+              <div key={`${entry.id}-${entry.result}-${entry.bytes}`} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{entry.title}</span>
+                  <Badge variant={entry.result === "executed" ? "safe" : "review"}>{entry.result}</Badge>
+                  <Badge variant="outline">{formatBytes(entry.bytes)}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{entry.note}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function GradleCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, onExecute }) {
+  const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.gradleCacheExecutor);
+  const rows = executorPlan.rows.filter((row) => row.id === "gradle-cache" && row.route === "bounded-cache-delete");
+  const finding = (nativeScan.result?.findings || [])
+    .find((row) => row.recipeId === "gradle-cache" && (row.status === "measured" || row.status === "limited") && row.path);
+  const target = finding
+    ? {
+        id: "gradle-cache",
+        title: finding.title || "Gradle dependency and build cache",
+        path: finding.path,
+        bytes: Number(finding.bytes || 0),
+        status: finding.status
+      }
+    : null;
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentReceipt.planId);
+  const running = execution.status === "running";
+  const result = execution.result;
+  const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+  const disabled = running || !enabled || !requestReady;
+
+  return (
+    <Card id="gradle-cache-executor-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Gradle cache cleanup
+          <Badge variant={enabled ? "restricted" : "review"}>{enabled ? "feature on" : "feature off"}</Badge>
+        </CardTitle>
+        <CardDescription>
+          Deletes old files only under the current user's `.gradle\\caches` root. Project folders, daemon state, wrapper files, and init scripts are rejected.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Selected" value={rows.length} tone={rows.length ? "advanced" : "review"} />
+          <QueueStat label="Root" value={target ? "scanned" : "missing"} tone={target ? "safe" : "review"} />
+          <QueueStat label="Recovered" value={formatBytes(reclaimed)} tone={reclaimed ? "safe" : "review"} />
+          <QueueStat label="Request" value={requestReady ? "ready" : "wait"} tone={requestReady ? "safe" : "review"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Gradle executor boundary</span>
+            <Badge variant={enabled ? "restricted" : "safe"}>{enabled ? "can delete old cache" : "cannot delete"}</Badge>
+            <Badge variant="outline">bounded-cache-delete</Badge>
+            <Badge variant="safe">30+ day files</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Enable with `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=1` before launching Tauri.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, selected Gradle route {rows.length ? "yes" : "no"}.</span>
+            <span>Allowed target is the native-scanned current user `.gradle\\caches` directory; lock files and recent files are skipped.</span>
+          </div>
+        </div>
+
+        {target ? (
+          <div className="rounded-md border bg-card p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-auto min-w-0 text-sm font-medium">{target.title}</span>
+              <Badge variant="outline">{formatBytes(target.bytes)}</Badge>
+              <Badge variant={target.status === "limited" ? "review" : "safe"}>{target.status}</Badge>
+            </div>
+            <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{target.path}</p>
+          </div>
+        ) : (
+          <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+            Run a native read-only scan that measures `.gradle\\caches` before this executor has a concrete target.
+          </div>
+        )}
+
+        <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
+          {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          {running ? "Cleaning Gradle cache" : "Run Gradle cache cleanup"}
         </Button>
 
         {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}

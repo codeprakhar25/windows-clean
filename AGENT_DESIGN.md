@@ -236,6 +236,8 @@ Execution rules:
 - The first-safe temp executor deletes files only, skips symlinks and recent files, never removes folders, and returns a ledger-style native response.
 - `execute-project-deps` is limited to reviewed `node_modules` targets with parent `package.json` evidence.
 - The project dependency executor requires Windows, `SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR=1`, item-review Remove decisions, current plan/scan/consent IDs, and target validation.
+- `execute-gradle-cache` is limited to the current user's scanned `.gradle\caches` root.
+- The Gradle cache executor requires Windows, `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=1`, current plan/scan/consent IDs, selected `gradle-cache` action, native Gradle cache evidence, and target validation that rejects project folders, daemon state, wrapper files, init scripts, lock files, `node_modules`, and system/program paths.
 - `execute-browser-cache` is limited to scanned browser cache roots.
 - The browser cache executor requires Windows, `SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR=1`, current plan/scan/consent IDs, selected browser-cache action, native cache-root evidence, and target validation that rejects cookies, sessions, logins, extensions, history, bookmarks, preferences, favicons, and profile stores.
 - Expo and React Native package hints can raise priority, but they never auto-approve cleanup.
@@ -541,6 +543,8 @@ For `known-temp-delete`, `requestMode=execute-first-safe` may delete old files u
 
 For `node-modules-old`, `requestMode=execute-project-deps` may remove reviewed dependency targets when `SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR=1` is present on Windows. The target must be a `node_modules` directory, the parent project must contain `package.json`, and the UI must send only item-review targets marked Remove.
 
+For `gradle-cache`, `requestMode=execute-gradle-cache` may remove old files and empty cache subdirectories when `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=1` is present on Windows. The UI must send the concrete native scan finding for the current user's `.gradle\caches` root only.
+
 For `browser-cache`, `requestMode=execute-browser-cache` may remove files and empty cache subdirectories when `SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR=1` is present on Windows. The UI must send concrete native scan findings for cache roots only, not generic browser labels or identity-store paths.
 
 Every other route remains rejecting or advisory.
@@ -603,6 +607,7 @@ Executor routes are classified before simulation:
 
 - `known-temp-delete`: scoped feature-flagged candidate for known temp roots only.
 - `shell-recycle-bin`: future candidate for Recycle Bin only.
+- `bounded-cache-delete`: scoped feature-flagged candidate for current-user Gradle cache only.
 - `browser-cache-only`: scoped feature-flagged candidate for scanned browser cache roots only.
 - `tool-native-prune`: future candidate for npm, pnpm, and Docker build cache commands.
 - `item-review-project-cache`: scoped feature-flagged candidate only after item-level review marks `node_modules` targets Remove.

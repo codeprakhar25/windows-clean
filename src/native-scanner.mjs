@@ -367,6 +367,50 @@ export async function runNativeBrowserCacheExecutor(boundary = {}, host = global
   return normalizeNativeWriteBoundary(result);
 }
 
+export async function runNativeGradleCacheExecutor(boundary = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      accepted: false,
+      reason: "Native Gradle cache executor is not available in the browser demo.",
+      entries: [],
+      warnings: ["Run the Tauri desktop shell before executing Gradle cache cleanup."]
+    };
+  }
+
+  const row = boundary.row || boundary.selectedRow || {};
+  const targetPath = row.targetPath || row.target || row.path || "";
+  const action = {
+    id: row.id || "gradle-cache",
+    title: row.title || "Gradle dependency and build cache",
+    bytes: Number(row.bytes || boundary.expectedBytes || 0),
+    route: "bounded-cache-delete",
+    targetPath
+  };
+  const expectedBytes = Number(boundary.expectedBytes ?? action.bytes);
+
+  const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
+    request: {
+      schemaVersion: "spaceguard-gradle-cache-request/v1",
+      requestMode: "execute-gradle-cache",
+      planId: boundary.planId || "",
+      route: "bounded-cache-delete",
+      scanFingerprint: boundary.scanFingerprint || "",
+      consentPlanId: boundary.consentPlanId || "",
+      expectedBytes,
+      dryRunOnly: false,
+      mutationAttempted: true,
+      actions: [action]
+    }
+  });
+
+  return normalizeNativeWriteBoundary(result);
+}
+
 export async function getNativeRuntimeCapabilities(host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {
@@ -639,6 +683,7 @@ function normalizeExecutorFlags(value = {}) {
   return {
     tempCleanupExecutor: Boolean(value.tempCleanupExecutor || value.temp_cleanup_executor),
     projectDependencyExecutor: Boolean(value.projectDependencyExecutor || value.project_dependency_executor),
+    gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
     browserCacheExecutor: Boolean(value.browserCacheExecutor || value.browser_cache_executor),
     toolNativePruneExecutors: Boolean(value.toolNativePruneExecutors || value.tool_native_prune_executors)
