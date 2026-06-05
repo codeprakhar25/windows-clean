@@ -959,6 +959,38 @@ const assert = require("assert");
     "future-locked",
     "real cleanup row should remain future locked"
   );
+  const scopedExecutorAudit = guard.buildProductCompletionAudit({
+    scanned: true,
+    scanMode: "native-readonly",
+    scanSession: { status: "native-current", readyForPlanning: true, nativeEvidence: true },
+    runtimeCapabilities: {
+      realRunEnabled: true,
+      destructiveCommands: true,
+      safeExecutorsEnabled: true,
+      executorFlags: { tempCleanupExecutor: true }
+    }
+  });
+  assert.strictEqual(scopedExecutorAudit.status, "scoped-real-cleanup-ready", "product audit should recognize scoped native executor readiness");
+  assert.strictEqual(scopedExecutorAudit.realCleanupLocked, false, "scoped executor flags should unlock scoped real cleanup status");
+  assert.strictEqual(scopedExecutorAudit.broadCleanupLocked, true, "broad cleanup should remain locked even when scoped executors are enabled");
+  assert.deepStrictEqual(scopedExecutorAudit.scopedRealExecutorRoutes, ["known-temp-delete"], "product audit should list enabled scoped executor routes");
+  assert.strictEqual(
+    scopedExecutorAudit.rows.find((row) => row.id === "real-cleanup").status,
+    "native-proven",
+    "real cleanup row should be native-proven for scoped executor flags"
+  );
+  const scopedExecutorHandoff = guard.buildWorkflowHandoffPacket({
+    productCompletionAudit: scopedExecutorAudit,
+    runtimeCapabilities: {
+      realRunEnabled: true,
+      destructiveCommands: true,
+      executorFlags: { tempCleanupExecutor: true }
+    }
+  });
+  assert.strictEqual(scopedExecutorHandoff.status, "scoped-handoff-ready", "workflow handoff should allow scoped executor resume state");
+  assert.strictEqual(scopedExecutorHandoff.realCleanupLocked, false, "workflow handoff should not report scoped executor cleanup as locked");
+  assert.strictEqual(scopedExecutorHandoff.broadCleanupLocked, true, "workflow handoff should keep broad cleanup locked");
+  assert.strictEqual(scopedExecutorHandoff.scopedRealCleanupAvailable, true, "workflow handoff should expose scoped cleanup availability");
   const questionAwareAudit = guard.buildProductCompletionAudit({
     scanned: true,
     scanMode: "demo",
@@ -3679,6 +3711,27 @@ const assert = require("assert");
   assert.strictEqual(nativeLaunchRoadmap.nativePlanningReady, true, "native roadmap should consume the native evidence quality gate");
   assert.strictEqual(nativeLaunchRoadmap.nativeQualityStatus, "planning-grade-partial", "native roadmap should expose quality status");
   assert.strictEqual(nativeLaunchRoadmap.realCleanupLocked, true, "native roadmap must keep real cleanup locked");
+  const scopedLaunchRoadmap = guard.buildRealDataLaunchRoadmap({
+    scanMode: "native-readonly",
+    scanSession: { status: "native-current", readyForPlanning: true, nativeEvidence: true },
+    runtimeCapabilities: {
+      available: true,
+      scanKnownRoots: true,
+      realRunEnabled: true,
+      destructiveCommands: true,
+      safeExecutorsEnabled: true,
+      executorFlags: { downloadsCleanupExecutor: true, browserCacheExecutor: true }
+    }
+  });
+  assert.strictEqual(scopedLaunchRoadmap.status, "scoped-real-cleanup-ready", "roadmap should recognize scoped real executor flags");
+  assert.strictEqual(scopedLaunchRoadmap.realCleanupLocked, false, "roadmap should not call scoped real executors locked");
+  assert.strictEqual(scopedLaunchRoadmap.broadCleanupLocked, true, "roadmap should keep broad cleanup locked");
+  assert.deepStrictEqual(
+    scopedLaunchRoadmap.scopedRealExecutorRoutes,
+    ["item-review-recycle-bin", "browser-cache-only"],
+    "roadmap should list enabled scoped executor routes"
+  );
+  assert.strictEqual(scopedLaunchRoadmap.counts.realRun, 1, "roadmap should count scoped real-run availability");
   const incompleteQualityRoadmap = guard.buildRealDataLaunchRoadmap({
     scanMode: "native-readonly",
     scanSession: { status: "native-current", readyForPlanning: true, nativeEvidence: true },

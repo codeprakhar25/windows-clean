@@ -157,7 +157,7 @@ The **First-safe validation gate** sits between the disabled request contract an
 
 The **First-safe work order** turns a passed validation gate into an engineering checklist for the next executor: native implementation boundary, target allowlist, forbidden-target rejection, disposable fixture tests, rollback/rescan proof, feature flag, and kill-switch review. It is not a cleanup command and still reports real run allowed as false.
 
-The **Temp executor activation** gate is the route-specific bridge between the disabled temp scaffold and any future real executor. It requires the known-temp route, disabled scaffold evidence, native preflight rows, the `tempCleanupExecutor` flag, validation gate, work order, release gate, and write readiness. Current builds report activation allowed as false, mutation disabled, and destructive action unavailable.
+The **Temp executor activation** gate is the route-specific bridge for the known-temp executor. It requires the known-temp route, native preflight rows, the `tempCleanupExecutor` flag, validation gate, work order, release gate, and write readiness. When the flag is off, activation remains disabled with zero bytes; when the flag is on, the native executor still requires current plan, scan fingerprint, consent, route, and target validators.
 
 The **Temp activation rehearsal** panel is a browser-safe demo of that same route. It synthesizes rejected write-boundary evidence from the current first-safe contract, feeds it through the real activation gate, and should stop at `feature-flag-disabled`. It is demo-only evidence: no native command runs, no local path is scanned, no mutation is attempted, and it cannot satisfy Windows validation or release readiness.
 
@@ -437,10 +437,12 @@ Each manifest route lists required Windows validation checks, disposable fixture
 
 The tool command inventory is declarative only. It can show command shapes such as package-manager cache verification or Docker build-cache inventory so validation work is concrete, but the current app does not spawn shell commands, uninstall apps, run Docker prune, or execute Windows cleanup APIs.
 
-Real cleanup remains locked until all release gates pass:
+Broad cleanup remains locked. Scoped real cleanup is available only for named executor families when their runtime feature flag is enabled and every per-run precondition passes:
 
 - Real executor feature flag is enabled.
 - Native Windows scan evidence is available.
+- Current plan id, scan fingerprint, and consent receipt match.
+- Native target validators accept the exact route and target paths.
 - Runtime privilege evidence is captured for admin-sensitive routes.
 - Scanner, guardrail, executor, verification, rollback, and signing checks pass.
 - Disposable Windows VM scenarios pass for standard user, admin low-disk, browser-heavy, developer-toolchain, and review-gated data profiles.
@@ -483,7 +485,7 @@ The production shell should become a signed Windows desktop app with:
 - Append-only local cleanup ledger.
 - No cloud upload by default.
 
-The current native slice is intentionally scoped. The next product milestone is Windows validation evidence for the temp, Recycle Bin, reviewed dependency, Gradle cache, npm cache, and browser cache executors, while pnpm, Docker, and broader tool-native prune commands remain future work.
+The current native slice is intentionally scoped. The next product milestone is Windows validation evidence and post-run rescan proof for temp, reviewed Downloads, reviewed large-file archive, Recycle Bin, reviewed dependency, Gradle cache, npm cache, and browser cache executors, while pnpm, Docker, automated app uninstall, partition work, and broader tool-native prune commands remain future work or manual-only.
 
 The native runtime also reports elevation state. This is evidence only: the app does not self-elevate, request UAC, or turn admin-sensitive routes into real executors.
 

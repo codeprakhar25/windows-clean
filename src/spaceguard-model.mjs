@@ -5946,9 +5946,10 @@ export function buildProductCompletionAudit({
 } = {}) {
   const selectedCount = selectedIds?.size || 0;
   const ledgerEntries = Array.isArray(ledger) ? ledger : [];
+  const scopedRealExecutorRoutes = getScopedRealExecutorRoutes(runtimeCapabilities);
+  const scopedRealCleanupAvailable = Boolean(runtimeCapabilities?.realRunEnabled && scopedRealExecutorRoutes.length);
   const unsafeRuntime = Boolean(
-    runtimeCapabilities?.destructiveCommands
-      || runtimeCapabilities?.realRunEnabled
+    ((runtimeCapabilities?.destructiveCommands || runtimeCapabilities?.realRunEnabled) && !scopedRealExecutorRoutes.length)
       || releaseReviewPacket?.writeSignalVisible
       || demoRehearsalRunbook?.destructiveCommands
       || windowsSetupAssistant?.destructiveCommands
@@ -6200,13 +6201,19 @@ export function buildProductCompletionAudit({
     }),
     buildProductCompletionAuditRow({
       id: "real-cleanup",
-      requirement: "Perform real cleanup only after all gates pass",
-      status: unsafeRuntime ? "unsafe" : realCleanupComplete ? "proven" : "future-locked",
+      requirement: "Perform real cleanup only through scoped native executors",
+      status: unsafeRuntime ? "unsafe" : realCleanupComplete ? "proven" : scopedRealCleanupAvailable ? "native-proven" : "future-locked",
       detail: realCleanupComplete
         ? "Write readiness and release review claim real execution is ready."
-        : writeReadiness?.primary || "Real cleanup is intentionally locked until a validated executor exists.",
-      evidence: writeReadiness?.status || realExecutorCapsule?.status || "write readiness missing",
-      nextStep: realCleanupComplete ? "Proceed only through the validated executor route." : "Implement one first-safe executor behind a feature flag after validation evidence exists."
+        : scopedRealCleanupAvailable
+          ? `Scoped native executor flag(s) are enabled: ${scopedRealExecutorRoutes.join(", ")}. Broad cleanup remains blocked.`
+          : writeReadiness?.primary || "Broad real cleanup is locked until a validated scoped executor is enabled.",
+      evidence: scopedRealCleanupAvailable ? scopedRealExecutorRoutes.join(",") : writeReadiness?.status || realExecutorCapsule?.status || "write readiness missing",
+      nextStep: realCleanupComplete
+        ? "Proceed only through the validated executor route."
+        : scopedRealCleanupAvailable
+          ? "Use only the matching executor panel after plan, scan fingerprint, consent, and target validators pass."
+          : "Enable one scoped native executor flag after validation evidence exists."
     })
   ];
   const unsafeRows = rows.filter((row) => row.status === "unsafe");
@@ -6218,6 +6225,8 @@ export function buildProductCompletionAudit({
     ? "unsafe-stop"
     : realCleanupComplete
       ? "complete-real-cleanup-ready"
+      : scopedRealCleanupAvailable
+        ? "scoped-real-cleanup-ready"
       : nativeScanCurrent
         ? "native-readonly-validation"
         : demoWorkflowComplete
@@ -6233,7 +6242,10 @@ export function buildProductCompletionAudit({
     demoWorkflowComplete,
     readOnlyRealDataReady: nativeScanCurrent,
     realCleanupComplete,
-    realCleanupLocked: !realCleanupComplete,
+    scopedRealCleanupAvailable,
+    scopedRealExecutorRoutes,
+    broadCleanupLocked: true,
+    realCleanupLocked: !realCleanupComplete && !scopedRealCleanupAvailable,
     rows,
     provenRows,
     partialRows,
@@ -6247,7 +6259,8 @@ export function buildProductCompletionAudit({
       waiting: waitingRows.length,
       locked: lockedRows.length,
       unsafe: unsafeRows.length,
-      realRun: realCleanupComplete ? 1 : 0
+      realRun: realCleanupComplete || scopedRealCleanupAvailable ? 1 : 0,
+      scopedRealRun: scopedRealExecutorRoutes.length
     },
     primary: getProductCompletionAuditPrimary(status, { provenRows, waitingRows, lockedRows, unsafeRows }),
     steps: getProductCompletionAuditSteps(status, { rows, waitingRows, lockedRows, unsafeRows })
@@ -6271,11 +6284,21 @@ export function buildWorkflowHandoffPacket({
   generatedAt = "set-on-export"
 } = {}) {
   const activeQuestion = agentQuestionQueue?.activeQuestion || null;
-  const unsafeRuntime = Boolean(runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands || releaseReviewPacket?.status === "unsafe-stop" || productCompletionAudit?.unsafeRows?.length);
+  const scopedRealExecutorRoutes = getScopedRealExecutorRoutes(runtimeCapabilities);
+  const scopedRealCleanupAvailable = Boolean(
+    productCompletionAudit?.scopedRealCleanupAvailable || (runtimeCapabilities?.realRunEnabled && scopedRealExecutorRoutes.length)
+  );
+  const unsafeRuntime = Boolean(
+    ((runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands) && !scopedRealExecutorRoutes.length)
+      || releaseReviewPacket?.status === "unsafe-stop"
+      || productCompletionAudit?.unsafeRows?.length
+  );
   const productComplete = Boolean(productCompletionAudit?.productComplete);
-  const realCleanupLocked = !productComplete;
+  const realCleanupLocked = productCompletionAudit?.realCleanupLocked ?? !productComplete;
   const status = unsafeRuntime
     ? "unsafe-stop"
+    : scopedRealCleanupAvailable && !activeQuestion
+      ? "scoped-handoff-ready"
     : activeQuestion?.action && activeQuestion.action !== "none"
       ? "next-action-ready"
       : activeQuestion
@@ -6312,7 +6335,10 @@ export function buildWorkflowHandoffPacket({
     redactedPaths: true,
     productComplete,
     realCleanupLocked,
-    realCleanupEnabled: false,
+    scopedRealCleanupAvailable,
+    scopedRealExecutorRoutes,
+    broadCleanupLocked: true,
+    realCleanupEnabled: Boolean(scopedRealCleanupAvailable || productComplete),
     runtimeRealRunEnabled: Boolean(runtimeCapabilities?.realRunEnabled),
     destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
     activeQuestion: activeQuestion
@@ -8534,10 +8560,10 @@ export function buildRealDataLaunchRoadmap({
   writeBoundaryProbe = null,
   runtimeCapabilities = {}
 } = {}) {
+  const scopedRealExecutorRoutes = getScopedRealExecutorRoutes(runtimeCapabilities);
+  const scopedRealCleanupAvailable = Boolean(runtimeCapabilities?.realRunEnabled && scopedRealExecutorRoutes.length);
   const unsafeWriteSignal = Boolean(
-    runtimeCapabilities?.realRunEnabled ||
-      runtimeCapabilities?.destructiveCommands ||
-      runtimeCapabilities?.safeExecutorsEnabled ||
+    (((runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands || runtimeCapabilities?.safeExecutorsEnabled) && !scopedRealExecutorRoutes.length)) ||
       releaseReviewPacket?.writeSignalVisible ||
       tempExecutorActivationGate?.status === "unsafe-runtime" ||
       tempExecutorActivationRehearsal?.status === "unsafe-runtime" ||
@@ -8571,6 +8597,7 @@ export function buildRealDataLaunchRoadmap({
   const activationReviewReady = Boolean(tempExecutorActivationGate?.status === "activation-review-ready");
   const releaseReviewReady = Boolean(releaseReviewPacket?.status === "review-packet-ready");
   const realCleanupReady = Boolean(writeReadiness?.readyForRealExecution);
+  const anyRealCleanupReady = Boolean(realCleanupReady || scopedRealCleanupAvailable);
 
   const milestones = [
     buildRealDataLaunchMilestone({
@@ -8597,11 +8624,13 @@ export function buildRealDataLaunchRoadmap({
     }),
     buildRealDataLaunchMilestone({
       id: "first-safe-temp",
-      label: "First-safe temp executor",
-      status: realCleanupReady || activationReviewReady || workOrderReady ? "ready" : activationRehearsed || nativePreflightReady ? "partial" : "locked",
-      estimate: realCleanupReady ? "ready now" : workOrderReady ? "1-2 weeks" : activationRehearsed ? "2-4 weeks" : "3-5 weeks",
+      label: "Scoped native executors",
+      status: scopedRealCleanupAvailable || realCleanupReady || activationReviewReady || workOrderReady ? "ready" : activationRehearsed || nativePreflightReady ? "partial" : "locked",
+      estimate: scopedRealCleanupAvailable || realCleanupReady ? "ready now" : workOrderReady ? "1-2 weeks" : activationRehearsed ? "2-4 weeks" : "3-5 weeks",
       confidence: workOrderReady || validationReady ? "medium" : "low",
-      detail: realCleanupReady
+      detail: scopedRealCleanupAvailable
+        ? `Scoped native executor flag(s) are enabled: ${scopedRealExecutorRoutes.join(", ")}.`
+        : realCleanupReady
         ? "Write readiness is complete for the selected executor route."
         : workOrderReady
           ? "Implementation work order is ready, but the executor still needs test-first native implementation."
@@ -8612,10 +8641,10 @@ export function buildRealDataLaunchRoadmap({
     buildRealDataLaunchMilestone({
       id: "multi-route-cleanup",
       label: "Broader cleanup product",
-      status: realCleanupReady ? "partial" : "locked",
-      estimate: realCleanupReady ? "6-10 weeks after first route" : "future after first-safe route",
+      status: scopedRealCleanupAvailable || realCleanupReady ? "partial" : "locked",
+      estimate: scopedRealCleanupAvailable || realCleanupReady ? "ongoing" : "future after first-safe route",
       confidence: "low",
-      detail: "Recycle Bin, browser cache, tool-native prune, uninstall, and partition strategy should follow only after one executor proves rollback and rescan parity."
+      detail: "Only named scoped executor families are write-capable; app uninstall, custom roots, Docker volumes, registry, pagefile, and partition work stay blocked or manual."
     })
   ];
 
@@ -8708,11 +8737,13 @@ export function buildRealDataLaunchRoadmap({
       id: "release-review",
       label: "Release review and write readiness",
       lane: "release",
-      status: realCleanupReady ? "ready" : releaseReviewReady ? "partial" : "locked",
-      detail: writeReadiness?.primary || releaseReviewPacket?.primary || "Final write readiness is locked.",
-      evidence: writeReadiness?.status || releaseReviewPacket?.status || "not-evaluated",
-      nextStep: realCleanupReady ? "Use only the validated executor route." : "Keep real cleanup locked until release review and write readiness both pass.",
-      estimate: realCleanupReady ? "ready now" : workOrderReady ? "2-4 weeks" : "future"
+      status: scopedRealCleanupAvailable || realCleanupReady ? "ready" : releaseReviewReady ? "partial" : "locked",
+      detail: scopedRealCleanupAvailable
+        ? `Scoped executor route(s) are available: ${scopedRealExecutorRoutes.join(", ")}. Broad cleanup remains locked.`
+        : writeReadiness?.primary || releaseReviewPacket?.primary || "Final write readiness is locked.",
+      evidence: scopedRealCleanupAvailable ? scopedRealExecutorRoutes.join(",") : writeReadiness?.status || releaseReviewPacket?.status || "not-evaluated",
+      nextStep: scopedRealCleanupAvailable || realCleanupReady ? "Use only the matching executor panel after consent and native target validation." : "Keep real cleanup locked until release review and write readiness both pass.",
+      estimate: scopedRealCleanupAvailable || realCleanupReady ? "ready now" : workOrderReady ? "2-4 weeks" : "future"
     })
   ];
 
@@ -8725,6 +8756,8 @@ export function buildRealDataLaunchRoadmap({
   const unsafeRoadmapRows = effectiveRows.filter((row) => row.status === "unsafe");
   const status = unsafeWriteSignal
     ? "unsafe-stop"
+    : scopedRealCleanupAvailable
+      ? "scoped-real-cleanup-ready"
     : realCleanupReady
       ? "real-cleanup-release-ready"
       : workOrderReady
@@ -8744,7 +8777,10 @@ export function buildRealDataLaunchRoadmap({
     tone: getRealDataLaunchRoadmapTone(status),
     currentMilestone: getRealDataLaunchCurrentMilestone(status),
     progress,
-    realCleanupLocked: !realCleanupReady,
+    broadCleanupLocked: true,
+    scopedRealCleanupAvailable,
+    scopedRealExecutorRoutes,
+    realCleanupLocked: !anyRealCleanupReady,
     realRunEnabled: Boolean(runtimeCapabilities?.realRunEnabled || writeReadiness?.realRunEnabled),
     destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
     nativeAvailable,
@@ -8758,6 +8794,7 @@ export function buildRealDataLaunchRoadmap({
     workOrderReady,
     releaseReviewReady,
     realCleanupReady,
+    anyRealCleanupReady,
     estimate: getRealDataLaunchEstimate(status, milestones),
     confidence: getRealDataLaunchConfidence(status, milestones),
     milestones,
@@ -8774,7 +8811,8 @@ export function buildRealDataLaunchRoadmap({
       waiting: waitingRows.length,
       locked: lockedRows.length,
       unsafe: unsafeRoadmapRows.length,
-      realRun: realCleanupReady ? 1 : 0
+      realRun: anyRealCleanupReady ? 1 : 0,
+      scopedRealRun: scopedRealExecutorRoutes.length
     },
     primary: getRealDataLaunchRoadmapPrimary(status, { readyRows, partialRows, waitingRows, lockedRows, unsafeRows: unsafeRoadmapRows }),
     steps: getRealDataLaunchRoadmapSteps(status, effectiveRows)
@@ -13532,7 +13570,7 @@ function buildProductCompletionAuditRow({
     evidence,
     nextStep,
     proofLevel: getProductCompletionAuditProofLevel(status),
-    canRealRun: status === "proven" && id === "real-cleanup"
+    canRealRun: (status === "proven" || status === "native-proven") && id === "real-cleanup"
   };
 }
 
@@ -13556,6 +13594,7 @@ function getProductCompletionAuditProofLevel(status) {
 function getProductCompletionAuditPrimary(status, { provenRows = [], waitingRows = [], lockedRows = [], unsafeRows = [] } = {}) {
   if (status === "unsafe-stop") return `${unsafeRows.length} unsafe signal(s) require stopping product completion review.`;
   if (status === "complete-real-cleanup-ready") return "Every audited requirement is ready for the validated real-cleanup route.";
+  if (status === "scoped-real-cleanup-ready") return "Scoped native cleanup is available through named executor panels; broad cleanup remains locked.";
   if (status === "native-readonly-validation") return "Real local data can be scanned read-only; write-capable cleanup remains locked.";
   if (status === "demo-workflow-proven") return "The no-real-data demo workflow is proven; real local scan and cleanup validation remain separate.";
   if (lockedRows.length) return `${provenRows.length} requirement(s) proven; ${lockedRows.length} real-cleanup requirement(s) remain locked.`;
@@ -13565,6 +13604,7 @@ function getProductCompletionAuditPrimary(status, { provenRows = [], waitingRows
 function getProductCompletionAuditSteps(status, { rows = [], waitingRows = [], lockedRows = [], unsafeRows = [] } = {}) {
   if (status === "unsafe-stop") return unsafeRows.slice(0, 3).map((row) => `${row.requirement}: ${row.nextStep}`);
   if (status === "complete-real-cleanup-ready") return ["Export release evidence.", "Run only the validated executor route.", "Keep audit evidence attached to the run ledger."];
+  if (status === "scoped-real-cleanup-ready") return ["Use only named executor panels.", "Keep broad cleanup, app uninstall, custom roots, registry, pagefile, and partition work blocked or manual.", "Run a fresh native scan after each scoped executor run."];
   const nextRows = [...waitingRows, ...lockedRows].slice(0, 4);
   return nextRows.length
     ? nextRows.map((row) => `${row.requirement}: ${row.nextStep}`)
@@ -13573,6 +13613,7 @@ function getProductCompletionAuditSteps(status, { rows = [], waitingRows = [], l
 
 function getWorkflowHandoffPrimary(status, { activeQuestion = null, productCompletionAudit = null } = {}) {
   if (status === "unsafe-stop") return "Unsafe runtime or release-review signal is visible; stop before continuing.";
+  if (status === "scoped-handoff-ready") return "Scoped native cleanup is available; continue only through named executor panels and current-plan validation.";
   if (status === "next-action-ready") return activeQuestion?.prompt || "A guarded next action is ready.";
   if (status === "user-evidence-needed") return activeQuestion?.prompt || "User evidence is needed before the next action.";
   if (status === "demo-handoff-ready") return "Demo workflow evidence is ready to hand off; real cleanup remains locked.";
@@ -15159,12 +15200,13 @@ function getRealDataLaunchRowTone(status) {
 }
 
 function getRealDataLaunchRoadmapTone(status) {
-  if (status === "real-cleanup-release-ready" || status === "first-safe-build-ready" || status === "native-readonly-ready") return "safe";
+  if (status === "scoped-real-cleanup-ready" || status === "real-cleanup-release-ready" || status === "first-safe-build-ready" || status === "native-readonly-ready") return "safe";
   if (status === "unsafe-stop") return "restricted";
   return "review";
 }
 
 function getRealDataLaunchCurrentMilestone(status) {
+  if (status === "scoped-real-cleanup-ready") return "Scoped native executors";
   if (status === "real-cleanup-release-ready") return "Write-capable release review";
   if (status === "first-safe-build-ready") return "First-safe executor implementation";
   if (status === "native-readonly-ready") return "Native read-only beta evidence";
@@ -15175,6 +15217,7 @@ function getRealDataLaunchCurrentMilestone(status) {
 
 function getRealDataLaunchEstimate(status, milestones = []) {
   const byId = new Map(milestones.map((milestone) => [milestone.id, milestone]));
+  if (status === "scoped-real-cleanup-ready") return "ready now";
   if (status === "real-cleanup-release-ready") return "ready now";
   if (status === "first-safe-build-ready") return byId.get("first-safe-temp")?.estimate || "1-2 weeks";
   if (status === "native-readonly-ready") return byId.get("native-readonly-beta")?.estimate || "3-5 days";
@@ -15185,6 +15228,7 @@ function getRealDataLaunchEstimate(status, milestones = []) {
 
 function getRealDataLaunchConfidence(status, milestones = []) {
   const byId = new Map(milestones.map((milestone) => [milestone.id, milestone]));
+  if (status === "scoped-real-cleanup-ready") return "medium";
   if (status === "real-cleanup-release-ready") return "medium";
   if (status === "first-safe-build-ready") return byId.get("first-safe-temp")?.confidence || "medium";
   if (status === "native-readonly-ready") return byId.get("native-readonly-beta")?.confidence || "medium";
@@ -15195,6 +15239,7 @@ function getRealDataLaunchConfidence(status, milestones = []) {
 
 function getRealDataLaunchRoadmapPrimary(status, { readyRows = [], partialRows = [], waitingRows = [], lockedRows = [], unsafeRows = [] } = {}) {
   if (status === "unsafe-stop") return `${unsafeRows.length || 1} unsafe write signal requires stopping the real-data launch path.`;
+  if (status === "scoped-real-cleanup-ready") return "Scoped native cleanup executors are available; broad cleanup and blocked classes remain locked.";
   if (status === "real-cleanup-release-ready") return "Real cleanup release evidence is ready for the selected validated route.";
   if (status === "first-safe-build-ready") return "The first-safe temp route can move into disabled executor implementation work.";
   if (status === "native-readonly-ready") return "Real local data can be scanned read-only; write-capable cleanup remains locked.";
@@ -15206,6 +15251,7 @@ function getRealDataLaunchRoadmapPrimary(status, { readyRows = [], partialRows =
 
 function getRealDataLaunchRoadmapSteps(status, rows = []) {
   if (status === "unsafe-stop") return ["Stop launch work.", "Inspect runtime capabilities and write-boundary evidence.", "Restore dry-run-only signals before continuing."];
+  if (status === "scoped-real-cleanup-ready") return ["Use only named executor panels.", "Require current scan fingerprint, consent, and target validation for each run.", "Keep app uninstall, custom roots, Docker volumes, registry, pagefile, and partition work manual or blocked."];
   if (status === "real-cleanup-release-ready") return ["Use only the validated executor route.", "Attach release review evidence to the run ledger.", "Keep broader cleanup routes disabled."];
   const activeRows = rows
     .filter((row) => row.status !== "ready")
@@ -15260,6 +15306,21 @@ function normalizeExecutorFeatureFlags(value = {}) {
     browserCacheExecutor: Boolean(value.browserCacheExecutor || value.browser_cache_executor),
     toolNativePruneExecutors: Boolean(value.toolNativePruneExecutors || value.tool_native_prune_executors)
   };
+}
+
+function getScopedRealExecutorRoutes(runtimeCapabilities = {}) {
+  const flags = normalizeExecutorFeatureFlags(runtimeCapabilities?.executorFlags || runtimeCapabilities?.executor_flags || {});
+  return [
+    flags.tempCleanupExecutor ? "known-temp-delete" : "",
+    flags.downloadsCleanupExecutor ? "item-review-recycle-bin" : "",
+    flags.largeFileArchiveExecutor ? "item-review-large-files" : "",
+    flags.projectDependencyExecutor ? "item-review-project-cache" : "",
+    flags.gradleCacheExecutor ? "bounded-cache-delete" : "",
+    flags.npmCacheExecutor ? "bounded-npm-cache-delete" : "",
+    flags.recycleBinExecutor ? "shell-recycle-bin" : "",
+    flags.browserCacheExecutor ? "browser-cache-only" : "",
+    flags.toolNativePruneExecutors ? "tool-native-prune" : ""
+  ].filter(Boolean);
 }
 
 function getRealExecutorCapsulePrimary(status, route, blockers = []) {

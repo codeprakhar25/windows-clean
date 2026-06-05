@@ -638,6 +638,9 @@ assert(model.includes("safeForPublicDemo"), "demo rehearsal should expose public
 assert(model.includes("requiresNativeData: false"), "demo rehearsal should not require native data");
 assert(model.includes("spaceguard-product-completion-audit/v1"), "model should expose product completion audit schema");
 assert(model.includes("realCleanupLocked"), "product audit should expose real cleanup lock state");
+assert(model.includes("scopedRealCleanupAvailable"), "product audit should expose scoped real cleanup state");
+assert(model.includes("broadCleanupLocked"), "product audit should keep broad cleanup lock visible");
+assert(model.includes("getScopedRealExecutorRoutes"), "model should derive scoped executor route names from runtime flags");
 assert(model.includes("future-locked"), "product audit should name future-locked real cleanup");
 assert(model.includes("spaceguard-user-decision-receipt/v1"), "model should expose user decision receipt schema");
 assert(model.includes("spaceguard-risk-budget/v1"), "model should expose risk budget schema");

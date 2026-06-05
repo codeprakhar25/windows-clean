@@ -110,7 +110,7 @@ npm run native:dev
 In the app:
 
 1. Check **Windows setup assistant**. Browser demo is enough for rehearsal; desktop shell plus current read-only scan evidence is required for real local data.
-2. Complete **Demo rehearsal runbook** in browser demo mode first. It should show no native data required, no destructive commands, real cleanup locked, and zero real-run routes before you export the dry-run report.
+2. Complete **Demo rehearsal runbook** in browser demo mode first. It should show no native data required, no destructive commands, broad cleanup locked, and zero scoped real-run routes before you export the dry-run report.
 3. Review **Temp activation rehearsal** for the no-real-data path. It should show demo-only synthetic evidence, activation gate `feature-flag-disabled`, zero bytes, and mutation locked.
 4. Set **Real scan settings** for target drive, project artifact inclusion, traversal depth, per-root entry cap, and optional custom read-only roots.
 5. Check **Native scan request guard**. Fix malformed drive scope, unapproved traversal caps, protected-path overlap, or broad system roots before the scan button can run.
@@ -230,6 +230,7 @@ For each Windows validation run, capture:
 - Manual strategy checklist state for backup, archive, move, uninstall, or partition-prep evidence.
 - Structured installed-app review signals, including explicit `usage proof = not proven` evidence when no true app-usage source exists.
 - App uninstall review dossier status, manual-only flag, selected follow-up bytes, uninstall-entry count, and no executor authority.
+- Scoped real cleanup status: enabled executor route list, broad cleanup locked state, feature flags, current plan id, scan fingerprint, consent receipt, and target-validation result.
 - Item review decisions and protected-path exclusions.
 - Executor manifest selected routes.
 - Tool command inventory state for npm, pnpm, Docker, Gradle, and Windows cleanup command validation.

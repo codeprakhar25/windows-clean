@@ -3896,7 +3896,7 @@ function RealDataLaunchRoadmapPanel({ roadmap }) {
           <QueueStat label="Phase" value={phaseLabel} tone={roadmap.tone} />
           <QueueStat label="Estimate" value={estimateLabel} tone={roadmap.confidence === "high" ? "safe" : "review"} />
           <QueueStat label="Progress" value={`${roadmap.progress}%`} tone={roadmap.progress >= 70 ? "safe" : "review"} />
-          <QueueStat label="Real cleanup" value={roadmap.realCleanupLocked ? "locked" : "ready"} tone={roadmap.realCleanupLocked ? "safe" : "restricted"} />
+          <QueueStat label="Real cleanup" value={roadmap.scopedRealCleanupAvailable ? "scoped" : roadmap.realCleanupLocked ? "locked" : "ready"} tone={roadmap.scopedRealCleanupAvailable || !roadmap.realCleanupLocked ? "safe" : "restricted"} />
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
@@ -4254,7 +4254,7 @@ function ProductCompletionAuditPanel({ audit }) {
           <QueueStat label="Proven" value={audit.counts.proven} tone={audit.counts.proven ? "safe" : "review"} />
           <QueueStat label="Waiting" value={audit.counts.waiting + audit.counts.partial} tone={audit.counts.waiting || audit.counts.partial ? "review" : "safe"} />
           <QueueStat label="Locked" value={audit.counts.locked} tone={audit.counts.locked ? "restricted" : "safe"} />
-          <QueueStat label="Real run" value={audit.realCleanupComplete ? "ready" : "locked"} tone={audit.realCleanupComplete ? "safe" : "restricted"} />
+          <QueueStat label="Real run" value={audit.scopedRealCleanupAvailable ? "scoped" : audit.realCleanupComplete ? "ready" : "locked"} tone={audit.scopedRealCleanupAvailable || audit.realCleanupComplete ? "safe" : "restricted"} />
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
@@ -4271,7 +4271,7 @@ function ProductCompletionAuditPanel({ audit }) {
               {audit.readOnlyRealDataReady ? "real scan current" : "real scan not proven"}
             </Badge>
             <Badge variant={audit.realCleanupLocked ? "restricted" : "safe"}>
-              {audit.realCleanupLocked ? "real cleanup locked" : "real cleanup ready"}
+              {audit.scopedRealCleanupAvailable ? "scoped real cleanup" : audit.realCleanupLocked ? "real cleanup locked" : "real cleanup ready"}
             </Badge>
           </div>
         </div>
@@ -4499,14 +4499,14 @@ function WorkflowHandoffPanel({ handoff, onExport }) {
           <QueueStat label="Actionable" value={handoff.counts.actionableQuestions} tone={handoff.counts.actionableQuestions ? "advanced" : "safe"} />
           <QueueStat label="Proven" value={handoff.counts.provenRequirements} tone={handoff.counts.provenRequirements ? "safe" : "review"} />
           <QueueStat label="Beta evidence" value={handoff.workflow.nativeBetaEvidenceComplete || "0/0"} tone={handoff.workflow.nativeBetaEvidenceStatus === "complete" ? "safe" : "review"} />
-          <QueueStat label="Writes" value={handoff.realCleanupLocked ? "locked" : "ready"} tone={handoff.realCleanupLocked ? "restricted" : "safe"} />
+          <QueueStat label="Writes" value={handoff.scopedRealCleanupAvailable ? "scoped" : handoff.realCleanupLocked ? "locked" : "ready"} tone={handoff.scopedRealCleanupAvailable || !handoff.realCleanupLocked ? "safe" : "restricted"} />
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
             <span className="font-medium">Resume boundary</span>
             <Badge variant={handoff.redactedPaths ? "safe" : "restricted"}>{handoff.redactedPaths ? "paths redacted" : "paths visible"}</Badge>
-            <Badge variant={handoff.realCleanupEnabled ? "restricted" : "safe"}>{handoff.realCleanupEnabled ? "cleanup enabled" : "no cleanup authority"}</Badge>
+            <Badge variant={handoff.scopedRealCleanupAvailable ? "safe" : handoff.realCleanupEnabled ? "restricted" : "safe"}>{handoff.scopedRealCleanupAvailable ? "scoped cleanup" : handoff.realCleanupEnabled ? "cleanup enabled" : "no cleanup authority"}</Badge>
           </div>
           <p className="text-sm text-muted-foreground">
             {handoff.activeQuestion ? handoff.activeQuestion.detail : "No active question is blocking this handoff."}
