@@ -588,6 +588,12 @@ assert(app.includes("buildRunReadiness"), "combined run readiness should be wire
 assert(app.includes("buildLedgerRunRecord"), "ledger run records should be wired");
 assert(app.includes("buildLedgerHistorySummary"), "ledger history summary should be wired");
 assert(app.includes("buildLedgerHistoryMarkdown"), "ledger history export should be wired");
+assert(app.includes("getLedgerRunLabel"), "ledger panels should render source-aware run labels");
+assert(app.includes("records dry-runs and scoped native executor runs"), "ledger empty state should describe dry-runs and scoped executor runs");
+assert(app.includes("Append-only local run evidence"), "run history copy should include real run evidence");
+assert(model.includes("scoped-native-execution"), "model should classify scoped native executor run records");
+assert(model.includes("Scoped native execution bytes"), "run history export should separate scoped executor bytes");
+assert(model.includes("Run type:"), "post-run exports should include run type");
 assert(app.includes("localStorage"), "ledger history should use local browser storage");
 assert(app.includes("runNativeExecutorDryRun"), "native executor dry-run should be wired");
 assert(app.includes("runNativeDryRunScopeValidation"), "native dry-run scope validation probe should be wired");

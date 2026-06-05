@@ -127,6 +127,7 @@ import {
   actionRequiresAdminConsent,
   getActionTaskPower,
   getExecutionReadinessForActions,
+  getLedgerRunLabel,
   getScenario,
   isActionProtected,
   makeExecutionLedgerForActions,
@@ -1904,7 +1905,7 @@ export default function App() {
     commitExecutionLedger(nextLedger, { executedAt, source: nativeCapability.available ? "native-dry-run" : "browser-demo" });
   }
 
-  function recordLedgerRun(nextLedger) {
+  function recordLedgerRun(nextLedger, source = "execution", createdAt = new Date().toISOString()) {
     if (!nextLedger.length) return;
     const record = buildLedgerRunRecord({
       planSnapshot,
@@ -1916,7 +1917,8 @@ export default function App() {
       runtimeCapabilities: runtimeCapabilities.result,
       runReadiness,
       dryRunLaunchGuard,
-      createdAt: new Date().toISOString()
+      source,
+      createdAt
     });
     setRunHistory((current) => appendLedgerRunRecord(current, record, { limit: RUN_HISTORY_LIMIT }));
   }
@@ -1935,7 +1937,12 @@ export default function App() {
   }
 
   function commitExecutionLedger(nextLedger, { executedAt = new Date().toISOString(), source = "execution" } = {}) {
-    setLedger(nextLedger);
+    const sourcedLedger = nextLedger.map((entry) => ({
+      ...entry,
+      executedAt: entry.executedAt || executedAt,
+      source: entry.source || source
+    }));
+    setLedger(sourcedLedger);
     setExecutionProofContext({
       planSnapshot,
       executorPlan,
@@ -1943,7 +1950,7 @@ export default function App() {
       source,
       recordedAt: executedAt
     });
-    recordLedgerRun(nextLedger);
+    recordLedgerRun(sourcedLedger, source, executedAt);
     window.setTimeout(() => setActiveStage("verify"), 240);
   }
 
@@ -9061,7 +9068,7 @@ function PostRunVerificationPanel({ verification, scanning, nativeCapability, on
               </div>
             ))
           ) : (
-            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">Run simulation to generate affected-root checkpoints.</div>
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">Run a dry-run simulation or scoped executor to generate affected-root checkpoints.</div>
           )}
         </div>
 
@@ -9131,7 +9138,7 @@ function RescanComparisonPanel({ comparison, scanning, nativeCapability, onResca
               </div>
             ))
           ) : (
-            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">Run simulation and then a native read-only scan to compare affected roots.</div>
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">Run a dry-run simulation or scoped executor, then run a native read-only scan to compare affected roots.</div>
           )}
         </div>
 
@@ -9914,6 +9921,7 @@ function ExecutionConsentPanel({ consentReceipt, runReadiness, safetyInterlock, 
 
 function LedgerPanel({ ledger, selectedBytes, preflight, runReadiness, consentReceipt, dryRunLaunchGuard, onExecute, onExport }) {
   const reclaimed = ledger.reduce((sum, entry) => sum + entry.bytes, 0);
+  const runLabel = ledger.length ? getLedgerRunLabel(ledger[0]?.source) : "";
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -9926,7 +9934,7 @@ function LedgerPanel({ ledger, selectedBytes, preflight, runReadiness, consentRe
         </CardTitle>
         <CardDescription>
           {ledger.length
-            ? "Dry-run execution completed."
+            ? `${runLabel} completed.`
             : consentReceipt.ready
               ? `${formatBytes(selectedBytes)} ready for simulation.`
               : `${consentReceipt.blockedCount || runReadiness.blockedCount} consent/readiness check(s) remain.`}
@@ -9989,7 +9997,7 @@ function LedgerPanel({ ledger, selectedBytes, preflight, runReadiness, consentRe
           </div>
 
           {ledger.length === 0 ? (
-            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">No actions run yet. The ledger records every simulated step.</div>
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">No actions run yet. The ledger records dry-runs and scoped native executor runs.</div>
           ) : (
             ledger.map((entry) => (
               <div key={entry.id} className="rounded-md border bg-card p-3">
@@ -10031,12 +10039,13 @@ function RunHistoryPanel({ historySummary, onExport }) {
             {historySummary.hasCurrentPlanRecord ? "current saved" : "local"}
           </Badge>
         </CardTitle>
-        <CardDescription>Append-only local dry-run evidence for audits and duplicate-run protection.</CardDescription>
+        <CardDescription>Append-only local run evidence for audits, duplicate-run protection, and post-run review.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <QueueStat label="Persisted" value={historySummary.counts.records} tone="review" />
           <QueueStat label="Current" value={historySummary.counts.current} tone="safe" />
+          <QueueStat label="Scoped" value={historySummary.counts.scopedNativeExecution || 0} tone="safe" />
           <QueueStat label="Stale" value={historySummary.counts.stale} tone="review" />
         </div>
 
@@ -10049,14 +10058,14 @@ function RunHistoryPanel({ historySummary, onExport }) {
             <div className="grid gap-2 text-sm">
               <div className="flex items-center justify-between gap-3">
                 <span className="min-w-0 truncate">{latest.createdAt}</span>
-                <Badge variant="outline">{latest.scanMode}</Badge>
+                <Badge variant="outline">{latest.runLabel || latest.scanMode}</Badge>
               </div>
               <div className="text-xs text-muted-foreground">
-                Latest simulated {formatBytes(latest.reclaimedBytes)} across {latest.entryCount} step(s).
+                Latest recorded {formatBytes(latest.reclaimedBytes)} across {latest.entryCount} step(s).
               </div>
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">No dry-run has been saved on this device yet.</div>
+            <div className="text-sm text-muted-foreground">No run has been saved on this device yet.</div>
           )}
         </div>
 

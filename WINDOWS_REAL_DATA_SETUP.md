@@ -257,7 +257,7 @@ For each Windows validation run, capture:
 - Write boundary probe state if the desktop runtime exposes `execute_cleanup_plan`; current evidence must show accepted false, rejected entries, zero bytes, matching first-safe contract echo, and no mutation.
 - Exported validation pack.
 
-Rescan comparison only counts when the native scan is taken after the current dry-run ledger. The expected operator order is: finish item decisions, arm and run the dry-run simulation or scoped executor, click **Run post-run rescan** in verification, then inspect the rescan comparison panel. The general **Run real scan** action starts a new planning scan and clears execution state; use it for discovery, not after-ledger proof. A native scan captured before the ledger remains evidence for sizing, not parity.
+Rescan comparison only counts when the native scan is taken after the current run ledger. The expected operator order is: finish item decisions, arm and run the dry-run simulation or scoped executor, click **Run post-run rescan** in verification, then inspect the rescan comparison panel. The general **Run real scan** action starts a new planning scan and clears execution state; use it for discovery, not after-ledger proof. A native scan captured before the ledger remains evidence for sizing, not parity.
 
 ## Release Criteria
 

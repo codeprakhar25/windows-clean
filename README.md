@@ -301,7 +301,7 @@ The demo also includes:
 - Plan snapshot verification so a ledger is trusted only when it matches the current selected actions, approvals, protected paths, and item decisions.
 - Post-run verification checklist that turns the current ledger into affected-root rescan checkpoints before any Windows validation can count, with a dedicated **Run post-run rescan** action that preserves the ledger and compares against the execution snapshot that produced it.
 - Rollback plan panel and local proof ledger that classify each selected executor route as rebuildable, restore-path-required, backup-required, permanent-warning, or blocked, then require reviewer, evidence path, and restore/backup/acknowledgement reference for proof routes.
-- Local run history that persists dry-run ledger records on the device and separates current-plan records from stale audit evidence.
+- Local run history that persists dry-run and scoped executor ledger records on the device and separates current-plan records from stale audit evidence.
 - Privacy boundary panel that explains local scan metadata, manual exports, local audit storage, blocked data classes, and disabled telemetry/cloud upload.
 - Public beta readiness panel that separates web-demo readiness from native read-only beta readiness, including signing, support, uninstall, privacy, and claim boundaries.
 - Redacted support bundle export for diagnostics that excludes local paths and filenames by default.
@@ -396,7 +396,7 @@ The post-run verification panel converts the current ledger into route-level che
 
 The agent questions panel is the workflow control surface. It asks for the next decision only after deriving it from current state: scan first, approve rebuildable caches, allow admin/system routes into dry-run planning when lower-risk cleanup is exhausted, review per-item decisions, arm dry-run consent, simulate the armed plan, capture validation details, or probe the rejecting write boundary. These actions reuse existing gates and cannot bypass preflight, consent, release gates, or real-execution locks.
 
-The rescan comparison panel is stricter than the checklist. It requires an absolute ledger timestamp and a native scan timestamp newer than that ledger before any affected-root row can be marked as matched. Demo scans, stale ledgers, and scans taken before the dry-run ledger stay in a waiting state. If native bytes remain where the plan expected removal, the row is marked as a mismatch and cannot count as ledger/rescan parity evidence.
+The rescan comparison panel is stricter than the checklist. It requires an absolute ledger timestamp and a native scan timestamp newer than that ledger before any affected-root row can be marked as matched. Demo scans, stale ledgers, and scans taken before the current run ledger stay in a waiting state. If native bytes remain where the plan expected removal, the row is marked as a mismatch and cannot count as ledger/rescan parity evidence.
 
 The rollback plan is evaluated before dry-run consent. Disposable and rebuildable routes require rescan proof. Reviewed user items require a visible Recycle Bin, quarantine, or archive restore location. Recycle Bin emptying is marked as permanent-removal. Admin and advanced routes require backup or recovery-state evidence. The local rollback proof ledger treats checkbox-only or legacy evidence as draft until reviewer, evidence path, and route-specific restore/backup/acknowledgement reference are filled. None of these checks unlock real cleanup in the current build.
 

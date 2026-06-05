@@ -2075,8 +2075,13 @@ export function buildLedgerRunRecord({
   runtimeCapabilities = null,
   runReadiness = null,
   dryRunLaunchGuard = null,
+  source = "",
   createdAt = "set-on-save"
 } = {}) {
+  const ledgerSource = normalizeLedgerSource(source || inferLedgerSourceFromEntries(ledger, scanMode));
+  const runKind = getLedgerRunKind(ledgerSource);
+  const runLabel = getLedgerRunLabel(ledgerSource);
+  const scopedNativeExecution = isScopedNativeExecutionSource(ledgerSource);
   const expectedBytes = executorPlan?.dryRunBytes ?? planSnapshot?.selectedBytes ?? 0;
   const reclaimedBytes = ledger.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
   const deltaBytes = Math.abs(expectedBytes - reclaimedBytes);
@@ -2098,7 +2103,8 @@ export function buildLedgerRunRecord({
     title: entry.title,
     result: entry.result,
     bytes: Number(entry.bytes || 0),
-    method: entry.method
+    method: entry.method,
+    source: normalizeLedgerSource(entry.source || ledgerSource)
   }));
   const planSnapshotRecord = compactLedgerPlanSnapshot(planSnapshot);
   const executorPlanRecord = compactLedgerExecutorPlan(executorPlan);
@@ -2107,6 +2113,10 @@ export function buildLedgerRunRecord({
     planId: planSnapshot?.id || entries[0]?.planId || "",
     createdAt,
     scanMode,
+    source: ledgerSource,
+    runKind,
+    runLabel,
+    scopedNativeExecution,
     expectedBytes,
     reclaimedBytes,
     entryCount: entries.length,
@@ -2125,17 +2135,54 @@ export function buildLedgerRunRecord({
     nativeEvidence: scanMode === "native-readonly" && Boolean(nativeScan),
     realRunEnabled: Boolean(runtimeCapabilities?.realRunEnabled),
     destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
+    scopedNativeExecution,
     runReady: Boolean(runReadiness?.ready),
     launchGuardReady: Boolean(dryRunLaunchGuard?.ready),
     routes,
     safety: {
-      dryRunOnly: !runtimeCapabilities?.realRunEnabled,
+      dryRunOnly: !scopedNativeExecution,
+      scopedNativeExecution,
       dryRunLaunchGuard: dryRunLaunchGuard?.status || "not-evaluated",
       dryRunAllowed: Boolean(dryRunLaunchGuard?.dryRunAllowed),
       destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
       nativeWriteCapability: Boolean(nativeScan?.writeCapability)
     }
   };
+}
+
+function normalizeLedgerSource(value = "") {
+  return String(value || "").trim() || "execution";
+}
+
+function inferLedgerSourceFromEntries(ledger = [], scanMode = "") {
+  const entrySource = (Array.isArray(ledger) ? ledger : []).find((entry) => entry?.source)?.source;
+  if (entrySource) return entrySource;
+  if (scanMode === "demo") return "browser-demo";
+  if (scanMode === "native-readonly") return "native-dry-run";
+  return "execution";
+}
+
+export function isScopedNativeExecutionSource(source = "") {
+  const clean = normalizeLedgerSource(source);
+  return clean.startsWith("native-") && clean.endsWith("-executor");
+}
+
+export function getLedgerRunKind(source = "") {
+  const clean = normalizeLedgerSource(source);
+  if (isScopedNativeExecutionSource(clean)) return "scoped-native-execution";
+  if (clean === "native-dry-run") return "native-dry-run";
+  if (clean === "browser-demo") return "browser-demo";
+  if (clean.includes("dry-run")) return "dry-run";
+  return "execution";
+}
+
+export function getLedgerRunLabel(source = "") {
+  const kind = getLedgerRunKind(source);
+  if (kind === "scoped-native-execution") return "Scoped native execution";
+  if (kind === "native-dry-run") return "Native dry-run";
+  if (kind === "browser-demo") return "Browser demo";
+  if (kind === "dry-run") return "Dry-run";
+  return "Execution";
 }
 
 function compactLedgerPlanSnapshot(planSnapshot = null) {
@@ -2232,6 +2279,9 @@ export function buildLedgerHistorySummary(history = [], planSnapshot = null) {
   const staleRecords = planId ? records.filter((record) => record.planId !== planId) : records;
   const currentRecord = currentRecords[currentRecords.length - 1] || null;
   const latestRecord = records[records.length - 1] || null;
+  const scopedNativeRecords = records.filter((record) => Boolean(record.scopedNativeExecution) || isScopedNativeExecutionSource(record.source));
+  const dryRunRecords = records.filter((record) => !scopedNativeRecords.includes(record));
+  const currentScopedNativeRecords = currentRecords.filter((record) => Boolean(record.scopedNativeExecution) || isScopedNativeExecutionSource(record.source));
 
   return {
     schemaVersion: "spaceguard-ledger-history/v1",
@@ -2246,9 +2296,14 @@ export function buildLedgerHistorySummary(history = [], planSnapshot = null) {
     counts: {
       records: records.length,
       current: currentRecords.length,
-      stale: staleRecords.length
+      stale: staleRecords.length,
+      dryRun: dryRunRecords.length,
+      scopedNativeExecution: scopedNativeRecords.length,
+      currentScopedNativeExecution: currentScopedNativeRecords.length
     },
     totalReclaimedBytes: records.reduce((sum, record) => sum + Number(record.reclaimedBytes || 0), 0),
+    dryRunBytes: dryRunRecords.reduce((sum, record) => sum + Number(record.reclaimedBytes || 0), 0),
+    scopedNativeExecutionBytes: scopedNativeRecords.reduce((sum, record) => sum + Number(record.reclaimedBytes || 0), 0),
     currentReclaimedBytes: currentRecords.reduce((sum, record) => sum + Number(record.reclaimedBytes || 0), 0),
     hasCurrentPlanRecord: currentRecords.length > 0
   };
@@ -2261,7 +2316,7 @@ export function buildLedgerHistoryMarkdown(historySummary) {
     ? records
         .slice()
         .reverse()
-        .map((record) => `- ${record.createdAt}: ${formatBytes(record.reclaimedBytes)} | ${record.entryCount} step(s) | plan=${record.planId} | mode=${record.scanMode}`)
+        .map((record) => `- ${record.createdAt}: ${formatBytes(record.reclaimedBytes)} | ${record.entryCount} step(s) | plan=${record.planId} | mode=${record.scanMode} | source=${record.runLabel || getLedgerRunLabel(record.source)}`)
         .join("\n")
     : "- No run history recorded.";
 
@@ -2271,12 +2326,16 @@ export function buildLedgerHistoryMarkdown(historySummary) {
     `Records: ${summary?.counts?.records || 0}`,
     `Current plan records: ${summary?.counts?.current || 0}`,
     `Stale records: ${summary?.counts?.stale || 0}`,
-    `Total simulated recovery: ${formatBytes(summary?.totalReclaimedBytes || 0)}`,
+    `Dry-run records: ${summary?.counts?.dryRun || 0}`,
+    `Scoped native execution records: ${summary?.counts?.scopedNativeExecution || 0}`,
+    `Total recorded bytes: ${formatBytes(summary?.totalReclaimedBytes || 0)}`,
+    `Dry-run preview bytes: ${formatBytes(summary?.dryRunBytes || 0)}`,
+    `Scoped native execution bytes: ${formatBytes(summary?.scopedNativeExecutionBytes || 0)}`,
     "",
     "## Runs",
     rows,
     "",
-    "This history is local dry-run evidence only. It does not prove real filesystem cleanup."
+    "Dry-run records are preview evidence. Scoped native execution records are local post-run evidence and still require a newer native rescan for parity."
   ].join("\n");
 }
 
@@ -4399,7 +4458,7 @@ export function buildAgentQuestionQueue({
       priority: 58,
       title: "Verify the ledger",
       prompt: scanMode === "native-readonly" ? "Should I run a fresh native read-only scan for rescan parity?" : "Should I switch to native scan evidence before counting parity?",
-      detail: rescanComparison?.detail || "Post-run verification needs a native scan after the dry-run ledger timestamp.",
+      detail: rescanComparison?.detail || "Post-run verification needs a native scan after the ledger timestamp.",
       action: nativeCapability?.available ? "run-real-scan" : "none",
       options: nativeCapability?.available ? ["Run real read-only scan"] : ["Use desktop shell for native evidence"]
     });
@@ -5364,6 +5423,8 @@ export function buildOperatingChecklist({
   const scanAction = runtimeCapabilities?.available ? "run-real-scan" : "run-scan";
   const activeActionSafe = !unsafe || activeQuestion?.action === "focus-panel";
   const launchReady = Boolean(dryRunLaunchGuard?.ready);
+  const ledgerSource = inferLedgerSourceFromEntries(ledgerEntries, scanMode);
+  const ledgerRunLabel = getLedgerRunLabel(ledgerSource);
 
   const rows = [
     buildOperatingChecklistRow({
@@ -5424,11 +5485,11 @@ export function buildOperatingChecklist({
     }),
     buildOperatingChecklistRow({
       id: "dry-run-ledger",
-      label: "Dry-run ledger",
+      label: "Run ledger",
       phase: "verify",
       status: ledgerCurrent ? "passed" : launchReady && !unsafe ? "waiting" : unsafe ? "blocked" : "waiting",
-      detail: ledgerCurrent ? `${ledgerEntries.length} current ledger entr${ledgerEntries.length === 1 ? "y" : "ies"} captured.` : "Run simulation to create current-plan dry-run evidence.",
-      evidence: ledgerCurrent ? planSnapshot?.id || "current plan" : "ledger missing",
+      detail: ledgerCurrent ? `${ledgerEntries.length} current ${ledgerRunLabel.toLowerCase()} ledger entr${ledgerEntries.length === 1 ? "y" : "ies"} captured.` : "Run a dry-run simulation or scoped executor to create current-plan ledger evidence.",
+      evidence: ledgerCurrent ? `${planSnapshot?.id || "current plan"} | ${ledgerRunLabel}` : "ledger missing",
       action: ledgerCurrent || !launchReady || unsafe ? "none" : "simulate",
       canAct: Boolean(!ledgerCurrent && launchReady && !unsafe)
     }),
@@ -10682,6 +10743,10 @@ export function buildVerificationSummary({
   const currentLedger = planSnapshot?.id ? ledger.filter((entry) => entry.planId === planSnapshot.id) : ledger;
   const staleLedger = planSnapshot?.id ? ledger.filter((entry) => entry.planId !== planSnapshot.id) : [];
   const deltaBytes = Math.abs(expectedBytes - reclaimedBytes);
+  const ledgerSource = inferLedgerSourceFromEntries(currentLedger.length ? currentLedger : ledger, scanMode);
+  const runKind = getLedgerRunKind(ledgerSource);
+  const runLabel = getLedgerRunLabel(ledgerSource);
+  const scopedNativeExecution = isScopedNativeExecutionSource(ledgerSource);
 
   if (ledger.length === 0) {
     return {
@@ -10689,12 +10754,16 @@ export function buildVerificationSummary({
       tone: "review",
       current: false,
       planId: planSnapshot?.id || "",
+      source: "",
+      runKind: "not-run",
+      runLabel: "Not run",
+      scopedNativeExecution: false,
       expectedBytes,
       reclaimedBytes: 0,
       deltaBytes: expectedBytes,
       nativeEvidence: scanMode === "native-readonly" && Boolean(nativeScan),
       detail: "No ledger exists for the current plan.",
-      steps: ["Run simulation.", "Review skipped actions.", "Export report before changing the plan."]
+      steps: ["Run a dry-run simulation or scoped executor.", "Review skipped actions.", "Export report before changing the plan."]
     };
   }
 
@@ -10704,12 +10773,16 @@ export function buildVerificationSummary({
       tone: "advanced",
       current: false,
       planId: planSnapshot?.id || "",
+      source: ledgerSource,
+      runKind,
+      runLabel,
+      scopedNativeExecution,
       expectedBytes,
       reclaimedBytes,
       deltaBytes: expectedBytes,
       nativeEvidence: scanMode === "native-readonly" && Boolean(nativeScan),
-      detail: "The visible ledger belongs to an older plan. Simulate again before trusting the numbers.",
-      steps: ["Run simulation for the current plan.", "Discard or export the stale report for audit only.", "Do not compare old ledger bytes to new selections."]
+      detail: "The visible ledger belongs to an older plan. Run the current plan again before trusting the numbers.",
+      steps: ["Run the current plan again.", "Discard or export the stale report for audit only.", "Do not compare old ledger bytes to new selections."]
     };
   }
 
@@ -10719,11 +10792,15 @@ export function buildVerificationSummary({
       tone: "review",
       current: true,
       planId: planSnapshot?.id || "",
+      source: ledgerSource,
+      runKind,
+      runLabel,
+      scopedNativeExecution,
       expectedBytes,
       reclaimedBytes,
       deltaBytes,
       nativeEvidence: scanMode === "native-readonly" && Boolean(nativeScan),
-      detail: `${formatBytes(deltaBytes)} differs between expected dry-run bytes and the ledger.`,
+      detail: `${formatBytes(deltaBytes)} differs between expected run bytes and the ${runLabel.toLowerCase()} ledger.`,
       steps: ["Rescan affected roots.", "Check skipped actions.", "Export the mismatch before another run."]
     };
   }
@@ -10733,12 +10810,18 @@ export function buildVerificationSummary({
     tone: "safe",
     current: true,
     planId: planSnapshot?.id || "",
+    source: ledgerSource,
+    runKind,
+    runLabel,
+    scopedNativeExecution,
     expectedBytes,
     reclaimedBytes,
     deltaBytes,
     nativeEvidence: scanMode === "native-readonly" && Boolean(nativeScan),
-    detail: "The ledger matches the current plan snapshot within tolerance.",
-    steps: ["Export the report.", "Use native rescan evidence before enabling real execution.", "Change the plan before any second run."]
+    detail: `${runLabel} ledger matches the current plan snapshot within tolerance.`,
+    steps: scopedNativeExecution
+      ? ["Export the run record.", "Run a newer native rescan before another scoped execution.", "Change the plan before any second run."]
+      : ["Export the report.", "Use native rescan evidence before enabling scoped execution.", "Change the plan before any second run."]
   };
 }
 
@@ -10754,6 +10837,10 @@ export function buildPostRunVerificationPlan({
   const staleEntries = planId ? ledger.filter((entry) => entry.planId !== planId) : [];
   const rows = executorPlan?.rows || [];
   const nativeEvidence = scanMode === "native-readonly" && Boolean(nativeScan);
+  const ledgerSource = inferLedgerSourceFromEntries(currentEntries.length ? currentEntries : ledger, scanMode);
+  const runKind = getLedgerRunKind(ledgerSource);
+  const runLabel = getLedgerRunLabel(ledgerSource);
+  const scopedNativeExecution = isScopedNativeExecutionSource(ledgerSource);
   const checkpoints = currentEntries.map((entry) => {
     const row = rows.find((item) => item.id === entry.id) || {};
     const skipped = entry.result === "skipped" || Number(entry.bytes || 0) === 0;
@@ -10761,6 +10848,9 @@ export function buildPostRunVerificationPlan({
       id: entry.id,
       title: entry.title,
       planId: entry.planId || planId,
+      source: normalizeLedgerSource(entry.source || ledgerSource),
+      runKind: getLedgerRunKind(entry.source || ledgerSource),
+      runLabel: getLedgerRunLabel(entry.source || ledgerSource),
       route: row.route || "unknown",
       lane: row.lane || "unknown",
       path: row.path || "unknown affected root",
@@ -10789,11 +10879,15 @@ export function buildPostRunVerificationPlan({
       planId,
       current: false,
       nativeEvidence,
+      source: "",
+      runKind: "not-run",
+      runLabel: "Not run",
+      scopedNativeExecution: false,
       checkpoints: [],
       skippedCount: 0,
       expectedBytes: 0,
       detail: "No ledger exists yet, so there is no post-run verification checklist.",
-      steps: ["Run simulation first.", "Save the run record.", "Use native read-only rescan evidence for Windows validation."]
+      steps: ["Run a dry-run simulation or scoped executor first.", "Save the run record.", "Use native read-only rescan evidence for Windows validation."]
     };
   }
 
@@ -10805,11 +10899,15 @@ export function buildPostRunVerificationPlan({
       planId,
       current: false,
       nativeEvidence,
+      source: ledgerSource,
+      runKind,
+      runLabel,
+      scopedNativeExecution,
       checkpoints: [],
       skippedCount: 0,
       expectedBytes: 0,
       detail: "The available ledger does not match the current plan snapshot.",
-      steps: ["Simulate the current plan.", "Keep stale history as audit evidence only.", "Do not use stale entries for rescan parity."]
+      steps: ["Run the current plan again.", "Keep stale history as audit evidence only.", "Do not use stale entries for rescan parity."]
     };
   }
 
@@ -10824,15 +10922,21 @@ export function buildPostRunVerificationPlan({
     planId,
     current: true,
     nativeEvidence,
+    source: ledgerSource,
+    runKind,
+    runLabel,
+    scopedNativeExecution,
     checkpoints,
     skippedCount,
     expectedBytes,
     detail: nativeEvidence
-      ? `${checkpoints.length} checkpoint(s) can be compared against the current native scan evidence.`
-      : `${checkpoints.length} checkpoint(s) need native read-only rescan evidence before validation.`,
+      ? `${checkpoints.length} ${runLabel.toLowerCase()} checkpoint(s) can be compared against the current native scan evidence.`
+      : `${checkpoints.length} ${runLabel.toLowerCase()} checkpoint(s) need native read-only rescan evidence before validation.`,
     steps: nativeEvidence
-      ? ["Compare each affected root with the ledger.", "Record skipped files and byte deltas.", "Export the verification checklist with the dry-run report."]
-      : ["Run the Windows desktop read-only scan after execution.", "Compare affected roots with the ledger.", "Keep real execution locked until rescan parity is proven."]
+      ? ["Compare each affected root with the ledger.", "Record skipped files and byte deltas.", "Export the verification checklist with the run record."]
+      : scopedNativeExecution
+        ? ["Run the Windows desktop read-only scan after scoped execution.", "Compare affected roots with the ledger.", "Block another scoped execution until rescan parity is reviewed."]
+        : ["Run the Windows desktop read-only scan after the dry-run.", "Compare affected roots with the ledger.", "Keep scoped execution locked until rescan parity is proven."]
   };
 }
 
@@ -10849,6 +10953,10 @@ export function buildRescanComparison({
   const currentEntries = planId ? ledger.filter((entry) => entry.planId === planId) : ledger;
   const staleEntries = planId ? ledger.filter((entry) => entry.planId !== planId) : [];
   const nativeEvidence = scanMode === "native-readonly" && Boolean(nativeScan?.available !== false && nativeScan);
+  const ledgerSource = normalizeLedgerSource(postRunVerification?.source || inferLedgerSourceFromEntries(currentEntries.length ? currentEntries : ledger, scanMode));
+  const runKind = getLedgerRunKind(ledgerSource);
+  const runLabel = getLedgerRunLabel(ledgerSource);
+  const scopedNativeExecution = isScopedNativeExecutionSource(ledgerSource);
   const latestExecutionAt = latestComparableTimestamp(currentEntries.map((entry) => entry.executedAt));
   const scanGeneratedAt = nativeScan?.generatedAt || "";
   const postRunScanEvidence = Boolean(nativeEvidence && latestExecutionAt && isTimestampAtOrAfter(scanGeneratedAt, latestExecutionAt));
@@ -10880,6 +10988,10 @@ export function buildRescanComparison({
       planId,
       current: false,
       nativeEvidence,
+      source: "",
+      runKind: "not-run",
+      runLabel: "Not run",
+      scopedNativeExecution: false,
       postRunScanEvidence: false,
       latestExecutionAt,
       scanGeneratedAt,
@@ -10889,7 +11001,7 @@ export function buildRescanComparison({
       expectedBytes: 0,
       actualRemainingBytes: 0,
       detail: "No current ledger checkpoints exist yet, so rescan parity cannot be evaluated.",
-      steps: ["Run dry-run simulation.", "Run a native read-only scan after the ledger is created.", "Compare affected roots before any real executor work."]
+      steps: ["Run a dry-run simulation or scoped executor.", "Run a native read-only scan after the ledger is created.", "Compare affected roots before another executor run."]
     };
   }
 
@@ -10901,6 +11013,10 @@ export function buildRescanComparison({
       planId,
       current: false,
       nativeEvidence,
+      source: ledgerSource,
+      runKind,
+      runLabel,
+      scopedNativeExecution,
       postRunScanEvidence: false,
       latestExecutionAt,
       scanGeneratedAt,
@@ -10910,7 +11026,7 @@ export function buildRescanComparison({
       expectedBytes: 0,
       actualRemainingBytes: 0,
       detail: "The ledger is not current for this plan, so native scan data cannot prove parity.",
-      steps: ["Simulate the current plan.", "Run a fresh native read-only scan after that ledger.", "Ignore stale run history for parity decisions."]
+      steps: ["Run the current plan again.", "Run a fresh native read-only scan after that ledger.", "Ignore stale run history for parity decisions."]
     };
   }
 
@@ -10925,6 +11041,10 @@ export function buildRescanComparison({
     planId,
     current: true,
     nativeEvidence,
+    source: ledgerSource,
+    runKind,
+    runLabel,
+    scopedNativeExecution,
     postRunScanEvidence,
     latestExecutionAt,
     scanGeneratedAt,
@@ -10958,6 +11078,7 @@ export function buildRescanComparisonMarkdown(comparison) {
     "",
     `Plan: ${comparison?.planId || "none"}`,
     `Status: ${comparison?.status || "not-run"}`,
+    `Run type: ${comparison?.runLabel || "Not run"}`,
     `Native evidence: ${comparison?.nativeEvidence ? "yes" : "no"}`,
     `Post-run scan evidence: ${comparison?.postRunScanEvidence ? "yes" : "no"}`,
     `Ledger timestamp: ${comparison?.latestExecutionAt || "missing"}`,
@@ -10992,6 +11113,7 @@ export function buildPostRunVerificationMarkdown(plan) {
     "",
     `Plan: ${plan?.planId || "none"}`,
     `Status: ${plan?.status || "not-run"}`,
+    `Run type: ${plan?.runLabel || "Not run"}`,
     `Native evidence: ${plan?.nativeEvidence ? "yes" : "no"}`,
     `Expected recovery: ${formatBytes(plan?.expectedBytes || 0)}`,
     "",
@@ -11001,7 +11123,9 @@ export function buildPostRunVerificationMarkdown(plan) {
     "## Checkpoints",
     checkpoints,
     "",
-    "This checklist is verification evidence only. It does not enable real cleanup."
+    plan?.scopedNativeExecution
+      ? "This checklist is post-run evidence for scoped native execution; it still requires native rescan parity."
+      : "This checklist is verification evidence for a dry-run preview. It does not enable real cleanup."
   ].join("\n");
 }
 
@@ -12256,9 +12380,12 @@ export function buildReport({
           `- Records: ${ledgerHistorySummary.counts.records}`,
           `- Current plan records: ${ledgerHistorySummary.counts.current}`,
           `- Stale records: ${ledgerHistorySummary.counts.stale}`,
-          `- Total simulated recovery: ${formatBytes(ledgerHistorySummary.totalReclaimedBytes)}`,
+          `- Dry-run records: ${ledgerHistorySummary.counts.dryRun || 0}`,
+          `- Scoped native execution records: ${ledgerHistorySummary.counts.scopedNativeExecution || 0}`,
+          `- Total recorded bytes: ${formatBytes(ledgerHistorySummary.totalReclaimedBytes)}`,
+          `- Scoped native execution bytes: ${formatBytes(ledgerHistorySummary.scopedNativeExecutionBytes || 0)}`,
           ledgerHistorySummary.latestRecord
-            ? `- Latest: ${ledgerHistorySummary.latestRecord.createdAt} | ${formatBytes(ledgerHistorySummary.latestRecord.reclaimedBytes)} | ${ledgerHistorySummary.latestRecord.planId}`
+            ? `- Latest: ${ledgerHistorySummary.latestRecord.createdAt} | ${ledgerHistorySummary.latestRecord.runLabel || getLedgerRunLabel(ledgerHistorySummary.latestRecord.source)} | ${formatBytes(ledgerHistorySummary.latestRecord.reclaimedBytes)} | ${ledgerHistorySummary.latestRecord.planId}`
             : "- Latest: none"
         ].join("\n")
       : "- Not loaded.",
@@ -13313,7 +13440,7 @@ function getOperatingChecklistRowTone(status) {
 
 function getOperatingChecklistPrimary(status, { safeActionNow = null, unsafeRows = [], waitingRows = [], ledgerEntries = [] } = {}) {
   if (status === "unsafe-stop") return safeActionNow?.detail || `${unsafeRows.length} unsafe operating signal(s) require safety review.`;
-  if (status === "ledger-ready") return `${ledgerEntries.length} dry-run ledger entr${ledgerEntries.length === 1 ? "y is" : "ies are"} current for this plan.`;
+  if (status === "ledger-ready") return `${ledgerEntries.length} run ledger entr${ledgerEntries.length === 1 ? "y is" : "ies are"} current for this plan.`;
   if (status === "dry-run-ready") return safeActionNow ? `${safeActionNow.label}: ${safeActionNow.detail}` : "Dry-run simulation is ready.";
   if (status === "consent-needed") return "The plan can be armed for dry-run consent.";
   if (status === "launch-blocked") return "Consent is armed, but the launch guard is still blocking simulation.";

@@ -3238,9 +3238,15 @@ const assert = require("assert");
   });
   assert.strictEqual(runRecord.schemaVersion, "spaceguard-ledger-run/v1", "run record should have a schema version");
   assert.strictEqual(runRecord.planId, itemPlanSnapshot.id, "run record should keep the plan id");
+  assert.strictEqual(runRecord.source, "browser-demo", "demo run records should infer browser demo source");
+  assert.strictEqual(runRecord.runKind, "browser-demo", "demo run records should expose browser demo kind");
+  assert.strictEqual(runRecord.runLabel, "Browser demo", "demo run records should expose a human run label");
+  assert.strictEqual(runRecord.scopedNativeExecution, false, "demo run records should not imply scoped native execution");
+  assert.strictEqual(runRecord.entries[0].source, "browser-demo", "run record entries should inherit the run source");
   assert.strictEqual(runRecord.reclaimedBytes, taggedItemLedger[0].bytes, "run record should summarize reclaimed bytes");
   assert.strictEqual(runRecord.realRunEnabled, false, "run record must not imply real execution");
   assert.strictEqual(runRecord.launchGuardReady, true, "run record should capture launch guard readiness");
+  assert.strictEqual(runRecord.safety.dryRunOnly, true, "demo run records should remain dry-run-only evidence");
   assert.strictEqual(runRecord.safety.dryRunLaunchGuard, "dry-run-launch-ready", "run record should persist launch guard status");
   assert.strictEqual(runRecord.planSnapshot.id, itemPlanSnapshot.id, "run record should persist the executed plan snapshot");
   assert.strictEqual(runRecord.planSnapshot.rows.length, itemPlanSnapshot.rows.length, "run record should persist compact selected rows");
@@ -3261,6 +3267,57 @@ const assert = require("assert");
   const historyMarkdown = guard.buildLedgerHistoryMarkdown(currentHistorySummary);
   assert(historyMarkdown.includes("SpaceGuard Local Run History"), "history markdown should have a title");
   assert(historyMarkdown.includes(itemPlanSnapshot.id), "history markdown should include plan ids");
+  assert(historyMarkdown.includes("Browser demo"), "history markdown should label demo run records");
+
+  const scopedSource = "native-downloads-recycle-bin-executor";
+  const scopedItemLedger = taggedItemLedger.map((entry) => ({ ...entry, source: scopedSource }));
+  const scopedRunRecord = guard.buildLedgerRunRecord({
+    planSnapshot: itemPlanSnapshot,
+    ledger: scopedItemLedger,
+    executorPlan: itemExecutorPlan,
+    scanMode: "native-readonly",
+    runtimeCapabilities: {
+      realRunEnabled: true,
+      destructiveCommands: false
+    },
+    runReadiness: runReady,
+    dryRunLaunchGuard: { ready: true, dryRunAllowed: true, status: "dry-run-launch-ready" },
+    source: scopedSource,
+    createdAt: "2026-06-03T00:05:00.000Z"
+  });
+  assert.strictEqual(scopedRunRecord.source, scopedSource, "scoped executor run records should preserve native source");
+  assert.strictEqual(scopedRunRecord.runKind, "scoped-native-execution", "scoped executor records should expose execution kind");
+  assert.strictEqual(scopedRunRecord.runLabel, "Scoped native execution", "scoped executor records should expose a human run label");
+  assert.strictEqual(scopedRunRecord.scopedNativeExecution, true, "scoped executor records should be flagged");
+  assert.strictEqual(scopedRunRecord.entries[0].source, scopedSource, "scoped executor entries should preserve source");
+  assert.strictEqual(scopedRunRecord.safety.dryRunOnly, false, "scoped executor records should not be labeled dry-run-only");
+  const mixedHistorySummary = guard.buildLedgerHistorySummary([runRecord, scopedRunRecord], itemPlanSnapshot);
+  assert.strictEqual(mixedHistorySummary.counts.dryRun, 1, "history should count preview records separately");
+  assert.strictEqual(mixedHistorySummary.counts.scopedNativeExecution, 1, "history should count scoped executor records separately");
+  assert.strictEqual(mixedHistorySummary.counts.currentScopedNativeExecution, 1, "history should count current scoped executor records");
+  assert.strictEqual(mixedHistorySummary.scopedNativeExecutionBytes, scopedRunRecord.reclaimedBytes, "history should summarize scoped executor bytes");
+  const mixedHistoryMarkdown = guard.buildLedgerHistoryMarkdown(mixedHistorySummary);
+  assert(mixedHistoryMarkdown.includes("Scoped native execution"), "history markdown should label scoped executor records");
+  assert(mixedHistoryMarkdown.includes("Scoped native execution bytes"), "history markdown should separate scoped executor bytes");
+  const scopedPostRunVerification = guard.buildPostRunVerificationPlan({
+    planSnapshot: itemPlanSnapshot,
+    ledger: scopedItemLedger,
+    executorPlan: itemExecutorPlan,
+    scanMode: "native-readonly"
+  });
+  assert.strictEqual(scopedPostRunVerification.scopedNativeExecution, true, "post-run verification should preserve scoped executor source");
+  assert.strictEqual(scopedPostRunVerification.runKind, "scoped-native-execution", "post-run verification should expose scoped executor kind");
+  assert(scopedPostRunVerification.steps.join(" ").includes("scoped execution"), "scoped post-run verification should request post-execution rescan");
+  const scopedPostRunMarkdown = guard.buildPostRunVerificationMarkdown(scopedPostRunVerification);
+  assert(scopedPostRunMarkdown.includes("Run type: Scoped native execution"), "post-run markdown should include run type");
+  const scopedRescanComparison = guard.buildRescanComparison({
+    postRunVerification: scopedPostRunVerification,
+    ledger: scopedItemLedger,
+    scanMode: "native-readonly"
+  });
+  assert.strictEqual(scopedRescanComparison.scopedNativeExecution, true, "rescan comparison should preserve scoped executor source");
+  assert.strictEqual(scopedRescanComparison.runLabel, "Scoped native execution", "rescan comparison should expose scoped executor label");
+  assert(guard.buildRescanComparisonMarkdown(scopedRescanComparison).includes("Run type: Scoped native execution"), "rescan markdown should include scoped run type");
   const localEvidenceBackup = guard.buildLocalEvidenceBackup({
     validationEvidence: { "windows-native-build": { status: "passed", reviewer: "qa", evidencePath: "evidence/native.log" } },
     rollbackEvidence: { "windows-temp": { status: "proved", reviewer: "qa", evidencePath: "evidence/rollback.md", restoreLocation: "rescan parity" } },
