@@ -110,6 +110,7 @@ export function buildOpenAIAgentContext({
   nativeScan,
   runtimeCapabilities,
   itemReviewsByAction,
+  approvals,
   driveInventorySummary,
   customRootTriage,
   writeReadiness,
@@ -258,9 +259,30 @@ export function buildOpenAIAgentContext({
       consequence: "permanent removal"
     }))
     .slice(0, 1);
+  const wslVhdxTargets = (nativeScan?.findings || [])
+    .filter((finding) => finding.recipeId === "wsl-vhdx")
+    .filter((finding) => (finding.status === "measured" || finding.status === "limited") && finding.path)
+    .map((finding, index) => ({
+      id: `wsl-vhdx-${index + 1}`,
+      title: finding.title || "WSL virtual disk",
+      route: "advanced-checklist",
+      path: finding.path,
+      bytes: Number(finding.bytes || 0),
+      status: finding.status || "unknown",
+      manualOnly: true,
+      canCreateExecutor: false
+    }))
+    .slice(0, 12);
   const manualReviewTargets = buildManualReviewTargets({ nativeScan, itemReviewsByAction });
   const installedAppReview = buildInstalledAppReviewContext(manualReviewTargets);
   const installedAppUninstallWorkOrder = buildInstalledAppUninstallWorkOrderContext(installedAppReview, {
+    planId: planSnapshot?.id || "",
+    scanFingerprint: scanSession?.currentFingerprint || "",
+    rescanComparisonStatus: rescanComparison?.status || "not-run"
+  });
+  const wslCompactionWorkOrder = buildWslCompactionWorkOrderContext(wslVhdxTargets, {
+    selected: selectedIds?.has?.("wsl-vhdx") || false,
+    typedConfirmed: approvals?.typed?.["wsl-vhdx"] === "COMPACT WSL",
     planId: planSnapshot?.id || "",
     scanFingerprint: scanSession?.currentFingerprint || "",
     rescanComparisonStatus: rescanComparison?.status || "not-run"
@@ -385,10 +407,12 @@ export function buildOpenAIAgentContext({
     npmCacheTargets,
     pnpmStoreTargets,
     recycleBinTargets,
+    wslVhdxTargets,
     browserCacheTargets,
     manualReviewTargets,
     installedAppReview,
     installedAppUninstallWorkOrder,
+    wslCompactionWorkOrder,
     driveInventoryRows,
     customRootRows,
     candidateSamples: (candidateSafetyManifest?.rows || []).slice(0, 12).map((row) => ({
@@ -796,6 +820,7 @@ function getManualRecommendationPanel(row = {}) {
   if (targetId.startsWith("custom-root") || route.includes("custom-root")) return "custom-root-triage-panel";
   if (targetId.startsWith("drive-") || route.includes("drive-inventory")) return "drive-inventory-panel";
   if (targetId.includes("installed-app") || route.includes("manual-app-uninstall")) return "app-uninstall-work-order-panel";
+  if (targetId.includes("wsl") || route.includes("advanced-checklist")) return "wsl-compaction-work-order-panel";
   return "item-review-panel";
 }
 
@@ -899,10 +924,12 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
       npmCacheTargets: Array.isArray(context?.npmCacheTargets) ? context.npmCacheTargets.length : 0,
       pnpmStoreTargets: Array.isArray(context?.pnpmStoreTargets) ? context.pnpmStoreTargets.length : 0,
       recycleBinTargets: Array.isArray(context?.recycleBinTargets) ? context.recycleBinTargets.length : 0,
+      wslVhdxTargets: Array.isArray(context?.wslVhdxTargets) ? context.wslVhdxTargets.length : 0,
       browserCacheTargets: Array.isArray(context?.browserCacheTargets) ? context.browserCacheTargets.length : 0,
       manualReviewTargets: Array.isArray(context?.manualReviewTargets) ? context.manualReviewTargets.length : 0,
       installedAppReviewRows: Array.isArray(context?.installedAppReview?.rows) ? context.installedAppReview.rows.length : 0,
       installedAppWorkOrderRows: Array.isArray(context?.installedAppUninstallWorkOrder?.rows) ? context.installedAppUninstallWorkOrder.rows.length : 0,
+      wslCompactionRows: Array.isArray(context?.wslCompactionWorkOrder?.rows) ? context.wslCompactionWorkOrder.rows.length : 0,
       driveInventoryRows: Array.isArray(context?.driveInventoryRows) ? context.driveInventoryRows.length : 0,
       customRootRows: Array.isArray(context?.customRootRows) ? context.customRootRows.length : 0,
       candidateSamples: Array.isArray(context?.candidateSamples) ? context.candidateSamples.length : 0
@@ -1165,6 +1192,56 @@ function buildInstalledAppUninstallWorkOrderContext(installedAppReview = null, {
       "Run a native rescan after uninstall."
     ],
     forbiddenActions: ["automated-uninstall", "delete-program-files", "run-uninstall-string", "edit-registry"]
+  };
+}
+
+function buildWslCompactionWorkOrderContext(wslVhdxTargets = [], {
+  selected = false,
+  typedConfirmed = false,
+  planId = "",
+  scanFingerprint = "",
+  rescanComparisonStatus = "not-run"
+} = {}) {
+  const rows = (Array.isArray(wslVhdxTargets) ? wslVhdxTargets : []).slice(0, 12);
+  const status = !rows.length
+    ? "no-wsl-vhdx"
+    : !selected
+      ? "not-selected"
+      : !typedConfirmed
+        ? "needs-typed-ack"
+        : "ready-for-manual-compaction";
+  return {
+    schemaVersion: "spaceguard-wsl-compaction-work-order-context/v1",
+    status,
+    manualOnly: true,
+    canCreateExecutor: false,
+    directDeleteAuthority: false,
+    canRunShell: false,
+    canCompactVhdx: false,
+    planId,
+    scanFingerprintPresent: Boolean(scanFingerprint),
+    typedPhrase: "COMPACT WSL",
+    typedConfirmed: Boolean(typedConfirmed),
+    rescanComparisonStatus,
+    totalVhdxBytes: rows.reduce((sum, row) => sum + Number(row.bytes || 0), 0),
+    rows: rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      route: "advanced-checklist",
+      path: row.path,
+      bytes: Number(row.bytes || 0),
+      status: row.status || "unknown",
+      manualOnly: true,
+      canCreateExecutor: false
+    })),
+    requiredUserSteps: [
+      "Back up or export the distro.",
+      "Shut down WSL outside SpaceGuard.",
+      "Compact the VHDX outside SpaceGuard.",
+      "Boot the distro and verify files.",
+      "Run a native rescan after compaction."
+    ],
+    forbiddenActions: ["run-wsl-exe", "run-powershell", "run-optimize-vhd", "delete-vhdx", "change-partitions"]
   };
 }
 

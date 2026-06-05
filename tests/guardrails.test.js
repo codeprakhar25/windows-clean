@@ -1823,6 +1823,39 @@ const assert = require("assert");
     readiness: guard.getExecutionReadinessForActions(new Set(["wsl-vhdx"]), { groupConfirm: true, permanentConfirm: true, reviewed: {}, typed: {} }, developerActions, [])
   });
   assert(typedQuestions.questions.some((question) => question.id === "typed-wsl-vhdx" && question.action === "focus-panel" && question.targetPanel === "gate-panel"), "typed acknowledgement question should focus approval gates");
+  const wslWorkOrder = guard.buildWslCompactionWorkOrder({
+    nativeScan: {
+      findings: [
+        {
+          recipeId: "wsl-vhdx",
+          title: "WSL virtual disk compaction",
+          path: "C:\\Users\\demo\\AppData\\Local\\Packages\\Ubuntu\\LocalState\\ext4.vhdx",
+          bytes: 24 * guard.GB,
+          status: "measured",
+          files: 1,
+          dirs: 0,
+          errors: 0,
+          note: "Read-only WSL VHDX measurement."
+        }
+      ]
+    },
+    actionList: developerActions,
+    selectedIds: new Set(["wsl-vhdx"]),
+    approvals: { groupConfirm: true, permanentConfirm: true, reviewed: {}, typed: { "wsl-vhdx": "COMPACT WSL" } },
+    planSnapshot: { id: "plan-wsl" },
+    scanSession: { currentFingerprint: "scan-wsl-before" },
+    rescanComparison: { status: "not-run" }
+  });
+  assert.strictEqual(wslWorkOrder.schemaVersion, "spaceguard-wsl-compaction-work-order/v1", "WSL compaction work order should expose a stable schema");
+  assert.strictEqual(wslWorkOrder.status, "ready-for-manual-compaction", "typed WSL selection with native evidence should create a manual work order");
+  assert.strictEqual(wslWorkOrder.manualOnly, true, "WSL compaction work order should stay manual-only");
+  assert.strictEqual(wslWorkOrder.canRunShell, false, "WSL compaction work order must not run shell commands");
+  assert.strictEqual(wslWorkOrder.canCompactVhdx, false, "WSL compaction work order must not compact VHDX from the app");
+  assert(wslWorkOrder.guardrails.includes("No Optimize-VHD execution."), "WSL compaction work order should forbid Optimize-VHD execution");
+  assert(wslWorkOrder.steps.some((step) => step.id === "backup-export" && step.status === "ready"), "WSL compaction work order should require backup/export before compaction");
+  const wslMarkdown = guard.buildWslCompactionWorkOrderMarkdown(wslWorkOrder);
+  assert(wslMarkdown.includes("SpaceGuard WSL Compaction Work Order"), "WSL compaction work order should export markdown");
+  assert(wslMarkdown.includes("No shell command execution."), "WSL compaction work order export should preserve shell-execution guardrail");
 
   const normalSelection = new Set(
     developerActions

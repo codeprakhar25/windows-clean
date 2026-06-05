@@ -77,8 +77,18 @@ const assert = require("assert");
           path: "C:\\Users\\real\\AppData\\Local\\Google\\AndroidStudio2025.1\\caches",
           bytes: 2 * 1024 ** 3,
           status: "measured"
+        },
+        {
+          recipeId: "wsl-vhdx",
+          title: "WSL virtual disk compaction",
+          path: "C:\\Users\\real\\AppData\\Local\\Packages\\Ubuntu\\LocalState\\ext4.vhdx",
+          bytes: 12 * 1024 ** 3,
+          status: "measured"
         }
       ]
+    },
+    approvals: {
+      typed: { "wsl-vhdx": "COMPACT WSL" }
     },
     itemReviewsByAction: {
       "installed-app-footprints": {
@@ -190,6 +200,11 @@ const assert = require("assert");
   assert.strictEqual(manualContext.largeFileArchiveTargets[0].decision, "archive", "OpenAI context should preserve archive decisions");
   assert.strictEqual(manualContext.userCacheTargets[0].route, "bounded-user-cache-delete", "OpenAI context should include scanned user .cache targets");
   assert.strictEqual(manualContext.androidCacheTargets[0].route, "bounded-android-cache-delete", "OpenAI context should include scanned Android cache targets");
+  assert.strictEqual(manualContext.wslVhdxTargets[0].route, "advanced-checklist", "OpenAI context should include scanned WSL VHDX manual targets");
+  assert.strictEqual(manualContext.wslCompactionWorkOrder.manualOnly, true, "OpenAI WSL compaction work order should stay manual-only");
+  assert.strictEqual(manualContext.wslCompactionWorkOrder.canRunShell, false, "OpenAI WSL compaction work order must not run shell commands");
+  assert.strictEqual(manualContext.wslCompactionWorkOrder.typedConfirmed, true, "OpenAI WSL compaction work order should preserve typed acknowledgement state");
+  assert(manualContext.wslCompactionWorkOrder.forbiddenActions.includes("run-optimize-vhd"), "OpenAI WSL compaction context should forbid Optimize-VHD execution");
   assert.strictEqual(manualContext.driveInventoryRows[0].canCreateExecutor, false, "drive inventory rows should be advisory-only in OpenAI context");
   assert.strictEqual(manualContext.customRootRows[0].manualOnly, true, "custom root rows should be manual-only in OpenAI context");
 
@@ -277,6 +292,8 @@ const assert = require("assert");
   assert.strictEqual(nativeRunRecord.context.counts.manualReviewTargets, 1, "OpenAI run records should retain compact context counts");
   assert.strictEqual(nativeRunRecord.context.counts.installedAppReviewRows, 1, "OpenAI run records should retain compact installed app review counts");
   assert.strictEqual(nativeRunRecord.context.counts.installedAppWorkOrderRows, 1, "OpenAI run records should retain compact app uninstall work-order counts");
+  assert.strictEqual(nativeRunRecord.context.counts.wslVhdxTargets, 1, "OpenAI run records should retain compact WSL target counts");
+  assert.strictEqual(nativeRunRecord.context.counts.wslCompactionRows, 1, "OpenAI run records should retain compact WSL work-order counts");
   assert.strictEqual(nativeRunRecord.context.execution.scanFingerprintPresent, true, "OpenAI run records should retain compact scan proof presence");
   assert.strictEqual(nativeRunRecord.context.execution.proofStatus, "waiting-for-execution", "OpenAI run records should retain compact proof status");
   assert.strictEqual(nativeRunRecord.context.privacy.storesFullContext, false, "OpenAI run records should not persist the full path-level context");
@@ -407,6 +424,25 @@ const assert = require("assert");
   assert.strictEqual(manualAppBroker.rows[0].targetPanel, "app-uninstall-work-order-panel", "broker should route manual app recommendations to the app uninstall work-order panel");
   assert.strictEqual(manualAppBroker.rows[0].canAct, true, "manual app recommendations should be actionable as UI focus only");
   assert.strictEqual(manualAppBroker.rows[0].directToolAccess, false, "manual app recommendations must not grant tool access");
+  const manualWslBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "wsl-vhdx",
+          title: "Review WSL compaction work order",
+          reason: "WSL VHDX compaction needs backup and manual execution.",
+          priority: "low",
+          actionType: "manual-only",
+          targetId: "wsl-vhdx",
+          route: "advanced-checklist"
+        }
+      ]
+    },
+    context: manualContext
+  });
+  assert.strictEqual(manualWslBroker.rows[0].kind, "manual", "manual WSL recommendations should stay manual broker rows");
+  assert.strictEqual(manualWslBroker.rows[0].targetPanel, "wsl-compaction-work-order-panel", "broker should route WSL recommendations to the WSL work-order panel");
+  assert.strictEqual(manualWslBroker.rows[0].directToolAccess, false, "manual WSL recommendations must not grant tool access");
   const contextOnlyBroker = openai.buildOpenAIAgentRecommendationBroker({
     advice: result.advice,
     context: {

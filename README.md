@@ -191,6 +191,8 @@ The **OpenAI cleanup agent** panel sends a bounded context packet to the OpenAI 
 
 The **App uninstall work order** turns selected installed-app footprint candidates into a manual follow-up artifact. It records the app name, path, measured footprint, publisher/version/install-date signals when available, usage-proof state, uninstall-entry evidence, and the exact guardrails: no automated uninstall, no uninstall-string execution, no Program Files deletion, no registry edits, and no recovered-space claim until a native rescan verifies the footprint changed.
 
+The **WSL compaction work order** turns scanned `ext4.vhdx` findings into a manual advanced checklist. It records measured VHDX targets, typed acknowledgement state, backup/export, WSL shutdown, manual compaction, boot verification, and native rescan requirements. SpaceGuard does not run `wsl.exe`, PowerShell, `Optimize-VHD`, partition tools, or VHDX deletion.
+
 The native runtime capability command is:
 
 ```txt

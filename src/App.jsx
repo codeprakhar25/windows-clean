@@ -124,6 +124,8 @@ import {
   buildWindowsSetupAssistant,
   buildWorkflowHandoffMarkdown,
   buildWorkflowHandoffPacket,
+  buildWslCompactionWorkOrder,
+  buildWslCompactionWorkOrderMarkdown,
   buildWriteBoundaryProbe,
   buildWriteReadiness,
   computeTotals,
@@ -744,6 +746,19 @@ export default function App() {
         rescanComparison
       }),
     [installedAppReviewDossier, planSnapshot, scanSession, rescanComparison]
+  );
+  const wslCompactionWorkOrder = useMemo(
+    () =>
+      buildWslCompactionWorkOrder({
+        nativeScan: nativeScan.result,
+        actionList,
+        selectedIds,
+        approvals,
+        planSnapshot,
+        scanSession,
+        rescanComparison
+      }),
+    [nativeScan.result, actionList, selectedIds, approvals, planSnapshot, scanSession, rescanComparison]
   );
   const executionProofHandoff = useMemo(
     () =>
@@ -1448,6 +1463,7 @@ export default function App() {
         nativeScan: nativeScan.result,
         runtimeCapabilities: runtimeCapabilities.result,
         itemReviewsByAction,
+        approvals,
         driveInventorySummary,
         customRootTriage,
         writeReadiness,
@@ -1475,6 +1491,7 @@ export default function App() {
       nativeScan.result,
       runtimeCapabilities.result,
       itemReviewsByAction,
+      approvals,
       driveInventorySummary,
       customRootTriage,
       writeReadiness,
@@ -2224,6 +2241,10 @@ export default function App() {
       if (targetId.includes("installed-app") || route.includes("manual-app-uninstall")) {
         setFocusedReviewId("installed-app-footprints");
         focusWorkflowPanel("app-uninstall-work-order-panel");
+        return;
+      }
+      if (targetId.includes("wsl") || route.includes("advanced-checklist")) {
+        focusWorkflowPanel("wsl-compaction-work-order-panel");
         return;
       }
       setFocusedReviewId("installed-app-footprints");
@@ -3344,6 +3365,23 @@ export default function App() {
     downloadTextFile("spaceguard-app-uninstall-work-order.md", body, "text/markdown;charset=utf-8");
   }
 
+  function exportWslCompactionWorkOrder() {
+    const exportedOrder = { ...wslCompactionWorkOrder, generatedAt: new Date().toISOString() };
+    const markdown = buildWslCompactionWorkOrderMarkdown(exportedOrder);
+    const body = [
+      markdown,
+      "",
+      "---",
+      "",
+      "## Structured WSL Compaction Work Order JSON",
+      "",
+      "```json",
+      JSON.stringify(exportedOrder, null, 2),
+      "```"
+    ].join("\n");
+    downloadTextFile("spaceguard-wsl-compaction-work-order.md", body, "text/markdown;charset=utf-8");
+  }
+
   function exportValidationPack() {
     const exportedPack = { ...validationPack, generatedAt: new Date().toISOString() };
     const markdown = buildValidationPackMarkdown(exportedPack);
@@ -3861,6 +3899,13 @@ export default function App() {
               workOrder={installedAppUninstallWorkOrder}
               onFocusReview={() => setFocusedReviewId("installed-app-footprints")}
               onExport={exportInstalledAppUninstallWorkOrder}
+              onRescan={nativeCapability.available ? runRealReadonlyScan : runScan}
+            />
+
+            <WslCompactionWorkOrderPanel
+              workOrder={wslCompactionWorkOrder}
+              onFocusGate={() => focusWorkflowPanel("gate-panel")}
+              onExport={exportWslCompactionWorkOrder}
               onRescan={nativeCapability.available ? runRealReadonlyScan : runScan}
             />
 
@@ -7516,6 +7561,89 @@ function InstalledAppUninstallWorkOrderPanel({ workOrder, onFocusReview, onExpor
           )) : (
             <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
               No app is selected for manual uninstall follow-up. Mark a recognized unused app in item review to create a work order.
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function WslCompactionWorkOrderPanel({ workOrder, onFocusGate, onExport, onRescan }) {
+  const rows = workOrder.rows || [];
+  const ready = workOrder.status === "ready-for-manual-compaction";
+  return (
+    <Card id="wsl-compaction-work-order-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <HardDrive className="h-4 w-4" />
+              WSL compaction work order
+            </CardTitle>
+            <CardDescription>{workOrder.nextStep}</CardDescription>
+          </div>
+          <Badge variant={ready ? "review" : workOrder.status === "needs-typed-ack" ? "advanced" : "outline"}>
+            {workOrder.status}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid gap-2 md:grid-cols-4">
+          <ReviewStat label="VHDX targets" value={String(workOrder.counts.targets)} />
+          <ReviewStat label="Measured size" value={formatBytes(workOrder.totalVhdxBytes)} />
+          <ReviewStat label="Typed ack" value={workOrder.typedConfirmed ? "yes" : "no"} />
+          <ReviewStat label="Can execute" value="no" />
+        </div>
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="restricted">manual only</Badge>
+            <Badge variant="outline">no wsl.exe</Badge>
+            <Badge variant="outline">no Optimize-VHD</Badge>
+            <Badge variant="outline">backup first</Badge>
+            <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={onFocusGate}>
+              <Lock className="h-4 w-4" />
+              Open approval
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={onExport} disabled={!rows.length}>
+              <Download className="h-4 w-4" />
+              Export work order
+            </Button>
+            <Button type="button" variant="secondary" size="sm" onClick={onRescan}>
+              <RefreshCcw className="h-4 w-4" />
+              Run rescan
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-4 xl:grid-cols-7">
+          {(workOrder.steps || []).map((step) => (
+            <div key={step.id} className="rounded-md border bg-card p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-medium">{step.label}</div>
+                <Badge variant={step.status === "complete" ? "safe" : step.status === "ready" ? "review" : step.status === "pending" ? "outline" : "restricted"}>
+                  {step.status}
+                </Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{step.detail}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-2">
+          {rows.length ? rows.map((row) => (
+            <div key={row.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="mr-auto min-w-0 text-sm font-medium">{row.title}</div>
+                <Badge variant={row.status === "measured" ? "safe" : "review"}>{row.status}</Badge>
+                <span className="text-sm font-medium text-muted-foreground">{formatBytes(row.bytes)}</span>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">{row.note}</p>
+              <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{row.path}</p>
+            </div>
+          )) : (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              No WSL virtual disk target is available. Run a native read-only scan to discover ext4.vhdx files.
             </div>
           )}
         </div>

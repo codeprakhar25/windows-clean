@@ -4984,6 +4984,217 @@ export function buildInstalledAppUninstallWorkOrderMarkdown(workOrder = null) {
   return lines.join("\n");
 }
 
+export function buildWslCompactionWorkOrder({
+  nativeScan = null,
+  actionList = actions,
+  selectedIds = new Set(),
+  approvals = {},
+  planSnapshot = null,
+  scanSession = null,
+  rescanComparison = null,
+  generatedAt = null
+} = {}) {
+  const action = actionList.find((item) => item.id === "wsl-vhdx") || actions.find((item) => item.id === "wsl-vhdx");
+  const rows = collectWslVhdxRows(nativeScan).slice(0, 12);
+  const selected = selectedIds?.has?.("wsl-vhdx") || false;
+  const typedPhrase = action?.typedPhrase || "COMPACT WSL";
+  const typedValue = approvals?.typed?.["wsl-vhdx"] || "";
+  const typedConfirmed = typedValue === typedPhrase;
+  const scanFingerprint = scanSession?.currentFingerprint || scanSession?.fingerprint || "";
+  const rescanStatus = rescanComparison?.status || "not-run";
+  const status = !rows.length
+    ? "no-wsl-vhdx"
+    : !selected
+      ? "not-selected"
+      : !typedConfirmed
+        ? "needs-typed-ack"
+        : !scanFingerprint
+          ? "needs-native-scan"
+          : "ready-for-manual-compaction";
+
+  return {
+    schemaVersion: "spaceguard-wsl-compaction-work-order/v1",
+    generatedAt: generatedAt || new Date().toISOString(),
+    status,
+    manualOnly: true,
+    canCreateExecutor: false,
+    directDeleteAuthority: false,
+    canRunShell: false,
+    canCompactVhdx: false,
+    planId: planSnapshot?.id || "",
+    scanFingerprint,
+    typedPhrase,
+    typedConfirmed,
+    selected,
+    totalVhdxBytes: rows.reduce((sum, row) => sum + row.bytes, 0),
+    rows,
+    counts: {
+      targets: rows.length,
+      measured: rows.filter((row) => row.status === "measured").length,
+      limited: rows.filter((row) => row.status === "limited").length
+    },
+    steps: buildWslCompactionSteps(status, rows, typedConfirmed, scanFingerprint, rescanStatus),
+    guardrails: [
+      "No automated WSL shutdown.",
+      "No shell command execution.",
+      "No Optimize-VHD execution.",
+      "No VHDX deletion.",
+      "Backup or export the distro before compaction.",
+      "Do not interrupt compaction once the user starts it outside SpaceGuard.",
+      "No recovered-space claim until a native rescan verifies the VHDX size changed."
+    ],
+    operatorCommands: [
+      "Manual reference only: wsl --shutdown",
+      "Manual reference only: export or backup the distro before compaction",
+      "Manual reference only: compact the VHDX with the user's chosen Windows tool",
+      "Manual reference only: boot the distro and verify files"
+    ],
+    verification: {
+      required: rows.length > 0,
+      method: "User performs backup, shutdown, compaction, boot verification, then SpaceGuard native rescan.",
+      rescanComparisonStatus: rescanStatus,
+      evidenceNeeded: [
+        "Before native scan fingerprint.",
+        "Backup/export path or restore point evidence.",
+        "User confirmation that WSL was shut down before compaction.",
+        "Post-compaction distro boot verification.",
+        "Post-compaction native scan showing VHDX size changed."
+      ]
+    },
+    nextStep: getWslCompactionNextStep(status)
+  };
+}
+
+function collectWslVhdxRows(nativeScan = null) {
+  return (nativeScan?.findings || [])
+    .filter((finding) => finding.recipeId === "wsl-vhdx")
+    .filter((finding) => (finding.status === "measured" || finding.status === "limited") && finding.path)
+    .map((finding, index) => ({
+      id: `wsl-vhdx-${index + 1}`,
+      title: finding.title || "WSL virtual disk",
+      path: finding.path || "",
+      bytes: Number(finding.bytes || 0),
+      status: finding.status || "unknown",
+      files: Number(finding.files || 0),
+      dirs: Number(finding.dirs || 0),
+      errors: Number(finding.errors || 0),
+      note: finding.note || "Read-only WSL VHDX measurement."
+    }))
+    .sort((left, right) => right.bytes - left.bytes);
+}
+
+function buildWslCompactionSteps(status, rows, typedConfirmed, scanFingerprint, rescanStatus) {
+  return [
+    {
+      id: "measure-vhdx",
+      label: "Measure ext4.vhdx",
+      status: rows.length ? "complete" : "blocked",
+      detail: rows.length
+        ? `${rows.length} WSL virtual disk target(s) measured read-only.`
+        : "Run a native read-only scan to find WSL ext4.vhdx files."
+    },
+    {
+      id: "typed-ack",
+      label: "Typed acknowledgement",
+      status: typedConfirmed ? "complete" : "blocked",
+      detail: typedConfirmed ? "Typed acknowledgement matches COMPACT WSL." : "Select WSL compaction and type COMPACT WSL in approvals."
+    },
+    {
+      id: "backup-export",
+      label: "Backup or export distro",
+      status: rows.length && typedConfirmed ? "ready" : "blocked",
+      detail: "Create user-owned backup/export evidence before compaction. SpaceGuard does not create the backup."
+    },
+    {
+      id: "shutdown-compact",
+      label: "Shutdown and compact manually",
+      status: rows.length && typedConfirmed ? "ready" : "blocked",
+      detail: "The user shuts down WSL and compacts outside SpaceGuard. SpaceGuard does not run shell commands."
+    },
+    {
+      id: "boot-verify",
+      label: "Boot verification",
+      status: rows.length && typedConfirmed ? "ready" : "blocked",
+      detail: "Boot the distro and verify expected files before claiming success."
+    },
+    {
+      id: "native-rescan",
+      label: "Native rescan",
+      status: rows.length && scanFingerprint ? "ready" : "blocked",
+      detail: scanFingerprint
+        ? `Use a post-compaction native scan to compare against ${scanFingerprint}.`
+        : "Run a before native scan so post-compaction evidence has a baseline."
+    },
+    {
+      id: "verify-recovery",
+      label: "Verify recovered space",
+      status: rescanStatus === "proof-complete" || rescanStatus === "verified" ? "complete" : "pending",
+      detail: `Rescan comparison status: ${rescanStatus}.`
+    }
+  ];
+}
+
+function getWslCompactionNextStep(status) {
+  if (status === "ready-for-manual-compaction") return "Export this work order, back up the distro, compact WSL outside SpaceGuard, then run a native rescan.";
+  if (status === "needs-native-scan") return "Run a native read-only scan before using this WSL compaction work order.";
+  if (status === "needs-typed-ack") return "Select WSL compaction and type COMPACT WSL in the approvals panel.";
+  if (status === "not-selected") return "Select WSL compaction only if the user accepts downtime, backup, and manual compaction risk.";
+  return "Run a native read-only scan to discover WSL ext4.vhdx files.";
+}
+
+export function buildWslCompactionWorkOrderMarkdown(workOrder = null) {
+  const order = workOrder && typeof workOrder === "object"
+    ? workOrder
+    : buildWslCompactionWorkOrder();
+  const lines = [
+    "# SpaceGuard WSL Compaction Work Order",
+    "",
+    `- Schema: ${order.schemaVersion}`,
+    `- Status: ${order.status}`,
+    `- Plan: ${order.planId || "not recorded"}`,
+    `- Scan fingerprint: ${order.scanFingerprint || "missing"}`,
+    `- Typed acknowledgement: ${order.typedConfirmed ? "yes" : "no"}`,
+    `- WSL VHDX targets: ${order.counts?.targets || 0}`,
+    `- Measured VHDX bytes: ${formatBytes(order.totalVhdxBytes || 0)}`,
+    "",
+    "## Guardrails",
+    ...((order.guardrails || []).map((item) => `- ${item}`)),
+    "",
+    "## Steps",
+    ...((order.steps || []).map((step) => `- [${step.status}] ${step.label}: ${step.detail}`)),
+    "",
+    "## Manual Command References",
+    ...((order.operatorCommands || []).map((item) => `- ${item}`)),
+    "",
+    "## WSL VHDX Targets"
+  ];
+
+  if (order.rows?.length) {
+    for (const row of order.rows) {
+      lines.push(
+        "",
+        `### ${row.title}`,
+        `- Path: ${row.path || "not recorded"}`,
+        `- Size: ${formatBytes(row.bytes || 0)}`,
+        `- Status: ${row.status || "unknown"}`,
+        `- Note: ${row.note || "Read-only WSL VHDX measurement."}`
+      );
+    }
+  } else {
+    lines.push("", "No WSL ext4.vhdx targets are available.");
+  }
+
+  lines.push(
+    "",
+    "## Verification",
+    `- Required: ${order.verification?.required ? "yes" : "no"}`,
+    `- Method: ${order.verification?.method || "Manual compaction, then native rescan."}`,
+    `- Rescan comparison: ${order.verification?.rescanComparisonStatus || "not-run"}`
+  );
+
+  return lines.join("\n");
+}
+
 export function buildItemReview(actionId, actionList = actions, nativeScan = null, protectedPaths = [], approvals = {}) {
   const action = actionList.find((item) => item.id === actionId) || actionList.find((item) => item.gate === "review") || actionList[0];
   if (!action) {
