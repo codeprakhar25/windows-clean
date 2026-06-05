@@ -461,8 +461,18 @@ export default function App() {
     [runHistory, planSnapshot]
   );
   const activeLedger = ledger.length ? ledger : ledgerHistorySummary.currentLedger;
-  const verificationPlanSnapshot = activeLedger.length && executionProofContext?.planSnapshot ? executionProofContext.planSnapshot : planSnapshot;
-  const verificationScanMode = activeLedger.length && executionProofContext?.scanMode ? executionProofContext.scanMode : dataMode;
+  const historyExecutionProofContext = !ledger.length && ledgerHistorySummary.currentLedger.length
+    ? {
+        planSnapshot: ledgerHistorySummary.currentPlanSnapshot || planSnapshot,
+        executorPlan: ledgerHistorySummary.currentExecutorPlan,
+        scanMode: ledgerHistorySummary.currentRecord?.scanMode || dataMode,
+        source: "run-history",
+        recordedAt: ledgerHistorySummary.currentRecord?.createdAt || ""
+      }
+    : null;
+  const activeExecutionProofContext = executionProofContext || historyExecutionProofContext;
+  const verificationPlanSnapshot = activeLedger.length && activeExecutionProofContext?.planSnapshot ? activeExecutionProofContext.planSnapshot : planSnapshot;
+  const verificationScanMode = activeLedger.length && activeExecutionProofContext?.scanMode ? activeExecutionProofContext.scanMode : dataMode;
   const totals = useMemo(() => computeTotals(selectedIds, actionList, { approvals, itemReviewsByAction }), [selectedIds, actionList, approvals, itemReviewsByAction]);
   const readiness = useMemo(
     () => getExecutionReadinessForActions(selectedIds, approvals, actionList, protectedPaths, itemReviewsByAction, intakePolicy),
@@ -638,7 +648,7 @@ export default function App() {
       }),
     [selectedIds, actionList, approvals, protectedPaths, dataMode, preflight, itemReviewsByAction, intakePolicy]
   );
-  const verificationExecutorPlan = activeLedger.length && executionProofContext?.executorPlan ? executionProofContext.executorPlan : executorPlan;
+  const verificationExecutorPlan = activeLedger.length && activeExecutionProofContext?.executorPlan ? activeExecutionProofContext.executorPlan : executorPlan;
   const executorReadiness = useMemo(
     () => buildExecutorReadiness(executorPlan, preflight),
     [executorPlan, preflight]

@@ -2098,6 +2098,8 @@ export function buildLedgerRunRecord({
     bytes: Number(entry.bytes || 0),
     method: entry.method
   }));
+  const planSnapshotRecord = compactLedgerPlanSnapshot(planSnapshot);
+  const executorPlanRecord = compactLedgerExecutorPlan(executorPlan);
   const payload = {
     schemaVersion: "spaceguard-ledger-run/v1",
     planId: planSnapshot?.id || entries[0]?.planId || "",
@@ -2107,6 +2109,8 @@ export function buildLedgerRunRecord({
     reclaimedBytes,
     entryCount: entries.length,
     routeIds: routes.map((route) => route.id),
+    planSnapshot: planSnapshotRecord,
+    executorPlan: executorPlanRecord,
     entries
   };
 
@@ -2129,6 +2133,72 @@ export function buildLedgerRunRecord({
       destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
       nativeWriteCapability: Boolean(nativeScan?.writeCapability)
     }
+  };
+}
+
+function compactLedgerPlanSnapshot(planSnapshot = null) {
+  if (!planSnapshot || typeof planSnapshot !== "object") return null;
+  return {
+    id: planSnapshot.id || "",
+    scanMode: planSnapshot.scanMode || "",
+    selectedCount: Number(planSnapshot.selectedCount || 0),
+    selectedBytes: Number(planSnapshot.selectedBytes || 0),
+    goalBytes: Number(planSnapshot.goalBytes || planSnapshot.payload?.goalBytes || 0),
+    selectedIds: Array.isArray(planSnapshot.selectedIds) ? planSnapshot.selectedIds.slice(0, 80) : [],
+    rows: Array.isArray(planSnapshot.rows)
+      ? planSnapshot.rows.slice(0, 80).map((row) => ({
+          id: row.id || "",
+          title: row.title || "",
+          bytes: Number(row.bytes || 0),
+          risk: row.risk || "",
+          gate: row.gate || "",
+          path: row.path || "",
+          decision: row.decision || "",
+          protected: Boolean(row.protected)
+        }))
+      : []
+  };
+}
+
+function compactLedgerExecutorPlan(executorPlan = null) {
+  if (!executorPlan || typeof executorPlan !== "object") return null;
+  return {
+    schemaVersion: executorPlan.schemaVersion || "spaceguard-executor-plan/v1",
+    dryRunBytes: Number(executorPlan.dryRunBytes || 0),
+    dryRunCount: Number(executorPlan.dryRunCount || 0),
+    futureCount: Number(executorPlan.futureCount || 0),
+    blockedCount: Number(executorPlan.blockedCount || 0),
+    realRunEnabled: Boolean(executorPlan.realRunEnabled),
+    rows: Array.isArray(executorPlan.rows)
+      ? executorPlan.rows.slice(0, 80).map((row) => ({
+          id: row.id || "",
+          title: row.title || "",
+          route: row.route || "",
+          lane: row.lane || "",
+          status: row.status || "",
+          path: row.path || row.targetPath || row.target || "",
+          targetPath: row.targetPath || row.target || row.path || "",
+          bytes: Number(row.bytes || 0),
+          visibleBytes: Number(row.visibleBytes ?? row.bytes ?? 0),
+          canSimulate: Boolean(row.canSimulate),
+          canExecute: Boolean(row.canExecute),
+          canRealRun: Boolean(row.canRealRun),
+          method: row.method || "",
+          verification: row.verification || "",
+          consequence: row.consequence || "",
+          reviewTargets: Array.isArray(row.reviewTargets)
+            ? row.reviewTargets.slice(0, 40).map((target) => ({
+                id: target.id || "",
+                name: target.name || "",
+                path: target.path || "",
+                bytes: Number(target.bytes || 0),
+                ageDays: Number(target.ageDays || 0),
+                kind: target.kind || "",
+                reason: target.reason || ""
+              }))
+            : []
+        }))
+      : []
   };
 }
 
@@ -2155,6 +2225,8 @@ export function buildLedgerHistorySummary(history = [], planSnapshot = null) {
     currentRecord,
     latestRecord,
     currentLedger: currentRecord?.entries || [],
+    currentPlanSnapshot: currentRecord?.planSnapshot || null,
+    currentExecutorPlan: currentRecord?.executorPlan || null,
     counts: {
       records: records.length,
       current: currentRecords.length,
