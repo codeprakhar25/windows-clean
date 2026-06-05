@@ -197,6 +197,7 @@ assert(app.includes("writeStoredNativeBetaEvidence"), "native beta evidence shou
 assert(app.includes("buildNativeBetaEvidenceLedger"), "native beta evidence should be exportable as a ledger");
 assert(app.includes("buildNativeBetaEvidenceLedgerMarkdown"), "native beta evidence ledger should export markdown");
 assert(app.includes("buildNativeBetaDocumentationEvidence"), "native beta documentation readiness should be derived from evidence");
+assert(app.includes("nativeBetaEvidenceLedger"), "native beta evidence ledger should feed downstream readiness surfaces");
 assert(app.includes("coerceNativeBetaEvidenceFormRecord"), "native beta evidence should migrate older records");
 assert(app.includes("setNativeBetaEvidenceRow"), "native beta evidence checklist should be editable");
 assert(app.includes("Recorded beta evidence"), "native beta distribution panel should expose editable evidence");
@@ -207,6 +208,7 @@ assert(app.includes("Evidence path or artifact id"), "native beta evidence shoul
 assert(!app.includes("publicReleaseResearch: true"), "native beta documentation evidence should not be hardcoded as complete in the UI");
 assert(model.includes("Native Beta Evidence Ledger"), "report should export native beta evidence records");
 assert(model.includes("nativeBetaEvidenceLedger"), "report should accept native beta evidence ledger input");
+assert(model.includes("native-beta-evidence-ledger"), "release review should require native beta evidence ledger");
 assert(app.includes("buildDemoRehearsalRunbook"), "demo rehearsal runbook should be wired");
 assert(app.includes("DemoRehearsalRunbookPanel"), "demo rehearsal runbook panel should be rendered");
 assert(app.includes("buildProductCompletionAudit"), "product completion audit should be wired");

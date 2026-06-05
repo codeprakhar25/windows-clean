@@ -1338,6 +1338,38 @@ const assert = require("assert");
   });
   assert.strictEqual(signingOnlyDistributionReadiness.readyForNativeBeta, false, "signing alone should not satisfy native beta distribution");
   assert.strictEqual(signingOnlyPublicReadiness.readyForNativeBeta, false, "public beta should respect missing install/uninstall/support evidence when distribution gate is attached");
+  const incompleteNativeBetaLedgerPacket = guard.buildReleaseReviewPacket({
+    nativeBetaDistributionReadiness: nativeDistributionReadiness,
+    nativeBetaEvidenceLedger: {
+      schemaVersion: "spaceguard-native-beta-evidence/v1",
+      status: "partial",
+      complete: false,
+      counts: { total: 5, complete: 4, needsDetail: 1, draft: 0, missing: 0 },
+      rows: []
+    },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(
+    incompleteNativeBetaLedgerPacket.rows.find((row) => row.id === "native-beta-evidence-ledger").status,
+    "waiting",
+    "release review should wait when native beta evidence ledger needs detail"
+  );
+  const completeNativeBetaLedgerPacket = guard.buildReleaseReviewPacket({
+    nativeBetaDistributionReadiness: nativeDistributionReadiness,
+    nativeBetaEvidenceLedger: {
+      schemaVersion: "spaceguard-native-beta-evidence/v1",
+      status: "complete",
+      complete: true,
+      counts: { total: 5, complete: 5, needsDetail: 0, draft: 0, missing: 0 },
+      rows: []
+    },
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(
+    completeNativeBetaLedgerPacket.rows.find((row) => row.id === "native-beta-evidence-ledger").status,
+    "passed",
+    "release review should pass native beta ledger row only when distribution and evidence are complete"
+  );
   const nativeBetaEvidenceLedger = {
     schemaVersion: "spaceguard-native-beta-evidence/v1",
     status: "partial",

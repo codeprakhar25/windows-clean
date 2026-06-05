@@ -8234,6 +8234,8 @@ export function buildReleaseReviewPacket({
   privilegeBoundary = null,
   privacyBoundary = null,
   publicBetaReadiness = null,
+  nativeBetaDistributionReadiness = null,
+  nativeBetaEvidenceLedger = null,
   supportBundle = null,
   releaseGate = null,
   writeReadiness = null,
@@ -8255,6 +8257,8 @@ export function buildReleaseReviewPacket({
     privilegeBoundary,
     privacyBoundary,
     publicBetaReadiness,
+    nativeBetaDistributionReadiness,
+    nativeBetaEvidenceLedger,
     supportBundle,
     releaseGate,
     writeReadiness,
@@ -10155,6 +10159,8 @@ function buildReleaseReviewRows({
   privilegeBoundary = null,
   privacyBoundary = null,
   publicBetaReadiness = null,
+  nativeBetaDistributionReadiness = null,
+  nativeBetaEvidenceLedger = null,
   supportBundle = null,
   releaseGate = null,
   writeReadiness = null,
@@ -10173,6 +10179,12 @@ function buildReleaseReviewRows({
       firstSafeExecutorContract?.destructiveActionAvailable
   );
   const realCleanupLocked = !runtimeWriteVisible && !probeUnsafe && !realActionVisible;
+  const nativeBetaEvidenceMissing = Number(nativeBetaEvidenceLedger?.counts?.missing || 0);
+  const nativeBetaEvidenceNeedsDetail = Number(nativeBetaEvidenceLedger?.counts?.needsDetail || 0);
+  const nativeBetaEvidenceDraft = Number(nativeBetaEvidenceLedger?.counts?.draft || 0);
+  const nativeBetaEvidenceComplete = Number(nativeBetaEvidenceLedger?.counts?.complete || 0);
+  const nativeBetaEvidenceTotal = Number(nativeBetaEvidenceLedger?.counts?.total || nativeBetaEvidenceLedger?.rows?.length || 0);
+  const nativeBetaEvidenceWaiting = nativeBetaEvidenceMissing + nativeBetaEvidenceNeedsDetail + nativeBetaEvidenceDraft;
 
   return [
     {
@@ -10324,6 +10336,22 @@ function buildReleaseReviewRows({
           : "waiting",
       detail: publicBetaReadiness?.primary || "Keep public claims to demo or read-only scanner until distribution evidence passes.",
       evidence: publicBetaReadiness?.status || ""
+    },
+    {
+      id: "native-beta-evidence-ledger",
+      lane: "distribution",
+      label: "Native beta evidence ledger",
+      status: nativeBetaDistributionReadiness?.status === "unsafe-stop"
+        ? "unsafe"
+        : nativeBetaEvidenceLedger?.complete && nativeBetaDistributionReadiness?.readyForNativeBeta
+          ? "passed"
+          : nativeBetaEvidenceLedger?.schemaVersion
+            ? "waiting"
+            : "waiting",
+      detail: nativeBetaEvidenceLedger?.schemaVersion
+        ? `${nativeBetaEvidenceComplete}/${nativeBetaEvidenceTotal} beta evidence row(s) complete; ${nativeBetaEvidenceWaiting} need reviewer, artifact, or final status.`
+        : "Record and export native beta evidence before release review.",
+      evidence: nativeBetaEvidenceLedger?.schemaVersion || nativeBetaDistributionReadiness?.status || ""
     },
     {
       id: "real-cleanup-locked",
