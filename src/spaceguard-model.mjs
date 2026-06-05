@@ -7573,6 +7573,80 @@ export function buildNativeBetaEvidenceImport({
   };
 }
 
+const validationPackImportIds = new Set(windowsValidationChecks.map((check) => check.id));
+
+export function buildValidationPackImport({
+  evidenceText = "",
+  evidenceObject = null,
+  currentEvidence = {},
+  importedAt = new Date().toISOString()
+} = {}) {
+  const parsed = parseValidationPackInput(evidenceObject, evidenceText);
+  if (!parsed.ok) {
+    return buildRejectedValidationPackImport("parse-error", parsed.detail, currentEvidence, importedAt);
+  }
+
+  const pack = parsed.value;
+  if (pack.schemaVersion !== "spaceguard-validation-pack/v1") {
+    return buildRejectedValidationPackImport("schema-mismatch", "Validation pack must use spaceguard-validation-pack/v1.", currentEvidence, importedAt, pack);
+  }
+
+  const sourceRows = Array.isArray(pack.validationChecks) ? pack.validationChecks : [];
+  const knownRows = sourceRows.filter((row) => validationPackImportIds.has(row?.id));
+  if (!knownRows.length) {
+    return buildRejectedValidationPackImport("missing-known-checks", "No known validation checks were found in the pack.", currentEvidence, importedAt, pack);
+  }
+
+  const validationEvidence = { ...(currentEvidence || {}) };
+  const warnings = [];
+  let complete = 0;
+  let needsDetail = 0;
+  let failed = 0;
+
+  for (const row of knownRows) {
+    const sourcePassed = row.passed === true || row.evidenceComplete === true || row.status === "passed" || row.evidenceValue === "passed";
+    const sourceFailed = row.status === "failed" || row.evidenceValue === "failed" || row.result === "failed";
+    const status = sourceFailed ? "failed" : sourcePassed ? "passed" : "draft";
+    const evidencePath = cleanEvidenceText(row.evidencePath || row.artifact || row.artifactId);
+    const reviewer = cleanEvidenceText(row.reviewer);
+    const completeRow = status === "passed" && evidencePath && reviewer;
+    if (status === "passed" && !completeRow) {
+      needsDetail += 1;
+      warnings.push(`${row.id} needs reviewer and artifact detail before it counts.`);
+    }
+    if (status === "failed") failed += 1;
+    if (completeRow) complete += 1;
+    validationEvidence[row.id] = {
+      status,
+      evidencePath,
+      reviewer,
+      notes: cleanEvidenceText(row.notes),
+      recordedAt: cleanEvidenceText(row.recordedAt) || pack.generatedAt || importedAt,
+      updatedAt: importedAt,
+      source: "validation-pack-import"
+    };
+  }
+
+  return {
+    schemaVersion: "spaceguard-validation-pack-import/v1",
+    status: "import-ready",
+    canApply: true,
+    importedAt,
+    generatedAt: pack.generatedAt || "",
+    detail: `${knownRows.length} validation evidence row(s) imported; ${complete} complete.`,
+    validationEvidence,
+    warnings,
+    counts: {
+      sourceRows: sourceRows.length,
+      importedRows: knownRows.length,
+      complete,
+      needsDetail,
+      failed,
+      ignoredRows: sourceRows.length - knownRows.length
+    }
+  };
+}
+
 export function buildNativeDryRunScopeEvidence({
   nativeExecutorDryRun = null,
   planSnapshot = null,
@@ -7717,6 +7791,31 @@ function parseNativeBetaEvidenceInput(evidenceObject, evidenceText) {
   return { ok: false, detail: "Native beta evidence could not be parsed as JSON." };
 }
 
+function parseValidationPackInput(evidenceObject, evidenceText) {
+  if (evidenceObject && typeof evidenceObject === "object" && !Array.isArray(evidenceObject)) {
+    return { ok: true, value: evidenceObject };
+  }
+  const text = String(evidenceText || "").trim();
+  if (!text) {
+    return { ok: false, detail: "Validation pack JSON or markdown export is required." };
+  }
+  const candidates = [
+    text,
+    ...[...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map((match) => match[1]?.trim()).filter(Boolean)
+  ];
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return { ok: true, value: parsed };
+      }
+    } catch {
+      // Continue through possible markdown code fences.
+    }
+  }
+  return { ok: false, detail: "Validation pack evidence could not be parsed as JSON." };
+}
+
 function buildRejectedNativeBetaEvidenceImport(status, detail, currentEvidence, importedAt, evidence = null) {
   const rows = Array.isArray(evidence?.rows) ? evidence.rows : [];
   return {
@@ -7732,6 +7831,28 @@ function buildRejectedNativeBetaEvidenceImport(status, detail, currentEvidence, 
       importedRows: 0,
       complete: 0,
       needsDetail: 0,
+      ignoredRows: rows.length
+    }
+  };
+}
+
+function buildRejectedValidationPackImport(status, detail, currentEvidence, importedAt, pack = null) {
+  const rows = Array.isArray(pack?.validationChecks) ? pack.validationChecks : [];
+  return {
+    schemaVersion: "spaceguard-validation-pack-import/v1",
+    status,
+    canApply: false,
+    importedAt,
+    generatedAt: pack?.generatedAt || "",
+    detail,
+    validationEvidence: currentEvidence || {},
+    warnings: [],
+    counts: {
+      sourceRows: rows.length,
+      importedRows: 0,
+      complete: 0,
+      needsDetail: 0,
+      failed: 0,
       ignoredRows: rows.length
     }
   };

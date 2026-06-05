@@ -286,6 +286,10 @@ assert(app.includes("Open temp activation"), "question queue actions should focu
 assert(app.includes("buildWriteBoundaryProbe"), "write boundary probe should be wired");
 assert(app.includes("buildValidationEvidencePack"), "validation evidence pack should be wired");
 assert(app.includes("buildValidationPackMarkdown"), "validation pack markdown export should be wired");
+assert(app.includes("validationPackImportText"), "validation pack import text should be tracked in UI state");
+assert(app.includes("importValidationPackEvidence"), "validation pack import should be wired");
+assert(model.includes("buildValidationPackImport"), "model should import validation pack evidence");
+assert(model.includes("spaceguard-validation-pack-import/v1"), "validation pack import should expose a schema");
 assert(app.includes("buildFixtureEvidenceImport"), "fixture evidence import should be wired");
 assert(app.includes("VALIDATION_EVIDENCE_STORAGE_KEY"), "validation evidence should be persisted locally");
 assert(app.includes("MANUAL_STRATEGY_EVIDENCE_STORAGE_KEY"), "manual strategy evidence should be persisted separately");
@@ -308,6 +312,9 @@ assert(app.includes("Open checklist"), "agent question action should label manua
 assert(app.includes("Open validation evidence"), "agent question action should label validation detail focus");
 assert(app.includes("Evidence path or artifact id"), "validation evidence should require artifact path input");
 assert(app.includes("Reviewer"), "validation evidence should require reviewer input");
+assert(app.includes("Validation pack import"), "validation evidence panel should expose validation pack import");
+assert(app.includes("Paste spaceguard-validation-pack/v1 JSON"), "validation pack import should accept exported JSON");
+assert(app.includes("Import validation pack"), "validation pack import should have an explicit action");
 assert(app.includes("Dry-run scope cases"), "fixture evidence import UI should expose dry-run scope case counts");
 assert(app.includes("setManualStrategyCheckEvidence"), "manual strategy checklist should be editable");
 assert(app.includes("buildPlanSnapshot"), "plan snapshot should be wired");
@@ -523,6 +530,7 @@ assert(realDataGuide.includes("Run real scan"), "real-data guide should include 
 assert(realDataGuide.includes("Disposable Fixture Run"), "real-data guide should include fixture validation setup");
 assert(realDataGuide.includes("inspect-spaceguard-fixtures.ps1"), "real-data guide should include fixture evidence inspection");
 assert(realDataGuide.includes("DryRunScopeEvidencePath"), "real-data guide should explain dry-run scope evidence inspection");
+assert(realDataGuide.includes("Validation pack import"), "real-data guide should explain validation pack import resume flow");
 assert(readme.includes("NATIVE_BETA_DISTRIBUTION.md"), "README should link native beta distribution runbook");
 assert(realDataGuide.includes("NATIVE_BETA_DISTRIBUTION.md"), "real-data guide should link native beta distribution runbook");
 assert(nativeBetaRunbook.includes("Native Beta Distribution Runbook"), "native beta runbook should exist");

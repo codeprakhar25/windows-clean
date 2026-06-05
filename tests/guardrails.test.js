@@ -2872,6 +2872,77 @@ const assert = require("assert");
   assert.strictEqual(recordedValidationPack.validationChecks.find((check) => check.id === "windows-native-build").evidenceComplete, true, "validation pack should mark detailed records complete");
   assert.strictEqual(recordedValidationPack.validationChecks.find((check) => check.id === "windows-native-build").reviewer, "qa-operator", "validation pack should export reviewer");
   assert(guard.buildValidationPackMarkdown(recordedValidationPack).includes("- [x] Windows native build"), "validation markdown should check recorded evidence rows");
+  const importedValidationPack = guard.buildValidationPackImport({
+    evidenceText: [
+      "# SpaceGuard Validation Evidence Pack",
+      "",
+      "```json",
+      JSON.stringify({
+        schemaVersion: "spaceguard-validation-pack/v1",
+        generatedAt: "2026-06-05T00:00:00.000Z",
+        validationChecks: [
+          {
+            id: "windows-native-build",
+            status: "passed",
+            evidenceValue: "passed",
+            evidenceComplete: true,
+            reviewer: "qa-operator",
+            evidencePath: "evidence/native-build.log",
+            notes: "Build passed."
+          },
+          {
+            id: "scanner-fixtures",
+            status: "passed",
+            evidenceValue: "passed",
+            evidenceComplete: false,
+            reviewer: "",
+            evidencePath: "evidence/fixtures.json"
+          },
+          {
+            id: "rollback-story",
+            status: "failed",
+            evidenceValue: "failed",
+            reviewer: "qa-operator",
+            evidencePath: "evidence/rollback-failed.md"
+          },
+          {
+            id: "unknown-check",
+            status: "passed",
+            reviewer: "qa-operator",
+            evidencePath: "evidence/unknown.md"
+          }
+        ]
+      }),
+      "```"
+    ].join("\n"),
+    currentEvidence: {},
+    importedAt: "2026-06-05T01:00:00.000Z"
+  });
+  assert.strictEqual(importedValidationPack.schemaVersion, "spaceguard-validation-pack-import/v1", "validation pack import should expose a schema version");
+  assert.strictEqual(importedValidationPack.canApply, true, "validation pack import should accept exported markdown JSON");
+  assert.strictEqual(importedValidationPack.counts.importedRows, 3, "validation pack import should map known checks");
+  assert.strictEqual(importedValidationPack.counts.ignoredRows, 1, "validation pack import should ignore unknown checks");
+  assert.strictEqual(importedValidationPack.counts.complete, 1, "validation pack import should count complete checks");
+  assert.strictEqual(importedValidationPack.counts.needsDetail, 1, "validation pack import should preserve detail-needed checks");
+  assert.strictEqual(importedValidationPack.counts.failed, 1, "validation pack import should preserve failed checks");
+  assert.strictEqual(importedValidationPack.validationEvidence["windows-native-build"].status, "passed", "complete imported validation check should pass");
+  assert.strictEqual(importedValidationPack.validationEvidence["scanner-fixtures"].status, "passed", "detail-needed imported validation check should stay marked passed");
+  assert.strictEqual(importedValidationPack.validationEvidence["scanner-fixtures"].reviewer, "", "detail-needed imported validation check should still miss reviewer");
+  assert.strictEqual(importedValidationPack.validationEvidence["rollback-story"].status, "failed", "failed imported validation check should stay failed");
+  const importedValidationGate = guard.buildReleaseGate({
+    validationEvidence: importedValidationPack.validationEvidence,
+    scanMode: "native-readonly",
+    nativeCapability: { available: true },
+    executorPlan
+  });
+  assert.strictEqual(importedValidationGate.rows.find((row) => row.id === "windows-native-build").passed, true, "validation pack import should feed complete checks into release gate");
+  assert.strictEqual(importedValidationGate.rows.find((row) => row.id === "scanner-fixtures").passed, false, "validation pack import should not pass missing-reviewer checks");
+  const rejectedValidationPackImport = guard.buildValidationPackImport({
+    evidenceText: JSON.stringify({ schemaVersion: "spaceguard-native-beta-evidence/v1", validationChecks: [] }),
+    currentEvidence: { "windows-native-build": { status: "draft" } }
+  });
+  assert.strictEqual(rejectedValidationPackImport.canApply, false, "validation pack import should reject wrong schemas");
+  assert.strictEqual(rejectedValidationPackImport.validationEvidence["windows-native-build"].status, "draft", "rejected validation pack import should preserve current evidence");
 
   const runRecord = guard.buildLedgerRunRecord({
     planSnapshot: itemPlanSnapshot,

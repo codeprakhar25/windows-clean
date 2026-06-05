@@ -101,6 +101,7 @@ import {
   buildUserDecisionReceipt,
   buildValidationEvidencePack,
   buildValidationPackMarkdown,
+  buildValidationPackImport,
   buildVerificationSummary,
   buildWindowsSetupAssistant,
   buildWorkflowHandoffMarkdown,
@@ -250,6 +251,8 @@ export default function App() {
   const [fixtureImportReviewer, setFixtureImportReviewer] = useState("");
   const [fixtureImportArtifact, setFixtureImportArtifact] = useState("");
   const [fixtureImportResult, setFixtureImportResult] = useState(null);
+  const [validationPackImportText, setValidationPackImportText] = useState("");
+  const [validationPackImportResult, setValidationPackImportResult] = useState(null);
   const [nativeBetaImportText, setNativeBetaImportText] = useState("");
   const [nativeBetaImportResult, setNativeBetaImportResult] = useState(null);
   const [executionConsent, setExecutionConsent] = useState({ accepted: false, planId: "", acceptedAt: "" });
@@ -1657,6 +1660,23 @@ export default function App() {
 
   function resetValidationEvidence() {
     setValidationEvidence({});
+    setValidationPackImportResult(null);
+  }
+
+  function updateValidationPackImportText(value) {
+    setValidationPackImportText(value);
+    setValidationPackImportResult(null);
+  }
+
+  function importValidationPackEvidence() {
+    const result = buildValidationPackImport({
+      evidenceText: validationPackImportText,
+      currentEvidence: validationEvidence
+    });
+    setValidationPackImportResult(result);
+    if (result.canApply) {
+      setValidationEvidence(result.validationEvidence);
+    }
   }
 
   function setNativeBetaEvidenceRow(rowId, checked) {
@@ -2521,10 +2541,14 @@ export default function App() {
               fixtureImportReviewer={fixtureImportReviewer}
               fixtureImportArtifact={fixtureImportArtifact}
               fixtureImportResult={fixtureImportResult}
+              validationPackImportText={validationPackImportText}
+              validationPackImportResult={validationPackImportResult}
               onFixtureImportText={setFixtureImportText}
               onFixtureImportReviewer={setFixtureImportReviewer}
               onFixtureImportArtifact={setFixtureImportArtifact}
               onImportFixtureEvidence={importFixtureEvidence}
+              onValidationPackImportText={updateValidationPackImportText}
+              onImportValidationPack={importValidationPackEvidence}
               onToggleEvidence={setValidationCheckEvidence}
               onUpdateEvidence={updateValidationCheckEvidence}
               onReset={resetValidationEvidence}
@@ -6907,10 +6931,14 @@ function ValidationEvidencePanel({
   fixtureImportReviewer,
   fixtureImportArtifact,
   fixtureImportResult,
+  validationPackImportText,
+  validationPackImportResult,
   onFixtureImportText,
   onFixtureImportReviewer,
   onFixtureImportArtifact,
   onImportFixtureEvidence,
+  onValidationPackImportText,
+  onImportValidationPack,
   onToggleEvidence,
   onUpdateEvidence,
   onReset,
@@ -6994,6 +7022,53 @@ function ValidationEvidencePanel({
               {fixtureImportResult.warnings.length ? (
                 <div className="mt-2 flex flex-col gap-1">
                   {fixtureImportResult.warnings.map((warning) => (
+                    <span key={warning}>{warning}</span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">Validation pack import</span>
+            <Badge variant={validationPackImportResult?.canApply ? "safe" : validationPackImportResult ? "review" : "outline"}>
+              {validationPackImportResult?.status || "waiting"}
+            </Badge>
+          </div>
+          <div className="grid gap-2">
+            <Textarea
+              className="min-h-20 font-mono"
+              value={validationPackImportText}
+              placeholder='Paste spaceguard-validation-pack/v1 JSON or the exported markdown file'
+              aria-label="validation pack import"
+              onChange={(event) => onValidationPackImportText(event.target.value)}
+            />
+            <Button variant="outline" className="w-full" onClick={onImportValidationPack} disabled={!validationPackImportText.trim()}>
+              <ClipboardList className="h-4 w-4" />
+              Import validation pack
+            </Button>
+          </div>
+
+          {validationPackImportResult ? (
+            <div className="mt-3 rounded-md border bg-card p-2 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={validationPackImportResult.canApply ? "safe" : "review"}>
+                  {validationPackImportResult.canApply ? "mapped" : "blocked"}
+                </Badge>
+                <span>{validationPackImportResult.detail}</span>
+              </div>
+              <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                <span>Rows: {validationPackImportResult.counts.importedRows}/{validationPackImportResult.counts.sourceRows}</span>
+                <span>Complete: {validationPackImportResult.counts.complete}</span>
+                <span>Needs detail: {validationPackImportResult.counts.needsDetail}</span>
+                <span>Failed: {validationPackImportResult.counts.failed}</span>
+                <span>Ignored: {validationPackImportResult.counts.ignoredRows}</span>
+              </div>
+              {validationPackImportResult.warnings.length ? (
+                <div className="mt-2 flex flex-col gap-1">
+                  {validationPackImportResult.warnings.map((warning) => (
                     <span key={warning}>{warning}</span>
                   ))}
                 </div>
