@@ -251,13 +251,13 @@ export default function App() {
       elevationSource: "browser-demo",
       realRunEnabled: false,
       destructiveCommands: false,
-        scanKnownRoots: false,
-        simulateCleanupPlan: false,
-        executeCleanupPlan: false,
-        openAiAgentAdvice: false,
-        openAiAdvisorConfigured: false,
-        openAiKeySource: "missing",
-        safeExecutorsEnabled: false,
+      scanKnownRoots: false,
+      simulateCleanupPlan: false,
+      executeCleanupPlan: false,
+      openAiAgentAdvice: false,
+      openAiAdvisorConfigured: false,
+      openAiKeySource: "missing",
+      safeExecutorsEnabled: false,
       executorFlags: {
         tempCleanupExecutor: false,
         projectDependencyExecutor: false,
@@ -277,6 +277,7 @@ export default function App() {
   });
   const [approvals, setApprovals] = useState({ groupConfirm: false, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} });
   const [ledger, setLedger] = useState([]);
+  const [executionProofContext, setExecutionProofContext] = useState(null);
   const [runHistory, setRunHistory] = useState(() => readStoredRunHistory());
   const [validationEvidence, setValidationEvidence] = useState(() => readStoredValidationEvidence());
   const [manualStrategyEvidence, setManualStrategyEvidence] = useState(() => readStoredManualStrategyEvidence());
@@ -460,6 +461,8 @@ export default function App() {
     [runHistory, planSnapshot]
   );
   const activeLedger = ledger.length ? ledger : ledgerHistorySummary.currentLedger;
+  const verificationPlanSnapshot = activeLedger.length && executionProofContext?.planSnapshot ? executionProofContext.planSnapshot : planSnapshot;
+  const verificationScanMode = activeLedger.length && executionProofContext?.scanMode ? executionProofContext.scanMode : dataMode;
   const totals = useMemo(() => computeTotals(selectedIds, actionList, { approvals, itemReviewsByAction }), [selectedIds, actionList, approvals, itemReviewsByAction]);
   const readiness = useMemo(
     () => getExecutionReadinessForActions(selectedIds, approvals, actionList, protectedPaths, itemReviewsByAction, intakePolicy),
@@ -635,6 +638,7 @@ export default function App() {
       }),
     [selectedIds, actionList, approvals, protectedPaths, dataMode, preflight, itemReviewsByAction, intakePolicy]
   );
+  const verificationExecutorPlan = activeLedger.length && executionProofContext?.executorPlan ? executionProofContext.executorPlan : executorPlan;
   const executorReadiness = useMemo(
     () => buildExecutorReadiness(executorPlan, preflight),
     [executorPlan, preflight]
@@ -650,47 +654,47 @@ export default function App() {
   const verificationSummary = useMemo(
     () =>
       buildVerificationSummary({
-        planSnapshot,
+        planSnapshot: verificationPlanSnapshot,
         ledger: activeLedger,
-        executorPlan,
-        scanMode: dataMode,
+        executorPlan: verificationExecutorPlan,
+        scanMode: verificationScanMode,
         nativeScan: nativeScan.result
       }),
-    [planSnapshot, activeLedger, executorPlan, dataMode, nativeScan.result]
+    [verificationPlanSnapshot, activeLedger, verificationExecutorPlan, verificationScanMode, nativeScan.result]
   );
   const postRunVerification = useMemo(
     () =>
       buildPostRunVerificationPlan({
-        planSnapshot,
+        planSnapshot: verificationPlanSnapshot,
         ledger: activeLedger,
-        executorPlan,
-        scanMode: dataMode,
+        executorPlan: verificationExecutorPlan,
+        scanMode: verificationScanMode,
         nativeScan: nativeScan.result
       }),
-    [planSnapshot, activeLedger, executorPlan, dataMode, nativeScan.result]
+    [verificationPlanSnapshot, activeLedger, verificationExecutorPlan, verificationScanMode, nativeScan.result]
   );
   const rescanComparison = useMemo(
     () =>
       buildRescanComparison({
         postRunVerification,
         nativeScan: nativeScan.result,
-        scanMode: dataMode,
+        scanMode: verificationScanMode,
         ledger: activeLedger,
-        planSnapshot
+        planSnapshot: verificationPlanSnapshot
       }),
-    [postRunVerification, nativeScan.result, dataMode, activeLedger, planSnapshot]
+    [postRunVerification, nativeScan.result, verificationScanMode, activeLedger, verificationPlanSnapshot]
   );
   const rollbackPlan = useMemo(
     () =>
       buildRollbackPlan({
-        planSnapshot,
-        executorPlan,
+        planSnapshot: verificationPlanSnapshot,
+        executorPlan: verificationExecutorPlan,
         itemReviewsByAction,
         postRunVerification,
         rollbackEvidence,
-        scanMode: dataMode
+        scanMode: verificationScanMode
       }),
-    [planSnapshot, executorPlan, itemReviewsByAction, postRunVerification, rollbackEvidence, dataMode]
+    [verificationPlanSnapshot, verificationExecutorPlan, itemReviewsByAction, postRunVerification, rollbackEvidence, verificationScanMode]
   );
   const releaseGate = useMemo(
     () => {
@@ -1557,6 +1561,7 @@ export default function App() {
 
   function clearExecutionState() {
     setLedger([]);
+    setExecutionProofContext(null);
     setNativeExecutorDryRun({ status: "idle", result: null, error: "" });
     setNativeScopeEvidenceExport({ status: "idle", result: null, error: "" });
     setNativeWriteBoundary({ status: "idle", result: null, error: "" });
@@ -1688,6 +1693,61 @@ export default function App() {
     }
   }
 
+  async function runPostRunReadonlyScan() {
+    if (nativeScan.status === "scanning" || scanning) return;
+    if (!activeLedger.length) {
+      setScanLabel("Run execution before post-run rescan");
+      setActiveStage("verify");
+      return;
+    }
+    if (!nativeCapability.available) {
+      setNativeScan({ status: "unavailable", result: nativeScan.result, error: "Post-run rescan requires the Tauri desktop shell." });
+      setScanLabel("Native scanner unavailable");
+      setActiveStage("verify");
+      return;
+    }
+    if (!nativeScanRequestGuard.canScan) {
+      setNativeScan({ status: "blocked", result: nativeScan.result, error: nativeScanRequestGuard.primary });
+      setScanLabel("Native scan settings blocked");
+      setActiveStage("verify");
+      return;
+    }
+
+    setNativeScan({ status: "scanning", result: nativeScan.result, error: "" });
+    setScanning(true);
+    setScanned(true);
+    setScanProgress(0);
+    setScanLabel("Starting post-run native rescan");
+    setActiveStage("verify");
+
+    try {
+      const result = await runNativeReadonlyScan({
+        protectedPaths,
+        ...scanSettings,
+        targetDrive
+      });
+
+      if (!result.available) {
+        setNativeScan({ status: "unavailable", result: nativeScan.result, error: result.warnings[0] || "Native scanner unavailable." });
+        setScanLabel("Native scanner unavailable");
+        setScanProgress(0);
+        return;
+      }
+
+      setNativeScan({ status: "complete", result, error: "" });
+      setScanned(true);
+      setScanProgress(100);
+      setScanLabel("Post-run native rescan complete");
+      setActiveStage("verify");
+    } catch (error) {
+      setNativeScan({ status: "error", result: nativeScan.result, error: error instanceof Error ? error.message : String(error) });
+      setScanLabel("Post-run native rescan failed");
+      setScanProgress(0);
+    } finally {
+      setScanning(false);
+    }
+  }
+
   function applyModeDefaults(nextMode, force = false, planActions = actionList) {
     if (!scanned && !force) return;
 
@@ -1799,9 +1859,7 @@ export default function App() {
       nextLedger = makeExecutionLedgerForActions(selectedIds, actionList, protectedPaths, { approvals, itemReviewsByAction, planSnapshot, executedAt });
     }
 
-    setLedger(nextLedger);
-    recordLedgerRun(nextLedger);
-    window.setTimeout(() => setActiveStage("verify"), 240);
+    commitExecutionLedger(nextLedger, { executedAt, source: nativeCapability.available ? "native-dry-run" : "browser-demo" });
   }
 
   function recordLedgerRun(nextLedger) {
@@ -1819,6 +1877,32 @@ export default function App() {
       createdAt: new Date().toISOString()
     });
     setRunHistory((current) => appendLedgerRunRecord(current, record, { limit: RUN_HISTORY_LIMIT }));
+  }
+
+  function buildNativeExecutionLedger(result, executedAt) {
+    return (result.entries || []).map((entry, index) => ({
+      id: entry.id,
+      planId: planSnapshot.id,
+      executedAt,
+      time: `T+${String(index + 1).padStart(2, "0")}m`,
+      title: entry.title,
+      result: entry.result,
+      bytes: entry.bytes,
+      method: `${entry.route}: ${entry.note}`
+    }));
+  }
+
+  function commitExecutionLedger(nextLedger, { executedAt = new Date().toISOString(), source = "execution" } = {}) {
+    setLedger(nextLedger);
+    setExecutionProofContext({
+      planSnapshot,
+      executorPlan,
+      scanMode: dataMode,
+      source,
+      recordedAt: executedAt
+    });
+    recordLedgerRun(nextLedger);
+    window.setTimeout(() => setActiveStage("verify"), 240);
   }
 
   function armExecutionConsent() {
@@ -1965,19 +2049,7 @@ export default function App() {
       });
       setNativeRealExecution({ status: "complete", result, error: "" });
       const executedAt = new Date().toISOString();
-      const nextLedger = result.entries.map((entry, index) => ({
-        id: entry.id,
-        planId: planSnapshot.id,
-        executedAt,
-        time: `T+${String(index + 1).padStart(2, "0")}m`,
-        title: entry.title,
-        result: entry.result,
-        bytes: entry.bytes,
-        method: `${entry.route}: ${entry.note}`
-      }));
-      setLedger(nextLedger);
-      recordLedgerRun(nextLedger);
-      window.setTimeout(() => setActiveStage("verify"), 240);
+      commitExecutionLedger(buildNativeExecutionLedger(result, executedAt), { executedAt, source: "native-temp-executor" });
     } catch (error) {
       setNativeRealExecution({
         status: "error",
@@ -2020,19 +2092,7 @@ export default function App() {
       });
       setNativeProjectDependencyExecution({ status: "complete", result, error: "" });
       const executedAt = new Date().toISOString();
-      const nextLedger = result.entries.map((entry, index) => ({
-        id: entry.id,
-        planId: planSnapshot.id,
-        executedAt,
-        time: `T+${String(index + 1).padStart(2, "0")}m`,
-        title: entry.title,
-        result: entry.result,
-        bytes: entry.bytes,
-        method: `${entry.route}: ${entry.note}`
-      }));
-      setLedger(nextLedger);
-      recordLedgerRun(nextLedger);
-      window.setTimeout(() => setActiveStage("verify"), 240);
+      commitExecutionLedger(buildNativeExecutionLedger(result, executedAt), { executedAt, source: "native-project-dependency-executor" });
     } catch (error) {
       setNativeProjectDependencyExecution({
         status: "error",
@@ -2084,19 +2144,7 @@ export default function App() {
       });
       setNativeBrowserCacheExecution({ status: "complete", result, error: "" });
       const executedAt = new Date().toISOString();
-      const nextLedger = result.entries.map((entry, index) => ({
-        id: entry.id,
-        planId: planSnapshot.id,
-        executedAt,
-        time: `T+${String(index + 1).padStart(2, "0")}m`,
-        title: entry.title,
-        result: entry.result,
-        bytes: entry.bytes,
-        method: `${entry.route}: ${entry.note}`
-      }));
-      setLedger(nextLedger);
-      recordLedgerRun(nextLedger);
-      window.setTimeout(() => setActiveStage("verify"), 240);
+      commitExecutionLedger(buildNativeExecutionLedger(result, executedAt), { executedAt, source: "native-browser-cache-executor" });
     } catch (error) {
       setNativeBrowserCacheExecution({
         status: "error",
@@ -2149,19 +2197,7 @@ export default function App() {
       });
       setNativeGradleCacheExecution({ status: "complete", result, error: "" });
       const executedAt = new Date().toISOString();
-      const nextLedger = result.entries.map((entry, index) => ({
-        id: entry.id,
-        planId: planSnapshot.id,
-        executedAt,
-        time: `T+${String(index + 1).padStart(2, "0")}m`,
-        title: entry.title,
-        result: entry.result,
-        bytes: entry.bytes,
-        method: `${entry.route}: ${entry.note}`
-      }));
-      setLedger(nextLedger);
-      recordLedgerRun(nextLedger);
-      window.setTimeout(() => setActiveStage("verify"), 240);
+      commitExecutionLedger(buildNativeExecutionLedger(result, executedAt), { executedAt, source: "native-gradle-cache-executor" });
     } catch (error) {
       setNativeGradleCacheExecution({
         status: "error",
@@ -2214,19 +2250,7 @@ export default function App() {
       });
       setNativeNpmCacheExecution({ status: "complete", result, error: "" });
       const executedAt = new Date().toISOString();
-      const nextLedger = result.entries.map((entry, index) => ({
-        id: entry.id,
-        planId: planSnapshot.id,
-        executedAt,
-        time: `T+${String(index + 1).padStart(2, "0")}m`,
-        title: entry.title,
-        result: entry.result,
-        bytes: entry.bytes,
-        method: `${entry.route}: ${entry.note}`
-      }));
-      setLedger(nextLedger);
-      recordLedgerRun(nextLedger);
-      window.setTimeout(() => setActiveStage("verify"), 240);
+      commitExecutionLedger(buildNativeExecutionLedger(result, executedAt), { executedAt, source: "native-npm-cache-executor" });
     } catch (error) {
       setNativeNpmCacheExecution({
         status: "error",
@@ -2287,19 +2311,7 @@ export default function App() {
       });
       setNativeRecycleBinExecution({ status: "complete", result, error: "" });
       const executedAt = new Date().toISOString();
-      const nextLedger = result.entries.map((entry, index) => ({
-        id: entry.id,
-        planId: planSnapshot.id,
-        executedAt,
-        time: `T+${String(index + 1).padStart(2, "0")}m`,
-        title: entry.title,
-        result: entry.result,
-        bytes: entry.bytes,
-        method: `${entry.route}: ${entry.note}`
-      }));
-      setLedger(nextLedger);
-      recordLedgerRun(nextLedger);
-      window.setTimeout(() => setActiveStage("verify"), 240);
+      commitExecutionLedger(buildNativeExecutionLedger(result, executedAt), { executedAt, source: "native-recycle-bin-executor" });
     } catch (error) {
       setNativeRecycleBinExecution({
         status: "error",
@@ -3291,8 +3303,8 @@ export default function App() {
             <ExecutorManifestPanel manifest={executorManifest} />
             <ToolCommandInventoryPanel inventory={toolCommandInventory} />
             <VerificationPanel planSnapshot={planSnapshot} verificationSummary={verificationSummary} />
-            <PostRunVerificationPanel verification={postRunVerification} onExport={exportPostRunVerification} />
-            <RescanComparisonPanel comparison={rescanComparison} onExport={exportRescanComparison} />
+            <PostRunVerificationPanel verification={postRunVerification} scanning={scanning} nativeCapability={nativeCapability} onRescan={runPostRunReadonlyScan} onExport={exportPostRunVerification} />
+            <RescanComparisonPanel comparison={rescanComparison} scanning={scanning} nativeCapability={nativeCapability} onRescan={runPostRunReadonlyScan} onExport={exportRescanComparison} />
             <RollbackPlanPanel
               plan={rollbackPlan}
               rollbackEvidence={rollbackEvidence}
@@ -8481,8 +8493,9 @@ function VerificationPanel({ planSnapshot, verificationSummary }) {
   );
 }
 
-function PostRunVerificationPanel({ verification, onExport }) {
+function PostRunVerificationPanel({ verification, scanning, nativeCapability, onRescan, onExport }) {
   const preview = verification.checkpoints.slice(0, 4);
+  const canRescan = Boolean(nativeCapability.available && verification.checkpoints.length && !scanning);
 
   return (
     <Card>
@@ -8515,6 +8528,13 @@ function PostRunVerificationPanel({ verification, onExport }) {
               </div>
             ))}
           </div>
+          <Button type="button" variant="outline" size="sm" className="mt-3" onClick={onRescan} disabled={!canRescan}>
+            <RefreshCcw className={`h-4 w-4 ${scanning ? "animate-spin" : ""}`} />
+            {scanning ? "Rescanning" : "Run post-run rescan"}
+          </Button>
+          {!nativeCapability.available ? (
+            <p className="mt-2 text-xs text-muted-foreground">Post-run proof requires the Tauri desktop shell.</p>
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-2">
@@ -8545,8 +8565,9 @@ function PostRunVerificationPanel({ verification, onExport }) {
   );
 }
 
-function RescanComparisonPanel({ comparison, onExport }) {
+function RescanComparisonPanel({ comparison, scanning, nativeCapability, onRescan, onExport }) {
   const preview = comparison.rows.slice(0, 4);
+  const canRescan = Boolean(nativeCapability.available && comparison.rows.length && !scanning);
 
   return (
     <Card>
@@ -8576,6 +8597,10 @@ function RescanComparisonPanel({ comparison, onExport }) {
             <span className="truncate">Scan: {comparison.scanGeneratedAt || "missing timestamp"}</span>
             <span>Tolerance: {formatBytes(comparison.toleranceBytes)}</span>
           </div>
+          <Button type="button" variant="outline" size="sm" className="mt-3" onClick={onRescan} disabled={!canRescan}>
+            <RefreshCcw className={`h-4 w-4 ${scanning ? "animate-spin" : ""}`} />
+            {scanning ? "Rescanning" : "Run post-run rescan"}
+          </Button>
         </div>
 
         <div className="flex flex-col gap-2">

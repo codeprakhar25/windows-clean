@@ -154,6 +154,8 @@ const requiredAppMarkers = [
   "Plan snapshot",
   "Post-run verification",
   "Rescan proof",
+  "Run post-run rescan",
+  "Post-run proof requires the Tauri desktop shell",
   "Export verification checklist",
   "Rescan comparison",
   "Post-run scan timing",
@@ -485,6 +487,12 @@ assert(app.includes("buildPlanSnapshot"), "plan snapshot should be wired");
 assert(app.includes("buildVerificationSummary"), "verification summary should be wired");
 assert(app.includes("buildPostRunVerificationPlan"), "post-run verification plan should be wired");
 assert(app.includes("buildPostRunVerificationMarkdown"), "post-run verification export should be wired");
+assert(app.includes("runPostRunReadonlyScan"), "post-run verification should have a ledger-preserving native rescan action");
+assert(app.includes("executionProofContext"), "post-run verification should freeze the execution plan context");
+assert(app.includes("commitExecutionLedger"), "execution ledger writes should go through one proof-context helper");
+assert(app.includes("verificationPlanSnapshot"), "post-run verification should compare against the frozen execution plan");
+assert(app.includes("verificationExecutorPlan"), "post-run verification should compare against the frozen executor plan");
+assert(app.includes("Post-run native rescan complete"), "post-run rescan should report completion without starting a new plan scan");
 assert(app.includes("buildRescanComparison"), "rescan comparison should be wired");
 assert(app.includes("buildRescanComparisonMarkdown"), "rescan comparison export should be wired");
 assert(app.includes("buildRollbackPlan"), "rollback plan should be wired");

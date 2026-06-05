@@ -293,7 +293,7 @@ The demo also includes:
 - Permanent-removal confirmation for Recycle Bin emptying, separate from cache approval.
 - A plan-specific dry-run consent receipt that must be armed after readiness passes and resets whenever the plan snapshot changes.
 - Plan snapshot verification so a ledger is trusted only when it matches the current selected actions, approvals, protected paths, and item decisions.
-- Post-run verification checklist that turns the current ledger into affected-root rescan checkpoints before any Windows validation can count.
+- Post-run verification checklist that turns the current ledger into affected-root rescan checkpoints before any Windows validation can count, with a dedicated **Run post-run rescan** action that preserves the ledger and compares against the execution snapshot that produced it.
 - Rollback plan panel and local proof ledger that classify each selected executor route as rebuildable, restore-path-required, backup-required, permanent-warning, or blocked, then require reviewer, evidence path, and restore/backup/acknowledgement reference for proof routes.
 - Local run history that persists dry-run ledger records on the device and separates current-plan records from stale audit evidence.
 - Privacy boundary panel that explains local scan metadata, manual exports, local audit storage, blocked data classes, and disabled telemetry/cloud upload.
@@ -487,6 +487,7 @@ For real-data setup today:
 2. Run `npm run native:dev` on a Windows 11 machine with the prerequisites above.
 3. Use **Run real scan** to collect read-only known-root measurements and C: volume totals.
 4. Review protected paths, item review, executor policy, release gate, write readiness, and real executor capsule.
-5. Use **Probe write boundary** only to capture rejection evidence from the native stub.
-6. Export the dry-run report and validation pack.
-7. Validate fixtures in disposable Windows VMs before implementing any write-capable executor.
+5. Arm consent and run the dry-run or scoped executor route, then use **Run post-run rescan** in verification to collect after-ledger read-only proof without clearing the ledger.
+6. Use **Probe write boundary** only to capture rejection evidence from the native stub.
+7. Export the dry-run report and validation pack.
+8. Validate fixtures in disposable Windows VMs before implementing any write-capable executor.
