@@ -640,6 +640,71 @@ const assert = require("assert");
   assert.strictEqual(downloadsExecutionInvocation.payload.request.actions[0].targetPath.endsWith("\\Downloads\\setup-old.exe"), true, "Downloads executor should pass only exact reviewed file paths");
   assert.strictEqual(downloadsExecution.accepted, true, "Downloads executor should normalize accepted responses");
   assert.strictEqual(downloadsExecution.entries[0].route, "item-review-recycle-bin", "Downloads executor should normalize executed route");
+  let archiveExecutionInvocation = null;
+  const archiveExecution = await native.runNativeLargeFileArchiveExecutor(
+    {
+      rows: [
+        {
+          id: "large-user-files",
+          title: "Large personal files",
+          archiveTargets: [
+            {
+              id: "old-video",
+              name: "old-video.mov",
+              path: "C:\\Users\\real\\Videos\\old-video.mov",
+              bytes: 2 * guard.GB,
+              decision: "archive"
+            }
+          ]
+        }
+      ],
+      archiveDestination: "D:\\SpaceGuardArchive",
+      planId: "plan-archive",
+      scanFingerprint: "scan-archive",
+      consentPlanId: "plan-archive",
+      expectedBytes: 2 * guard.GB
+    },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            archiveExecutionInvocation = { command, payload };
+            return Promise.resolve({
+              mode: "native-large-file-archive-executor",
+              real_run_enabled: true,
+              destructive_commands: true,
+              accepted: true,
+              reason: "accepted",
+              contract_echo: {
+                schema_version: payload.request.schemaVersion,
+                request_mode: payload.request.requestMode,
+                plan_id: payload.request.planId,
+                route: payload.request.route,
+                scan_fingerprint: payload.request.scanFingerprint,
+                consent_plan_id: payload.request.consentPlanId,
+                expected_bytes: payload.request.expectedBytes,
+                dry_run_only: payload.request.dryRunOnly,
+                mutation_attempted: payload.request.mutationAttempted,
+                action_count: payload.request.actions.length
+              },
+              entries: [{ id: "old-video", title: "old-video.mov", route: "item-review-large-files", result: "executed", reject_code: "", bytes: 2 * guard.GB, note: "archived" }],
+              warnings: ["archive done"]
+            });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(archiveExecutionInvocation.command, "execute_cleanup_plan", "large-file archive executor should invoke execute_cleanup_plan");
+  assert.strictEqual(archiveExecutionInvocation.payload.request.schemaVersion, "spaceguard-large-file-archive-request/v1", "large-file archive executor should use its schema");
+  assert.strictEqual(archiveExecutionInvocation.payload.request.requestMode, "execute-large-file-archive", "large-file archive executor should send execute-large-file-archive mode");
+  assert.strictEqual(archiveExecutionInvocation.payload.request.route, "item-review-large-files", "large-file archive executor should stay on item-review-large-files route");
+  assert.strictEqual(archiveExecutionInvocation.payload.request.archiveDestination, "D:\\SpaceGuardArchive", "large-file archive executor should send explicit archive destination");
+  assert.strictEqual(archiveExecutionInvocation.payload.request.dryRunOnly, false, "large-file archive executor should be a mutating request");
+  assert.strictEqual(archiveExecutionInvocation.payload.request.mutationAttempted, true, "large-file archive executor should require mutation confirmation");
+  assert.strictEqual(archiveExecutionInvocation.payload.request.actions[0].targetPath.endsWith("\\Videos\\old-video.mov"), true, "large-file archive executor should pass exact reviewed file paths");
+  assert.strictEqual(archiveExecution.accepted, true, "large-file archive executor should normalize accepted responses");
+  assert.strictEqual(archiveExecution.entries[0].route, "item-review-large-files", "large-file archive executor should normalize executed route");
   let recycleExecutionInvocation = null;
   const recycleExecution = await native.runNativeRecycleBinExecutor(
     {
@@ -752,6 +817,7 @@ const assert = require("assert");
       temp_cleanup_executor: false,
       project_dependency_executor: true,
       downloads_cleanup_executor: true,
+      large_file_archive_executor: true,
       gradle_cache_executor: true,
       npm_cache_executor: true,
       recycle_bin_executor: true,
@@ -775,6 +841,7 @@ const assert = require("assert");
       tempCleanupExecutor: false,
       projectDependencyExecutor: true,
       downloadsCleanupExecutor: true,
+      largeFileArchiveExecutor: true,
       gradleCacheExecutor: true,
       npmCacheExecutor: true,
       recycleBinExecutor: true,

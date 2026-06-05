@@ -129,7 +129,7 @@ The native write-boundary command is:
 execute_cleanup_plan
 ```
 
-It validates request shape for dry-run probes and contains scoped real executor branches for `requestMode=execute-first-safe`, `requestMode=execute-project-deps`, `requestMode=execute-gradle-cache`, `requestMode=execute-npm-cache`, `requestMode=execute-recycle-bin`, and `requestMode=execute-browser-cache`.
+It validates request shape for dry-run probes and contains scoped real executor branches for `requestMode=execute-first-safe`, `requestMode=execute-project-deps`, `requestMode=execute-downloads-recycle-bin`, `requestMode=execute-large-file-archive`, `requestMode=execute-gradle-cache`, `requestMode=execute-npm-cache`, `requestMode=execute-recycle-bin`, and `requestMode=execute-browser-cache`.
 
 For `known-temp-delete`, setting `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1` in the Windows Tauri runtime enables deletion of old files under allowlisted temp roots only. The executor rejects missing plan/scan/consent IDs, non-Windows runtimes, non-temp routes, forbidden targets, symlinks, recent files, folders, and broad personal/project paths. It returns a ledger-style native response with accepted state, bytes reclaimed, skipped count, and warnings. Without the feature flag, it still rejects with zero bytes.
 
@@ -138,6 +138,8 @@ For `known-temp-delete`, the native response exposes an executor scaffold: route
 For `node-modules-old`, setting `SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR=1` enables reviewed dependency cleanup. The frontend sends only item-review targets marked **Remove**. The native executor accepts only `node_modules` directories whose parent has `package.json`, skips link-like entries, removes files through controlled traversal, removes empty directories bottom-up, and never runs package-manager or shell commands. Native review items parse readable `package.json` metadata for package name, package manager or lockfile, framework hints such as Expo/React Native/Next/Vite, and common scripts so stale dependency folders can be reviewed with better context.
 
 For `downloads-installers`, setting `SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR=1` enables reviewed Downloads cleanup. The frontend sends only item-review targets marked **Remove**. The native executor accepts only single non-symlink installer/archive files under the current user's Downloads folder, requires the file to be at least 30 days old, moves accepted files through Windows Shell Recycle Bin semantics with `SHFileOperationW`, rejects directories and arbitrary personal folders, and never runs shell commands.
+
+For `large-user-files`, setting `SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR=1` enables reviewed large-file archive. The frontend sends only item-review targets marked **Move** or **Archive** plus an explicit archive destination. The native executor accepts only single non-symlink 1GB+ files under current-user review folders, requires the file to be at least 90 days old, requires an existing non-system destination on another drive, copies into a plan-specific `SpaceGuard Archive` folder, verifies the copied size, removes the source file, rejects bulk folders and same-drive destinations, and never runs shell commands.
 
 For `gradle-cache`, setting `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=1` enables bounded Gradle cache cleanup. The frontend sends only the concrete `.gradle\caches` path from the latest native read-only scan. The native executor accepts only the current user's `.gradle\caches` directory, deletes files older than 30 days, skips symlinks, lock files, recent files, daemon state, wrapper files, init scripts, project folders, `node_modules`, and Program Files paths, removes empty cache subdirectories bottom-up, and never runs Gradle or shell commands.
 
@@ -173,7 +175,7 @@ runtime_capabilities
 
 It reports platform, scanner availability, dry-run availability, and whether real executors are enabled.
 
-Runtime capabilities also expose per-executor feature flags: `tempCleanupExecutor`, `downloadsCleanupExecutor`, `projectDependencyExecutor`, `gradleCacheExecutor`, `npmCacheExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`. They default to false independently, so enabling temp, reviewed Downloads, project dependency, Gradle cache, npm cache, Recycle Bin, or browser cache cleanup cannot accidentally enable unrelated cleanup routes.
+Runtime capabilities also expose per-executor feature flags: `tempCleanupExecutor`, `downloadsCleanupExecutor`, `largeFileArchiveExecutor`, `projectDependencyExecutor`, `gradleCacheExecutor`, `npmCacheExecutor`, `recycleBinExecutor`, `browserCacheExecutor`, and `toolNativePruneExecutors`. They default to false independently, so enabling temp, reviewed Downloads, reviewed large-file archive, project dependency, Gradle cache, npm cache, Recycle Bin, or browser cache cleanup cannot accidentally enable unrelated cleanup routes.
 
 It currently scans or reports:
 
@@ -242,6 +244,7 @@ The demo also includes:
 - Gradle cache executor panel for old files under the current user's `.gradle\caches` root, with project folders and Gradle daemon/wrapper/config paths rejected.
 - npm cache executor panel for old content blobs and temp files under `%LocalAppData%\npm-cache\_cacache`, with index metadata, globals, and project folders rejected.
 - Reviewed Downloads executor panel for selected old installer/archive files under the current user's Downloads folder, moved through Recycle Bin semantics only.
+- Reviewed large-file archive executor panel for selected old 1GB+ personal files marked Move or Archive, copied to an explicit destination on another drive and then removed from the source only after copy verification.
 - Reviewed project dependency executor panel for stale `node_modules` cleanup, including Expo/React Native project hints and item-level remove targets.
 - Browser cache executor panel for scanned cache roots only, with cookies, sessions, logins, extensions, history, and profile stores blocked by native target validation.
 - Installed app footprint review for large app folders, with manual uninstall guidance and no automated uninstall or Program Files deletion.
@@ -334,7 +337,7 @@ Requires item review:
 - Android emulator images and SDK packages.
 - Installed app footprints.
 
-Review-gated categories cannot execute from a broad category approval. The user must mark candidate items as `Remove`, `Move`, `Archive`, or `Keep`; only `Remove` item bytes are counted in selected recovery, executor previews, and the simulated ledger. `Move` and `Archive` are tracked as manual recovery intent.
+Review-gated categories cannot execute from a broad category approval. The user must mark candidate items as `Remove`, `Move`, `Archive`, or `Keep`; only decided item bytes can enter selected recovery, executor previews, and the ledger. For most review-gated categories, only `Remove` creates executor bytes and `Move`/`Archive` stay manual. `large-user-files` is the scoped exception: `Move` and `Archive` create exact archive executor targets only when the native feature flag, destination, consent, scan fingerprint, and path validators pass.
 
 Installed app footprints are the exception to the selected-recovery rule: marking an app uninstall candidate records manual follow-up only. It does not count as executor recovery, dry-run bytes, or simulated ledger recovery.
 

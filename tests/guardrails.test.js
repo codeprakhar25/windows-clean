@@ -1124,8 +1124,19 @@ const assert = require("assert");
     scanMode: "demo",
     itemReviewsByAction: largeFileArchiveReviews
   });
-  assert.strictEqual(largeFileArchiveExecutorPlan.dryRunBytes, 0, "manual move/archive review should not create dry-run executor bytes");
-  assert.strictEqual(largeFileArchiveExecutorPlan.dryRunCount, 0, "manual move/archive review should not create runnable executor routes");
+  const largeFileArchiveRow = largeFileArchiveExecutorPlan.rows.find((row) => row.id === "large-user-files");
+  assert.strictEqual(
+    largeFileArchiveExecutorPlan.dryRunBytes,
+    largeFileArchiveReviews["large-user-files"].manualDispositionBytes,
+    "reviewed large-file archive bytes should become scoped executor bytes"
+  );
+  assert.strictEqual(largeFileArchiveExecutorPlan.dryRunCount, 1, "reviewed large-file archive should create one scoped executor route");
+  assert.strictEqual(largeFileArchiveRow.route, "item-review-large-files", "large-file archive should stay on the reviewed item route");
+  assert.strictEqual(
+    largeFileArchiveRow.archiveTargets.length,
+    largeFileArchiveReviews["large-user-files"].archiveCount,
+    "archive decisions should be carried as exact archive executor targets"
+  );
   assert.strictEqual(
     guard.getExecutionReadinessForActions(largeFileOnly, downloadsItemApprovals, guard.actions, [], downloadsItemReviews).ready,
     true,

@@ -659,6 +659,7 @@ export const releaseFeatureFlags = {
   realExecutors: false,
   tempCleanupExecutor: false,
   downloadsCleanupExecutor: false,
+  largeFileArchiveExecutor: false,
   projectDependencyExecutor: false,
   gradleCacheExecutor: false,
   npmCacheExecutor: false,
@@ -2196,6 +2197,19 @@ function compactLedgerExecutorPlan(executorPlan = null) {
                 ageDays: Number(target.ageDays || 0),
                 kind: target.kind || "",
                 reason: target.reason || "",
+                signals: normalizeReviewSignals(target.signals)
+              }))
+            : [],
+          archiveTargets: Array.isArray(row.archiveTargets)
+            ? row.archiveTargets.slice(0, 40).map((target) => ({
+                id: target.id || "",
+                name: target.name || "",
+                path: target.path || "",
+                bytes: Number(target.bytes || 0),
+                ageDays: Number(target.ageDays || 0),
+                kind: target.kind || "",
+                reason: target.reason || "",
+                decision: target.decision || "",
                 signals: normalizeReviewSignals(target.signals)
               }))
             : []
@@ -3745,6 +3759,7 @@ export function buildAIAgentIntegration({
       && (
         runtimeCapabilities?.executorFlags?.tempCleanupExecutor
         || runtimeCapabilities?.executorFlags?.downloadsCleanupExecutor
+        || runtimeCapabilities?.executorFlags?.largeFileArchiveExecutor
         || runtimeCapabilities?.executorFlags?.projectDependencyExecutor
         || runtimeCapabilities?.executorFlags?.browserCacheExecutor
         || runtimeCapabilities?.executorFlags?.gradleCacheExecutor
@@ -6696,6 +6711,21 @@ export function buildExecutorPlan({
             signals: normalizeReviewSignals(item.signals)
           }))
       : [];
+    const archiveTargets = itemReview
+      ? itemReview.items
+          .filter((item) => (item.decision === "move" || item.decision === "archive") && !item.protected)
+          .map((item) => ({
+            id: item.id,
+            name: item.name,
+            path: item.path,
+            bytes: Number(item.bytes || 0),
+            ageDays: Number(item.ageDays || 0),
+            kind: item.kind,
+            reason: item.reason,
+            decision: item.decision,
+            signals: normalizeReviewSignals(item.signals)
+          }))
+      : [];
     const gate = unresolvedGate(action, approvals, protectedPaths, itemReview, intakePolicy);
     const policyBlocked = action.gate === "blocked" || action.gate === "advisory" || policy.lane === "blocked" || policy.lane === "advisory";
     const realBlockedReason = getRealExecutionBlocker(action, policy, scanMode);
@@ -6719,6 +6749,7 @@ export function buildExecutorPlan({
       visibleBytes: action.bytes,
       path: action.path,
       reviewTargets,
+      archiveTargets,
       risk: action.risk,
       gate: gate || action.gate,
       powerId: getActionTaskPowerId(action, policy),
@@ -12056,7 +12087,7 @@ export function buildReport({
           `- Detail-needed records: ${validationPack.validationChecks.filter((check) => check.evidenceValue && !check.evidenceComplete).length}`,
           `- VM scenarios: ${validationPack.vmScenarios.length}`,
           `- Fixture roots: ${validationPack.fixtureRoots.length}`,
-          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, downloads=${validationPack.runtime?.executorFlags?.downloadsCleanupExecutor ? "on" : "off"}, projectDeps=${validationPack.runtime?.executorFlags?.projectDependencyExecutor ? "on" : "off"}, gradle=${validationPack.runtime?.executorFlags?.gradleCacheExecutor ? "on" : "off"}, npm=${validationPack.runtime?.executorFlags?.npmCacheExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
+          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, downloads=${validationPack.runtime?.executorFlags?.downloadsCleanupExecutor ? "on" : "off"}, largeArchive=${validationPack.runtime?.executorFlags?.largeFileArchiveExecutor ? "on" : "off"}, projectDeps=${validationPack.runtime?.executorFlags?.projectDependencyExecutor ? "on" : "off"}, gradle=${validationPack.runtime?.executorFlags?.gradleCacheExecutor ? "on" : "off"}, npm=${validationPack.runtime?.executorFlags?.npmCacheExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
           `- Safety invariants waiting: ${validationPack.safetyInvariants.filter((item) => !item.passed).length}`,
           validationPack.validationChecks.length
             ? validationPack.validationChecks
@@ -13908,11 +13939,15 @@ function getReviewReason(action, status, gate, itemReview = null) {
     if (gate === "typed") return "Needs typed acknowledgement.";
     if (itemReview?.items?.length) {
       if (itemReview.undecidedCount > 0) return `${itemReview.undecidedCount} item decision(s) still unset.`;
+      if (action.id === "large-user-files" && (itemReview.moveCount > 0 || itemReview.archiveCount > 0)) return "Large-file Move/Archive decisions can enter the scoped archive executor after destination and native flag checks.";
       if (itemReview.removeCount === 0) return "Manual item decisions are resolved, but no Remove bytes are selected for executor preview.";
     }
     return "Needs item review.";
   }
   if (status === "approved") {
+    if (action.id === "large-user-files" && itemReview?.items?.length && (itemReview.moveCount > 0 || itemReview.archiveCount > 0)) {
+      return "Item review is resolved for the scoped large-file archive executor.";
+    }
     if (itemReview?.items?.length && itemReview.removeCount === 0) {
       return "Item review is resolved for manual move/archive/keep; no executable cleanup bytes are selected.";
     }
@@ -14059,7 +14094,12 @@ function getPlannedActionBytes(action, approvals = {}, itemReviewsByAction = {})
   const policy = getExecutorPolicy(action);
   if (policy.route === "manual-app-uninstall") return 0;
   const itemReview = getItemReviewForAction(action, itemReviewsByAction);
-  if (itemReview) return itemReview.selectedBytes || itemReview.removeBytes || 0;
+  if (itemReview) {
+    if (action.id === "large-user-files") {
+      return Number(itemReview.removeBytes || 0) + Number(itemReview.moveBytes || 0) + Number(itemReview.archiveBytes || 0);
+    }
+    return itemReview.selectedBytes || itemReview.removeBytes || 0;
+  }
   if (action.gate === "review" && !approvals.reviewed?.[action.id]) return 0;
   return action.bytes;
 }
@@ -15102,6 +15142,7 @@ function normalizeExecutorFeatureFlags(value = {}) {
     tempCleanupExecutor: Boolean(value.tempCleanupExecutor || value.temp_cleanup_executor),
     projectDependencyExecutor: Boolean(value.projectDependencyExecutor || value.project_dependency_executor),
     downloadsCleanupExecutor: Boolean(value.downloadsCleanupExecutor || value.downloads_cleanup_executor),
+    largeFileArchiveExecutor: Boolean(value.largeFileArchiveExecutor || value.large_file_archive_executor),
     gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
     npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
@@ -15719,7 +15760,9 @@ function reviewNextStep(action, status, gate, evidence, reviewSummary = null) {
   if (evidence === "missing") return "No matching root was measured in the current scan.";
   if (evidence === "unsupported") return "Needs a dedicated detector before the app can size it.";
   if (gate === "review" && reviewSummary?.undecidedCount > 0) return `Resolve ${reviewSummary.undecidedCount} remaining item decision(s).`;
+  if (action.id === "large-user-files" && reviewSummary?.removeCount === 0 && (reviewSummary?.moveCount > 0 || reviewSummary?.archiveCount > 0)) return "Set an archive destination, enable the large-file archive executor, then run native preflight.";
   if (gate === "review" && reviewSummary?.removeCount === 0) return "Choose Remove for executor cleanup, or Move/Archive/Keep for manual-only recovery.";
+  if (action.id === "large-user-files" && !gate && reviewSummary?.removeCount === 0 && (reviewSummary?.moveCount > 0 || reviewSummary?.archiveCount > 0)) return "Ready for scoped archive preflight after destination, consent, and native feature-flag checks.";
   if (!gate && reviewSummary?.removeCount === 0 && (reviewSummary?.moveCount > 0 || reviewSummary?.archiveCount > 0)) return "Manual move/archive decisions are tracked; no executor cleanup bytes are selected.";
   if (gate) return gateInstruction(action, gate);
   if (status === "ready") return "Ready for preflight after all other selected gates resolve.";

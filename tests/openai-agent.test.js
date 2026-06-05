@@ -83,6 +83,28 @@ const assert = require("assert");
         ]
       }
     },
+    executorPlan: {
+      rows: [
+        {
+          id: "large-user-files",
+          title: "Large personal files",
+          route: "item-review-large-files",
+          archiveTargets: [
+            {
+              id: "old-video",
+              name: "old-video.mov",
+              path: "C:\\Users\\real\\Videos\\old-video.mov",
+              bytes: 2 * 1024 ** 3,
+              ageDays: 140,
+              kind: "large personal file",
+              decision: "archive",
+              reason: "Move to external archive.",
+              signals: [{ label: "modified age", value: "140d", tone: "review" }]
+            }
+          ]
+        }
+      ]
+    },
     driveInventorySummary: {
       topRows: [
         {
@@ -119,6 +141,8 @@ const assert = require("assert");
   assert.strictEqual(manualContext.manualReviewTargets[0].selectedForRemoval, false, "manual uninstall decisions must not be represented as automatic removal authority");
   assert.strictEqual(manualContext.manualReviewTargets[0].signals[0].label, "usage proof", "OpenAI context should include structured app review signals");
   assert.strictEqual(manualContext.manualReviewTargets[0].signals[0].value, "not proven", "OpenAI context should not overclaim app usage proof");
+  assert.strictEqual(manualContext.largeFileArchiveTargets[0].route, "item-review-large-files", "OpenAI context should include reviewed large-file archive targets");
+  assert.strictEqual(manualContext.largeFileArchiveTargets[0].decision, "archive", "OpenAI context should preserve archive decisions");
   assert.strictEqual(manualContext.driveInventoryRows[0].canCreateExecutor, false, "drive inventory rows should be advisory-only in OpenAI context");
   assert.strictEqual(manualContext.customRootRows[0].manualOnly, true, "custom root rows should be manual-only in OpenAI context");
 

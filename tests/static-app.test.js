@@ -324,6 +324,7 @@ assert(openAiAgent.includes("driveInventoryRows"), "OpenAI context should includ
 assert(openAiAgent.includes("customRootRows"), "OpenAI context should include custom root triage rows");
 assert(openAiAgent.includes("run-gradle-cache-executor"), "OpenAI schema should allow Gradle cache executor recommendations");
 assert(openAiAgent.includes("run-downloads-cleanup-executor"), "OpenAI schema should allow reviewed Downloads executor recommendations");
+assert(openAiAgent.includes("run-large-file-archive-executor"), "OpenAI schema should allow reviewed large-file archive recommendations");
 assert(openAiAgent.includes("run-npm-cache-executor"), "OpenAI schema should allow npm cache executor recommendations");
 assert(openAiAgent.includes("run-recycle-bin-executor"), "OpenAI schema should allow Recycle Bin executor recommendations");
 assert(openAiAgent.includes("run-browser-cache-executor"), "OpenAI schema should allow browser cache executor recommendations");
@@ -338,6 +339,8 @@ assert(app.includes("Recycle"), "OpenAI panel should show Recycle Bin target cou
 assert(app.includes("Cache roots"), "OpenAI panel should show browser cache target count");
 assert(app.includes("Reviewed Downloads cleanup"), "App should expose reviewed Downloads executor panel");
 assert(app.includes("downloads-cleanup-executor-panel"), "Reviewed Downloads executor panel should be focusable");
+assert(app.includes("Reviewed large-file archive"), "App should expose reviewed large-file archive panel");
+assert(app.includes("large-file-archive-executor-panel"), "Reviewed large-file archive panel should be focusable");
 assert(app.includes("strict JSON"), "OpenAI panel should show structured output boundary");
 assert(app.includes("Reasoning:"), "OpenAI panel should show configured reasoning effort");
 assert(app.includes("Transport:"), "OpenAI panel should show native/browser transport");
@@ -420,6 +423,16 @@ assert(rustScanner.includes("SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR"), "Rust nativ
 assert(rustScanner.includes("downloads_cleanup_target_reject_code"), "Rust native shell should validate reviewed Downloads targets");
 assert(rustScanner.includes("SHFileOperationW"), "Rust reviewed Downloads executor should use Windows Shell file operation");
 assert(rustScanner.includes("FOF_ALLOWUNDO"), "Rust reviewed Downloads executor should use Recycle Bin semantics");
+assert(app.includes("LargeFileArchiveExecutorPanel"), "reviewed large-file archive panel should be rendered");
+assert(app.includes("runNativeLargeFileArchiveExecutor"), "reviewed large-file archive should be wired through the native adapter");
+assert(nativeAdapter.includes("requestMode: \"execute-large-file-archive\""), "native adapter should send the large-file archive request mode");
+assert(nativeAdapter.includes("spaceguard-large-file-archive-request/v1"), "native adapter should send the large-file archive request schema");
+assert(nativeAdapter.includes("largeFileArchiveExecutor"), "native adapter should normalize reviewed large-file archive executor flag");
+assert(rustScanner.includes("execute_large_file_archive_cleanup"), "Rust native shell should implement reviewed large-file archive");
+assert(rustScanner.includes("SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR"), "Rust native shell should require the large-file archive feature flag");
+assert(rustScanner.includes("large_file_archive_target_reject_code"), "Rust native shell should validate large-file archive targets");
+assert(rustScanner.includes("archive_destination_reject_code"), "Rust native shell should validate archive destinations");
+assert(rustScanner.includes("archive_large_file_to_destination"), "Rust native shell should copy verified archive files before removing sources");
 assert(app.includes("GradleCacheExecutorPanel"), "Gradle cache executor panel should be rendered");
 assert(app.includes("gradle-cache-executor-panel"), "Gradle cache executor panel should be focusable");
 assert(app.includes("Run Gradle cache cleanup"), "Gradle cache executor should expose a user-triggered cleanup button");

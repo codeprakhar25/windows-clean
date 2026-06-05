@@ -29,7 +29,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -50,7 +50,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -145,6 +145,23 @@ export function buildOpenAIAgentContext({
         bytes: Number(target.bytes || 0),
         ageDays: Number(target.ageDays || 0),
         kind: target.kind || "project dependency folder",
+        reason: target.reason || "",
+        signals: normalizeAgentReviewSignals(target.signals)
+      }))
+    )
+    .slice(0, 16);
+  const largeFileArchiveTargets = (executorPlan?.rows || [])
+    .filter((row) => row.route === "item-review-large-files" && Array.isArray(row.archiveTargets))
+    .flatMap((row) =>
+      row.archiveTargets.map((target) => ({
+        id: target.id || row.id,
+        name: target.name || row.title,
+        route: row.route,
+        path: target.path || "",
+        bytes: Number(target.bytes || 0),
+        ageDays: Number(target.ageDays || 0),
+        kind: target.kind || "large user file",
+        decision: target.decision || "archive",
         reason: target.reason || "",
         signals: normalizeAgentReviewSignals(target.signals)
       }))
@@ -271,6 +288,7 @@ export function buildOpenAIAgentContext({
       destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
       tempCleanupExecutor: Boolean(runtimeCapabilities?.executorFlags?.tempCleanupExecutor),
       downloadsCleanupExecutor: Boolean(runtimeCapabilities?.executorFlags?.downloadsCleanupExecutor),
+      largeFileArchiveExecutor: Boolean(runtimeCapabilities?.executorFlags?.largeFileArchiveExecutor),
       projectDependencyExecutor: Boolean(runtimeCapabilities?.executorFlags?.projectDependencyExecutor),
       browserCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.browserCacheExecutor),
       gradleCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.gradleCacheExecutor),
@@ -284,6 +302,7 @@ export function buildOpenAIAgentContext({
     topFindings,
     executableRows,
     reviewedProjectTargets,
+    largeFileArchiveTargets,
     gradleCacheTargets,
     npmCacheTargets,
     recycleBinTargets,
@@ -393,6 +412,7 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
       topFindings: Array.isArray(context?.topFindings) ? context.topFindings.length : 0,
       executableRows: Array.isArray(context?.executableRows) ? context.executableRows.length : 0,
       reviewedProjectTargets: Array.isArray(context?.reviewedProjectTargets) ? context.reviewedProjectTargets.length : 0,
+      largeFileArchiveTargets: Array.isArray(context?.largeFileArchiveTargets) ? context.largeFileArchiveTargets.length : 0,
       gradleCacheTargets: Array.isArray(context?.gradleCacheTargets) ? context.gradleCacheTargets.length : 0,
       npmCacheTargets: Array.isArray(context?.npmCacheTargets) ? context.npmCacheTargets.length : 0,
       recycleBinTargets: Array.isArray(context?.recycleBinTargets) ? context.recycleBinTargets.length : 0,
@@ -711,6 +731,7 @@ function normalizeActionType(value) {
     clean === "review-target" ||
     clean === "run-temp-executor" ||
     clean === "run-downloads-cleanup-executor" ||
+    clean === "run-large-file-archive-executor" ||
     clean === "run-project-deps-executor" ||
     clean === "run-browser-cache-executor" ||
     clean === "run-gradle-cache-executor" ||

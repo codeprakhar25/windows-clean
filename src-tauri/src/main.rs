@@ -190,6 +190,7 @@ struct WriteExecutionRequest {
     dry_run_only: Option<bool>,
     mutation_attempted: Option<bool>,
     permanent_removal_confirmed: Option<bool>,
+    archive_destination: Option<String>,
     actions: Vec<WriteExecutionAction>,
 }
 
@@ -294,6 +295,7 @@ struct ExecutorFeatureFlags {
     temp_cleanup_executor: bool,
     project_dependency_executor: bool,
     downloads_cleanup_executor: bool,
+    large_file_archive_executor: bool,
     gradle_cache_executor: bool,
     npm_cache_executor: bool,
     recycle_bin_executor: bool,
@@ -663,6 +665,7 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
         dry_run_only: Some(true),
         mutation_attempted: Some(false),
         permanent_removal_confirmed: Some(false),
+        archive_destination: None,
         actions: Vec::new(),
     });
     if request.request_mode.as_deref() == Some("execute-first-safe") {
@@ -673,6 +676,9 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
     }
     if request.request_mode.as_deref() == Some("execute-downloads-recycle-bin") {
         return execute_downloads_review_cleanup(request);
+    }
+    if request.request_mode.as_deref() == Some("execute-large-file-archive") {
+        return execute_large_file_archive_cleanup(request);
     }
     if request.request_mode.as_deref() == Some("execute-browser-cache") {
         return execute_browser_cache_cleanup(request);
@@ -1282,6 +1288,222 @@ fn execute_downloads_review_cleanup(request: WriteExecutionRequest) -> WriteExec
             format!("Reviewed Downloads executor accepted selected files and reclaimed {reclaimed} byte(s).")
         } else {
             "Reviewed Downloads executor rejected the request before mutation.".to_string()
+        },
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
+        entries,
+        warnings,
+    }
+}
+
+fn execute_large_file_archive_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let archive_destination = request.archive_destination.clone().unwrap_or_default();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let flag_enabled = large_file_archive_executor_enabled();
+    let rejections = large_file_archive_execution_rejections(&request, flag_enabled);
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-large-file-archive-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-large-file-archive".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+
+    let entries = request
+        .actions
+        .into_iter()
+        .map(|action| {
+            let target_path = action.target_path.clone().unwrap_or_default();
+            let target_reject =
+                large_file_archive_target_reject_code(&target_path, &archive_destination);
+            let route_match = action.route == route && route == "item-review-large-files";
+            let can_execute = rejections.is_empty() && route_match && target_reject.is_none();
+
+            if can_execute {
+                let target = resolve_dry_run_target(&target_path);
+                let destination = resolve_dry_run_target(&archive_destination);
+                let moved = archive_large_file_to_destination(&target, &destination, &plan_id);
+                return WriteExecutionEntry {
+                    id: action.id,
+                    title: action.title,
+                    route: action.route,
+                    result: if moved.succeeded && moved.bytes > 0 {
+                        "executed".to_string()
+                    } else if moved.succeeded {
+                        "no-op".to_string()
+                    } else {
+                        "rejected".to_string()
+                    },
+                    reject_code: if moved.succeeded {
+                        String::new()
+                    } else {
+                        "large-file-archive-move-failed".to_string()
+                    },
+                    bytes: if moved.succeeded { moved.bytes } else { 0 },
+                    preflight_status: if moved.succeeded {
+                        "executed".to_string()
+                    } else {
+                        "target-blocked".to_string()
+                    },
+                    preflight_checks: vec![
+                        write_preflight_check(
+                            "route-large-file-review",
+                            "Reviewed large-file route",
+                            "passed",
+                            "Action route is item-review-large-files.",
+                        ),
+                        write_preflight_check(
+                            "target-large-file",
+                            "Reviewed large file",
+                            "passed",
+                            "Target is a single old large file under an allowed current-user folder.",
+                        ),
+                        write_preflight_check(
+                            "archive-destination",
+                            "Archive destination",
+                            "passed",
+                            "Destination is an existing non-system folder on a different drive.",
+                        ),
+                        write_preflight_check(
+                            "feature-flag",
+                            "Executor feature flag",
+                            "passed",
+                            "SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR enabled reviewed large-file archive.",
+                        ),
+                        write_preflight_check(
+                            "archive-move",
+                            "Archive copy and source removal",
+                            if moved.succeeded { "passed" } else { "blocked" },
+                            if moved.succeeded {
+                                "The file was copied to the archive destination and removed from the source path."
+                            } else {
+                                "The archive move did not complete; no reclaimed bytes are claimed."
+                            },
+                        ),
+                    ],
+                    note: if moved.succeeded {
+                        format!(
+                            "Reviewed large-file archive moved one file to {} and reclaimed {} byte(s).",
+                            moved.archive_path, moved.bytes
+                        )
+                    } else {
+                        format!(
+                            "Reviewed large-file archive failed with code {}. No bytes were claimed.",
+                            moved.error_code
+                        )
+                    },
+                };
+            }
+
+            let reject_code = if !route_match {
+                "route-not-large-file-review"
+            } else {
+                target_reject
+                    .or_else(|| rejections.first().copied())
+                    .unwrap_or("large-file-archive-executor-disabled")
+            };
+
+            WriteExecutionEntry {
+                id: action.id,
+                title: action.title,
+                route: action.route,
+                result: "rejected".to_string(),
+                reject_code: reject_code.to_string(),
+                bytes: 0,
+                preflight_status: "target-blocked".to_string(),
+                preflight_checks: vec![
+                    write_preflight_check(
+                        "route-large-file-review",
+                        "Reviewed large-file route",
+                        if route_match { "passed" } else { "blocked" },
+                        if route_match {
+                            "Action route is item-review-large-files."
+                        } else {
+                            "Only reviewed large-file archive can use this executor."
+                        },
+                    ),
+                    write_preflight_check(
+                        "target-large-file",
+                        "Reviewed large file",
+                        if target_reject.is_none() {
+                            "passed"
+                        } else {
+                            "blocked"
+                        },
+                        if target_reject.is_none() {
+                            "Target is a reviewed old large user file."
+                        } else {
+                            "Target is missing, too recent, too small, outside allowed user folders, link-like, or not a file."
+                        },
+                    ),
+                    write_preflight_check(
+                        "archive-destination",
+                        "Archive destination",
+                        if archive_destination_reject_code(&archive_destination).is_none() {
+                            "passed"
+                        } else {
+                            "blocked"
+                        },
+                        "Archive destination must be an existing non-system folder on a different drive from the source.",
+                    ),
+                    write_preflight_check(
+                        "feature-flag",
+                        "Executor feature flag",
+                        if flag_enabled { "passed" } else { "blocked" },
+                        if flag_enabled {
+                            "Large-file archive executor feature flag is enabled."
+                        } else {
+                            "SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR is not enabled."
+                        },
+                    ),
+                ],
+                note: format!(
+                    "Reviewed large-file archive rejected with code {reject_code}. Plan {plan_id}; no bytes were moved for this action."
+                ),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let accepted = rejections.is_empty()
+        && entries
+            .iter()
+            .all(|entry| entry.result == "executed" || entry.result == "no-op");
+    let reclaimed = entries.iter().map(|entry| entry.bytes).sum::<u64>();
+    let mut warnings = large_file_archive_execution_warnings(&rejections);
+    if accepted {
+        warnings.push(format!(
+            "Reviewed large-file archive completed for plan {plan_id}; moved {reclaimed} byte(s) to the archive destination. Run a fresh native scan to verify free space."
+        ));
+    }
+
+    WriteExecutionResponse {
+        mode: if accepted {
+            "native-large-file-archive-executor"
+        } else {
+            "native-large-file-archive-executor-rejected"
+        },
+        real_run_enabled: flag_enabled,
+        destructive_commands: flag_enabled,
+        accepted,
+        reason: if accepted {
+            format!("Reviewed large-file archive accepted selected files and reclaimed {reclaimed} byte(s).")
+        } else {
+            "Reviewed large-file archive rejected the request before moving files.".to_string()
         },
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
@@ -2151,6 +2373,7 @@ fn is_first_safe_write_route(route: &str) -> bool {
         "known-temp-delete"
             | "shell-recycle-bin"
             | "item-review-recycle-bin"
+            | "item-review-large-files"
             | "browser-cache-only"
             | "item-review-project-cache"
             | "bounded-cache-delete"
@@ -2230,6 +2453,30 @@ fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
                     "Downloads executor can move reviewed old installer/archive files through Recycle Bin semantics only.".to_string()
                 } else {
                     "Downloads executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR is enabled on Windows.".to_string()
+                },
+            })
+        }
+        "item-review-large-files" => {
+            let enabled = cfg!(target_os = "windows") && large_file_archive_executor_enabled();
+            Some(WriteExecutorScaffold {
+                route: "item-review-large-files".to_string(),
+                title: "Reviewed large-file archive".to_string(),
+                feature_flag: "largeFileArchiveExecutor".to_string(),
+                status: if enabled {
+                    "feature-flag-enabled".to_string()
+                } else {
+                    "feature-flag-disabled".to_string()
+                },
+                validation_status: if enabled {
+                    "reviewed-large-files-archive-only".to_string()
+                } else {
+                    "validation-required".to_string()
+                },
+                mutation_enabled: enabled,
+                reason: if enabled {
+                    "Large-file archive executor can move reviewed old large files to an explicit archive destination on another drive only.".to_string()
+                } else {
+                    "Large-file archive scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR is enabled on Windows.".to_string()
                 },
             })
         }
@@ -2338,6 +2585,7 @@ fn write_executor_scaffold_reject_code(route: &str) -> &'static str {
         "known-temp-delete" => "temp-executor-feature-flag-disabled",
         "shell-recycle-bin" => "recycle-bin-executor-disabled",
         "item-review-recycle-bin" => "downloads-executor-disabled",
+        "item-review-large-files" => "large-file-archive-executor-disabled",
         "item-review-project-cache" => "project-deps-executor-disabled",
         "browser-cache-only" => "browser-cache-executor-disabled",
         "bounded-cache-delete" => "gradle-cache-executor-disabled",
@@ -2365,6 +2613,9 @@ fn write_action_target_reject_code(
     }
     if route == "item-review-recycle-bin" {
         return downloads_cleanup_target_reject_code(target_path.as_deref().unwrap_or(""));
+    }
+    if route == "item-review-large-files" {
+        return large_file_archive_target_reject_code(target_path.as_deref().unwrap_or(""), "");
     }
     if write_target_forbidden(route, &target) {
         return Some("target-forbidden");
@@ -2407,6 +2658,19 @@ fn write_target_forbidden(route: &str, target: &str) -> bool {
                 || target.contains("\\videos\\")
                 || target.contains("\\music\\")
                 || target.ends_with("\\downloads")
+        }
+        "item-review-large-files" => {
+            target.contains("\\windows\\")
+                || target.contains("\\program files")
+                || target.contains("\\programdata\\")
+                || target.contains("\\appdata\\")
+                || target.contains("\\node_modules\\")
+                || target.ends_with("\\downloads")
+                || target.ends_with("\\desktop")
+                || target.ends_with("\\documents")
+                || target.ends_with("\\videos")
+                || target.ends_with("\\pictures")
+                || target.ends_with("\\music")
         }
         "browser-cache-only" => {
             target.contains("cookie")
@@ -2465,6 +2729,14 @@ fn write_target_allowed(route: &str, target: &str) -> bool {
         }
         "shell-recycle-bin" => target.contains("$recycle.bin") || target.contains("recycle bin"),
         "item-review-recycle-bin" => target.contains("\\downloads\\"),
+        "item-review-large-files" => {
+            target.contains("\\downloads\\")
+                || target.contains("\\desktop\\")
+                || target.contains("\\documents\\")
+                || target.contains("\\videos\\")
+                || target.contains("\\pictures\\")
+                || target.contains("\\music\\")
+        }
         "browser-cache-only" => {
             target.contains("\\cache")
                 || target.contains("cache2")
@@ -2522,6 +2794,9 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "downloads-executor-disabled" => {
             "Write request rejected: downloadsCleanupExecutor scaffold is feature-flag disabled."
         }
+        "large-file-archive-executor-disabled" => {
+            "Write request rejected: largeFileArchiveExecutor scaffold is feature-flag disabled."
+        }
         "gradle-cache-executor-disabled" => {
             "Write request rejected: gradleCacheExecutor scaffold is feature-flag disabled."
         }
@@ -2557,6 +2832,33 @@ fn write_boundary_warning(code: &str) -> &'static str {
         }
         "downloads-recycle-bin-shell-api-failed" => {
             "Write request rejected: Windows Shell file recycle operation failed."
+        }
+        "target-not-large-user-file" => {
+            "Write request rejected: reviewed target is not an allowed old large user file."
+        }
+        "target-not-user-review-folder" => {
+            "Write request rejected: reviewed large-file target is not under an allowed current-user review folder."
+        }
+        "target-too-small" => {
+            "Write request rejected: reviewed large-file target is below the native archive size threshold."
+        }
+        "archive-destination-missing" => {
+            "Write request rejected: archive destination is missing."
+        }
+        "archive-destination-not-directory" => {
+            "Write request rejected: archive destination is not an existing directory."
+        }
+        "archive-destination-forbidden" => {
+            "Write request rejected: archive destination is a system, app, or protected folder."
+        }
+        "archive-destination-same-drive" => {
+            "Write request rejected: archive destination must be on a different drive from the source file."
+        }
+        "route-not-large-file-review" => {
+            "Write request rejected: large-file archive requires route item-review-large-files."
+        }
+        "large-file-archive-move-failed" => {
+            "Write request rejected: archive copy or source removal failed."
         }
         "target-not-gradle-cache" => {
             "Write request rejected: Gradle cache target is not the current user's .gradle\\caches directory."
@@ -2603,6 +2905,17 @@ fn project_dependency_executor_enabled() -> bool {
 
 fn downloads_cleanup_executor_enabled() -> bool {
     env::var("SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR")
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn large_file_archive_executor_enabled() -> bool {
+    env::var("SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR")
         .map(|value| {
             matches!(
                 value.to_ascii_lowercase().as_str(),
@@ -2886,6 +3199,92 @@ fn downloads_cleanup_execution_warnings(codes: &[&'static str]) -> Vec<String> {
             }
             "route-not-downloads-review" => {
                 "Reviewed Downloads cleanup requires route item-review-recycle-bin."
+            }
+            _ => write_boundary_warning(code),
+        })
+        .map(String::from)
+        .collect()
+}
+
+fn large_file_archive_execution_rejections(
+    request: &WriteExecutionRequest,
+    flag_enabled: bool,
+) -> Vec<&'static str> {
+    let mut codes = Vec::new();
+    if !cfg!(target_os = "windows") {
+        codes.push("windows-required");
+    }
+    if !flag_enabled {
+        codes.push("large-file-archive-executor-disabled");
+    }
+    if request.plan_id.trim().is_empty() {
+        codes.push("missing-plan-id");
+    }
+    if request
+        .scan_fingerprint
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-scan-fingerprint");
+    }
+    if request
+        .consent_plan_id
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-consent-plan-id");
+    }
+    if request.request_mode.as_deref() != Some("execute-large-file-archive") {
+        codes.push("request-mode-invalid");
+    }
+    if request.route != "item-review-large-files" {
+        codes.push("route-not-large-file-review");
+    }
+    if request.dry_run_only != Some(false) {
+        codes.push("dry-run-disabled-required");
+    }
+    if request.mutation_attempted != Some(true) {
+        codes.push("mutation-confirmation-required");
+    }
+    if request.actions.is_empty() {
+        codes.push("no-actions");
+    }
+    if let Some(code) =
+        archive_destination_reject_code(request.archive_destination.as_deref().unwrap_or_default())
+    {
+        codes.push(code);
+    }
+    codes
+}
+
+fn large_file_archive_execution_warnings(codes: &[&'static str]) -> Vec<String> {
+    if codes.is_empty() {
+        return vec![
+            "Reviewed large-file archive moves selected old large files to the explicit archive destination only.".to_string(),
+        ];
+    }
+    codes
+        .iter()
+        .map(|code| match *code {
+            "windows-required" => "Reviewed large-file archive is Windows-only in this build.",
+            "large-file-archive-executor-disabled" => {
+                "Set SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR=1 before launching the Tauri app to enable reviewed large-file archive."
+            }
+            "dry-run-disabled-required" => {
+                "Reviewed large-file archive requires dryRunOnly=false on the execute-large-file-archive request."
+            }
+            "mutation-confirmation-required" => {
+                "Reviewed large-file archive requires mutationAttempted=true on the execute-large-file-archive request."
+            }
+            "request-mode-invalid" => {
+                "Reviewed large-file archive requires requestMode=execute-large-file-archive."
+            }
+            "route-not-large-file-review" => {
+                "Reviewed large-file archive requires route item-review-large-files."
             }
             _ => write_boundary_warning(code),
         })
@@ -3422,16 +3821,125 @@ fn downloads_cleanup_target_reject_code(value: &str) -> Option<&'static str> {
     None
 }
 
+fn large_file_archive_target_reject_code(
+    value: &str,
+    archive_destination: &str,
+) -> Option<&'static str> {
+    let path = resolve_dry_run_target(value);
+    if path.as_os_str().is_empty() {
+        return Some("target-missing");
+    }
+
+    let original = normalize_write_target(value);
+    let resolved = normalize_write_target(&path_to_string(&path));
+    if write_target_forbidden("item-review-large-files", &original)
+        || write_target_forbidden("item-review-large-files", &resolved)
+    {
+        return Some("target-forbidden");
+    }
+    if !write_target_allowed("item-review-large-files", &original)
+        && !write_target_allowed("item-review-large-files", &resolved)
+    {
+        return Some("target-not-user-review-folder");
+    }
+
+    if !user_large_file_review_roots()
+        .iter()
+        .any(|root| path_is_under(&path, root))
+    {
+        return Some("target-not-user-review-folder");
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(&path) else {
+        return Some("target-missing");
+    };
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Some("target-link-or-not-file");
+    }
+    if metadata.len() < 1024 * 1024 * 1024 {
+        return Some("target-too-small");
+    }
+    if !should_count_file(MeasureKind::LargeUserFiles, &path) {
+        return Some("target-not-large-user-file");
+    }
+    if path_age_days(&path).unwrap_or(0) < 90 {
+        return Some("target-too-recent");
+    }
+    if let Some(code) = archive_destination_reject_code(archive_destination) {
+        return Some(code);
+    }
+    if same_windows_drive(&path_to_string(&path), archive_destination) {
+        return Some("archive-destination-same-drive");
+    }
+    None
+}
+
+fn archive_destination_reject_code(value: &str) -> Option<&'static str> {
+    let destination = resolve_dry_run_target(value);
+    if destination.as_os_str().is_empty() || value.trim().is_empty() {
+        return Some("archive-destination-missing");
+    }
+    let normalized = normalize_write_target(&path_to_string(&destination));
+    if normalized.ends_with(':')
+        || normalized.ends_with(":\\")
+        || normalized.contains("\\windows\\")
+        || normalized.contains("\\program files")
+        || normalized.contains("\\programdata\\")
+        || normalized.contains("\\appdata\\")
+    {
+        return Some("archive-destination-forbidden");
+    }
+    let Ok(metadata) = fs::symlink_metadata(&destination) else {
+        return Some("archive-destination-not-directory");
+    };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Some("archive-destination-not-directory");
+    }
+    None
+}
+
 fn user_downloads_dir() -> Option<PathBuf> {
     env_path("USERPROFILE")
         .or_else(|| env_path("HOME"))
         .map(|profile| profile.join("Downloads"))
 }
 
+fn user_large_file_review_roots() -> Vec<PathBuf> {
+    let Some(profile) = env_path("USERPROFILE").or_else(|| env_path("HOME")) else {
+        return Vec::new();
+    };
+    [
+        "Downloads",
+        "Desktop",
+        "Documents",
+        "Videos",
+        "Pictures",
+        "Music",
+    ]
+    .iter()
+    .map(|name| profile.join(name))
+    .collect()
+}
+
 fn path_is_under(path: &Path, root: &Path) -> bool {
     let path = normalize_path(&path_to_string(path));
     let root = normalize_path(&path_to_string(root));
     path == root || path.starts_with(&format!("{root}\\"))
+}
+
+fn same_windows_drive(left: &str, right: &str) -> bool {
+    let left = windows_drive_prefix(left);
+    let right = windows_drive_prefix(right);
+    left.is_some() && left == right
+}
+
+fn windows_drive_prefix(value: &str) -> Option<String> {
+    let clean = value.trim().replace('/', "\\");
+    let bytes = clean.as_bytes();
+    if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
+        return Some((bytes[0] as char).to_ascii_lowercase().to_string());
+    }
+    None
 }
 
 #[derive(Default)]
@@ -3487,6 +3995,14 @@ struct DownloadsRecycleMoveResult {
     succeeded: bool,
     bytes: u64,
     error_code: i32,
+}
+
+#[derive(Default)]
+struct LargeFileArchiveMoveResult {
+    succeeded: bool,
+    bytes: u64,
+    error_code: i32,
+    archive_path: String,
 }
 
 fn delete_browser_cache_action_targets(value: &str) -> BrowserCacheDeleteResult {
@@ -3873,6 +4389,118 @@ fn move_download_file_to_recycle_bin(_path: &Path) -> DownloadsRecycleMoveResult
     }
 }
 
+fn archive_large_file_to_destination(
+    source: &Path,
+    destination_root: &Path,
+    plan_id: &str,
+) -> LargeFileArchiveMoveResult {
+    let bytes = fs::metadata(source)
+        .map(|metadata| metadata.len())
+        .unwrap_or(0);
+    let archive_dir = destination_root
+        .join("SpaceGuard Archive")
+        .join(sanitize_archive_segment(plan_id));
+    if fs::create_dir_all(&archive_dir).is_err() {
+        return LargeFileArchiveMoveResult {
+            succeeded: false,
+            bytes: 0,
+            error_code: 1,
+            archive_path: path_to_string(&archive_dir),
+        };
+    }
+
+    let file_name = source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or("archived-file");
+    let archive_path = unique_archive_path(&archive_dir, file_name);
+    let archive_path_text = path_to_string(&archive_path);
+
+    let Ok(copied_bytes) = fs::copy(source, &archive_path) else {
+        return LargeFileArchiveMoveResult {
+            succeeded: false,
+            bytes: 0,
+            error_code: 2,
+            archive_path: archive_path_text,
+        };
+    };
+    let archive_len = fs::metadata(&archive_path)
+        .map(|metadata| metadata.len())
+        .unwrap_or(0);
+    if copied_bytes < bytes || archive_len < bytes {
+        return LargeFileArchiveMoveResult {
+            succeeded: false,
+            bytes: 0,
+            error_code: 3,
+            archive_path: archive_path_text,
+        };
+    }
+    if fs::remove_file(source).is_err() || source.exists() {
+        return LargeFileArchiveMoveResult {
+            succeeded: false,
+            bytes: 0,
+            error_code: 4,
+            archive_path: archive_path_text,
+        };
+    }
+
+    LargeFileArchiveMoveResult {
+        succeeded: true,
+        bytes,
+        error_code: 0,
+        archive_path: archive_path_text,
+    }
+}
+
+fn sanitize_archive_segment(value: &str) -> String {
+    let clean = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+    if clean.is_empty() {
+        "plan".to_string()
+    } else {
+        clean.chars().take(80).collect()
+    }
+}
+
+fn unique_archive_path(root: &Path, file_name: &str) -> PathBuf {
+    let candidate = root.join(file_name);
+    if !candidate.exists() {
+        return candidate;
+    }
+    let path = Path::new(file_name);
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("archived-file");
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("");
+    for index in 1..1000 {
+        let name = if extension.is_empty() {
+            format!("{stem}-{index}")
+        } else {
+            format!("{stem}-{index}.{extension}")
+        };
+        let candidate = root.join(name);
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    root.join(format!("{stem}-overflow"))
+}
+
 fn delete_project_dependency_target(root: &Path) -> ProjectDependencyDeleteResult {
     let mut result = ProjectDependencyDeleteResult::default();
     if project_dependency_target_reject_code(&path_to_string(root)).is_some() {
@@ -4062,7 +4690,7 @@ fn openai_advice_row_schema() -> Value {
             "priority": { "type": "string", "enum": ["high", "medium", "low"] },
             "actionType": {
                 "type": "string",
-                "enum": ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+                "enum": ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-npm-cache-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             "targetId": { "type": "string" },
             "route": { "type": "string" }
@@ -4216,6 +4844,8 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         cfg!(target_os = "windows") && project_dependency_executor_enabled();
     let downloads_cleanup_enabled =
         cfg!(target_os = "windows") && downloads_cleanup_executor_enabled();
+    let large_file_archive_enabled =
+        cfg!(target_os = "windows") && large_file_archive_executor_enabled();
     let browser_cache_enabled = cfg!(target_os = "windows") && browser_cache_executor_enabled();
     let gradle_cache_enabled = cfg!(target_os = "windows") && gradle_cache_executor_enabled();
     let npm_cache_enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
@@ -4227,6 +4857,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
     let real_execution_enabled = temp_enabled
         || project_dependency_enabled
         || downloads_cleanup_enabled
+        || large_file_archive_enabled
         || browser_cache_enabled
         || gradle_cache_enabled
         || npm_cache_enabled
@@ -4254,6 +4885,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
             temp_cleanup_executor: temp_enabled,
             project_dependency_executor: project_dependency_enabled,
             downloads_cleanup_executor: downloads_cleanup_enabled,
+            large_file_archive_executor: large_file_archive_enabled,
             gradle_cache_executor: gradle_cache_enabled,
             npm_cache_executor: npm_cache_enabled,
             recycle_bin_executor: recycle_bin_enabled,

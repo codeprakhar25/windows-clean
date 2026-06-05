@@ -222,8 +222,8 @@ Review gate invariant:
 - A selected review-gated category is not executable by category approval alone.
 - Every visible review candidate must be marked `Remove`, `Move`, `Archive`, or `Keep`.
 - Protected candidates are forced to `Keep`.
-- Only `Remove` item bytes count toward selected recovery, executor preview, and ledger output.
-- `Move` and `Archive` item bytes are manual recovery intent and cannot create executor rows.
+- Only decided item bytes count toward selected recovery, executor preview, and ledger output.
+- `Move` and `Archive` item bytes are manual recovery intent unless the route has a scoped native executor. Today that exception is `large-user-files`, where Move/Archive decisions create exact archive targets after the destination and feature-flag checks.
 - Installed app footprint candidates are an explicit exception: `Remove` means manual uninstall follow-up, not executor recovery. The app must not count those bytes in dry-run totals, executor previews, or ledgers.
 - If all items are kept, the action should be unselected rather than simulated as cleanup.
 

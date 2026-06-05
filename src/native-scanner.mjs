@@ -369,6 +369,54 @@ export async function runNativeDownloadsCleanupExecutor(boundary = {}, host = gl
   return normalizeNativeWriteBoundary(result);
 }
 
+export async function runNativeLargeFileArchiveExecutor(boundary = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      accepted: false,
+      reason: "Native reviewed large-file archive executor is not available in the browser demo.",
+      entries: [],
+      warnings: ["Run the Tauri desktop shell before archiving reviewed large files."]
+    };
+  }
+
+  const rows = boundary.rows || boundary.selectedRows || [];
+  const archiveTargets = rows.flatMap((row) =>
+    Array.isArray(row.archiveTargets)
+      ? row.archiveTargets.map((target) => ({
+          id: target.id || row.id,
+          title: target.name || row.title,
+          bytes: Number(target.bytes || 0),
+          route: "item-review-large-files",
+          targetPath: target.path || ""
+        }))
+      : []
+  );
+  const expectedBytes = Number(boundary.expectedBytes ?? archiveTargets.reduce((sum, row) => sum + Number(row.bytes || 0), 0));
+
+  const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
+    request: {
+      schemaVersion: "spaceguard-large-file-archive-request/v1",
+      requestMode: "execute-large-file-archive",
+      planId: boundary.planId || "",
+      route: "item-review-large-files",
+      scanFingerprint: boundary.scanFingerprint || "",
+      consentPlanId: boundary.consentPlanId || "",
+      expectedBytes,
+      dryRunOnly: false,
+      mutationAttempted: true,
+      archiveDestination: boundary.archiveDestination || "",
+      actions: archiveTargets
+    }
+  });
+
+  return normalizeNativeWriteBoundary(result);
+}
+
 export async function runNativeBrowserCacheExecutor(boundary = {}, host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {
@@ -846,6 +894,7 @@ function normalizeExecutorFlags(value = {}) {
     tempCleanupExecutor: Boolean(value.tempCleanupExecutor || value.temp_cleanup_executor),
     projectDependencyExecutor: Boolean(value.projectDependencyExecutor || value.project_dependency_executor),
     downloadsCleanupExecutor: Boolean(value.downloadsCleanupExecutor || value.downloads_cleanup_executor),
+    largeFileArchiveExecutor: Boolean(value.largeFileArchiveExecutor || value.large_file_archive_executor),
     gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
     npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),

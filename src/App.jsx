@@ -144,6 +144,7 @@ import {
   runNativeBrowserCacheExecutor,
   runNativeExecutorDryRun,
   runNativeGradleCacheExecutor,
+  runNativeLargeFileArchiveExecutor,
   runNativeNpmCacheExecutor,
   runNativeProjectDependencyExecutor,
   runNativeRecycleBinExecutor,
@@ -241,6 +242,8 @@ export default function App() {
   const [nativeRealExecution, setNativeRealExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeProjectDependencyExecution, setNativeProjectDependencyExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeDownloadsExecution, setNativeDownloadsExecution] = useState({ status: "idle", result: null, error: "" });
+  const [nativeLargeFileArchiveExecution, setNativeLargeFileArchiveExecution] = useState({ status: "idle", result: null, error: "" });
+  const [largeFileArchiveDestination, setLargeFileArchiveDestination] = useState("");
   const [nativeBrowserCacheExecution, setNativeBrowserCacheExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeGradleCacheExecution, setNativeGradleCacheExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeNpmCacheExecution, setNativeNpmCacheExecution] = useState({ status: "idle", result: null, error: "" });
@@ -270,6 +273,7 @@ export default function App() {
         tempCleanupExecutor: false,
         projectDependencyExecutor: false,
         downloadsCleanupExecutor: false,
+        largeFileArchiveExecutor: false,
         gradleCacheExecutor: false,
         npmCacheExecutor: false,
         recycleBinExecutor: false,
@@ -731,6 +735,7 @@ export default function App() {
           realExecutors: Boolean(runtimeCapabilities.result.realRunEnabled),
           tempCleanupExecutor: Boolean(executorFlags.tempCleanupExecutor),
           downloadsCleanupExecutor: Boolean(executorFlags.downloadsCleanupExecutor),
+          largeFileArchiveExecutor: Boolean(executorFlags.largeFileArchiveExecutor),
           gradleCacheExecutor: Boolean(executorFlags.gradleCacheExecutor),
           npmCacheExecutor: Boolean(executorFlags.npmCacheExecutor),
           recycleBinExecutor: Boolean(executorFlags.recycleBinExecutor),
@@ -1941,6 +1946,7 @@ export default function App() {
     const scopedExecutorRuntime = Boolean(
       (runtimeCapabilities.result.executorFlags?.tempCleanupExecutor && realExecutorCapsule?.route?.id === "known-temp-delete")
         || runtimeCapabilities.result.executorFlags?.downloadsCleanupExecutor
+        || runtimeCapabilities.result.executorFlags?.largeFileArchiveExecutor
         || runtimeCapabilities.result.executorFlags?.projectDependencyExecutor
         || runtimeCapabilities.result.executorFlags?.browserCacheExecutor
         || runtimeCapabilities.result.executorFlags?.gradleCacheExecutor
@@ -2060,6 +2066,11 @@ export default function App() {
     if (actionType === "run-downloads-cleanup-executor") {
       focusWorkflowPanel("downloads-cleanup-executor-panel");
       await executeReviewedDownloadsCleanup();
+      return;
+    }
+    if (actionType === "run-large-file-archive-executor") {
+      focusWorkflowPanel("large-file-archive-executor-panel");
+      await executeLargeFileArchive();
       return;
     }
     if (actionType === "run-project-deps-executor") {
@@ -2198,6 +2209,59 @@ export default function App() {
       commitExecutionLedger(buildNativeExecutionLedger(result, executedAt), { executedAt, source: "native-downloads-recycle-bin-executor" });
     } catch (error) {
       setNativeDownloadsExecution({
+        status: "error",
+        result: null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  async function executeLargeFileArchive() {
+    if (nativeLargeFileArchiveExecution.status === "running") return;
+    const archiveRows = executorPlan.rows.filter((row) => row.route === "item-review-large-files" && row.archiveTargets?.length);
+    const archiveTargets = archiveRows.flatMap((row) => row.archiveTargets || []);
+    const archiveDestination = largeFileArchiveDestination.trim();
+    if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.largeFileArchiveExecutor) {
+      setNativeLargeFileArchiveExecution({
+        status: "blocked",
+        result: null,
+        error: "Large-file archive executor is not enabled. Set SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR=1 before launching the Tauri app."
+      });
+      return;
+    }
+    if (!archiveDestination) {
+      setNativeLargeFileArchiveExecution({
+        status: "blocked",
+        result: null,
+        error: "Large-file archive needs an explicit destination folder on another drive."
+      });
+      return;
+    }
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !archiveRows.length) {
+      setNativeLargeFileArchiveExecution({
+        status: "blocked",
+        result: null,
+        error: "Large-file archive needs Move/Archive item targets plus current plan, scan fingerprint, and consent receipt."
+      });
+      return;
+    }
+
+    setActiveStage("execute");
+    setNativeLargeFileArchiveExecution({ status: "running", result: null, error: "" });
+    try {
+      const result = await runNativeLargeFileArchiveExecutor({
+        rows: archiveRows,
+        archiveDestination,
+        planId: planSnapshot.id,
+        scanFingerprint: scanSession.currentFingerprint,
+        consentPlanId: consentReceipt.planId,
+        expectedBytes: archiveTargets.reduce((sum, target) => sum + Number(target.bytes || 0), 0)
+      });
+      setNativeLargeFileArchiveExecution({ status: "complete", result, error: "" });
+      const executedAt = new Date().toISOString();
+      commitExecutionLedger(buildNativeExecutionLedger(result, executedAt), { executedAt, source: "native-large-file-archive-executor" });
+    } catch (error) {
+      setNativeLargeFileArchiveExecution({
         status: "error",
         result: null,
         error: error instanceof Error ? error.message : String(error)
@@ -3477,6 +3541,16 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               onExecute={executeReviewedDownloadsCleanup}
+            />
+            <LargeFileArchiveExecutorPanel
+              runtimeCapabilities={runtimeCapabilities}
+              execution={nativeLargeFileArchiveExecution}
+              executorPlan={executorPlan}
+              scanSession={scanSession}
+              consentReceipt={consentReceipt}
+              archiveDestination={largeFileArchiveDestination}
+              onArchiveDestination={setLargeFileArchiveDestination}
+              onExecute={executeLargeFileArchive}
             />
             <ProjectDependencyExecutorPanel
               runtimeCapabilities={runtimeCapabilities}
@@ -6048,7 +6122,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, runHis
   const configured = Boolean(config.configured || nativeConfigured);
   const keySource = nativeConfigured ? context.runtime.openAiKeySource : config.keySource;
   const transport = context.runtime.openAiAgentAdvice ? "native-tauri" : "browser-fetch";
-  const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.downloadsCleanupExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor || context.runtime.gradleCacheExecutor || context.runtime.npmCacheExecutor || context.runtime.recycleBinExecutor);
+  const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.downloadsCleanupExecutor || context.runtime.largeFileArchiveExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor || context.runtime.gradleCacheExecutor || context.runtime.npmCacheExecutor || context.runtime.recycleBinExecutor);
 
   return (
     <Card id="openai-agent-panel">
@@ -6071,6 +6145,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, runHis
           <QueueStat label="Direct tools" value="blocked" tone="safe" />
           <QueueStat label="Real exec" value={scopedRealFlag ? "scoped flag" : "off"} tone={scopedRealFlag ? "restricted" : "safe"} />
           <QueueStat label="Downloads" value={context.runtime.downloadsCleanupExecutor ? "on" : "off"} tone={context.runtime.downloadsCleanupExecutor ? "restricted" : "review"} />
+          <QueueStat label="Archive" value={context.largeFileArchiveTargets?.length || 0} tone={context.largeFileArchiveTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Manual" value={context.manualReviewTargets?.length || 0} tone={context.manualReviewTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Project targets" value={context.reviewedProjectTargets?.length || 0} tone={context.reviewedProjectTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Gradle root" value={context.gradleCacheTargets?.length || 0} tone={context.gradleCacheTargets?.length ? "advanced" : "review"} />
@@ -6180,6 +6255,8 @@ function aiRecommendationActionLabel(row = {}) {
       return "Run temp cleanup";
     case "run-downloads-cleanup-executor":
       return "Move Downloads items";
+    case "run-large-file-archive-executor":
+      return "Archive large files";
     case "run-project-deps-executor":
       return "Run project cleanup";
     case "run-browser-cache-executor":
@@ -6482,6 +6559,8 @@ function ItemReviewPanel({ itemReview, selected, onSelectAction, onDecision, onA
               <p className="text-sm text-muted-foreground">
                 {manualUninstallReview
                   ? "Mark uninstall candidates for manual follow-up only. SpaceGuard will not delete Program Files folders or run uninstallers."
+                  : action.id === "large-user-files"
+                    ? "Move and Archive can enter the reviewed large-file archive executor after the native flag, consent, destination, and path checks pass."
                   : "Only Remove enters executor preview. Move and Archive are manual follow-along decisions."}
               </p>
             </div>
@@ -8484,6 +8563,115 @@ function DownloadsCleanupExecutorPanel({ runtimeCapabilities, execution, executo
         <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
           {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {running ? "Moving reviewed files" : "Move reviewed Downloads items"}
+        </Button>
+
+        {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}
+
+        {result?.warnings?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.warnings.slice(0, 3).map((warning) => (
+              <div key={warning} className="rounded-md border bg-card p-3 text-xs text-muted-foreground">{warning}</div>
+            ))}
+          </div>
+        ) : null}
+
+        {result?.entries?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.entries.slice(0, 4).map((entry) => (
+              <div key={`${entry.id}-${entry.result}-${entry.bytes}`} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{entry.title}</span>
+                  <Badge variant={entry.result === "executed" ? "safe" : "review"}>{entry.result}</Badge>
+                  <Badge variant="outline">{formatBytes(entry.bytes)}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{entry.note}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function LargeFileArchiveExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, archiveDestination, onArchiveDestination, onExecute }) {
+  const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.largeFileArchiveExecutor);
+  const rows = executorPlan.rows.filter((row) => row.route === "item-review-large-files" && row.archiveTargets?.length);
+  const targets = rows.flatMap((row) => row.archiveTargets || []);
+  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentReceipt.planId && archiveDestination.trim());
+  const running = execution.status === "running";
+  const result = execution.result;
+  const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+  const disabled = running || !enabled || !requestReady;
+
+  return (
+    <Card id="large-file-archive-executor-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Reviewed large-file archive
+          <Badge variant={enabled ? "restricted" : "review"}>{enabled ? "feature on" : "feature off"}</Badge>
+        </CardTitle>
+        <CardDescription>
+          Moves reviewed large personal files to an explicit archive folder on another drive.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Targets" value={targets.length} tone={targets.length ? "advanced" : "review"} />
+          <QueueStat label="Selected" value={formatBytes(targets.reduce((sum, target) => sum + Number(target.bytes || 0), 0))} tone={targets.length ? "advanced" : "review"} />
+          <QueueStat label="Recovered" value={formatBytes(reclaimed)} tone={reclaimed ? "safe" : "review"} />
+          <QueueStat label="Request" value={requestReady ? "ready" : "wait"} tone={requestReady ? "safe" : "review"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Large-file archive boundary</span>
+            <Badge variant={enabled ? "restricted" : "safe"}>{enabled ? "can move reviewed files" : "cannot move"}</Badge>
+            <Badge variant="outline">item-review-large-files</Badge>
+            <Badge variant="safe">copy then remove source</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Enable with `SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR=1` before launching Tauri.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, Move/Archive targets {targets.length}.</span>
+            <span>Native validation accepts only old 1GB+ files under current-user review folders and requires an existing non-system destination on another drive.</span>
+          </div>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <Input
+            value={archiveDestination}
+            placeholder="D:\\SpaceGuardArchive"
+            aria-label="large file archive destination"
+            onChange={(event) => onArchiveDestination(event.target.value)}
+          />
+          <Badge variant={archiveDestination.trim() ? "safe" : "review"}>{archiveDestination.trim() ? "destination set" : "destination needed"}</Badge>
+        </div>
+
+        {targets.length ? (
+          <div className="flex flex-col gap-2">
+            {targets.slice(0, 4).map((target) => (
+              <div key={target.id} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{target.name}</span>
+                  <Badge variant={target.decision === "move" ? "review" : "advanced"}>{target.decision || "archive"}</Badge>
+                  <Badge variant="outline">{formatBytes(target.bytes)}</Badge>
+                  <Badge variant="outline">{target.kind || "large file"}</Badge>
+                </div>
+                <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{target.path}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{target.reason}</p>
+                <ReviewSignalBadges signals={target.signals} compact />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+            Mark large personal files as Move or Archive before this executor has a target.
+          </div>
+        )}
+
+        <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
+          {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          {running ? "Archiving reviewed files" : "Archive reviewed large files"}
         </Button>
 
         {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}
