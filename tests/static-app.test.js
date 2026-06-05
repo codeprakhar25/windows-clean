@@ -195,10 +195,14 @@ assert(app.includes("nativeBetaEvidenceSpecs"), "native beta evidence checklist 
 assert(app.includes("readStoredNativeBetaEvidence"), "native beta evidence should load from local storage");
 assert(app.includes("writeStoredNativeBetaEvidence"), "native beta evidence should save to local storage");
 assert(app.includes("buildNativeBetaEvidenceLedger"), "native beta evidence should be exportable as a ledger");
+assert(app.includes("buildNativeBetaEvidenceLedgerMarkdown"), "native beta evidence ledger should export markdown");
 assert(app.includes("buildNativeBetaDocumentationEvidence"), "native beta documentation readiness should be derived from evidence");
 assert(app.includes("coerceNativeBetaEvidenceFormRecord"), "native beta evidence should migrate older records");
 assert(app.includes("setNativeBetaEvidenceRow"), "native beta evidence checklist should be editable");
 assert(app.includes("Recorded beta evidence"), "native beta distribution panel should expose editable evidence");
+assert(app.includes("Export ledger"), "native beta distribution panel should expose evidence export action");
+assert(app.includes("spaceguard-native-beta-evidence.md"), "native beta evidence export should use a stable file name");
+assert(app.includes("Structured Native Beta Evidence JSON"), "native beta evidence export should include structured JSON");
 assert(app.includes("Evidence path or artifact id"), "native beta evidence should require artifact references");
 assert(!app.includes("publicReleaseResearch: true"), "native beta documentation evidence should not be hardcoded as complete in the UI");
 assert(model.includes("Native Beta Evidence Ledger"), "report should export native beta evidence records");

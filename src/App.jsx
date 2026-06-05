@@ -2040,6 +2040,22 @@ export default function App() {
     downloadTextFile("spaceguard-release-review-packet.md", body, "text/markdown;charset=utf-8");
   }
 
+  function exportNativeBetaEvidenceLedger() {
+    const exportedLedger = { ...nativeBetaEvidenceLedger, generatedAt: new Date().toISOString() };
+    const body = [
+      buildNativeBetaEvidenceLedgerMarkdown(exportedLedger),
+      "",
+      "---",
+      "",
+      "## Structured Native Beta Evidence JSON",
+      "",
+      "```json",
+      JSON.stringify(exportedLedger, null, 2),
+      "```"
+    ].join("\n");
+    downloadTextFile("spaceguard-native-beta-evidence.md", body, "text/markdown;charset=utf-8");
+  }
+
   async function exportNativeDryRunScopeEvidence() {
     if (!runtimeCapabilities.result.simulateCleanupPlan) {
       setNativeScopeEvidenceExport({
@@ -2247,6 +2263,7 @@ export default function App() {
               onToggleEvidence={setNativeBetaEvidenceRow}
               onUpdateEvidence={updateNativeBetaEvidence}
               onResetEvidence={resetNativeBetaEvidence}
+              onExportEvidence={exportNativeBetaEvidenceLedger}
             />
 
             <DemoRehearsalRunbookPanel runbook={demoRehearsalRunbook} onExport={exportReport} />
@@ -2847,7 +2864,7 @@ function RealDataLaunchRoadmapPanel({ roadmap }) {
   );
 }
 
-function NativeBetaDistributionPanel({ readiness, evidence, onToggleEvidence, onUpdateEvidence, onResetEvidence }) {
+function NativeBetaDistributionPanel({ readiness, evidence, onToggleEvidence, onUpdateEvidence, onResetEvidence, onExportEvidence }) {
   const visibleRows = readiness.waitingRows.length ? readiness.waitingRows : readiness.rows.slice(0, 4);
   const evidenceRows = nativeBetaEvidenceSpecs.map((spec) => ({
     ...spec,
@@ -2921,10 +2938,16 @@ function NativeBetaDistributionPanel({ readiness, evidence, onToggleEvidence, on
         <div className="rounded-md border bg-muted/30 p-3">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="text-sm font-medium">Recorded beta evidence</div>
-            <Button type="button" size="sm" variant="outline" onClick={onResetEvidence}>
-              <RefreshCcw className="h-4 w-4" />
-              Reset
-            </Button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={onExportEvidence}>
+                <Download className="h-4 w-4" />
+                Export ledger
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={onResetEvidence}>
+                <RefreshCcw className="h-4 w-4" />
+                Reset
+              </Button>
+            </div>
           </div>
           <div className="grid gap-2">
             {evidenceRows.map((row) => {
@@ -7304,6 +7327,38 @@ function buildNativeBetaEvidenceLedger(evidence = {}) {
       missing
     }
   };
+}
+
+function buildNativeBetaEvidenceLedgerMarkdown(ledger) {
+  const rows = Array.isArray(ledger?.rows) ? ledger.rows : [];
+  return [
+    "# SpaceGuard Native Beta Evidence Ledger",
+    "",
+    `Status: ${ledger?.status || "empty"}`,
+    `Generated at: ${ledger?.generatedAt || "not recorded"}`,
+    `Complete evidence: ${ledger?.counts?.complete || 0}/${ledger?.counts?.total || rows.length}`,
+    `Needs detail: ${ledger?.counts?.needsDetail || 0}`,
+    `Drafts: ${ledger?.counts?.draft || 0}`,
+    `Missing: ${ledger?.counts?.missing || 0}`,
+    "",
+    "## Evidence Rows",
+    rows.length
+      ? rows
+          .map((row) => [
+            `### ${row.label || row.id}`,
+            "",
+            `- Status: ${row.status}`,
+            `- Reviewer: ${row.reviewer || "missing"}`,
+            `- Artifact: ${row.evidencePath || "missing"}`,
+            `- Updated: ${row.updatedAt || row.recordedAt || "missing"}`,
+            `- Notes: ${row.notes || "none"}`,
+            `- Detail: ${row.detail || "none"}`
+          ].join("\n"))
+          .join("\n\n")
+      : "- No evidence rows.",
+    "",
+    "This ledger is beta distribution evidence only. It does not enable real cleanup."
+  ].join("\n");
 }
 
 function buildNativeBetaDocumentationEvidence(evidenceLedger = {}) {
