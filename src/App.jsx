@@ -5553,6 +5553,7 @@ function WriteBoundaryProbePanel({ probe, nativeWriteBoundary, runtimeCapabiliti
             <span>Route: {probe.route?.id || "none"}</span>
             <span>Contract echo: {probe.contractEcho ? probe.contractEcho.requestMode || "present" : "missing"}</span>
             <span>Echo match: {probe.contractRequired ? probe.contractMatch ? "yes" : "no" : "not required"}</span>
+            <span>Scaffold: {probe.executorScaffold ? `${probe.executorScaffold.featureFlag || probe.executorScaffold.route} / ${probe.executorScaffold.status}` : "none"}</span>
           </div>
         </div>
 

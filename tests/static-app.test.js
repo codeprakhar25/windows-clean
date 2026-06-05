@@ -373,6 +373,7 @@ assert(model.includes("spaceguard-first-safe-target-audit/v1"), "model should ex
 assert(model.includes("targetPath"), "first-safe contract should include native target path evidence");
 assert(model.includes("target-scope-rejected"), "write boundary probe should separate target-scope rejection from passing evidence");
 assert(model.includes("spaceguard-write-boundary-probe/v1"), "model should expose write boundary probe schema");
+assert(model.includes("normalizeWriteExecutorScaffold"), "model should normalize native write executor scaffold metadata");
 assert(model.includes("contract-mismatch"), "write boundary probe should reject mismatched contract echoes");
 assert(model.includes("normalizeValidationEvidenceRecord"), "model should normalize structured validation evidence");
 assert(model.includes("spaceguard-fixture-evidence-import/v1"), "model should expose fixture evidence import schema");
@@ -410,6 +411,7 @@ assert(nativeAdapter.includes("targetScopeStatus"), "native adapter should norma
 assert(nativeAdapter.includes("execute_cleanup_plan"), "native adapter should invoke the rejecting write boundary command");
 assert(nativeAdapter.includes("rejectCode"), "native adapter should normalize write-boundary reject codes");
 assert(nativeAdapter.includes("targetPath"), "native adapter should pass selected target paths to the write boundary");
+assert(nativeAdapter.includes("executorScaffold"), "native adapter should normalize write executor scaffold metadata");
 assert(nativeAdapter.includes("runtime_capabilities"), "native adapter should invoke runtime capability command");
 assert(nativeAdapter.includes("items.map"), "native adapter should preserve item-level review candidates");
 assert(tauriConfig.includes('"withGlobalTauri": true'), "Tauri config should expose the global bridge used by the adapter");
@@ -426,6 +428,9 @@ assert(rustScanner.includes("target_scope_status"), "Rust native dry-run should 
 assert(rustScanner.includes("write_action_target_reject_code(&action.route, &action.target_path)"), "Rust native dry-run should reuse target-scope rejection before candidate enumeration");
 assert(rustScanner.includes("execute_cleanup_plan"), "Rust rejecting write boundary command should exist");
 assert(rustScanner.includes("contract_echo"), "Rust rejecting write boundary should echo the first-safe contract");
+assert(rustScanner.includes("WriteExecutorScaffold"), "Rust write boundary should expose disabled executor scaffold metadata");
+assert(rustScanner.includes("tempCleanupExecutor"), "Rust write boundary should name the temp executor feature flag");
+assert(rustScanner.includes("temp-executor-feature-flag-disabled"), "Rust write boundary should reject the temp scaffold while disabled");
 assert(rustScanner.includes("write_boundary_rejections"), "Rust write boundary should validate request shape before rejection");
 assert(rustScanner.includes("dry-run-only-required"), "Rust write boundary should reject non-dry-run request shapes");
 assert(rustScanner.includes("route-not-first-safe"), "Rust write boundary should reject non-first-safe routes");

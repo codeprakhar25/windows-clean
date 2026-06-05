@@ -2925,6 +2925,15 @@ const assert = require("assert");
           mutationAttempted: false,
           actionCount: firstSafeContract.requestPreview.actionCount
         },
+        executorScaffold: {
+          route: "known-temp-delete",
+          title: "Known temp roots",
+          featureFlag: "tempCleanupExecutor",
+          status: "feature-flag-disabled",
+          validationStatus: "validation-required",
+          mutationEnabled: false,
+          reason: "Temp cleanup executor scaffold is present but disabled."
+        },
         entries: [
           {
             id: "windows-temp",
@@ -2946,6 +2955,8 @@ const assert = require("assert");
   assert.strictEqual(rejectedWriteBoundaryProbe.status, "rejected", "zero-byte rejected native result should pass as rejection evidence");
   assert.strictEqual(rejectedWriteBoundaryProbe.rejectionEvidence, true, "rejected native result should be evidence");
   assert.strictEqual(rejectedWriteBoundaryProbe.contractMatch, true, "rejected native result should match the first-safe contract echo");
+  assert.strictEqual(rejectedWriteBoundaryProbe.executorScaffold.featureFlag, "tempCleanupExecutor", "rejected probe should preserve disabled temp scaffold feature flag");
+  assert.strictEqual(rejectedWriteBoundaryProbe.executorScaffold.mutationEnabled, false, "rejected probe scaffold must keep mutation disabled");
   assert.strictEqual(rejectedWriteBoundaryProbe.counts.rejected, 1, "rejected probe should count rejected entries");
   assert.strictEqual(rejectedWriteBoundaryProbe.entries[0].rejectCode, "real-executor-disabled", "rejected probe should preserve native reject codes");
   assert.strictEqual(rejectedWriteBoundaryProbe.counts.bytes, 0, "rejected probe must not reclaim bytes");
@@ -3185,6 +3196,7 @@ const assert = require("assert");
   assert(writeReadinessReport.includes("Destructive action available: no"), "executor capsule report should keep destructive action hidden");
   assert(writeReadinessReport.includes("## Write Boundary Probe"), "dry-run report should include write boundary probe");
   assert(writeReadinessReport.includes("Rejection evidence: yes"), "write boundary probe report should record rejection evidence");
+  assert(writeReadinessReport.includes("Executor scaffold: Known temp roots | feature-flag-disabled | flag=tempCleanupExecutor | mutation=disabled"), "write boundary report should include the disabled temp scaffold");
   assert(writeReadinessReport.includes("Bytes reclaimed: 0 GB"), "write boundary probe report should not count recovered bytes");
   assert(writeReadinessReport.includes("## First-Safe Implementation Work Order"), "dry-run report should include the first-safe implementation work order");
   assert(writeReadinessReport.includes("Real run allowed: no"), "implementation work order report should keep real execution blocked");

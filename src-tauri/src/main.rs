@@ -179,8 +179,21 @@ struct WriteExecutionResponse {
     accepted: bool,
     reason: String,
     contract_echo: WriteContractEcho,
+    executor_scaffold: Option<WriteExecutorScaffold>,
     entries: Vec<WriteExecutionEntry>,
     warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WriteExecutorScaffold {
+    route: String,
+    title: String,
+    feature_flag: String,
+    status: String,
+    validation_status: String,
+    mutation_enabled: bool,
+    reason: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -410,6 +423,7 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
     let boundary_rejections = write_boundary_rejections(&request);
+    let executor_scaffold = write_executor_scaffold(&route);
     let contract_echo = WriteContractEcho {
         schema_version: request
             .schema_version
@@ -453,6 +467,12 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
             .iter()
             .map(|code| write_boundary_warning(code).to_string()),
     );
+    if let Some(scaffold) = &executor_scaffold {
+        warnings.push(format!(
+            "{} scaffold is present but disabled behind {} until Windows validation evidence and release gates pass.",
+            scaffold.title, scaffold.feature_flag
+        ));
+    }
 
     WriteExecutionResponse {
         mode: "native-write-rejected",
@@ -466,6 +486,7 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
                 .to_string()
         },
         contract_echo,
+        executor_scaffold,
         entries,
         warnings,
     }
@@ -535,7 +556,7 @@ fn write_action_reject_code(
     boundary_rejections
         .first()
         .copied()
-        .unwrap_or("real-executor-disabled")
+        .unwrap_or_else(|| write_executor_scaffold_reject_code(route))
 }
 
 fn is_first_safe_write_route(route: &str) -> bool {
@@ -543,6 +564,28 @@ fn is_first_safe_write_route(route: &str) -> bool {
         route,
         "known-temp-delete" | "shell-recycle-bin" | "browser-cache-only"
     )
+}
+
+fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
+    match route {
+        "known-temp-delete" => Some(WriteExecutorScaffold {
+            route: "known-temp-delete".to_string(),
+            title: "Known temp roots".to_string(),
+            feature_flag: "tempCleanupExecutor".to_string(),
+            status: "feature-flag-disabled".to_string(),
+            validation_status: "validation-required".to_string(),
+            mutation_enabled: false,
+            reason: "Temp cleanup executor scaffold is present, but mutation remains disabled until Windows fixture validation, rollback/rescan proof, and release review pass.".to_string(),
+        }),
+        _ => None,
+    }
+}
+
+fn write_executor_scaffold_reject_code(route: &str) -> &'static str {
+    match route {
+        "known-temp-delete" => "temp-executor-feature-flag-disabled",
+        _ => "real-executor-disabled",
+    }
 }
 
 fn write_action_target_reject_code(
@@ -629,6 +672,9 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "target-forbidden" => "Write request rejected: target path hits a forbidden target rule.",
         "target-not-allowlisted" => {
             "Write request rejected: target path does not match the route allowlist."
+        }
+        "temp-executor-feature-flag-disabled" => {
+            "Write request rejected: tempCleanupExecutor scaffold is feature-flag disabled and still requires validation evidence."
         }
         "no-actions" => "Write request rejected: no selected actions were supplied.",
         _ => "Write request rejected by native boundary validation.",

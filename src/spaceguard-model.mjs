@@ -6061,6 +6061,7 @@ export function buildWriteBoundaryProbe({
   const rejected = entries.filter((entry) => entry.result === "rejected").length;
   const targetScopeRejected = entries.some((entry) => isWriteBoundaryTargetRejectCode(entry.rejectCode));
   const contractEcho = result?.contractEcho || null;
+  const executorScaffold = normalizeWriteExecutorScaffold(result?.executorScaffold || result?.executor_scaffold);
   const expectedContract = firstSafeExecutorContract?.requestPreview || null;
   const contractRequired = Boolean(expectedContract);
   const contractReady = !contractRequired || firstSafeExecutorContract?.status === "disabled-contract-ready";
@@ -6114,6 +6115,7 @@ export function buildWriteBoundaryProbe({
     reason: nativeWriteBoundary?.error || result?.reason || getWriteBoundaryProbeReason(status),
     route: realExecutorCapsule?.route || null,
     contractEcho,
+    executorScaffold,
     contractRequired,
     contractReady,
     contractMatch,
@@ -6125,7 +6127,8 @@ export function buildWriteBoundaryProbe({
       rejected,
       bytes,
       warnings: warnings.length,
-      contractEcho: contractEcho ? 1 : 0
+      contractEcho: contractEcho ? 1 : 0,
+      executorScaffold: executorScaffold ? 1 : 0
     },
     primary: getWriteBoundaryProbePrimary(status, { selectedRows, entries, rejected, bytes }),
     steps: buildWriteBoundaryProbeSteps(status)
@@ -6391,7 +6394,8 @@ export function buildFirstSafeImplementationWorkOrder({
     boundary: {
       status: writeBoundaryProbe?.status || "not-run",
       rejectionEvidence: Boolean(writeBoundaryProbe?.rejectionEvidence),
-      zeroBytes: Number(writeBoundaryProbe?.counts?.bytes || 0) === 0
+      zeroBytes: Number(writeBoundaryProbe?.counts?.bytes || 0) === 0,
+      executorScaffold: writeBoundaryProbe?.executorScaffold || null
     },
     workItems,
     acceptanceTests,
@@ -9003,6 +9007,7 @@ export function buildReport({
           `- Contract ready: ${writeBoundaryProbe.contractReady ? "yes" : "no"}`,
           `- Contract echo: ${writeBoundaryProbe.contractEcho ? "present" : "missing"}`,
           `- Contract match: ${writeBoundaryProbe.contractMatch ? "yes" : "no"}`,
+          `- Executor scaffold: ${writeBoundaryProbe.executorScaffold ? `${writeBoundaryProbe.executorScaffold.title || writeBoundaryProbe.executorScaffold.route} | ${writeBoundaryProbe.executorScaffold.status} | flag=${writeBoundaryProbe.executorScaffold.featureFlag || "none"} | mutation=${writeBoundaryProbe.executorScaffold.mutationEnabled ? "enabled" : "disabled"}` : "none"}`,
           `- Entries: ${writeBoundaryProbe.counts.entries}`,
           `- Rejected entries: ${writeBoundaryProbe.counts.rejected}`,
           `- Bytes reclaimed: ${formatBytes(writeBoundaryProbe.counts.bytes || 0)}`,
@@ -11579,6 +11584,19 @@ function buildFirstSafeImplementationWorkOrderSteps(status, requirement, workIte
   return blocked.length
     ? blocked.map((item) => `${item.label}: ${item.detail}`)
     : ["Complete first-safe validation evidence.", "Keep real cleanup locked.", "Regenerate the implementation work order."];
+}
+
+function normalizeWriteExecutorScaffold(value = null) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    route: value.route || "",
+    title: value.title || "",
+    featureFlag: value.featureFlag || value.feature_flag || "",
+    status: value.status || "",
+    validationStatus: value.validationStatus || value.validation_status || "",
+    mutationEnabled: Boolean(value.mutationEnabled || value.mutation_enabled),
+    reason: value.reason || ""
+  };
 }
 
 function getRealExecutorCapsulePrimary(status, route, blockers = []) {

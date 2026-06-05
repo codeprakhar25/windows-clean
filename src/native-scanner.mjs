@@ -398,7 +398,21 @@ export function normalizeNativeWriteBoundary(result = {}) {
         }))
       : [],
     contractEcho: normalizeWriteContractEcho(result.contractEcho || result.contract_echo),
+    executorScaffold: normalizeWriteExecutorScaffold(result.executorScaffold || result.executor_scaffold),
     warnings: Array.isArray(result.warnings) ? result.warnings : []
+  };
+}
+
+function normalizeWriteExecutorScaffold(value = null) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    route: value.route || "",
+    title: value.title || "",
+    featureFlag: value.featureFlag || value.feature_flag || "",
+    status: value.status || "",
+    validationStatus: value.validationStatus || value.validation_status || "",
+    mutationEnabled: Boolean(value.mutationEnabled || value.mutation_enabled),
+    reason: value.reason || ""
   };
 }
 

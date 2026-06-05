@@ -347,6 +347,25 @@ const assert = require("assert");
   assert.strictEqual(rejectedWrite.entries[0].result, "rejected", "native write boundary should normalize rejected entries");
   assert.strictEqual(rejectedWrite.entries[0].rejectCode, "real-executor-disabled", "native write boundary should normalize reject codes");
   assert.strictEqual(rejectedWrite.entries[0].bytes, 0, "native write boundary should reclaim zero bytes");
+  const scaffoldedWrite = native.normalizeNativeWriteBoundary({
+    mode: "native-write-rejected",
+    real_run_enabled: false,
+    destructive_commands: false,
+    accepted: false,
+    executor_scaffold: {
+      route: "known-temp-delete",
+      title: "Known temp roots",
+      feature_flag: "tempCleanupExecutor",
+      status: "feature-flag-disabled",
+      validation_status: "validation-required",
+      mutation_enabled: false
+    },
+    entries: []
+  });
+  assert.strictEqual(scaffoldedWrite.executorScaffold.route, "known-temp-delete", "write boundary should normalize scaffold route");
+  assert.strictEqual(scaffoldedWrite.executorScaffold.featureFlag, "tempCleanupExecutor", "write boundary should normalize scaffold feature flag");
+  assert.strictEqual(scaffoldedWrite.executorScaffold.status, "feature-flag-disabled", "write boundary should normalize scaffold status");
+  assert.strictEqual(scaffoldedWrite.executorScaffold.mutationEnabled, false, "write boundary scaffold must keep mutation disabled");
 
   const capabilities = native.normalizeNativeRuntimeCapabilities({
     mode: "native-readonly",

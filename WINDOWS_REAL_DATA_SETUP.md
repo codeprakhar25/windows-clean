@@ -154,6 +154,7 @@ For each Windows validation run, capture:
 - Real executor capsule route, code-path status, missing checks, and destructive-action availability.
 - First-safe validation gate status, route-required checks, fixture coverage, unsafe runtime status, and `realRunAllowed=false`.
 - First-safe work order status, build items, acceptance tests, feature flag, boundary reprobe state, and `realRunAllowed=false`.
+- Disabled temp executor scaffold status when probing `known-temp-delete`: route, `tempCleanupExecutor`, validation-required state, mutation disabled, and zero bytes.
 - Write boundary probe state if the desktop runtime exposes `execute_cleanup_plan`; current evidence must show accepted false, rejected entries, zero bytes, matching first-safe contract echo, and no mutation.
 - Exported validation pack.
 
