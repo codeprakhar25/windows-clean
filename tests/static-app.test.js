@@ -293,6 +293,9 @@ assert(app.includes("handleOpenAIAgentRecommendation"), "OpenAI recommendations 
 assert(app.includes("aiRecommendationActionLabel"), "OpenAI recommendation rows should expose action labels");
 assert(app.includes("Run npm cleanup"), "OpenAI recommendations should include npm executor action labels");
 assert(app.includes("onAction={handleOpenAIAgentRecommendation}"), "OpenAI panel should receive the guarded recommendation action handler");
+assert(app.includes("OPENAI_AGENT_RUN_HISTORY_STORAGE_KEY"), "OpenAI agent runs should persist as local advisory history");
+assert(app.includes("buildOpenAIAgentRunRecord"), "OpenAI advice should create plan-bound run records");
+assert(app.includes("appendOpenAIAgentRunRecord"), "OpenAI run history should append through the adapter guard");
 assert(openAiAgent.includes("https://api.openai.com/v1/responses"), "OpenAI adapter should use the Responses API endpoint");
 assert(openAiAgent.includes("OPENAI_API_KEY"), "OpenAI adapter should read the primary .env API key");
 assert(openAiAgent.includes("VITE_OPENAI_API_KEY"), "OpenAI adapter should keep the Vite env API key fallback");
@@ -312,6 +315,10 @@ assert(openAiAgent.includes("npmCacheTargets"), "OpenAI context should include s
 assert(openAiAgent.includes("recycleBinTargets"), "OpenAI context should include scanned Recycle Bin targets");
 assert(openAiAgent.includes("browserCacheTargets"), "OpenAI context should include scanned browser cache targets");
 assert(openAiAgent.includes("manualReviewTargets"), "OpenAI context should include manual review targets");
+assert(openAiAgent.includes("planSnapshot"), "OpenAI context should include current plan snapshot identity");
+assert(openAiAgent.includes("spaceguard-openai-agent-run/v1"), "OpenAI adapter should expose local run provenance records");
+assert(openAiAgent.includes("storesFullContext: false"), "OpenAI run records should not persist full path-level context");
+assert(openAiAgent.includes("storesRawModelText: false"), "OpenAI run records should not persist raw model text");
 assert(openAiAgent.includes("driveInventoryRows"), "OpenAI context should include drive inventory rows");
 assert(openAiAgent.includes("customRootRows"), "OpenAI context should include custom root triage rows");
 assert(openAiAgent.includes("run-gradle-cache-executor"), "OpenAI schema should allow Gradle cache executor recommendations");
@@ -330,6 +337,9 @@ assert(app.includes("Cache roots"), "OpenAI panel should show browser cache targ
 assert(app.includes("strict JSON"), "OpenAI panel should show structured output boundary");
 assert(app.includes("Reasoning:"), "OpenAI panel should show configured reasoning effort");
 assert(app.includes("Transport:"), "OpenAI panel should show native/browser transport");
+assert(app.includes("AI runs"), "OpenAI panel should show advisory run history count");
+assert(app.includes("Last advice:"), "OpenAI panel should show last recorded advice");
+assert(app.includes("Current plan:"), "OpenAI panel should show the plan sent to OpenAI");
 assert(app.includes("OPENAI_MODEL"), "OpenAI panel should mention the primary model env setting");
 assert(app.includes("agent-question-panel"), "OpenAI ask-user recommendations should be able to focus the question panel");
 assert(app.includes("item-review-panel"), "OpenAI review-target recommendations should be able to focus item review");

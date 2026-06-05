@@ -111,7 +111,8 @@ export function buildOpenAIAgentContext({
   runtimeCapabilities,
   itemReviewsByAction,
   driveInventorySummary,
-  customRootTriage
+  customRootTriage,
+  planSnapshot
 } = {}) {
   const selected = actionList
     .filter((action) => selectedIds.has(action.id))
@@ -244,6 +245,14 @@ export function buildOpenAIAgentContext({
       freeBytes: Number(profile?.freeBytes || 0),
       totalBytes: Number(profile?.totalBytes || 0)
     },
+    plan: {
+      id: planSnapshot?.id || "",
+      scanMode: planSnapshot?.scanMode || scanMode || "unknown",
+      selectedCount: Number(planSnapshot?.selectedCount ?? selected.length),
+      selectedBytes: Number(planSnapshot?.selectedBytes ?? selected.reduce((sum, action) => sum + Number(action.bytes || 0), 0)),
+      goalBytes: Number(planSnapshot?.goalBytes || planSnapshot?.payload?.goalBytes || 0),
+      selectedIds: Array.isArray(planSnapshot?.selectedIds) ? planSnapshot.selectedIds.slice(0, 24) : selected.map((action) => action.id).slice(0, 24)
+    },
     readiness: {
       scan: scanSession?.status || "unknown",
       plan: readiness?.status || "unknown",
@@ -292,6 +301,131 @@ export function buildOpenAIAgentContext({
       sampleNames: row.sampleNames || []
     }))
   };
+}
+
+export function buildOpenAIAgentRunRecord({
+  result = null,
+  context = null,
+  userPrompt = "",
+  planSnapshot = null,
+  createdAt = null
+} = {}) {
+  const advice = result?.advice && typeof result.advice === "object"
+    ? normalizeAgentAdviceObject(result.advice, {
+        summary: "",
+        nextAction: "",
+        confidence: "medium",
+        recommendedActions: [],
+        blockedActions: [],
+        questions: [],
+        warnings: []
+      })
+    : parseAgentAdvice(result?.rawText || "");
+  const recordedAt = createdAt || result?.createdAt || new Date().toISOString();
+  const planId = planSnapshot?.id || context?.plan?.id || "";
+  const payload = {
+    schemaVersion: "spaceguard-openai-agent-run/v1",
+    provider: result?.provider || "openai",
+    model: result?.model || DEFAULT_OPENAI_MODEL,
+    transport: result?.transport || "",
+    keySource: result?.keySource || context?.runtime?.openAiKeySource || "",
+    requestId: result?.requestId || "",
+    responseId: result?.responseId || "",
+    createdAt: recordedAt,
+    planId,
+    scanMode: context?.machine?.scanMode || context?.plan?.scanMode || "unknown",
+    prompt: String(userPrompt || "").slice(0, 600),
+    summary: advice.summary,
+    nextAction: advice.nextAction,
+    confidence: advice.confidence,
+    recommendedActions: advice.recommendedActions,
+    blockedActions: advice.blockedActions,
+    questions: advice.questions,
+    warnings: advice.warnings,
+    context: compactOpenAIAgentRunContext(context, planSnapshot)
+  };
+  return {
+    ...payload,
+    id: buildOpenAIAgentRunId(payload)
+  };
+}
+
+export function appendOpenAIAgentRunRecord(history = [], record = null, { limit = 20 } = {}) {
+  const existing = normalizeOpenAIAgentRunHistory(history, { limit });
+  if (!isOpenAIAgentRunRecord(record)) return existing;
+  if (existing.some((item) => item.id === record.id)) return existing;
+  return [...existing, record].slice(-limit);
+}
+
+export function normalizeOpenAIAgentRunHistory(history = [], { limit = 20 } = {}) {
+  return (Array.isArray(history) ? history : [])
+    .filter(isOpenAIAgentRunRecord)
+    .slice(-limit);
+}
+
+function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
+  const plan = context?.plan || {};
+  const selectedActions = Array.isArray(context?.selectedActions) ? context.selectedActions : [];
+  return {
+    schemaVersion: "spaceguard-openai-agent-context-summary/v1",
+    generatedAt: context?.generatedAt || "",
+    plan: {
+      id: planSnapshot?.id || plan.id || "",
+      scanMode: planSnapshot?.scanMode || plan.scanMode || context?.machine?.scanMode || "unknown",
+      selectedCount: Number(planSnapshot?.selectedCount ?? plan.selectedCount ?? selectedActions.length),
+      selectedBytes: Number(planSnapshot?.selectedBytes ?? plan.selectedBytes ?? 0),
+      goalBytes: Number(planSnapshot?.goalBytes || planSnapshot?.payload?.goalBytes || plan.goalBytes || 0),
+      selectedIds: Array.isArray(planSnapshot?.selectedIds) ? planSnapshot.selectedIds.slice(0, 24) : (plan.selectedIds || selectedActions.map((action) => action.id)).slice(0, 24)
+    },
+    readiness: { ...(context?.readiness || {}) },
+    runtime: {
+      nativeAvailable: Boolean(context?.runtime?.nativeAvailable),
+      windows: Boolean(context?.runtime?.windows),
+      realRunEnabled: Boolean(context?.runtime?.realRunEnabled),
+      destructiveCommands: Boolean(context?.runtime?.destructiveCommands),
+      openAiAgentAdvice: Boolean(context?.runtime?.openAiAgentAdvice),
+      openAiAdvisorConfigured: Boolean(context?.runtime?.openAiAdvisorConfigured)
+    },
+    counts: {
+      selectedActions: selectedActions.length,
+      topFindings: Array.isArray(context?.topFindings) ? context.topFindings.length : 0,
+      executableRows: Array.isArray(context?.executableRows) ? context.executableRows.length : 0,
+      reviewedProjectTargets: Array.isArray(context?.reviewedProjectTargets) ? context.reviewedProjectTargets.length : 0,
+      gradleCacheTargets: Array.isArray(context?.gradleCacheTargets) ? context.gradleCacheTargets.length : 0,
+      npmCacheTargets: Array.isArray(context?.npmCacheTargets) ? context.npmCacheTargets.length : 0,
+      recycleBinTargets: Array.isArray(context?.recycleBinTargets) ? context.recycleBinTargets.length : 0,
+      browserCacheTargets: Array.isArray(context?.browserCacheTargets) ? context.browserCacheTargets.length : 0,
+      manualReviewTargets: Array.isArray(context?.manualReviewTargets) ? context.manualReviewTargets.length : 0,
+      driveInventoryRows: Array.isArray(context?.driveInventoryRows) ? context.driveInventoryRows.length : 0,
+      customRootRows: Array.isArray(context?.customRootRows) ? context.customRootRows.length : 0,
+      candidateSamples: Array.isArray(context?.candidateSamples) ? context.candidateSamples.length : 0
+    },
+    selectedActionIds: selectedActions.map((action) => action.id).filter(Boolean).slice(0, 24),
+    actionTypes: Array.from(new Set(selectedActions.map((action) => action.route || action.gate || action.risk).filter(Boolean))).slice(0, 12),
+    privacy: {
+      directFilesystemAccess: Boolean(context?.appBoundary?.directFilesystemAccess),
+      directDeleteAuthority: Boolean(context?.appBoundary?.directDeleteAuthority),
+      storesRawModelText: false,
+      storesFullContext: false
+    }
+  };
+}
+
+function isOpenAIAgentRunRecord(record) {
+  return Boolean(
+    record &&
+      typeof record === "object" &&
+      record.schemaVersion === "spaceguard-openai-agent-run/v1" &&
+      typeof record.id === "string" &&
+      typeof record.createdAt === "string" &&
+      Array.isArray(record.recommendedActions) &&
+      Array.isArray(record.blockedActions)
+  );
+}
+
+function buildOpenAIAgentRunId(record = {}) {
+  const suffix = record.responseId || record.requestId || `${record.createdAt}-${record.planId}-${record.nextAction}`;
+  return `openai-run-${String(suffix || "unknown").replace(/[^a-z0-9_-]+/gi, "-").slice(0, 96)}`;
 }
 
 export async function requestOpenAIAgentAdvice({

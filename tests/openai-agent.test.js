@@ -31,6 +31,14 @@ const assert = require("assert");
   );
 
   const manualContext = openai.buildOpenAIAgentContext({
+    planSnapshot: {
+      id: "plan-openai-manual",
+      scanMode: "native-readonly",
+      selectedCount: 1,
+      selectedBytes: 6 * 1024 ** 3,
+      goalBytes: 10 * 1024 ** 3,
+      selectedIds: ["installed-app-footprints"]
+    },
     nativeScan: {
       findings: [
         {
@@ -95,6 +103,8 @@ const assert = require("assert");
     }
   });
   assert.strictEqual(manualContext.appBoundary.allowedActions.includes("recommend-manual-review"), true, "OpenAI context should permit manual-review recommendations");
+  assert.strictEqual(manualContext.plan.id, "plan-openai-manual", "OpenAI context should include the current plan id");
+  assert.strictEqual(manualContext.plan.selectedCount, 1, "OpenAI context should include current plan selection counts");
   assert.strictEqual(manualContext.manualReviewTargets[0].route, "manual-app-uninstall", "installed app candidates should enter the OpenAI context as manual uninstall targets");
   assert.strictEqual(manualContext.manualReviewTargets[0].manualOnly, true, "installed app candidates should stay manual-only in OpenAI context");
   assert.strictEqual(manualContext.manualReviewTargets[0].canCreateExecutor, false, "OpenAI context must not turn installed app review into an executor route");
@@ -174,6 +184,22 @@ const assert = require("assert");
   assert.strictEqual(nativeResult.transport, "native-tauri", "native OpenAI result should preserve transport");
   assert.strictEqual(nativeResult.keySource, ".env:OPENAI_API_KEY", "native OpenAI result should expose key source only");
   assert.strictEqual(nativeResult.advice.recommendedActions[0].actionType, "rescan", "native OpenAI result should normalize advice rows");
+  const nativeRunRecord = openai.buildOpenAIAgentRunRecord({
+    result: nativeResult,
+    context: manualContext,
+    userPrompt: "Use the native advisor.",
+    planSnapshot: manualContext.plan,
+    createdAt: "2026-06-05T00:00:00.000Z"
+  });
+  assert.strictEqual(nativeRunRecord.schemaVersion, "spaceguard-openai-agent-run/v1", "OpenAI run records should expose a schema version");
+  assert.strictEqual(nativeRunRecord.planId, "plan-openai-manual", "OpenAI run records should bind advice to a plan id");
+  assert.strictEqual(nativeRunRecord.context.counts.manualReviewTargets, 1, "OpenAI run records should retain compact context counts");
+  assert.strictEqual(nativeRunRecord.context.privacy.storesFullContext, false, "OpenAI run records should not persist the full path-level context");
+  assert.strictEqual(JSON.stringify(nativeRunRecord).includes("C:\\Program Files"), false, "OpenAI run records should not persist local app paths");
+  const appendedAgentRuns = openai.appendOpenAIAgentRunRecord([], nativeRunRecord);
+  const dedupedAgentRuns = openai.appendOpenAIAgentRunRecord(appendedAgentRuns, nativeRunRecord);
+  assert.strictEqual(appendedAgentRuns.length, 1, "OpenAI run history should append valid run records");
+  assert.strictEqual(dedupedAgentRuns.length, 1, "OpenAI run history should dedupe repeated run records");
 
   await assert.rejects(
     () => openai.requestOpenAIAgentAdvice({ context: {}, userPrompt: "rank cleanup" }),

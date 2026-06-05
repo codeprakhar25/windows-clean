@@ -151,18 +151,23 @@ import {
   runNativeWriteBoundary
 } from "./native-scanner.mjs";
 import {
+  appendOpenAIAgentRunRecord,
+  buildOpenAIAgentRunRecord,
   buildOpenAIAgentContext,
   getOpenAIAgentConfig,
+  normalizeOpenAIAgentRunHistory,
   requestOpenAIAgentAdvice
 } from "./openai-agent.mjs";
 
 const RUN_HISTORY_STORAGE_KEY = "spaceguard.ledgerHistory.v1";
+const OPENAI_AGENT_RUN_HISTORY_STORAGE_KEY = "spaceguard.openAiAgentRuns.v1";
 const VALIDATION_EVIDENCE_STORAGE_KEY = "spaceguard.validationEvidence.v1";
 const MANUAL_STRATEGY_EVIDENCE_STORAGE_KEY = "spaceguard.manualStrategyEvidence.v1";
 const ROLLBACK_EVIDENCE_STORAGE_KEY = "spaceguard.rollbackEvidence.v1";
 const CUSTOM_ROOT_TRIAGE_STORAGE_KEY = "spaceguard.customRootTriage.v1";
 const NATIVE_BETA_EVIDENCE_STORAGE_KEY = "spaceguard.nativeBetaEvidence.v1";
 const RUN_HISTORY_LIMIT = 25;
+const OPENAI_AGENT_RUN_HISTORY_LIMIT = 20;
 const filters = ["all", "safe", "rebuildable", "review", "advanced", "restricted"];
 const modes = [
   ["safe", "Safe"],
@@ -240,6 +245,7 @@ export default function App() {
   const [nativeRecycleBinExecution, setNativeRecycleBinExecution] = useState({ status: "idle", result: null, error: "" });
   const [aiPrompt, setAiPrompt] = useState("Find the fastest safe path to recover real space from this scan.");
   const [aiAdvice, setAiAdvice] = useState({ status: "idle", result: null, error: "" });
+  const [openAiAgentRunHistory, setOpenAiAgentRunHistory] = useState(() => readStoredOpenAIAgentRunHistory());
   const [runtimeCapabilities, setRuntimeCapabilities] = useState({
     status: "loading",
     result: {
@@ -323,6 +329,10 @@ export default function App() {
   useEffect(() => {
     writeStoredRunHistory(runHistory);
   }, [runHistory]);
+
+  useEffect(() => {
+    writeStoredOpenAIAgentRunHistory(openAiAgentRunHistory);
+  }, [openAiAgentRunHistory]);
 
   useEffect(() => {
     writeStoredValidationEvidence(validationEvidence);
@@ -1339,7 +1349,8 @@ export default function App() {
         runtimeCapabilities: runtimeCapabilities.result,
         itemReviewsByAction,
         driveInventorySummary,
-        customRootTriage
+        customRootTriage,
+        planSnapshot
       }),
     [
       profile,
@@ -1359,7 +1370,8 @@ export default function App() {
       runtimeCapabilities.result,
       itemReviewsByAction,
       driveInventorySummary,
-      customRootTriage
+      customRootTriage,
+      planSnapshot
     ]
   );
   const aiAgentIntegration = useMemo(
@@ -1984,6 +1996,13 @@ export default function App() {
         config: openAiConfig
       });
       setAiAdvice({ status: "complete", result, error: "" });
+      const runRecord = buildOpenAIAgentRunRecord({
+        result,
+        context: openAiAgentContext,
+        userPrompt: aiPrompt,
+        planSnapshot
+      });
+      setOpenAiAgentRunHistory((current) => appendOpenAIAgentRunRecord(current, runRecord, { limit: OPENAI_AGENT_RUN_HISTORY_LIMIT }));
     } catch (error) {
       setAiAdvice({
         status: "error",
@@ -3217,6 +3236,7 @@ export default function App() {
               prompt={aiPrompt}
               advice={aiAdvice}
               context={openAiAgentContext}
+              runHistory={openAiAgentRunHistory}
               onPrompt={setAiPrompt}
               onAsk={askOpenAIAgent}
               onAction={handleOpenAIAgentRecommendation}
@@ -5957,11 +5977,12 @@ function AgentQuestionPanel({
   );
 }
 
-function OpenAIAgentPanel({ integration, config, prompt, advice, context, onPrompt, onAsk, onAction }) {
+function OpenAIAgentPanel({ integration, config, prompt, advice, context, runHistory = [], onPrompt, onAsk, onAction }) {
   const running = advice.status === "running";
   const result = advice.result?.advice || null;
   const recommended = result?.recommendedActions || [];
   const blocked = result?.blockedActions || [];
+  const lastRun = runHistory[runHistory.length - 1] || null;
   const nativeConfigured = Boolean(context.runtime.openAiAdvisorConfigured);
   const configured = Boolean(config.configured || nativeConfigured);
   const keySource = nativeConfigured ? context.runtime.openAiKeySource : config.keySource;
@@ -5994,6 +6015,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
           <QueueStat label="npm root" value={context.npmCacheTargets?.length || 0} tone={context.npmCacheTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Recycle" value={context.recycleBinTargets?.length || 0} tone={context.recycleBinTargets?.length ? "restricted" : "review"} />
           <QueueStat label="Cache roots" value={context.browserCacheTargets?.length || 0} tone={context.browserCacheTargets?.length ? "advanced" : "review"} />
+          <QueueStat label="AI runs" value={runHistory.length} tone={runHistory.length ? "safe" : "review"} />
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
@@ -6013,6 +6035,8 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, onProm
             <span>Candidate samples: {context.candidateSamples.length}</span>
             <span>Drive inventory rows: {context.driveInventoryRows?.length || 0}</span>
             <span>Custom root rows: {context.customRootRows?.length || 0}</span>
+            <span>Current plan: {context.plan?.id || "not locked"}</span>
+            <span>Last advice: {lastRun ? `${lastRun.recommendedActions.length} recommendation(s)` : "none recorded"}</span>
           </div>
         </div>
 
@@ -9702,6 +9726,28 @@ function readStoredRunHistory() {
 function writeStoredRunHistory(history) {
   try {
     globalThis.localStorage?.setItem(RUN_HISTORY_STORAGE_KEY, JSON.stringify(buildLedgerHistorySummary(history).records.slice(-RUN_HISTORY_LIMIT)));
+  } catch {
+    // Local storage can be unavailable in hardened browser contexts.
+  }
+}
+
+function readStoredOpenAIAgentRunHistory() {
+  try {
+    const raw = globalThis.localStorage?.getItem(OPENAI_AGENT_RUN_HISTORY_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return normalizeOpenAIAgentRunHistory(parsed, { limit: OPENAI_AGENT_RUN_HISTORY_LIMIT });
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredOpenAIAgentRunHistory(history) {
+  try {
+    globalThis.localStorage?.setItem(
+      OPENAI_AGENT_RUN_HISTORY_STORAGE_KEY,
+      JSON.stringify(normalizeOpenAIAgentRunHistory(history, { limit: OPENAI_AGENT_RUN_HISTORY_LIMIT }))
+    );
   } catch {
     // Local storage can be unavailable in hardened browser contexts.
   }
