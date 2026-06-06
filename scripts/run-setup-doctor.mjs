@@ -106,6 +106,7 @@ const report = {
     build: "npm run build",
     openAiFixtureSmoke: "npm run openai:smoke:fixture",
     openAiSmoke: "npm run openai:smoke",
+    routeSetup: "npm run setup:route -- --route npm-cache",
     nativeDev: "npm run native:dev"
   },
   nextSteps: buildNextSteps({ openAiConfigured: openAiKey.source !== "missing", enabledFlags })
@@ -124,6 +125,7 @@ function buildNextSteps({ openAiConfigured, enabledFlags }) {
   } else {
     steps.push("Run npm run openai:smoke to validate the fixture-only OpenAI advisor path.");
   }
+  steps.push("Run npm run setup:route -- --route npm-cache with the route you plan to validate before enabling a scoped executor.");
   if (!enabledFlags.length) {
     steps.push("Run npm run native:dev for read-only scanning, or enable exactly one scoped executor flag for Windows fixture validation.");
   } else if (enabledFlags.length === 1) {

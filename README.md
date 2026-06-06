@@ -53,6 +53,7 @@ cp .env.example .env
 npm run setup:doctor
 npm run openai:smoke:fixture
 npm run openai:smoke
+npm run setup:route -- --route npm-cache
 npm run native:dev
 ```
 
@@ -61,6 +62,8 @@ npm run native:dev
 `npm run openai:smoke:fixture` validates the same deterministic fixture task queue and recommendation broker locally without an API key or network call.
 
 `npm run openai:smoke` sends only a fixture context to the OpenAI advisor. It does not scan local folders or run cleanup; use it to validate the `.env` key, model, strict JSON schema, deterministic agent task queue, and recommendation broker before opening the desktop app. The smoke command exits non-zero unless OpenAI returns the required broker-ready npm cache recommendation from the fixture queue.
+
+`npm run setup:route -- --route npm-cache` prints a read-only route setup packet for one real cleanup path: the required scoped executor flag, native request mode, UI panel id, conflicting flags, and next commands. Run it for the route you plan to validate before launching the desktop shell.
 
 The same `.env` file can hold named scoped executor flags, for example `SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR=1`, when you are validating real cleanup on Windows. Validate and run one selected route at a time, then complete post-run rescan proof before running another executor.
 

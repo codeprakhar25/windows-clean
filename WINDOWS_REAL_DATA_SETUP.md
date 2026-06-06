@@ -41,6 +41,7 @@ Copy-Item .env.example .env
 npm run setup:doctor
 npm run openai:smoke:fixture
 npm run openai:smoke
+npm run setup:route -- --route npm-cache
 npm run native:dev
 ```
 
@@ -49,6 +50,8 @@ npm run native:dev
 `npm run openai:smoke:fixture` validates the local fixture task queue and recommendation broker without an API key or network call.
 
 `npm run openai:smoke` validates the OpenAI key, strict advice schema, deterministic agent task queue, and recommendation broker against fixture data only. It exits non-zero unless OpenAI returns the required broker-ready npm cache recommendation from the fixture queue. It does not scan local folders, run cleanup, or use real disk findings.
+
+`npm run setup:route -- --route npm-cache` emits a read-only setup packet for the selected real cleanup route. It shows the exact scoped executor flag, native request mode, app panel id, conflicting enabled flags, and next commands before you launch the desktop shell.
 
 Optional first-safe temp executor:
 

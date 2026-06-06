@@ -16,7 +16,8 @@
     "openai:smoke": "node scripts/run-openai-advisor-smoke.mjs",
     "openai:smoke:fixture": "node scripts/run-openai-advisor-smoke.mjs --fixture-only",
     "setup:doctor": "node scripts/run-setup-doctor.mjs",
-    "test": "node tests/guardrails.test.js && node tests/native-scanner.test.js && node tests/openai-agent.test.js && node tests/demo-rehearsal.test.js && node tests/native-readonly-rehearsal.test.js && node tests/static-app.test.js",
+    "setup:route": "node scripts/run-setup-route.mjs",
+    "test": "node tests/guardrails.test.js && node tests/native-scanner.test.js && node tests/openai-agent.test.js && node tests/setup-route.test.js && node tests/demo-rehearsal.test.js && node tests/native-readonly-rehearsal.test.js && node tests/static-app.test.js",
     "check": "npm run build"
   },
   "dependencies": {
