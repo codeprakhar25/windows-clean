@@ -1015,6 +1015,10 @@ assert(realDataGuide.includes("Native evidence quality"), "real-data guide shoul
 assert(readme.includes("NATIVE_BETA_DISTRIBUTION.md"), "README should link native beta distribution runbook");
 assert(readme.includes("Beta handoff manifest"), "README should describe beta handoff manifest");
 assert(readme.includes("Local evidence backup"), "README should describe local evidence backup");
+assert(readme.includes("Docker build-cache"), "README should list Docker build-cache as a scoped executor family");
+assert(readme.includes("pip cache"), "README should list pip cache as a scoped executor family");
+assert(readme.includes("shader cache"), "README should list shader cache as a scoped executor family");
+assert(!readme.includes("one scoped executor flag at a time"), "README should not imply only one scoped executor flag can exist in .env");
 assert(readme.includes("Read-only drive inventory"), "README should describe drive inventory");
 assert(readme.includes("Storage pressure diagnosis"), "README should describe storage pressure diagnosis");
 assert(readme.includes("Native evidence quality"), "README should describe native evidence quality");

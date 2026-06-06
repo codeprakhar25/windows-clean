@@ -6,7 +6,7 @@ SpaceGuard is a guarded Windows space recovery assistant. The current app has th
 - Native shell: Tauri + Rust read-only scanner for known local roots.
 - OpenAI advisor: optional Responses API call from `.env` that interprets the current scan/plan context and suggests next actions without direct tool authority.
 
-The native scanner measures filesystem metadata. Real cleanup is limited to feature-flagged scoped executors for known temp files, reviewed project dependency folders, Gradle cache, user `.cache`, Android cache, npm cache, pnpm store, Recycle Bin, and browser cache; all other routes remain read-only, manual, or advisory.
+The native scanner measures filesystem metadata. Real cleanup is limited to feature-flagged scoped executors for known temp files, reviewed Downloads items, reviewed large-file archives, reviewed project dependency folders, Gradle cache, user `.cache`, Android cache, shader cache, pip cache, Docker build-cache, npm cache, pnpm store, Recycle Bin, and browser cache; all other routes remain read-only, manual, or advisory.
 
 The product goal is to answer one user question clearly:
 
@@ -52,7 +52,7 @@ cp .env.example .env
 npm run native:dev
 ```
 
-The same `.env` file can hold one scoped executor flag at a time, for example `SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR=1`, when you are validating real cleanup on Windows.
+The same `.env` file can hold named scoped executor flags, for example `SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR=1`, when you are validating real cleanup on Windows. Validate and run one selected route at a time, then complete post-run rescan proof before running another executor.
 
 Enable temp cleanup only on a disposable Windows validation machine or after you accept the temp-file risk:
 
