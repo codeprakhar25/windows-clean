@@ -8231,6 +8231,7 @@ export function buildExecutorSmokeRunPacket({
 } = {}) {
   const runtime = runtimeCapabilities || {};
   const flags = normalizeExecutorFeatureFlags(runtime.executorFlags || runtime.executor_flags || {});
+  const enabledExecutorFlags = getEnabledExecutorFlagRows(flags);
   const planId = planSnapshot?.id || "";
   const scanFingerprint = scanSession?.currentFingerprint || "";
   const consentPlanId = consentReceipt?.planId || "";
@@ -8247,6 +8248,7 @@ export function buildExecutorSmokeRunPacket({
       consentPlanId,
       proofStatus,
       proofAllowsNextExecutor,
+      enabledExecutorFlags,
       nativeScan,
       archiveDestination,
       permanentRemovalConfirmed
@@ -8286,6 +8288,7 @@ export function buildExecutorSmokeRunPacket({
     releaseReady: Boolean(releaseGate?.readyForRealRun),
     proofStatus,
     proofAllowsNextExecutor,
+    enabledExecutorFlags: enabledExecutorFlags.map((row) => row.envVar),
     rescanComparisonStatus: rescanComparison?.status || "not-run",
     postRunScanEvidence: Boolean(rescanComparison?.postRunScanEvidence),
     selectedRoutes: rows.map((row) => row.route),
@@ -8303,6 +8306,7 @@ export function buildExecutorSmokeRunPacket({
       queuedReady: queuedReadyRows.length,
       blocked: blockedRows.length,
       needsProof: proofBlockedRows.length,
+      enabledFlags: enabledExecutorFlags.length,
       validationReady: validationReady ? 1 : 0
     },
     primary: getExecutorSmokeRunPrimary(status, { readyRows, activeReadyRow, queuedReadyRows, blockedRows, proofBlockedRows }),
@@ -16181,6 +16185,24 @@ function getExecutorSmokeRouteSpec(route) {
   return executorSmokeRouteSpecs[route] || null;
 }
 
+function getEnabledExecutorFlagRows(flags = {}) {
+  const seen = new Set();
+  return Object.entries(executorSmokeRouteSpecs)
+    .filter(([, spec]) => Boolean(flags[spec.flag]))
+    .filter(([, spec]) => {
+      if (seen.has(spec.flag)) return false;
+      seen.add(spec.flag);
+      return true;
+    })
+    .map(([route, spec]) => ({
+      route,
+      flag: spec.flag,
+      envVar: spec.envVar,
+      requestMode: spec.requestMode,
+      panelId: spec.panelId
+    }));
+}
+
 function buildScopedExecutorSetupCommands(primaryRow = null) {
   if (!primaryRow?.route) {
     return {
@@ -16229,6 +16251,7 @@ function buildExecutorSmokeRunRow({
   consentPlanId = "",
   proofStatus = "waiting-for-execution",
   proofAllowsNextExecutor = true,
+  enabledExecutorFlags = [],
   nativeScan = null,
   archiveDestination = "",
   permanentRemovalConfirmed = false
@@ -16241,6 +16264,7 @@ function buildExecutorSmokeRunRow({
     buildExecutorSmokeCheck("native-runtime", "Native Windows runtime", Boolean(runtime.available && runtime.windows), runtime.available ? `platform=${runtime.platform || "unknown"}` : "Tauri desktop shell required"),
     buildExecutorSmokeCheck("real-run-flag", "Scoped real-run mode", Boolean(runtime.realRunEnabled), runtime.realRunEnabled ? "runtime exposes scoped real execution" : "enable one scoped executor flag before launch"),
     buildExecutorSmokeCheck("feature-flag", "Route feature flag", flagEnabled, flagEnabled ? `${spec.envVar}=1` : `set ${spec.envVar}=1 in .env or process env`),
+    buildExecutorSmokeCheck("single-scoped-flag", "Exactly one scoped executor flag", enabledExecutorFlags.length <= 1, enabledExecutorFlags.length <= 1 ? `${enabledExecutorFlags.length} scoped executor flag(s) enabled` : `Turn off all but one scoped executor flag: ${enabledExecutorFlags.map((flag) => flag.envVar).join(", ")}`),
     buildExecutorSmokeCheck("plan-id", "Current plan id", Boolean(planId), planId || "missing plan id"),
     buildExecutorSmokeCheck("scan-fingerprint", "Current native scan", Boolean(scanFingerprint), scanFingerprint || "missing native scan fingerprint"),
     buildExecutorSmokeCheck("consent", "Current consent receipt", Boolean(planId && consentPlanId && consentPlanId === planId), consentPlanId ? `consent=${consentPlanId}` : "missing consent receipt"),
@@ -16593,17 +16617,17 @@ export function buildScopedExecutorRunGate({
     ? "route-missing"
     : proofBlocked
       ? "proof-required"
-      : !requestedRow
-        ? "route-missing"
-        : !activeRoute
-          ? "no-active-route"
-          : inactiveRoute
-            ? "inactive-route"
-            : requestedRow.status === "ready"
-              ? "ready-to-run"
-              : requestedRow.status === "needs-proof"
-                ? "proof-required"
-                : "route-blocked";
+        : !requestedRow
+          ? "route-missing"
+          : !activeRoute
+            ? "no-active-route"
+            : requestedRow.status === "needs-proof"
+              ? "proof-required"
+              : requestedRow.status !== "ready"
+                ? "route-blocked"
+                : inactiveRoute
+                  ? "inactive-route"
+                  : "ready-to-run";
   const ready = status === "ready-to-run";
   const blockedReason = ready
     ? ""

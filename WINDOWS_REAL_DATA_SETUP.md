@@ -46,7 +46,7 @@ npm run validate:route -- --route npm-cache
 npm run native:dev
 ```
 
-`npm run setup:doctor` is read-only. It checks `.env`, OpenAI key presence, model/reasoning defaults, and scoped executor flags without calling OpenAI, scanning folders, or running cleanup.
+`npm run setup:doctor` is read-only. It checks `.env`, OpenAI key presence, model/reasoning defaults, and scoped executor flags without calling OpenAI, scanning folders, or running cleanup. Its `status` is `readonly-ready`, `one-route-ready`, or `multi-flag-blocked`; write-mode validation is safe to launch only when exactly one scoped executor flag is enabled.
 
 `npm run openai:smoke:fixture` validates the local fixture task queue and recommendation broker without an API key or network call.
 

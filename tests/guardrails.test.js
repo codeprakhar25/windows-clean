@@ -3722,16 +3722,55 @@ const assert = require("assert");
       ]
     }
   });
-  assert.strictEqual(multiRouteSmokePacket.activeRoute, "bounded-pnpm-store-delete", "smoke packet should mark exactly one user-selected active route");
-  assert.strictEqual(multiRouteSmokePacket.counts.active, 1, "smoke packet should count one active smoke route");
-  assert.strictEqual(multiRouteSmokePacket.counts.queuedReady, 1, "smoke packet should queue other ready routes behind the active route");
-  assert.deepStrictEqual(
-    multiRouteSmokePacket.queuedReadyRows.map((row) => row.route),
-    ["bounded-npm-cache-delete"],
-    "smoke packet should keep non-selected ready routes queued for later proof-gated execution"
-  );
+  assert.strictEqual(multiRouteSmokePacket.status, "blocked", "smoke packet should block when multiple scoped executor flags are enabled");
+  assert.strictEqual(multiRouteSmokePacket.activeRoute, "", "multi-flag smoke packets must not choose an active route");
+  assert.strictEqual(multiRouteSmokePacket.counts.active, 0, "multi-flag smoke packets must not count an active route");
+  assert.strictEqual(multiRouteSmokePacket.counts.ready, 0, "multi-flag smoke packets must not expose ready routes");
+  assert(multiRouteSmokePacket.rows.every((row) => row.checks.some((check) => check.id === "single-scoped-flag" && !check.passed)), "every multi-flag route row should fail the single-flag check");
+  assert(multiRouteSmokePacket.blockedRows[0].blockedReason.includes("Turn off all but"), "multi-flag blocker should tell the operator to narrow flags");
+  const singleFlagPnpmSmokePacket = guard.buildExecutorSmokeRunPacket({
+    executorPlan: guard.buildExecutorPlan({
+      selectedIds: new Set(["npm-cache", "pnpm-store"]),
+      actionList: guard.actions,
+      approvals: { groupConfirm: true, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
+      scanMode: "native-readonly"
+    }),
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      platform: "windows",
+      realRunEnabled: true,
+      destructiveCommands: true,
+      executorFlags: { pnpmStoreExecutor: true }
+    },
+    scanSession: { currentFingerprint: "scan-package-cache-smoke" },
+    consentReceipt: { planId: "plan-package-cache-smoke" },
+    executionProofHandoff: { status: "waiting-for-execution" },
+    planSnapshot: { id: "plan-package-cache-smoke" },
+    preferredRoute: "bounded-pnpm-store-delete",
+    nativeScan: {
+      findings: [
+        {
+          recipeId: "npm-cache",
+          status: "measured",
+          path: "C:\\Users\\qa\\AppData\\Local\\npm-cache\\_cacache",
+          bytes: 1024
+        },
+        {
+          recipeId: "pnpm-store",
+          status: "measured",
+          path: "C:\\Users\\qa\\AppData\\Local\\pnpm\\store",
+          bytes: 2048
+        }
+      ]
+    }
+  });
+  assert.strictEqual(singleFlagPnpmSmokePacket.activeRoute, "bounded-pnpm-store-delete", "single-flag smoke packet should mark the user-selected active route");
+  assert.strictEqual(singleFlagPnpmSmokePacket.counts.active, 1, "single-flag smoke packet should count one active smoke route");
+  assert.strictEqual(singleFlagPnpmSmokePacket.counts.ready, 1, "single-flag smoke packet should expose only the flagged route as ready");
+  assert.strictEqual(singleFlagPnpmSmokePacket.counts.queuedReady, 0, "single-flag smoke packet should not queue another ready route");
   const selectedPnpmCommandFlow = guard.buildScopedExecutorCommandFlow({
-    smokeRunPacket: multiRouteSmokePacket,
+    smokeRunPacket: singleFlagPnpmSmokePacket,
     preferredRoute: "bounded-pnpm-store-delete",
     executionProofHandoff: { status: "waiting-for-execution" },
     nativeCapability: { available: true },
@@ -3748,7 +3787,7 @@ const assert = require("assert");
   );
   const activePnpmRunGate = guard.buildScopedExecutorRunGate({
     route: "bounded-pnpm-store-delete",
-    smokeRunPacket: multiRouteSmokePacket,
+    smokeRunPacket: singleFlagPnpmSmokePacket,
     executionProofHandoff: { status: "waiting-for-execution" }
   });
   assert.strictEqual(activePnpmRunGate.schemaVersion, "spaceguard-scoped-executor-run-gate/v1", "scoped executor run gate should expose a schema");
@@ -3756,21 +3795,21 @@ const assert = require("assert");
   assert.strictEqual(activePnpmRunGate.ready, true, "active selected route should pass the run gate");
   const overrideNpmRunGate = guard.buildScopedExecutorRunGate({
     route: "bounded-npm-cache-delete",
-    smokeRunPacket: multiRouteSmokePacket,
+    smokeRunPacket: singleFlagPnpmSmokePacket,
     activeRouteOverride: "bounded-npm-cache-delete",
     executionProofHandoff: { status: "waiting-for-execution" }
   });
-  assert.strictEqual(overrideNpmRunGate.status, "ready-to-run", "fresh route override should beat a stale packet active route");
+  assert.strictEqual(overrideNpmRunGate.status, "route-blocked", "route override must not bypass a disabled scoped flag");
   assert.strictEqual(overrideNpmRunGate.activeRoute, "bounded-npm-cache-delete", "run gate should expose the overridden active route");
   const queuedNpmRunGate = guard.buildScopedExecutorRunGate({
     route: "bounded-npm-cache-delete",
-    smokeRunPacket: multiRouteSmokePacket,
+    smokeRunPacket: singleFlagPnpmSmokePacket,
     executionProofHandoff: { status: "waiting-for-execution" }
   });
-  assert.strictEqual(queuedNpmRunGate.status, "inactive-route", "queued ready routes should not run until selected as active");
-  assert.strictEqual(queuedNpmRunGate.ready, false, "queued ready routes must be blocked by the run gate");
+  assert.strictEqual(queuedNpmRunGate.status, "route-blocked", "unflagged selected routes should block on route checks, not appear queued");
+  assert.strictEqual(queuedNpmRunGate.ready, false, "unflagged selected routes must be blocked by the run gate");
   assert.strictEqual(queuedNpmRunGate.activeRoute, "bounded-pnpm-store-delete", "run gate should name the active route");
-  assert(queuedNpmRunGate.blockedReason.includes("bounded-pnpm-store-delete"), "inactive route blocker should tell the operator which route is active");
+  assert(queuedNpmRunGate.blockedReason.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "disabled route blocker should tell the operator which flag is missing");
   const proofRequiredCommandFlow = guard.buildScopedExecutorCommandFlow({
     smokeRunPacket: proofBlockedSmokePacket,
     executionProofHandoff: { status: "proof-required" },

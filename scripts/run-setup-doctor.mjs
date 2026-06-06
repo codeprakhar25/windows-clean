@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const SCRIPT_ID = "spaceguard-setup-doctor";
-const EXECUTOR_FLAGS = [
+export const EXECUTOR_FLAGS = [
   "SPACEGUARD_ENABLE_TEMP_EXECUTOR",
   "SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR",
   "SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR",
@@ -19,9 +20,9 @@ const EXECUTOR_FLAGS = [
   "SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR"
 ];
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const scriptPath = fileURLToPath(import.meta.url);
+const root = path.resolve(path.dirname(scriptPath), "..");
 const dotenvPath = path.join(root, ".env");
-const dotenv = readDotEnv(dotenvPath);
 
 function readDotEnv(filePath) {
   if (!fs.existsSync(filePath)) return {};
@@ -49,9 +50,9 @@ function unquoteEnvValue(value) {
   return value;
 }
 
-function configValue(names, fallback = "") {
+function configValue(names, fallback = "", { env = process.env, dotenv = {} } = {}) {
   for (const name of names) {
-    const processValue = String(process.env[name] || "").trim();
+    const processValue = String(env[name] || "").trim();
     if (processValue) return { value: processValue, source: `process:${name}` };
     const dotenvValue = String(dotenv[name] || "").trim();
     if (dotenvValue) return { value: dotenvValue, source: `.env:${name}` };
@@ -59,61 +60,82 @@ function configValue(names, fallback = "") {
   return { value: fallback, source: fallback ? "default" : "missing" };
 }
 
-function flagEnabled(name) {
-  const { value } = configValue([name]);
+function flagEnabled(name, options = {}) {
+  const { value } = configValue([name], "", options);
   return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
 }
 
-const openAiKey = configValue(["OPENAI_API_KEY", "VITE_OPENAI_API_KEY"]);
-const model = configValue(["OPENAI_MODEL", "VITE_OPENAI_MODEL"], "gpt-5.2");
-const reasoningEffort = configValue(["OPENAI_REASONING_EFFORT", "VITE_OPENAI_REASONING_EFFORT"], "low");
-const enabledFlags = EXECUTOR_FLAGS.filter(flagEnabled);
-const report = {
-  schemaVersion: "spaceguard-setup-doctor/v1",
-  tool: SCRIPT_ID,
-  generatedAt: new Date().toISOString(),
-  platform: {
-    os: process.platform,
-    arch: process.arch,
-    node: process.version
-  },
-  env: {
-    envFilePresent: fs.existsSync(dotenvPath),
-    envFilePath: ".env"
-  },
-  openAi: {
-    configured: openAiKey.source !== "missing",
-    keySource: openAiKey.source,
-    model: model.value,
-    modelSource: model.source,
-    reasoningEffort: reasoningEffort.value,
-    reasoningEffortSource: reasoningEffort.source,
-    fixtureSmokeCommand: "npm run openai:smoke:fixture",
-    smokeCommand: "npm run openai:smoke"
-  },
-  scopedExecutors: {
-    enabledCount: enabledFlags.length,
-    enabledFlags,
-    warning: enabledFlags.length > 1
-      ? "Multiple scoped executor flags are enabled. Validate and run one selected route at a time."
-      : enabledFlags.length === 1
-        ? "One scoped executor flag is enabled."
-        : "No scoped executor flags are enabled; native mode remains read-only."
-  },
-  commands: {
-    install: "npm install",
-    test: "npm test",
-    build: "npm run build",
-    openAiFixtureSmoke: "npm run openai:smoke:fixture",
-    openAiSmoke: "npm run openai:smoke",
-    routeSetup: "npm run setup:route -- --route npm-cache",
-    routeValidation: "npm run validate:route -- --route npm-cache",
-    nativeDev: "npm run native:dev"
-  },
-  nextSteps: buildNextSteps({ openAiConfigured: openAiKey.source !== "missing", enabledFlags })
-};
+export function buildSetupDoctorReport({
+  env = process.env,
+  dotenv = readDotEnv(dotenvPath),
+  envFilePresent = fs.existsSync(dotenvPath),
+  generatedAt = new Date().toISOString()
+} = {}) {
+  const valueOptions = { env, dotenv };
+  const openAiKey = configValue(["OPENAI_API_KEY", "VITE_OPENAI_API_KEY"], "", valueOptions);
+  const model = configValue(["OPENAI_MODEL", "VITE_OPENAI_MODEL"], "gpt-5.2", valueOptions);
+  const reasoningEffort = configValue(["OPENAI_REASONING_EFFORT", "VITE_OPENAI_REASONING_EFFORT"], "low", valueOptions);
+  const enabledFlags = EXECUTOR_FLAGS.filter((name) => flagEnabled(name, valueOptions));
+  const validationStatus = getScopedExecutorValidationStatus(enabledFlags);
 
-console.log(JSON.stringify(report, null, 2));
+  return {
+    schemaVersion: "spaceguard-setup-doctor/v1",
+    tool: SCRIPT_ID,
+    generatedAt,
+    status: validationStatus,
+    platform: {
+      os: process.platform,
+      arch: process.arch,
+      node: process.version
+    },
+    env: {
+      envFilePresent,
+      envFilePath: ".env"
+    },
+    openAi: {
+      configured: openAiKey.source !== "missing",
+      keySource: openAiKey.source,
+      model: model.value,
+      modelSource: model.source,
+      reasoningEffort: reasoningEffort.value,
+      reasoningEffortSource: reasoningEffort.source,
+      fixtureSmokeCommand: "npm run openai:smoke:fixture",
+      smokeCommand: "npm run openai:smoke"
+    },
+    scopedExecutors: {
+      enabledCount: enabledFlags.length,
+      enabledFlags,
+      selectedFlag: enabledFlags.length === 1 ? enabledFlags[0] : "",
+      conflictingFlags: enabledFlags.length > 1 ? enabledFlags : [],
+      validationStatus,
+      safeToLaunchWriteMode: enabledFlags.length === 1,
+      warning: getScopedExecutorWarning(enabledFlags)
+    },
+    commands: {
+      install: "npm install",
+      test: "npm test",
+      build: "npm run build",
+      openAiFixtureSmoke: "npm run openai:smoke:fixture",
+      openAiSmoke: "npm run openai:smoke",
+      routeSetup: "npm run setup:route -- --route npm-cache",
+      routeValidation: "npm run validate:route -- --route npm-cache",
+      nativeDev: "npm run native:dev"
+    },
+    nextSteps: buildNextSteps({ openAiConfigured: openAiKey.source !== "missing", enabledFlags })
+  };
+}
+
+function getScopedExecutorValidationStatus(enabledFlags) {
+  if (enabledFlags.length > 1) return "multi-flag-blocked";
+  if (enabledFlags.length === 1) return "one-route-ready";
+  return "readonly-ready";
+}
+
+function getScopedExecutorWarning(enabledFlags) {
+  if (enabledFlags.length > 1) return "Multiple scoped executor flags are enabled. Validate and run one selected route at a time.";
+  if (enabledFlags.length === 1) return "One scoped executor flag is enabled.";
+  return "No scoped executor flags are enabled; native mode remains read-only.";
+}
 
 function buildNextSteps({ openAiConfigured, enabledFlags }) {
   const steps = [];
@@ -136,4 +158,8 @@ function buildNextSteps({ openAiConfigured, enabledFlags }) {
     steps.push("Turn off all but one scoped executor flag before real cleanup validation.");
   }
   return steps;
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath) {
+  console.log(JSON.stringify(buildSetupDoctorReport(), null, 2));
 }

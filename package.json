@@ -18,7 +18,7 @@
     "setup:doctor": "node scripts/run-setup-doctor.mjs",
     "setup:route": "node scripts/run-setup-route.mjs",
     "validate:route": "node scripts/run-windows-validation-packet.mjs",
-    "test": "node tests/guardrails.test.js && node tests/native-scanner.test.js && node tests/openai-agent.test.js && node tests/setup-route.test.js && node tests/windows-validation-packet.test.js && node tests/demo-rehearsal.test.js && node tests/native-readonly-rehearsal.test.js && node tests/static-app.test.js",
+    "test": "node tests/guardrails.test.js && node tests/native-scanner.test.js && node tests/openai-agent.test.js && node tests/setup-route.test.js && node tests/setup-doctor.test.js && node tests/windows-validation-packet.test.js && node tests/demo-rehearsal.test.js && node tests/native-readonly-rehearsal.test.js && node tests/static-app.test.js",
     "check": "npm run build"
   },
   "dependencies": {
