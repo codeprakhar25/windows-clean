@@ -208,6 +208,7 @@ Task power invariant:
 - Task runbook work orders can summarize and sequence selected task grants, but they cannot add authority, reuse one task power for another target, or bypass the selected route boundary.
 - The restriction matrix is authoritative for refusal classes. Hard-blocked, advisory-only, manual-only, and future-disabled rows cannot create executor routes, cannot count real-run routes, and cannot be bypassed by task powers, runbook work orders, validation records, or release packets.
 - The setup assistant can list non-destructive setup commands and UI exports, but it cannot list direct delete, registry, power-setting, format, partition, or cleanup shell commands.
+- The scoped executor run gate enforces the smoke packet's active route at execution time. Queued ready routes are visible for planning, but direct panel clicks must block until the route is selected as active and the previous run has proof.
 
 Safety interlock invariant:
 

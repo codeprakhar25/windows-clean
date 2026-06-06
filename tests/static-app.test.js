@@ -417,6 +417,10 @@ assert(app.includes("buildExecutorSmokeRunPacket"), "executor smoke-run packet s
 assert(app.includes("buildExecutorSmokeRunPacketMarkdown"), "executor smoke-run packet export should be wired");
 assert(app.includes("preferredRoute: selectedScopedExecutorRoute"), "executor smoke-run packet should receive the user-selected scoped route");
 assert(app.includes("buildScopedExecutorCommandFlow"), "scoped executor command flow should be wired");
+assert(model.includes("spaceguard-scoped-executor-run-gate/v1"), "model should expose the active route run gate");
+assert(model.includes("inactive-route"), "scoped executor run gate should block queued inactive routes");
+assert(app.includes("buildScopedExecutorRunGate"), "app should wire the scoped executor run gate");
+assert(app.includes("blockExecutorForInactiveRoute"), "native executor handlers should block inactive scoped routes");
 assert(app.includes("ScopedExecutorCommandFlowPanel"), "scoped executor command flow panel should be rendered");
 assert(app.includes("scoped-executor-command-flow-panel"), "scoped executor command flow should be focusable");
 assert(app.includes("handleScopedExecutorCommand"), "scoped executor command flow should dispatch primary workflow actions");

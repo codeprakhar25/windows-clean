@@ -3557,6 +3557,23 @@ const assert = require("assert");
     "bounded-pnpm-store-delete",
     "route selector should mark the preferred route"
   );
+  const activePnpmRunGate = guard.buildScopedExecutorRunGate({
+    route: "bounded-pnpm-store-delete",
+    smokeRunPacket: multiRouteSmokePacket,
+    executionProofHandoff: { status: "waiting-for-execution" }
+  });
+  assert.strictEqual(activePnpmRunGate.schemaVersion, "spaceguard-scoped-executor-run-gate/v1", "scoped executor run gate should expose a schema");
+  assert.strictEqual(activePnpmRunGate.status, "ready-to-run", "active selected route should be allowed to execute");
+  assert.strictEqual(activePnpmRunGate.ready, true, "active selected route should pass the run gate");
+  const queuedNpmRunGate = guard.buildScopedExecutorRunGate({
+    route: "bounded-npm-cache-delete",
+    smokeRunPacket: multiRouteSmokePacket,
+    executionProofHandoff: { status: "waiting-for-execution" }
+  });
+  assert.strictEqual(queuedNpmRunGate.status, "inactive-route", "queued ready routes should not run until selected as active");
+  assert.strictEqual(queuedNpmRunGate.ready, false, "queued ready routes must be blocked by the run gate");
+  assert.strictEqual(queuedNpmRunGate.activeRoute, "bounded-pnpm-store-delete", "run gate should name the active route");
+  assert(queuedNpmRunGate.blockedReason.includes("bounded-pnpm-store-delete"), "inactive route blocker should tell the operator which route is active");
   const proofRequiredCommandFlow = guard.buildScopedExecutorCommandFlow({
     smokeRunPacket: proofBlockedSmokePacket,
     executionProofHandoff: { status: "proof-required" },

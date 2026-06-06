@@ -104,6 +104,7 @@ import {
   buildScanCoverageSummary,
   buildScanSessionEvidence,
   buildScopedExecutorCommandFlow,
+  buildScopedExecutorRunGate,
   buildNativeScanRequestGuard,
   buildStoragePressureDiagnosis,
   buildStorageStrategyPlan,
@@ -2120,6 +2121,23 @@ export default function App() {
     return true;
   }
 
+  function blockExecutorForInactiveRoute(route, setExecution) {
+    const gate = buildScopedExecutorRunGate({
+      route,
+      smokeRunPacket: executorSmokeRunPacket,
+      executionProofHandoff
+    });
+    if (gate.status !== "inactive-route") return false;
+    setExecution({
+      status: "blocked",
+      result: null,
+      error: gate.primary
+    });
+    setSelectedScopedExecutorRoute(gate.activeRoute || route);
+    focusWorkflowPanel("scoped-executor-command-flow-panel");
+    return true;
+  }
+
   function armExecutionConsent() {
     const scopedExecutorRuntime = Boolean(
       (runtimeCapabilities.result.executorFlags?.tempCleanupExecutor && realExecutorCapsule?.route?.id === "known-temp-delete")
@@ -2346,6 +2364,7 @@ export default function App() {
   async function executeFirstSafeTempCleanup() {
     if (nativeRealExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeRealExecution)) return;
+    if (blockExecutorForInactiveRoute("known-temp-delete", setNativeRealExecution)) return;
     if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.tempCleanupExecutor) {
       setNativeRealExecution({
         status: "blocked",
@@ -2378,6 +2397,7 @@ export default function App() {
   async function executeReviewedProjectDependencies() {
     if (nativeProjectDependencyExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeProjectDependencyExecution)) return;
+    if (blockExecutorForInactiveRoute("item-review-project-cache", setNativeProjectDependencyExecution)) return;
     const projectRows = executorPlan.rows.filter((row) => row.route === "item-review-project-cache" && row.reviewTargets?.length);
     const projectTargets = projectRows.flatMap((row) => row.reviewTargets || []);
     if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.projectDependencyExecutor) {
@@ -2422,6 +2442,7 @@ export default function App() {
   async function executeReviewedDownloadsCleanup() {
     if (nativeDownloadsExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeDownloadsExecution)) return;
+    if (blockExecutorForInactiveRoute("item-review-recycle-bin", setNativeDownloadsExecution)) return;
     const downloadRows = executorPlan.rows.filter((row) => row.route === "item-review-recycle-bin" && row.reviewTargets?.length);
     const downloadTargets = downloadRows.flatMap((row) => row.reviewTargets || []);
     if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.downloadsCleanupExecutor) {
@@ -2466,6 +2487,7 @@ export default function App() {
   async function executeLargeFileArchive() {
     if (nativeLargeFileArchiveExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeLargeFileArchiveExecution)) return;
+    if (blockExecutorForInactiveRoute("item-review-large-files", setNativeLargeFileArchiveExecution)) return;
     const archiveRows = executorPlan.rows.filter((row) => row.route === "item-review-large-files" && row.archiveTargets?.length);
     const archiveTargets = archiveRows.flatMap((row) => row.archiveTargets || []);
     const archiveDestination = largeFileArchiveDestination.trim();
@@ -2520,6 +2542,7 @@ export default function App() {
   async function executeBrowserCacheCleanup() {
     if (nativeBrowserCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeBrowserCacheExecution)) return;
+    if (blockExecutorForInactiveRoute("browser-cache-only", setNativeBrowserCacheExecution)) return;
     const browserRows = executorPlan.rows.filter((row) => row.route === "browser-cache-only");
     const cacheTargets = (nativeScan.result?.findings || [])
       .filter((finding) => finding.recipeId === "browser-cache")
@@ -2573,6 +2596,7 @@ export default function App() {
   async function executeGradleCacheCleanup() {
     if (nativeGradleCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeGradleCacheExecution)) return;
+    if (blockExecutorForInactiveRoute("bounded-cache-delete", setNativeGradleCacheExecution)) return;
     const gradleRows = executorPlan.rows.filter((row) => row.id === "gradle-cache" && row.route === "bounded-cache-delete");
     const finding = (nativeScan.result?.findings || [])
       .find((row) => row.recipeId === "gradle-cache" && (row.status === "measured" || row.status === "limited") && row.path);
@@ -2627,6 +2651,7 @@ export default function App() {
   async function executeNpmCacheCleanup() {
     if (nativeNpmCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeNpmCacheExecution)) return;
+    if (blockExecutorForInactiveRoute("bounded-npm-cache-delete", setNativeNpmCacheExecution)) return;
     const npmRows = executorPlan.rows.filter((row) => row.id === "npm-cache" && row.route === "bounded-npm-cache-delete");
     const finding = (nativeScan.result?.findings || [])
       .find((row) => row.recipeId === "npm-cache" && (row.status === "measured" || row.status === "limited") && row.path);
@@ -2681,6 +2706,7 @@ export default function App() {
   async function executeUserCacheCleanup() {
     if (nativeUserCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeUserCacheExecution)) return;
+    if (blockExecutorForInactiveRoute("bounded-user-cache-delete", setNativeUserCacheExecution)) return;
     const userCacheRows = executorPlan.rows.filter((row) => row.id === "user-cache" && row.route === "bounded-user-cache-delete");
     const finding = (nativeScan.result?.findings || [])
       .find((row) => row.recipeId === "user-cache" && (row.status === "measured" || row.status === "limited") && row.path);
@@ -2735,6 +2761,7 @@ export default function App() {
   async function executeAndroidCacheCleanup() {
     if (nativeAndroidCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeAndroidCacheExecution)) return;
+    if (blockExecutorForInactiveRoute("bounded-android-cache-delete", setNativeAndroidCacheExecution)) return;
     const androidRows = executorPlan.rows.filter((row) => row.id === "android-cache" && row.route === "bounded-android-cache-delete");
     const androidTargets = (nativeScan.result?.findings || [])
       .filter((row) => row.recipeId === "android-cache" && (row.status === "measured" || row.status === "limited") && row.path)
@@ -2788,6 +2815,7 @@ export default function App() {
   async function executeShaderCacheCleanup() {
     if (nativeShaderCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeShaderCacheExecution)) return;
+    if (blockExecutorForInactiveRoute("launcher-cache-cleanup", setNativeShaderCacheExecution)) return;
     const shaderRows = executorPlan.rows.filter((row) => row.id === "steam-shader-cache" && row.route === "launcher-cache-cleanup");
     const shaderTargets = (nativeScan.result?.findings || [])
       .filter((row) => row.recipeId === "steam-shader-cache" && (row.status === "measured" || row.status === "limited") && row.path)
@@ -2841,6 +2869,7 @@ export default function App() {
   async function executePipCacheCleanup() {
     if (nativePipCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativePipCacheExecution)) return;
+    if (blockExecutorForInactiveRoute("bounded-pip-cache-delete", setNativePipCacheExecution)) return;
     const pipRows = executorPlan.rows.filter((row) => row.id === "pip-cache" && row.route === "bounded-pip-cache-delete");
     const finding = (nativeScan.result?.findings || [])
       .find((row) => row.recipeId === "pip-cache" && (row.status === "measured" || row.status === "limited") && row.path);
@@ -2896,6 +2925,7 @@ export default function App() {
   async function executeDockerBuildCacheCleanup() {
     if (nativeDockerBuildCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeDockerBuildCacheExecution)) return;
+    if (blockExecutorForInactiveRoute("tool-native-docker-build-cache-prune", setNativeDockerBuildCacheExecution)) return;
     const dockerRows = executorPlan.rows.filter((row) => row.id === "docker-build-cache" && row.route === "tool-native-docker-build-cache-prune");
     const finding = (nativeScan.result?.findings || [])
       .find((row) => row.recipeId === "docker-build-cache" && (row.status === "measured" || row.status === "limited") && row.path);
@@ -2951,6 +2981,7 @@ export default function App() {
   async function executePnpmStoreCleanup() {
     if (nativePnpmStoreExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativePnpmStoreExecution)) return;
+    if (blockExecutorForInactiveRoute("bounded-pnpm-store-delete", setNativePnpmStoreExecution)) return;
     const pnpmRows = executorPlan.rows.filter((row) => row.id === "pnpm-store" && row.route === "bounded-pnpm-store-delete");
     const finding = (nativeScan.result?.findings || [])
       .find((row) => row.recipeId === "pnpm-store" && (row.status === "measured" || row.status === "limited") && row.path);
@@ -3005,6 +3036,7 @@ export default function App() {
   async function executeRecycleBinCleanup() {
     if (nativeRecycleBinExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeRecycleBinExecution)) return;
+    if (blockExecutorForInactiveRoute("shell-recycle-bin", setNativeRecycleBinExecution)) return;
     const recycleRows = executorPlan.rows.filter((row) => row.id === "recycle-bin" && row.route === "shell-recycle-bin");
     const finding = (nativeScan.result?.findings || [])
       .find((row) => row.recipeId === "recycle-bin" && (row.status === "measured" || row.status === "limited") && row.path);

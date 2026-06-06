@@ -16333,6 +16333,73 @@ function getScopedExecutorCommandPrimary(status, primaryRow = null, nextAction =
   return nextAction?.label ? `${primaryRow?.title || "Selected route"} needs: ${nextAction.label}.` : "Complete route checks before execution.";
 }
 
+export function buildScopedExecutorRunGate({
+  route = "",
+  smokeRunPacket = null,
+  executionProofHandoff = null,
+  generatedAt = "set-on-export"
+} = {}) {
+  const packet = smokeRunPacket || buildExecutorSmokeRunPacket();
+  const requestedRoute = String(route || "").trim();
+  const rows = packet?.rows || [];
+  const requestedRow = rows.find((row) => row.route === requestedRoute || row.id === requestedRoute) || null;
+  const activeRoute = packet?.activeRoute || packet?.activeRow?.route || "";
+  const activeRow = packet?.activeRow || rows.find((row) => row.route === activeRoute) || null;
+  const proofStatus = executionProofHandoff?.status || packet?.proofStatus || "waiting-for-execution";
+  const proofBlocked = Boolean(proofStatus && proofStatus !== "waiting-for-execution" && proofStatus !== "proof-complete");
+  const inactiveRoute = Boolean(requestedRoute && activeRoute && requestedRoute !== activeRoute);
+
+  const status = !requestedRoute
+    ? "route-missing"
+    : proofBlocked
+      ? "proof-required"
+      : !requestedRow
+        ? "route-missing"
+        : !activeRoute
+          ? "no-active-route"
+          : inactiveRoute
+            ? "inactive-route"
+            : requestedRow.status === "ready"
+              ? "ready-to-run"
+              : requestedRow.status === "needs-proof"
+                ? "proof-required"
+                : "route-blocked";
+  const ready = status === "ready-to-run";
+  const blockedReason = ready
+    ? ""
+    : getScopedExecutorRunGateBlockedReason(status, { requestedRoute, activeRoute, requestedRow, activeRow, proofStatus });
+
+  return {
+    schemaVersion: "spaceguard-scoped-executor-run-gate/v1",
+    generatedAt,
+    status,
+    tone: ready ? "safe" : status === "inactive-route" || status === "proof-required" || status === "route-blocked" ? "restricted" : "review",
+    ready,
+    requestedRoute,
+    activeRoute,
+    requestedRow,
+    activeRow,
+    proofStatus,
+    proofAllowsExecution: !proofBlocked,
+    panelId: requestedRow?.panelId || activeRow?.panelId || "executor-smoke-run-packet-panel",
+    actionLabel: requestedRow?.actionLabel || activeRow?.actionLabel || "Run scoped executor",
+    queuedReadyRoutes: (packet?.queuedReadyRows || []).map((row) => row.route),
+    blockedReason,
+    primary: ready
+      ? `${requestedRow?.title || requestedRoute} is the active scoped route and may run through its guarded native executor.`
+      : blockedReason
+  };
+}
+
+function getScopedExecutorRunGateBlockedReason(status, { requestedRoute = "", activeRoute = "", requestedRow = null, activeRow = null, proofStatus = "" } = {}) {
+  if (status === "proof-required") return `Finish post-run proof before another scoped executor. Current proof state: ${proofStatus}.`;
+  if (status === "inactive-route") return `${requestedRoute} is queued. The active smoke route is ${activeRoute || activeRow?.route || "not selected"}.`;
+  if (status === "route-missing") return requestedRoute ? `${requestedRoute} is not part of the current smoke-run packet.` : "Select one scoped executor route before running cleanup.";
+  if (status === "no-active-route") return "No active ready route is selected in the smoke-run packet.";
+  if (status === "route-blocked") return requestedRow?.blockedReason || `${requestedRoute} is not ready to execute.`;
+  return "Scoped executor run gate is waiting for route evidence.";
+}
+
 function buildExecutorManifestNextSteps(routes, selectedRoutes) {
   if (!selectedRoutes.length) {
     return ["Select at least one cleanup action to see which executor routes would be involved."];
