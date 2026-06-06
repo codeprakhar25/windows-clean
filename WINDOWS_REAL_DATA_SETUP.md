@@ -39,11 +39,14 @@ Copy-Item .env.example .env
 # edit .env and set OPENAI_API_KEY
 # optional: set OPENAI_MODEL=gpt-5.2 and OPENAI_REASONING_EFFORT=low
 npm run setup:doctor
+npm run openai:smoke:fixture
 npm run openai:smoke
 npm run native:dev
 ```
 
 `npm run setup:doctor` is read-only. It checks `.env`, OpenAI key presence, model/reasoning defaults, and scoped executor flags without calling OpenAI, scanning folders, or running cleanup.
+
+`npm run openai:smoke:fixture` validates the local fixture task queue and recommendation broker without an API key or network call.
 
 `npm run openai:smoke` validates the OpenAI key, strict advice schema, deterministic agent task queue, and recommendation broker against fixture data only. It exits non-zero unless OpenAI returns the required broker-ready npm cache recommendation from the fixture queue. It does not scan local folders, run cleanup, or use real disk findings.
 

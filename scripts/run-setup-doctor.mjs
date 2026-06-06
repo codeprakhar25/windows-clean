@@ -88,6 +88,7 @@ const report = {
     modelSource: model.source,
     reasoningEffort: reasoningEffort.value,
     reasoningEffortSource: reasoningEffort.source,
+    fixtureSmokeCommand: "npm run openai:smoke:fixture",
     smokeCommand: "npm run openai:smoke"
   },
   scopedExecutors: {
@@ -103,6 +104,7 @@ const report = {
     install: "npm install",
     test: "npm test",
     build: "npm run build",
+    openAiFixtureSmoke: "npm run openai:smoke:fixture",
     openAiSmoke: "npm run openai:smoke",
     nativeDev: "npm run native:dev"
   },
@@ -116,6 +118,7 @@ function buildNextSteps({ openAiConfigured, enabledFlags }) {
   if (!fs.existsSync(dotenvPath)) {
     steps.push("Copy .env.example to .env before desktop setup.");
   }
+  steps.push("Run npm run openai:smoke:fixture to validate the local task queue and broker without an API key.");
   if (!openAiConfigured) {
     steps.push("Set OPENAI_API_KEY in .env or the process environment before running npm run openai:smoke.");
   } else {

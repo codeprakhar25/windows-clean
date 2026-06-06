@@ -151,6 +151,7 @@ function printAdvice(result, broker, validation) {
   const advice = result.advice || {};
   console.log(`${SCRIPT_ID}: OpenAI advisor smoke complete`);
   console.log("No local filesystem scan was performed; this used fixture data only.");
+  if (result.transport === "fixture-only") console.log("No OpenAI request was sent; fixture-only mode validated the local task queue and broker.");
   console.log(`provider=${result.provider} model=${result.model} transport=${result.transport}`);
   if (result.requestId) console.log(`requestId=${result.requestId}`);
   if (result.responseId) console.log(`responseId=${result.responseId}`);
@@ -217,24 +218,66 @@ function validateSmokeAdvice({ context, advice, broker }) {
   };
 }
 
-async function main() {
-  const env = {
-    ...readDotEnv(path.join(root, ".env")),
-    ...process.env
+function buildFixtureOnlyAdviceResult() {
+  const advice = {
+    summary: "Local fixture advice selected the broker-ready npm cache cleanup task.",
+    nextAction: "Run the npm cache executor only after the same deterministic gates pass in the desktop app.",
+    confidence: "high",
+    recommendedActions: [
+      {
+        id: requiredSmokeRecommendation.targetId,
+        title: "Clean npm cache",
+        reason: "The fixture task queue exposes a ready scoped npm cache executor target.",
+        priority: "high",
+        actionType: requiredSmokeRecommendation.actionType,
+        targetId: requiredSmokeRecommendation.targetId,
+        route: requiredSmokeRecommendation.route
+      }
+    ],
+    blockedActions: [],
+    questions: [],
+    warnings: ["Fixture-only mode did not contact OpenAI."]
   };
-  const config = getOpenAIAgentConfig(env);
-  if (!config.apiKey) {
-    console.error(`${SCRIPT_ID}: OPENAI_API_KEY is missing. Add it to .env or the process environment.`);
-    process.exitCode = 1;
-    return;
-  }
+  return {
+    schemaVersion: "spaceguard-openai-agent-advice/v1",
+    provider: "local-fixture",
+    model: "fixture-only",
+    transport: "fixture-only",
+    requestId: "",
+    responseId: "",
+    createdAt: new Date().toISOString(),
+    rawText: JSON.stringify(advice),
+    advice,
+    warnings: ["No OpenAI request was sent."]
+  };
+}
+
+async function main() {
+  const fixtureOnly = process.argv.includes("--fixture-only");
   const context = buildFixtureContext();
-  const result = await requestOpenAIAgentAdvice({
-    context,
-    userPrompt: `Use this fixture only. The required smoke task queue row is actionType=${requiredSmokeRecommendation.actionType}, targetId=${requiredSmokeRecommendation.targetId}, route=${requiredSmokeRecommendation.route}. If that row is ready, return it as the first recommendedAction exactly and explain any blockers.`,
-    config,
-    host: {}
-  });
+  let result = null;
+
+  if (fixtureOnly) {
+    result = buildFixtureOnlyAdviceResult();
+  } else {
+    const env = {
+      ...readDotEnv(path.join(root, ".env")),
+      ...process.env
+    };
+    const config = getOpenAIAgentConfig(env);
+    if (!config.apiKey) {
+      console.error(`${SCRIPT_ID}: OPENAI_API_KEY is missing. Add it to .env or the process environment.`);
+      process.exitCode = 1;
+      return;
+    }
+    result = await requestOpenAIAgentAdvice({
+      context,
+      userPrompt: `Use this fixture only. The required smoke task queue row is actionType=${requiredSmokeRecommendation.actionType}, targetId=${requiredSmokeRecommendation.targetId}, route=${requiredSmokeRecommendation.route}. If that row is ready, return it as the first recommendedAction exactly and explain any blockers.`,
+      config,
+      host: {}
+    });
+  }
+
   const broker = buildOpenAIAgentRecommendationBroker({
     advice: result.advice,
     context,

@@ -407,9 +407,13 @@ assert(openAiSmokeScript.includes("OPENAI_API_KEY"), "OpenAI smoke script should
 assert(openAiSmokeScript.includes("requiredSmokeRecommendation"), "OpenAI smoke script should define the required fixture recommendation");
 assert(openAiSmokeScript.includes("validateSmokeAdvice"), "OpenAI smoke script should validate brokered advice before passing");
 assert(openAiSmokeScript.includes("OpenAI smoke did not return the required broker-ready recommendation"), "OpenAI smoke script should fail on unbrokered fixture advice");
+assert(openAiSmokeScript.includes("--fixture-only"), "OpenAI smoke script should support a no-network fixture-only mode");
+assert(openAiSmokeScript.includes("buildFixtureOnlyAdviceResult"), "OpenAI smoke script should validate local fixture advice without an API key");
 assert(packageJson.includes("\"openai:smoke\""), "package scripts should expose the OpenAI fixture smoke command");
+assert(packageJson.includes("\"openai:smoke:fixture\""), "package scripts should expose the no-network OpenAI fixture smoke command");
 assert(packageJson.includes("\"setup:doctor\""), "package scripts should expose the setup doctor command");
 assert(setupDoctorScript.includes("OPENAI_API_KEY"), "setup doctor should check OpenAI key configuration");
+assert(setupDoctorScript.includes("openai:smoke:fixture"), "setup doctor should expose the local fixture smoke command");
 assert(setupDoctorScript.includes("SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR"), "setup doctor should check scoped executor flags");
 assert(setupDoctorScript.includes("spaceguard-setup-doctor/v1"), "setup doctor should emit a stable schema");
 assert(openAiAgent.includes("forbiddenActions"), "OpenAI context should expose forbidden actions");
