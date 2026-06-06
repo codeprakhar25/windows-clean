@@ -441,6 +441,8 @@ assert(app.includes("buildScopedExecutorRunGate"), "app should wire the scoped e
 assert(app.includes("blockExecutorForInactiveRoute"), "native executor handlers should block inactive scoped routes");
 assert(app.includes("ScopedExecutorCommandFlowPanel"), "scoped executor command flow panel should be rendered");
 assert(app.includes("scoped-executor-command-flow-panel"), "scoped executor command flow should be focusable");
+assert(app.includes("getScopedExecutorRouteForAction(action)"), "selecting an agent action should resolve its scoped executor route");
+assert(app.includes("setSelectedScopedExecutorRoute(scopedRoute)"), "selecting an agent action should activate the matching scoped executor route");
 assert(app.includes("handleScopedExecutorCommand"), "scoped executor command flow should dispatch primary workflow actions");
 assert(app.includes("executeScopedExecutorRoute"), "scoped executor command flow should call existing executor handlers");
 assert(app.includes("selectedScopedExecutorRoute"), "scoped executor command flow should keep user-selected route state");

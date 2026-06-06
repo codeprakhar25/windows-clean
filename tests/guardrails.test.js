@@ -1885,6 +1885,16 @@ const assert = require("assert");
   assert.strictEqual(fixtureSelectionQuestions.activeQuestion.id, "select-temp-fixture-cleanup", "question queue should prioritize the seeded fixture after native scan");
   assert.strictEqual(fixtureSelectionQuestions.activeQuestion.action, "select-action", "fixture question should select the exact scoped action");
   assert.strictEqual(fixtureSelectionQuestions.activeQuestion.actionId, "temp-fixture-cleanup", "fixture question must bind to the fixture action id");
+  assert.strictEqual(
+    guard.getScopedExecutorRouteForAction(fixtureModeActions.find((action) => action.id === "temp-fixture-cleanup")),
+    "known-temp-delete",
+    "fixture selection should resolve the active scoped temp route"
+  );
+  assert.strictEqual(
+    guard.getScopedExecutorRouteForAction(guard.actions.find((action) => action.id === "installed-app-footprints")),
+    "",
+    "manual installed-app review must not become an active executor route"
+  );
 
   const gatedAdvisor = guard.buildRecoveryAdvisor({
     scanned: true,

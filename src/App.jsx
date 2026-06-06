@@ -139,6 +139,7 @@ import {
   getExecutionReadinessForActions,
   getLedgerRunLabel,
   getScenario,
+  getScopedExecutorRouteForAction,
   isActionProtected,
   makeExecutionLedgerForActions,
   normalizeCustomRootTriageRecord,
@@ -2016,6 +2017,8 @@ export default function App() {
     const action = actionList.find((item) => item.id === actionId);
     if (!scanned || !action || !selectableAction(action, protectedPaths, intakePolicy)) return;
     setSelectedIds((current) => new Set([...current, action.id]));
+    const scopedRoute = getScopedExecutorRouteForAction(action);
+    if (scopedRoute) setSelectedScopedExecutorRoute(scopedRoute);
     if (action.gate === "review") setFocusedReviewId(action.id);
     clearExecutionState();
     setActiveStage("gate");

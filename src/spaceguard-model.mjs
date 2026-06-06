@@ -5530,6 +5530,12 @@ export function getExecutorPolicy(action) {
   };
 }
 
+export function getScopedExecutorRouteForAction(action = null) {
+  if (!action) return "";
+  const route = getExecutorPolicy(action).route;
+  return getExecutorSmokeRouteSpec(route) ? route : "";
+}
+
 export function getActionTaskPower(action) {
   const policy = getExecutorPolicy(action);
   const powerId = getActionTaskPowerId(action, policy);
