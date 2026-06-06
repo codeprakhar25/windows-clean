@@ -1547,6 +1547,7 @@ export default function App() {
     }),
     [planSnapshot.id, scanSession.currentFingerprint, consentReceipt.planId, executionProofHandoff.status, largeFileArchiveDestination, approvals.permanentConfirm]
   );
+  const consentMatchesCurrentPlan = Boolean(planSnapshot.id && consentReceipt.planId && consentReceipt.planId === planSnapshot.id);
   const openAiRecommendationBroker = useMemo(
     () =>
       buildOpenAIAgentRecommendationBroker({
@@ -2393,6 +2394,14 @@ export default function App() {
       });
       return;
     }
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentMatchesCurrentPlan) {
+      setNativeRealExecution({
+        status: "blocked",
+        result: null,
+        error: "Temp cleanup needs current plan, scan fingerprint, and current-plan consent receipt."
+      });
+      return;
+    }
 
     setActiveStage("execute");
     setNativeRealExecution({ status: "running", result: null, error: "" });
@@ -2428,11 +2437,11 @@ export default function App() {
       });
       return;
     }
-    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !projectRows.length) {
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentMatchesCurrentPlan || !projectRows.length) {
       setNativeProjectDependencyExecution({
         status: "blocked",
         result: null,
-        error: "Project dependency cleanup needs reviewed remove targets plus current plan, scan fingerprint, and consent receipt."
+        error: "Project dependency cleanup needs reviewed remove targets plus current plan, scan fingerprint, and current-plan consent receipt."
       });
       return;
     }
@@ -2473,11 +2482,11 @@ export default function App() {
       });
       return;
     }
-    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !downloadRows.length) {
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentMatchesCurrentPlan || !downloadRows.length) {
       setNativeDownloadsExecution({
         status: "blocked",
         result: null,
-        error: "Reviewed Downloads cleanup needs item Remove targets plus current plan, scan fingerprint, and consent receipt."
+        error: "Reviewed Downloads cleanup needs item Remove targets plus current plan, scan fingerprint, and current-plan consent receipt."
       });
       return;
     }
@@ -2527,11 +2536,11 @@ export default function App() {
       });
       return;
     }
-    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !archiveRows.length) {
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentMatchesCurrentPlan || !archiveRows.length) {
       setNativeLargeFileArchiveExecution({
         status: "blocked",
         result: null,
-        error: "Large-file archive needs Move/Archive item targets plus current plan, scan fingerprint, and consent receipt."
+        error: "Large-file archive needs Move/Archive item targets plus current plan, scan fingerprint, and current-plan consent receipt."
       });
       return;
     }
@@ -2582,11 +2591,11 @@ export default function App() {
       });
       return;
     }
-    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !browserRows.length || !cacheTargets.length) {
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentMatchesCurrentPlan || !browserRows.length || !cacheTargets.length) {
       setNativeBrowserCacheExecution({
         status: "blocked",
         result: null,
-        error: "Browser cache cleanup needs the browser-cache action selected, scanned cache root evidence, current plan, scan fingerprint, and consent receipt."
+        error: "Browser cache cleanup needs the browser-cache action selected, scanned cache root evidence, current plan, scan fingerprint, and current-plan consent receipt."
       });
       return;
     }
@@ -2637,11 +2646,11 @@ export default function App() {
       });
       return;
     }
-    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !gradleRows.length || !gradleTarget) {
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentMatchesCurrentPlan || !gradleRows.length || !gradleTarget) {
       setNativeGradleCacheExecution({
         status: "blocked",
         result: null,
-        error: "Gradle cache cleanup needs the gradle-cache action selected, native Gradle cache evidence, current plan, scan fingerprint, and consent receipt."
+        error: "Gradle cache cleanup needs the gradle-cache action selected, native Gradle cache evidence, current plan, scan fingerprint, and current-plan consent receipt."
       });
       return;
     }
@@ -2692,11 +2701,11 @@ export default function App() {
       });
       return;
     }
-    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !npmRows.length || !npmTarget) {
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentMatchesCurrentPlan || !npmRows.length || !npmTarget) {
       setNativeNpmCacheExecution({
         status: "blocked",
         result: null,
-        error: "npm cache cleanup needs the npm-cache action selected, native npm _cacache evidence, current plan, scan fingerprint, and consent receipt."
+        error: "npm cache cleanup needs the npm-cache action selected, native npm _cacache evidence, current plan, scan fingerprint, and current-plan consent receipt."
       });
       return;
     }
@@ -2747,11 +2756,11 @@ export default function App() {
       });
       return;
     }
-    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !userCacheRows.length || !userCacheTarget) {
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentMatchesCurrentPlan || !userCacheRows.length || !userCacheTarget) {
       setNativeUserCacheExecution({
         status: "blocked",
         result: null,
-        error: "User .cache cleanup needs the user-cache action selected, native .cache evidence, current plan, scan fingerprint, and consent receipt."
+        error: "User .cache cleanup needs the user-cache action selected, native .cache evidence, current plan, scan fingerprint, and current-plan consent receipt."
       });
       return;
     }
@@ -2801,11 +2810,11 @@ export default function App() {
       });
       return;
     }
-    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !androidRows.length || !androidTargets.length) {
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentMatchesCurrentPlan || !androidRows.length || !androidTargets.length) {
       setNativeAndroidCacheExecution({
         status: "blocked",
         result: null,
-        error: "Android cache cleanup needs the android-cache action selected, native Android cache evidence, current plan, scan fingerprint, and consent receipt."
+        error: "Android cache cleanup needs the android-cache action selected, native Android cache evidence, current plan, scan fingerprint, and current-plan consent receipt."
       });
       return;
     }
@@ -2855,11 +2864,11 @@ export default function App() {
       });
       return;
     }
-    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !shaderRows.length || !shaderTargets.length) {
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentMatchesCurrentPlan || !shaderRows.length || !shaderTargets.length) {
       setNativeShaderCacheExecution({
         status: "blocked",
         result: null,
-        error: "Shader cache cleanup needs the steam-shader-cache action selected, native shader cache evidence, current plan, scan fingerprint, and consent receipt."
+        error: "Shader cache cleanup needs the steam-shader-cache action selected, native shader cache evidence, current plan, scan fingerprint, and current-plan consent receipt."
       });
       return;
     }
@@ -2911,11 +2920,11 @@ export default function App() {
       });
       return;
     }
-    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !pipRows.length || !pipTarget) {
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentMatchesCurrentPlan || !pipRows.length || !pipTarget) {
       setNativePipCacheExecution({
         status: "blocked",
         result: null,
-        error: "pip cache cleanup needs the pip-cache action selected, native pip cache evidence, current plan, scan fingerprint, and consent receipt."
+        error: "pip cache cleanup needs the pip-cache action selected, native pip cache evidence, current plan, scan fingerprint, and current-plan consent receipt."
       });
       return;
     }
@@ -2967,11 +2976,11 @@ export default function App() {
       });
       return;
     }
-    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !dockerRows.length || !dockerTarget) {
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentMatchesCurrentPlan || !dockerRows.length || !dockerTarget) {
       setNativeDockerBuildCacheExecution({
         status: "blocked",
         result: null,
-        error: "Docker build-cache cleanup needs the docker-build-cache action selected, Docker CLI inventory evidence, current plan, scan fingerprint, and consent receipt."
+        error: "Docker build-cache cleanup needs the docker-build-cache action selected, Docker CLI inventory evidence, current plan, scan fingerprint, and current-plan consent receipt."
       });
       return;
     }
@@ -3022,11 +3031,11 @@ export default function App() {
       });
       return;
     }
-    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !pnpmRows.length || !pnpmTarget) {
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentMatchesCurrentPlan || !pnpmRows.length || !pnpmTarget) {
       setNativePnpmStoreExecution({
         status: "blocked",
         result: null,
-        error: "pnpm store cleanup needs the pnpm-store action selected, native pnpm store evidence, current plan, scan fingerprint, and consent receipt."
+        error: "pnpm store cleanup needs the pnpm-store action selected, native pnpm store evidence, current plan, scan fingerprint, and current-plan consent receipt."
       });
       return;
     }
@@ -3085,11 +3094,11 @@ export default function App() {
       });
       return;
     }
-    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !recycleRows.length || !recycleTarget) {
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentMatchesCurrentPlan || !recycleRows.length || !recycleTarget) {
       setNativeRecycleBinExecution({
         status: "blocked",
         result: null,
-        error: "Recycle Bin cleanup needs the recycle-bin action selected, native Recycle Bin evidence, current plan, scan fingerprint, consent receipt, and permanent confirmation."
+        error: "Recycle Bin cleanup needs the recycle-bin action selected, native Recycle Bin evidence, current plan, scan fingerprint, current-plan consent receipt, and permanent confirmation."
       });
       return;
     }
@@ -4304,6 +4313,7 @@ export default function App() {
               execution={nativeRealExecution}
               contract={firstSafeExecutorContract}
               capsule={realExecutorCapsule}
+              consentMatchesPlan={consentMatchesCurrentPlan}
               onExecute={executeFirstSafeTempCleanup}
             />
             <RecycleBinExecutorPanel
@@ -4313,6 +4323,7 @@ export default function App() {
               nativeScan={nativeScan}
               scanSession={scanSession}
               consentReceipt={consentReceipt}
+              consentMatchesPlan={consentMatchesCurrentPlan}
               permanentConfirmed={Boolean(approvals.permanentConfirm)}
               onExecute={executeRecycleBinCleanup}
             />
@@ -4323,6 +4334,7 @@ export default function App() {
               nativeScan={nativeScan}
               scanSession={scanSession}
               consentReceipt={consentReceipt}
+              consentMatchesPlan={consentMatchesCurrentPlan}
               onExecute={executeGradleCacheCleanup}
             />
             <UserCacheExecutorPanel
@@ -4332,6 +4344,7 @@ export default function App() {
               nativeScan={nativeScan}
               scanSession={scanSession}
               consentReceipt={consentReceipt}
+              consentMatchesPlan={consentMatchesCurrentPlan}
               onExecute={executeUserCacheCleanup}
             />
             <AndroidCacheExecutorPanel
@@ -4341,6 +4354,7 @@ export default function App() {
               nativeScan={nativeScan}
               scanSession={scanSession}
               consentReceipt={consentReceipt}
+              consentMatchesPlan={consentMatchesCurrentPlan}
               onExecute={executeAndroidCacheCleanup}
             />
             <ShaderCacheExecutorPanel
@@ -4350,6 +4364,7 @@ export default function App() {
               nativeScan={nativeScan}
               scanSession={scanSession}
               consentReceipt={consentReceipt}
+              consentMatchesPlan={consentMatchesCurrentPlan}
               onExecute={executeShaderCacheCleanup}
             />
             <PipCacheExecutorPanel
@@ -4359,6 +4374,7 @@ export default function App() {
               nativeScan={nativeScan}
               scanSession={scanSession}
               consentReceipt={consentReceipt}
+              consentMatchesPlan={consentMatchesCurrentPlan}
               onExecute={executePipCacheCleanup}
             />
             <DockerBuildCacheExecutorPanel
@@ -4368,6 +4384,7 @@ export default function App() {
               nativeScan={nativeScan}
               scanSession={scanSession}
               consentReceipt={consentReceipt}
+              consentMatchesPlan={consentMatchesCurrentPlan}
               onExecute={executeDockerBuildCacheCleanup}
             />
             <NpmCacheExecutorPanel
@@ -4377,6 +4394,7 @@ export default function App() {
               nativeScan={nativeScan}
               scanSession={scanSession}
               consentReceipt={consentReceipt}
+              consentMatchesPlan={consentMatchesCurrentPlan}
               onExecute={executeNpmCacheCleanup}
             />
             <PnpmStoreExecutorPanel
@@ -4386,6 +4404,7 @@ export default function App() {
               nativeScan={nativeScan}
               scanSession={scanSession}
               consentReceipt={consentReceipt}
+              consentMatchesPlan={consentMatchesCurrentPlan}
               onExecute={executePnpmStoreCleanup}
             />
             <DownloadsCleanupExecutorPanel
@@ -4394,6 +4413,7 @@ export default function App() {
               executorPlan={executorPlan}
               scanSession={scanSession}
               consentReceipt={consentReceipt}
+              consentMatchesPlan={consentMatchesCurrentPlan}
               onExecute={executeReviewedDownloadsCleanup}
             />
             <LargeFileArchiveExecutorPanel
@@ -4402,6 +4422,7 @@ export default function App() {
               executorPlan={executorPlan}
               scanSession={scanSession}
               consentReceipt={consentReceipt}
+              consentMatchesPlan={consentMatchesCurrentPlan}
               archiveDestination={largeFileArchiveDestination}
               onArchiveDestination={setLargeFileArchiveDestination}
               onExecute={executeLargeFileArchive}
@@ -4412,6 +4433,7 @@ export default function App() {
               executorPlan={executorPlan}
               scanSession={scanSession}
               consentReceipt={consentReceipt}
+              consentMatchesPlan={consentMatchesCurrentPlan}
               onExecute={executeReviewedProjectDependencies}
             />
             <BrowserCacheExecutorPanel
@@ -4421,6 +4443,7 @@ export default function App() {
               nativeScan={nativeScan}
               scanSession={scanSession}
               consentReceipt={consentReceipt}
+              consentMatchesPlan={consentMatchesCurrentPlan}
               onExecute={executeBrowserCacheCleanup}
             />
             <ExecutionProofHandoffPanel handoff={executionProofHandoff} onRescan={runPostRunReadonlyScan} />
@@ -9632,12 +9655,12 @@ function WriteBoundaryProbePanel({ probe, nativeWriteBoundary, runtimeCapabiliti
   );
 }
 
-function FirstSafeTempExecutorPanel({ runtimeCapabilities, execution, contract, capsule, onExecute }) {
+function FirstSafeTempExecutorPanel({ runtimeCapabilities, execution, contract, capsule, consentMatchesPlan = false, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.tempCleanupExecutor);
   const selectedRows = capsule?.selectedRows || [];
   const preview = contract?.requestPreview || {};
   const routeReady = preview.route === "known-temp-delete" && selectedRows.length > 0;
-  const requestReady = Boolean(routeReady && preview.planId && preview.scanFingerprint && preview.consentPlanId);
+  const requestReady = Boolean(routeReady && preview.planId && preview.scanFingerprint && consentMatchesPlan);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -9671,7 +9694,7 @@ function FirstSafeTempExecutorPanel({ runtimeCapabilities, execution, contract, 
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground">
             <span>Enable with `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1` before launching Tauri.</span>
-            <span>Request evidence: plan {preview.planId ? "yes" : "no"}, scan {preview.scanFingerprint ? "yes" : "no"}, consent {preview.consentPlanId ? "yes" : "no"}.</span>
+            <span>Request evidence: plan {preview.planId ? "yes" : "no"}, scan {preview.scanFingerprint ? "yes" : "no"}, consent {consentMatchesPlan ? "current" : preview.consentPlanId ? "stale" : "missing"}.</span>
             <span>Allowed targets are `%TEMP%`, `%TMP%`, and `Windows\\Temp`; Downloads, Desktop, Documents, node_modules, and reparse-like targets are rejected.</span>
           </div>
         </div>
@@ -9710,7 +9733,7 @@ function FirstSafeTempExecutorPanel({ runtimeCapabilities, execution, contract, 
   );
 }
 
-function GradleCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, onExecute }) {
+function GradleCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.gradleCacheExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "gradle-cache" && row.route === "bounded-cache-delete");
   const finding = (nativeScan.result?.findings || [])
@@ -9724,7 +9747,7 @@ function GradleCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan
         status: finding.status
       }
     : null;
-  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentReceipt.planId);
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -9758,7 +9781,7 @@ function GradleCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground">
             <span>Enable with `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=1` before launching Tauri.</span>
-            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, selected Gradle route {rows.length ? "yes" : "no"}.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentMatchesPlan ? "current" : consentReceipt.planId ? "stale" : "missing"}, selected Gradle route {rows.length ? "yes" : "no"}.</span>
             <span>Allowed target is the native-scanned current user `.gradle\\caches` directory; lock files and recent files are skipped.</span>
           </div>
         </div>
@@ -9812,7 +9835,7 @@ function GradleCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan
   );
 }
 
-function UserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, onExecute }) {
+function UserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.userCacheExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "user-cache" && row.route === "bounded-user-cache-delete");
   const finding = (nativeScan.result?.findings || [])
@@ -9826,7 +9849,7 @@ function UserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, 
         status: finding.status
       }
     : null;
-  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentReceipt.planId);
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -9860,7 +9883,7 @@ function UserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, 
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground">
             <span>Enable with `SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR=1` before launching Tauri.</span>
-            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, selected .cache route {rows.length ? "yes" : "no"}.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentMatchesPlan ? "current" : consentReceipt.planId ? "stale" : "missing"}, selected .cache route {rows.length ? "yes" : "no"}.</span>
             <span>Allowed target is the native-scanned current user `%UserProfile%\\.cache`; config, database, lock, log, session, credential, project, and identity-like files stay untouched.</span>
           </div>
         </div>
@@ -9914,7 +9937,7 @@ function UserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, 
   );
 }
 
-function AndroidCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, onExecute }) {
+function AndroidCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.androidCacheExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "android-cache" && row.route === "bounded-android-cache-delete");
   const targets = (nativeScan.result?.findings || [])
@@ -9926,7 +9949,7 @@ function AndroidCacheExecutorPanel({ runtimeCapabilities, execution, executorPla
       bytes: Number(finding.bytes || 0),
       status: finding.status
     }));
-  const requestReady = Boolean(rows.length && targets.length && scanSession.currentFingerprint && consentReceipt.planId);
+  const requestReady = Boolean(rows.length && targets.length && scanSession.currentFingerprint && consentMatchesPlan);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -9960,7 +9983,7 @@ function AndroidCacheExecutorPanel({ runtimeCapabilities, execution, executorPla
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground">
             <span>Enable with `SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR=1` before launching Tauri.</span>
-            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, selected Android route {rows.length ? "yes" : "no"}.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentMatchesPlan ? "current" : consentReceipt.planId ? "stale" : "missing"}, selected Android route {rows.length ? "yes" : "no"}.</span>
             <span>Allowed targets are native-scanned Android Studio `caches`, `system\\caches`, or `%UserProfile%\\.android\\build-cache`; `.android\\avd`, SDK, emulator, and project paths stay untouched.</span>
           </div>
         </div>
@@ -10018,7 +10041,7 @@ function AndroidCacheExecutorPanel({ runtimeCapabilities, execution, executorPla
   );
 }
 
-function ShaderCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, onExecute }) {
+function ShaderCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.shaderCacheExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "steam-shader-cache" && row.route === "launcher-cache-cleanup");
   const targets = (nativeScan.result?.findings || [])
@@ -10030,7 +10053,7 @@ function ShaderCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan
       bytes: Number(finding.bytes || 0),
       status: finding.status
     }));
-  const requestReady = Boolean(rows.length && targets.length && scanSession.currentFingerprint && consentReceipt.planId);
+  const requestReady = Boolean(rows.length && targets.length && scanSession.currentFingerprint && consentMatchesPlan);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10064,7 +10087,7 @@ function ShaderCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground">
             <span>Enable with `SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR=1` before launching Tauri.</span>
-            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, selected shader route {rows.length ? "yes" : "no"}.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentMatchesPlan ? "current" : consentReceipt.planId ? "stale" : "missing"}, selected shader route {rows.length ? "yes" : "no"}.</span>
             <span>Allowed roots are native-scanned `%LOCALAPPDATA%\\D3DSCache`, NVIDIA `DXCache`/`GLCache`/`NV_Cache`, AMD `DxCache`/`GLCache`/`VkCache`, and Intel `ShaderCache`.</span>
           </div>
         </div>
@@ -10122,7 +10145,7 @@ function ShaderCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan
   );
 }
 
-function RecycleBinExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, permanentConfirmed, onExecute }) {
+function RecycleBinExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, permanentConfirmed, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.recycleBinExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "recycle-bin" && row.route === "shell-recycle-bin");
   const finding = (nativeScan.result?.findings || [])
@@ -10137,7 +10160,7 @@ function RecycleBinExecutorPanel({ runtimeCapabilities, execution, executorPlan,
         files: Number(finding.files || 0)
       }
     : null;
-  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentReceipt.planId && permanentConfirmed);
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan && permanentConfirmed);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10171,7 +10194,7 @@ function RecycleBinExecutorPanel({ runtimeCapabilities, execution, executorPlan,
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground">
             <span>Enable with `SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR=1` before launching Tauri.</span>
-            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, selected Recycle Bin route {rows.length ? "yes" : "no"}, permanent confirmation {permanentConfirmed ? "yes" : "no"}.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentMatchesPlan ? "current" : consentReceipt.planId ? "stale" : "missing"}, selected Recycle Bin route {rows.length ? "yes" : "no"}, permanent confirmation {permanentConfirmed ? "yes" : "no"}.</span>
             <span>The native request sends `permanentRemovalConfirmed=true` and uses Windows Shell Recycle Bin APIs for the selected drive root only.</span>
           </div>
         </div>
@@ -10226,7 +10249,7 @@ function RecycleBinExecutorPanel({ runtimeCapabilities, execution, executorPlan,
   );
 }
 
-function PipCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, onExecute }) {
+function PipCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.pipCacheExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "pip-cache" && row.route === "bounded-pip-cache-delete");
   const finding = (nativeScan.result?.findings || [])
@@ -10240,7 +10263,7 @@ function PipCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, n
         status: finding.status
       }
     : null;
-  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentReceipt.planId);
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10274,7 +10297,7 @@ function PipCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, n
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground">
             <span>Enable with `SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR=1` before launching Tauri.</span>
-            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, selected pip route {rows.length ? "yes" : "no"}.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentMatchesPlan ? "current" : consentReceipt.planId ? "stale" : "missing"}, selected pip route {rows.length ? "yes" : "no"}.</span>
             <span>Allowed target is the native-scanned current user `%LocalAppData%\\pip\\Cache`; selfcheck, pip config, Python installs, virtualenvs, and site-packages stay untouched.</span>
           </div>
         </div>
@@ -10328,7 +10351,7 @@ function PipCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, n
   );
 }
 
-function DockerBuildCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, onExecute }) {
+function DockerBuildCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.toolNativePruneExecutors);
   const rows = executorPlan.rows.filter((row) => row.id === "docker-build-cache" && row.route === "tool-native-docker-build-cache-prune");
   const finding = (nativeScan.result?.findings || [])
@@ -10342,7 +10365,7 @@ function DockerBuildCacheExecutorPanel({ runtimeCapabilities, execution, executo
         status: finding.status
       }
     : null;
-  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentReceipt.planId);
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10376,7 +10399,7 @@ function DockerBuildCacheExecutorPanel({ runtimeCapabilities, execution, executo
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground">
             <span>Enable with `SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS=1` before launching Tauri.</span>
-            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, selected Docker route {rows.length ? "yes" : "no"}.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentMatchesPlan ? "current" : consentReceipt.planId ? "stale" : "missing"}, selected Docker route {rows.length ? "yes" : "no"}.</span>
             <span>Allowed command is `docker builder prune --force`; Docker volumes, running containers, image deletion, data-root deletion, shell commands, and `docker system prune` stay blocked.</span>
           </div>
         </div>
@@ -10430,7 +10453,7 @@ function DockerBuildCacheExecutorPanel({ runtimeCapabilities, execution, executo
   );
 }
 
-function NpmCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, onExecute }) {
+function NpmCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.npmCacheExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "npm-cache" && row.route === "bounded-npm-cache-delete");
   const finding = (nativeScan.result?.findings || [])
@@ -10444,7 +10467,7 @@ function NpmCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, n
         status: finding.status
       }
     : null;
-  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentReceipt.planId);
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10478,7 +10501,7 @@ function NpmCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, n
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground">
             <span>Enable with `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1` before launching Tauri.</span>
-            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, selected npm route {rows.length ? "yes" : "no"}.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentMatchesPlan ? "current" : consentReceipt.planId ? "stale" : "missing"}, selected npm route {rows.length ? "yes" : "no"}.</span>
             <span>Allowed target is the native-scanned current user `%LocalAppData%\\npm-cache\\_cacache`; index metadata, global packages, and project `node_modules` stay untouched.</span>
           </div>
         </div>
@@ -10532,7 +10555,7 @@ function NpmCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, n
   );
 }
 
-function PnpmStoreExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, onExecute }) {
+function PnpmStoreExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.pnpmStoreExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "pnpm-store" && row.route === "bounded-pnpm-store-delete");
   const finding = (nativeScan.result?.findings || [])
@@ -10546,7 +10569,7 @@ function PnpmStoreExecutorPanel({ runtimeCapabilities, execution, executorPlan, 
         status: finding.status
       }
     : null;
-  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentReceipt.planId);
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10580,7 +10603,7 @@ function PnpmStoreExecutorPanel({ runtimeCapabilities, execution, executorPlan, 
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground">
             <span>Enable with `SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR=1` before launching Tauri.</span>
-            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, selected pnpm route {rows.length ? "yes" : "no"}.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentMatchesPlan ? "current" : consentReceipt.planId ? "stale" : "missing"}, selected pnpm route {rows.length ? "yes" : "no"}.</span>
             <span>Allowed target is the native-scanned current user `%LocalAppData%\\pnpm\\store`; metadata, global bins, and project `node_modules` stay untouched.</span>
           </div>
         </div>
@@ -10634,11 +10657,11 @@ function PnpmStoreExecutorPanel({ runtimeCapabilities, execution, executorPlan, 
   );
 }
 
-function ProjectDependencyExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, onExecute }) {
+function ProjectDependencyExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.projectDependencyExecutor);
   const rows = executorPlan.rows.filter((row) => row.route === "item-review-project-cache" && row.reviewTargets?.length);
   const targets = rows.flatMap((row) => row.reviewTargets || []);
-  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentReceipt.planId);
+  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentMatchesPlan);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10673,7 +10696,7 @@ function ProjectDependencyExecutorPanel({ runtimeCapabilities, execution, execut
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground">
             <span>Enable with `SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR=1` before launching Tauri.</span>
-            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, reviewed remove targets {targets.length}.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentMatchesPlan ? "current" : consentReceipt.planId ? "stale" : "missing"}, reviewed remove targets {targets.length}.</span>
             <span>Only item-review decisions marked Remove are sent to native execution; source folders are not sent as targets.</span>
           </div>
         </div>
@@ -10735,11 +10758,11 @@ function ProjectDependencyExecutorPanel({ runtimeCapabilities, execution, execut
   );
 }
 
-function DownloadsCleanupExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, onExecute }) {
+function DownloadsCleanupExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.downloadsCleanupExecutor);
   const rows = executorPlan.rows.filter((row) => row.route === "item-review-recycle-bin" && row.reviewTargets?.length);
   const targets = rows.flatMap((row) => row.reviewTargets || []);
-  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentReceipt.planId);
+  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentMatchesPlan);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10773,7 +10796,7 @@ function DownloadsCleanupExecutorPanel({ runtimeCapabilities, execution, executo
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground">
             <span>Enable with `SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR=1` before launching Tauri.</span>
-            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, reviewed remove targets {targets.length}.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentMatchesPlan ? "current" : consentReceipt.planId ? "stale" : "missing"}, reviewed remove targets {targets.length}.</span>
             <span>Native validation accepts only old installer/archive files under the current user's Downloads folder. It rejects directories, protected paths, recent files, and arbitrary personal folders.</span>
           </div>
         </div>
@@ -10833,11 +10856,11 @@ function DownloadsCleanupExecutorPanel({ runtimeCapabilities, execution, executo
   );
 }
 
-function LargeFileArchiveExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, archiveDestination, onArchiveDestination, onExecute }) {
+function LargeFileArchiveExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, consentMatchesPlan = false, archiveDestination, onArchiveDestination, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.largeFileArchiveExecutor);
   const rows = executorPlan.rows.filter((row) => row.route === "item-review-large-files" && row.archiveTargets?.length);
   const targets = rows.flatMap((row) => row.archiveTargets || []);
-  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentReceipt.planId && archiveDestination.trim());
+  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentMatchesPlan && archiveDestination.trim());
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10871,7 +10894,7 @@ function LargeFileArchiveExecutorPanel({ runtimeCapabilities, execution, executo
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground">
             <span>Enable with `SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR=1` before launching Tauri.</span>
-            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, Move/Archive targets {targets.length}.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentMatchesPlan ? "current" : consentReceipt.planId ? "stale" : "missing"}, Move/Archive targets {targets.length}.</span>
             <span>Native validation accepts only old 1GB+ files under current-user review folders and requires an existing non-system destination on another drive.</span>
           </div>
         </div>
@@ -10962,7 +10985,7 @@ function reviewSignalBadgeVariant(tone = "") {
   return "outline";
 }
 
-function BrowserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, onExecute }) {
+function BrowserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.browserCacheExecutor);
   const selectedRows = executorPlan.rows.filter((row) => row.route === "browser-cache-only");
   const cacheTargets = (nativeScan.result?.findings || [])
@@ -10975,7 +10998,7 @@ function BrowserCacheExecutorPanel({ runtimeCapabilities, execution, executorPla
       bytes: Number(finding.bytes || 0),
       status: finding.status
     }));
-  const requestReady = Boolean(selectedRows.length && cacheTargets.length && scanSession.currentFingerprint && consentReceipt.planId);
+  const requestReady = Boolean(selectedRows.length && cacheTargets.length && scanSession.currentFingerprint && consentMatchesPlan);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -11009,7 +11032,7 @@ function BrowserCacheExecutorPanel({ runtimeCapabilities, execution, executorPla
           </div>
           <div className="grid gap-2 text-xs text-muted-foreground">
             <span>Enable with `SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR=1` before launching Tauri.</span>
-            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, cache roots {cacheTargets.length}.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentMatchesPlan ? "current" : consentReceipt.planId ? "stale" : "missing"}, cache roots {cacheTargets.length}.</span>
             <span>Targets come from read-only native browser cache findings; summary labels and profile stores are not sent to execution.</span>
           </div>
         </div>

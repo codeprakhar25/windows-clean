@@ -880,6 +880,9 @@ assert(model.includes("routeOptions"), "model should expose route selector optio
 assert(model.includes("Review proof"), "scoped command flow should review proof before another executor run");
 assert(model.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "smoke packet should name scoped executor env vars");
 assert(app.includes("blockExecutorForPendingProof"), "scoped executor handlers should block when post-run proof is pending");
+assert(app.includes("consentMatchesCurrentPlan"), "scoped executor handlers should require consent for the current plan");
+assert(app.includes("current-plan consent receipt"), "scoped executor errors should call out stale or missing current-plan consent");
+assert(app.includes("consentMatchesPlan ? \"current\""), "scoped executor panels should distinguish current consent from stale consent");
 assert(openAiAgent.includes("post-run-proof"), "OpenAI broker should check pending post-run proof before executor recommendations");
 assert(app.includes("runPostRunReadonlyScan"), "post-run verification should have a ledger-preserving native rescan action");
 assert(app.includes("executionProofContext"), "post-run verification should freeze the execution plan context");
