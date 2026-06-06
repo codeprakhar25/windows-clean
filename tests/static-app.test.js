@@ -404,6 +404,9 @@ assert(openAiAgent.includes("manual-only"), "OpenAI schema should allow manual-o
 assert(openAiSmokeScript.includes("run-openai-advisor-smoke"), "OpenAI fixture smoke script should identify itself");
 assert(openAiSmokeScript.includes("No local filesystem scan was performed"), "OpenAI smoke script should be fixture-only");
 assert(openAiSmokeScript.includes("OPENAI_API_KEY"), "OpenAI smoke script should read the key from .env or process env");
+assert(openAiSmokeScript.includes("requiredSmokeRecommendation"), "OpenAI smoke script should define the required fixture recommendation");
+assert(openAiSmokeScript.includes("validateSmokeAdvice"), "OpenAI smoke script should validate brokered advice before passing");
+assert(openAiSmokeScript.includes("OpenAI smoke did not return the required broker-ready recommendation"), "OpenAI smoke script should fail on unbrokered fixture advice");
 assert(packageJson.includes("\"openai:smoke\""), "package scripts should expose the OpenAI fixture smoke command");
 assert(packageJson.includes("\"setup:doctor\""), "package scripts should expose the setup doctor command");
 assert(setupDoctorScript.includes("OPENAI_API_KEY"), "setup doctor should check OpenAI key configuration");

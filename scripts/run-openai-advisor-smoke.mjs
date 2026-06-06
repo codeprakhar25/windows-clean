@@ -15,6 +15,11 @@ import {
 const SCRIPT_ID = "run-openai-advisor-smoke";
 const GB = 1024 * 1024 * 1024;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const requiredSmokeRecommendation = {
+  actionType: "run-npm-cache-executor",
+  targetId: "npm-cache",
+  route: "bounded-npm-cache-delete"
+};
 
 function readDotEnv(filePath) {
   if (!fs.existsSync(filePath)) return {};
@@ -142,13 +147,15 @@ function buildFixtureContext() {
   });
 }
 
-function printAdvice(result, broker) {
+function printAdvice(result, broker, validation) {
   const advice = result.advice || {};
   console.log(`${SCRIPT_ID}: OpenAI advisor smoke complete`);
   console.log("No local filesystem scan was performed; this used fixture data only.");
   console.log(`provider=${result.provider} model=${result.model} transport=${result.transport}`);
   if (result.requestId) console.log(`requestId=${result.requestId}`);
   if (result.responseId) console.log(`responseId=${result.responseId}`);
+  console.log(`required=${requiredSmokeRecommendation.actionType} route=${requiredSmokeRecommendation.route} target=${requiredSmokeRecommendation.targetId}`);
+  console.log(`validation=${validation.passed ? "broker-ready" : "failed"}`);
   console.log(`summary=${advice.summary || ""}`);
   console.log(`nextAction=${advice.nextAction || ""}`);
   console.log(`confidence=${advice.confidence || "low"}`);
@@ -165,6 +172,49 @@ function printAdvice(result, broker) {
   for (const warning of advice.warnings || []) {
     console.log(`warning=${warning}`);
   }
+  for (const failure of validation.failures || []) {
+    console.error(`failure=${failure}`);
+  }
+}
+
+function validateSmokeAdvice({ context, advice, broker }) {
+  const failures = [];
+  const task = (context.agentTaskQueue?.rows || []).find((row) =>
+    row.actionType === requiredSmokeRecommendation.actionType &&
+    row.targetId === requiredSmokeRecommendation.targetId &&
+    row.route === requiredSmokeRecommendation.route
+  );
+  if (!task) {
+    failures.push("required task queue row is missing from fixture context");
+  } else if (task.status !== "ready") {
+    failures.push(`required task queue row is ${task.status}, expected ready`);
+  }
+
+  const recommendation = (advice?.recommendedActions || []).find((row) =>
+    row.actionType === requiredSmokeRecommendation.actionType &&
+    row.targetId === requiredSmokeRecommendation.targetId &&
+    row.route === requiredSmokeRecommendation.route
+  );
+  if (!recommendation) {
+    failures.push("required recommendation was not returned by OpenAI");
+  }
+
+  const brokerRow = recommendation
+    ? broker.rows.find((row) => row.key === getOpenAIAgentRecommendationKey(recommendation))
+    : null;
+  if (!brokerRow) {
+    failures.push("required recommendation was not brokered");
+  } else if (!brokerRow.canAct || brokerRow.status !== "ready") {
+    failures.push(`required recommendation broker status=${brokerRow.status} canAct=${brokerRow.canAct}`);
+  }
+
+  return {
+    passed: failures.length === 0,
+    failures,
+    task,
+    recommendation,
+    brokerRow
+  };
 }
 
 async function main() {
@@ -181,7 +231,7 @@ async function main() {
   const context = buildFixtureContext();
   const result = await requestOpenAIAgentAdvice({
     context,
-    userPrompt: "Use this fixture only. Recommend the next safe SpaceGuard cleanup step and explain any blockers.",
+    userPrompt: `Use this fixture only. The required smoke task queue row is actionType=${requiredSmokeRecommendation.actionType}, targetId=${requiredSmokeRecommendation.targetId}, route=${requiredSmokeRecommendation.route}. If that row is ready, return it as the first recommendedAction exactly and explain any blockers.`,
     config,
     host: {}
   });
@@ -195,7 +245,12 @@ async function main() {
       proofStatus: "waiting-for-execution"
     }
   });
-  printAdvice(result, broker);
+  const validation = validateSmokeAdvice({ context, advice: result.advice, broker });
+  printAdvice(result, broker, validation);
+  if (!validation.passed) {
+    console.error(`${SCRIPT_ID}: OpenAI smoke did not return the required broker-ready recommendation.`);
+    process.exitCode = 1;
+  }
 }
 
 main().catch((error) => {

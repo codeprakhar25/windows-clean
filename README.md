@@ -57,7 +57,7 @@ npm run native:dev
 
 `npm run setup:doctor` is a read-only local setup diagnostic. It reports whether `.env` exists, whether `OPENAI_API_KEY` is configured, which model/reasoning defaults will be used, and which scoped executor flags are enabled. It does not call OpenAI, scan folders, or run cleanup.
 
-`npm run openai:smoke` sends only a fixture context to the OpenAI advisor. It does not scan local folders or run cleanup; use it to validate the `.env` key, model, strict JSON schema, and recommendation broker before opening the desktop app.
+`npm run openai:smoke` sends only a fixture context to the OpenAI advisor. It does not scan local folders or run cleanup; use it to validate the `.env` key, model, strict JSON schema, deterministic agent task queue, and recommendation broker before opening the desktop app. The smoke command exits non-zero unless OpenAI returns the required broker-ready npm cache recommendation from the fixture queue.
 
 The same `.env` file can hold named scoped executor flags, for example `SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR=1`, when you are validating real cleanup on Windows. Validate and run one selected route at a time, then complete post-run rescan proof before running another executor.
 

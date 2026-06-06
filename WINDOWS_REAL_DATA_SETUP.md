@@ -45,7 +45,7 @@ npm run native:dev
 
 `npm run setup:doctor` is read-only. It checks `.env`, OpenAI key presence, model/reasoning defaults, and scoped executor flags without calling OpenAI, scanning folders, or running cleanup.
 
-`npm run openai:smoke` validates the OpenAI key and strict advice schema against fixture data only. It does not scan local folders, run cleanup, or use real disk findings.
+`npm run openai:smoke` validates the OpenAI key, strict advice schema, deterministic agent task queue, and recommendation broker against fixture data only. It exits non-zero unless OpenAI returns the required broker-ready npm cache recommendation from the fixture queue. It does not scan local folders, run cleanup, or use real disk findings.
 
 Optional first-safe temp executor:
 
