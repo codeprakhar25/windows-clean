@@ -459,6 +459,9 @@ assert(nativeAdapter.includes("requestMode: \"execute-first-safe\""), "native ad
 assert(rustScanner.includes("execute_first_safe_temp_cleanup"), "Rust native shell should implement the first-safe temp executor branch");
 assert(rustScanner.includes("SPACEGUARD_ENABLE_TEMP_EXECUTOR"), "Rust native shell should require the temp executor feature flag");
 assert(rustScanner.includes("runtime_feature_flag_enabled"), "Rust native shell should read scoped executor flags through the shared .env resolver");
+assert(rustScanner.includes("fn scoped_executor_enabled_on_windows"), "Rust native shell should centralize Windows-only scoped executor enablement");
+assert(rustScanner.includes("scoped_executor_enabled_on_windows(temp_executor_enabled())"), "temp executor responses should not echo real-run capability on non-Windows");
+assert(rustScanner.includes("scoped_executor_enabled_on_windows(npm_cache_executor_enabled())"), "npm executor responses should not echo real-run capability on non-Windows");
 assert(rustScanner.includes("runtime_env_value"), "Rust native shell should read local .env values for runtime configuration");
 assert(rustScanner.includes("fs::remove_file"), "Rust temp executor should perform file deletion only");
 assert(!rustScanner.includes("remove_dir_all"), "Rust executors must not use broad recursive directory removal");

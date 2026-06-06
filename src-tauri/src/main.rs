@@ -800,7 +800,7 @@ fn execute_first_safe_temp_cleanup(request: WriteExecutionRequest) -> WriteExecu
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let flag_enabled = temp_executor_enabled();
+    let flag_enabled = scoped_executor_enabled_on_windows(temp_executor_enabled());
     let rejections = temp_execution_rejections(&request, flag_enabled);
     let contract_echo = WriteContractEcho {
         schema_version: request
@@ -964,7 +964,7 @@ fn execute_project_dependency_cleanup(request: WriteExecutionRequest) -> WriteEx
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let flag_enabled = project_dependency_executor_enabled();
+    let flag_enabled = scoped_executor_enabled_on_windows(project_dependency_executor_enabled());
     let rejections = project_dependency_execution_rejections(&request, flag_enabled);
     let contract_echo = WriteContractEcho {
         schema_version: request
@@ -1129,7 +1129,7 @@ fn execute_downloads_review_cleanup(request: WriteExecutionRequest) -> WriteExec
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let flag_enabled = downloads_cleanup_executor_enabled();
+    let flag_enabled = scoped_executor_enabled_on_windows(downloads_cleanup_executor_enabled());
     let rejections = downloads_cleanup_execution_rejections(&request, flag_enabled);
     let contract_echo = WriteContractEcho {
         schema_version: request
@@ -1327,7 +1327,7 @@ fn execute_large_file_archive_cleanup(request: WriteExecutionRequest) -> WriteEx
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let flag_enabled = large_file_archive_executor_enabled();
+    let flag_enabled = scoped_executor_enabled_on_windows(large_file_archive_executor_enabled());
     let rejections = large_file_archive_execution_rejections(&request, flag_enabled);
     let contract_echo = WriteContractEcho {
         schema_version: request
@@ -1542,7 +1542,7 @@ fn execute_browser_cache_cleanup(request: WriteExecutionRequest) -> WriteExecuti
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let flag_enabled = browser_cache_executor_enabled();
+    let flag_enabled = scoped_executor_enabled_on_windows(browser_cache_executor_enabled());
     let rejections = browser_cache_execution_rejections(&request, flag_enabled);
     let contract_echo = WriteContractEcho {
         schema_version: request
@@ -1707,7 +1707,7 @@ fn execute_gradle_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutio
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let flag_enabled = gradle_cache_executor_enabled();
+    let flag_enabled = scoped_executor_enabled_on_windows(gradle_cache_executor_enabled());
     let rejections = gradle_cache_execution_rejections(&request, flag_enabled);
     let contract_echo = WriteContractEcho {
         schema_version: request
@@ -1875,7 +1875,7 @@ fn execute_npm_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionRe
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let flag_enabled = npm_cache_executor_enabled();
+    let flag_enabled = scoped_executor_enabled_on_windows(npm_cache_executor_enabled());
     let rejections = npm_cache_execution_rejections(&request, flag_enabled);
     let contract_echo = WriteContractEcho {
         schema_version: request
@@ -2043,7 +2043,7 @@ fn execute_user_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionR
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let flag_enabled = user_cache_executor_enabled();
+    let flag_enabled = scoped_executor_enabled_on_windows(user_cache_executor_enabled());
     let rejections = user_cache_execution_rejections(&request, flag_enabled);
     let contract_echo = WriteContractEcho {
         schema_version: request
@@ -2211,7 +2211,7 @@ fn execute_android_cache_cleanup(request: WriteExecutionRequest) -> WriteExecuti
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let flag_enabled = android_cache_executor_enabled();
+    let flag_enabled = scoped_executor_enabled_on_windows(android_cache_executor_enabled());
     let rejections = android_cache_execution_rejections(&request, flag_enabled);
     let contract_echo = WriteContractEcho {
         schema_version: request
@@ -2379,7 +2379,7 @@ fn execute_shader_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutio
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let flag_enabled = shader_cache_executor_enabled();
+    let flag_enabled = scoped_executor_enabled_on_windows(shader_cache_executor_enabled());
     let rejections = shader_cache_execution_rejections(&request, flag_enabled);
     let contract_echo = WriteContractEcho {
         schema_version: request
@@ -2547,7 +2547,7 @@ fn execute_pip_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionRe
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let flag_enabled = pip_cache_executor_enabled();
+    let flag_enabled = scoped_executor_enabled_on_windows(pip_cache_executor_enabled());
     let rejections = pip_cache_execution_rejections(&request, flag_enabled);
     let contract_echo = WriteContractEcho {
         schema_version: request
@@ -2715,7 +2715,7 @@ fn execute_docker_build_cache_cleanup(request: WriteExecutionRequest) -> WriteEx
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let flag_enabled = tool_native_prune_executors_enabled();
+    let flag_enabled = scoped_executor_enabled_on_windows(tool_native_prune_executors_enabled());
     let rejections = docker_build_cache_execution_rejections(&request, flag_enabled);
     let contract_echo = WriteContractEcho {
         schema_version: request
@@ -2926,7 +2926,7 @@ fn execute_pnpm_store_cleanup(request: WriteExecutionRequest) -> WriteExecutionR
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let flag_enabled = pnpm_store_executor_enabled();
+    let flag_enabled = scoped_executor_enabled_on_windows(pnpm_store_executor_enabled());
     let rejections = pnpm_store_execution_rejections(&request, flag_enabled);
     let contract_echo = WriteContractEcho {
         schema_version: request
@@ -3094,7 +3094,7 @@ fn execute_recycle_bin_cleanup(request: WriteExecutionRequest) -> WriteExecution
     let expected_bytes = request
         .expected_bytes
         .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let flag_enabled = recycle_bin_executor_enabled();
+    let flag_enabled = scoped_executor_enabled_on_windows(recycle_bin_executor_enabled());
     let rejections = recycle_bin_execution_rejections(&request, flag_enabled);
     let contract_echo = WriteContractEcho {
         schema_version: request
@@ -4398,6 +4398,10 @@ fn runtime_feature_flag_enabled(name: &str) -> bool {
     runtime_env_value(&[name])
         .map(|(value, _)| is_truthy_runtime_flag(&value))
         .unwrap_or(false)
+}
+
+fn scoped_executor_enabled_on_windows(flag_enabled: bool) -> bool {
+    cfg!(target_os = "windows") && flag_enabled
 }
 
 fn is_truthy_runtime_flag(value: &str) -> bool {
