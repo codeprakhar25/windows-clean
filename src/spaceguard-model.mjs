@@ -4736,8 +4736,8 @@ export function buildAgentQuestionQueue({
       id: "probe-write-boundary",
       lane: "validation",
       priority: 48,
-      title: "Probe rejecting write boundary",
-      prompt: "Should I capture rejection evidence from the native write boundary?",
+      title: "Probe route boundary",
+      prompt: "Should I capture non-mutating evidence from the native route branch?",
       detail: "The probe must return accepted=false, every entry rejected, and zero reclaimed bytes.",
       action: "probe-write-boundary",
       options: ["Probe write boundary", "Leave unprobed"]
@@ -9597,12 +9597,12 @@ export function buildTempExecutorActivationGate({
       status: scaffoldPresent ? scaffold.status || "present" : "missing-scaffold",
       detail: scaffoldPresent
         ? scaffold.reason || "Native write boundary returned a disabled temp executor scaffold."
-        : "Run the native write-boundary probe and capture the disabled temp executor scaffold.",
+        : "Run the native route-boundary probe and capture the disabled temp executor scaffold.",
       evidence: scaffold?.featureFlag || contract.featureFlag
     }),
     buildTempExecutorActivationRow({
       id: "preflight-evidence",
-      label: "Rejecting preflight evidence",
+      label: "Non-mutating preflight evidence",
       passed: preflightAttached,
       blocked: unsafeSignal,
       status: preflightAttached ? preflightStatus || "recorded" : "missing-preflight",
@@ -14284,7 +14284,7 @@ function getReleaseReviewPacketSteps(status, { waitingRows = [], blockedRows = [
   const nextRows = waitingRows.slice(0, 4).map((row) => `${row.label}: ${row.detail}`);
   return nextRows.length
     ? nextRows
-    : ["Run a scan.", "Resolve plan gates and dry-run consent.", "Probe the rejecting write boundary and export evidence."];
+    : ["Run a scan.", "Resolve plan gates and dry-run consent.", "Probe the native route branch in non-mutating mode and export evidence."];
 }
 
 function buildTaskCapabilityGrantBlockers({
@@ -17240,7 +17240,7 @@ function buildFirstSafeImplementationWorkItems({
     {
       id: "write-boundary-reprobe",
       lane: "release",
-      label: "Rejecting boundary reprobe",
+      label: "Route boundary reprobe",
       status: unsafeRuntime || routeMissing || validationBlocked
         ? "blocked"
         : writeBoundaryProbe?.rejectionEvidence && Number(writeBoundaryProbe?.counts?.bytes || 0) === 0
@@ -17249,7 +17249,7 @@ function buildFirstSafeImplementationWorkItems({
           ? "waiting"
           : blockedStatus,
       detail: writeBoundaryProbe?.rejectionEvidence
-        ? "Rejecting write-boundary evidence is attached with zero bytes."
+        ? "Non-mutating route-boundary evidence is attached with zero bytes."
         : `Probe ${routeTitle} again after implementation while the feature flag remains disabled.`,
       evidence: writeBoundaryProbe?.status || "not-run"
     }
@@ -17403,7 +17403,7 @@ function buildTempExecutorActivationGateSteps(status, { blockers = [], contract 
   }
   if (status === "preflight-missing") {
     return [
-      "Run the native write-boundary probe for the known temp route.",
+      "Run the native route-boundary probe for the known temp route.",
       "Confirm every entry is rejected with zero bytes.",
       "Record per-action preflight checks and the disabled executor scaffold."
     ];
@@ -17896,7 +17896,7 @@ function getWriteBoundaryProbeReason(status) {
   if (status === "unsafe-signal") return "Probe returned a signal that would be unsafe in the current build.";
   if (status === "contract-mismatch") return "Native rejection did not echo the current first-safe executor contract.";
   if (status === "error") return "Probe failed before rejection evidence could be recorded.";
-  if (status === "running") return "Probe is running against the native rejecting boundary.";
+  if (status === "running") return "Probe is running against the native route boundary with mutation disabled.";
   if (status === "rejected") return "Native boundary rejected the request and reported zero reclaimed bytes.";
   return "Probe result did not provide enough rejection evidence.";
 }

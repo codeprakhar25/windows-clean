@@ -938,7 +938,8 @@ assert(app.includes("Write boundary probe"), "write boundary probe panel should 
 assert(app.includes("Release review packet"), "release review packet panel should be rendered");
 assert(app.includes("Export review packet"), "release review packet export action should be visible");
 assert(app.includes("Probe write boundary"), "write boundary probe action should be visible");
-assert(app.includes("rejection evidence"), "write boundary probe should frame evidence as rejection evidence");
+assert(app.includes("mutation disabled"), "write boundary probe should frame evidence as non-mutating route evidence");
+assert(app.includes("accepted=false"), "write boundary probe should show the accepted=false requirement");
 assert(app.includes("zero bytes"), "write boundary probe should make zero-byte outcome visible");
 assert(app.includes("rejectCode"), "write boundary probe UI should expose native reject codes");
 assert(app.includes("Candidate manifest"), "native dry-run panel should expose candidate manifest metadata");
@@ -1124,7 +1125,7 @@ assert(rustScanner.includes("OPENAI_API_KEY"), "Rust native OpenAI advisor shoul
 assert(rustScanner.includes("dotenv_candidate_paths"), "Rust native OpenAI advisor should read local .env files");
 assert(rustScanner.includes("reqwest::Client::new"), "Rust native OpenAI advisor should call OpenAI from native code");
 assert(rustScanner.includes("openai_response_format"), "Rust native OpenAI advisor should request strict structured output");
-assert(rustScanner.includes("contract_echo"), "Rust rejecting write boundary should echo the first-safe contract");
+assert(rustScanner.includes("contract_echo"), "Rust route boundary should echo the first-safe contract");
 assert(rustScanner.includes("WriteExecutorScaffold"), "Rust write boundary should expose disabled executor scaffold metadata");
 assert(rustScanner.includes("WritePreflightCheck"), "Rust write boundary should expose per-action preflight checks");
 assert(rustScanner.includes("write_action_preflight"), "Rust write boundary should build per-action preflight evidence");

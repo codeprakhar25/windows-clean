@@ -9586,7 +9586,7 @@ function WriteBoundaryProbePanel({ probe, nativeWriteBoundary, runtimeCapabiliti
         </Button>
 
         <p className="text-xs text-muted-foreground">
-          This calls the native rejecting stub only. It records rejection evidence and zero bytes; it does not create ledger recovery.
+          This calls the selected native route branch with mutation disabled. Passing evidence is accepted=false, rejected entries, and zero bytes.
         </p>
 
         <div className="flex flex-col gap-2">

@@ -464,7 +464,7 @@ const assert = require("assert");
       contract: {
         schemaVersion: "spaceguard-first-safe-executor-contract/v1",
         requestPreview: {
-          mode: "reject-only-preview",
+          mode: "execute-first-safe",
           planId: "plan-temp",
           route: "known-temp-delete",
           scanFingerprint: "scan-temp",
@@ -510,7 +510,7 @@ const assert = require("assert");
   assert.strictEqual(writeInvocation.command, "execute_cleanup_plan", "native write boundary should invoke execute_cleanup_plan");
   assert.strictEqual(writeInvocation.payload.request.planId, "plan-temp", "native write boundary should pass plan id");
   assert.strictEqual(writeInvocation.payload.request.route, "known-temp-delete", "native write boundary should pass capsule route");
-  assert.strictEqual(writeInvocation.payload.request.requestMode, "reject-only-preview", "native write boundary should pass first-safe request mode");
+  assert.strictEqual(writeInvocation.payload.request.requestMode, "execute-first-safe", "native write boundary should pass first-safe request mode");
   assert.strictEqual(writeInvocation.payload.request.scanFingerprint, "scan-temp", "native write boundary should pass scan fingerprint");
   assert.strictEqual(writeInvocation.payload.request.consentPlanId, "plan-temp", "native write boundary should pass consent plan id");
   assert.strictEqual(writeInvocation.payload.request.actions[0].targetPath, "C:\\Windows\\Temp", "native write boundary should pass selected target path");
@@ -519,7 +519,7 @@ const assert = require("assert");
   assert.strictEqual(rejectedWrite.realRunEnabled, false, "native write boundary must keep real run disabled");
   assert.strictEqual(rejectedWrite.destructiveCommands, false, "native write boundary must keep destructive commands disabled");
   assert.strictEqual(rejectedWrite.accepted, false, "native write boundary should reject execution");
-  assert.strictEqual(rejectedWrite.contractEcho.requestMode, "reject-only-preview", "native write boundary should normalize contract echo");
+  assert.strictEqual(rejectedWrite.contractEcho.requestMode, "execute-first-safe", "native write boundary should normalize contract echo");
   assert.strictEqual(rejectedWrite.contractEcho.scanFingerprint, "scan-temp", "native write boundary should normalize scan fingerprint echo");
   assert.strictEqual(rejectedWrite.entries[0].result, "rejected", "native write boundary should normalize rejected entries");
   assert.strictEqual(rejectedWrite.entries[0].rejectCode, "real-executor-disabled", "native write boundary should normalize reject codes");
@@ -1246,7 +1246,7 @@ const assert = require("assert");
   assert.strictEqual(capabilities.realRunEnabled, false, "native capabilities should keep real run disabled");
   assert.strictEqual(capabilities.scanKnownRoots, true, "native capabilities should expose scanner availability");
   assert.strictEqual(capabilities.simulateCleanupPlan, true, "native capabilities should expose dry-run availability");
-  assert.strictEqual(capabilities.executeCleanupPlan, true, "native capabilities should expose rejecting write boundary availability");
+  assert.strictEqual(capabilities.executeCleanupPlan, true, "native capabilities should expose route executor availability");
   assert.strictEqual(capabilities.openAiAgentAdvice, true, "native capabilities should expose OpenAI advisor availability");
   assert.strictEqual(capabilities.openAiAdvisorConfigured, true, "native capabilities should expose OpenAI key configuration without the key");
   assert.strictEqual(capabilities.openAiKeySource, ".env:OPENAI_API_KEY", "native capabilities should expose only the OpenAI key source");
