@@ -298,6 +298,10 @@ assert(app.includes("Candidate samples prove target filtering"), "candidate safe
 assert(app.includes("buildScanSessionEvidence"), "scan session freshness guard should be wired");
 assert(app.includes("buildRecoveryAdvisor"), "recovery advisor should be wired");
 assert(app.includes("buildAgentQuestionQueue"), "agent question queue should be wired");
+const agentQuestionQueueCallStart = app.indexOf("buildAgentQuestionQueue({");
+const agentQuestionQueueCallEnd = app.indexOf("}),\n    [", agentQuestionQueueCallStart);
+const agentQuestionQueueCall = app.slice(agentQuestionQueueCallStart, agentQuestionQueueCallEnd);
+assert(agentQuestionQueueCall.includes("tempExecutorActivationGate"), "agent question queue should receive temp executor activation state");
 assert(app.includes("buildAIAgentIntegration"), "AI agent integration audit should be wired");
 assert(app.includes("OpenAIAgentPanel"), "OpenAI agent panel should be rendered");
 assert(app.includes("openai-agent-panel"), "OpenAI agent panel should be focusable");
