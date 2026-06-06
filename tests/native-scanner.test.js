@@ -1059,6 +1059,7 @@ const assert = require("assert");
       planId: "plan-recycle",
       scanFingerprint: "scan-recycle",
       consentPlanId: "plan-recycle",
+      permanentRemovalConfirmed: true,
       expectedBytes: 1234
     },
     {
@@ -1102,6 +1103,39 @@ const assert = require("assert");
   assert.strictEqual(recycleExecutionInvocation.payload.request.actions[0].targetPath.endsWith("\\$Recycle.Bin"), true, "Recycle Bin executor should pass concrete scan target path");
   assert.strictEqual(recycleExecution.accepted, true, "Recycle Bin executor should normalize accepted responses");
   assert.strictEqual(recycleExecution.entries[0].route, "shell-recycle-bin", "Recycle Bin executor should normalize executed route");
+  let unconfirmedRecycleInvocation = null;
+  await native.runNativeRecycleBinExecutor(
+    {
+      row: { id: "recycle-bin", title: "Recycle Bin", path: "C:\\$Recycle.Bin", bytes: 1234 },
+      planId: "plan-recycle",
+      scanFingerprint: "scan-recycle",
+      consentPlanId: "plan-recycle",
+      expectedBytes: 1234
+    },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            unconfirmedRecycleInvocation = { command, payload };
+            return Promise.resolve({
+              mode: "native-recycle-bin-executor-rejected",
+              real_run_enabled: true,
+              destructive_commands: true,
+              accepted: false,
+              reason: "Recycle Bin cleanup rejected before permanent confirmation.",
+              entries: [],
+              warnings: ["confirmation missing"]
+            });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(
+    unconfirmedRecycleInvocation.payload.request.permanentRemovalConfirmed,
+    false,
+    "Recycle Bin adapter must not mint permanent-removal confirmation when the caller omits it"
+  );
   const scaffoldedWrite = native.normalizeNativeWriteBoundary({
     mode: "native-write-rejected",
     real_run_enabled: false,

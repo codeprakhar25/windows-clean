@@ -855,7 +855,7 @@ export async function runNativeRecycleBinExecutor(boundary = {}, host = globalTh
       expectedBytes,
       dryRunOnly: false,
       mutationAttempted: true,
-      permanentRemovalConfirmed: true,
+      permanentRemovalConfirmed: Boolean(boundary.permanentRemovalConfirmed),
       actions: [action]
     }
   });

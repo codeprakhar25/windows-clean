@@ -3083,6 +3083,7 @@ export default function App() {
         planId: planSnapshot.id,
         scanFingerprint: scanSession.currentFingerprint,
         consentPlanId: consentReceipt.planId,
+        permanentRemovalConfirmed: approvals.permanentConfirm,
         expectedBytes: recycleTarget.bytes
       });
       setNativeRecycleBinExecution({ status: "complete", result, error: "" });

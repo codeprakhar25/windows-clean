@@ -647,8 +647,9 @@ assert(rustScanner.includes("versioned_content"), "Rust pnpm store cleanup shoul
 assert(app.includes("RecycleBinExecutorPanel"), "Recycle Bin executor panel should be rendered");
 assert(app.includes("recycle-bin-executor-panel"), "Recycle Bin executor panel should be focusable");
 assert(app.includes("Empty Recycle Bin"), "Recycle Bin executor should expose a user-triggered cleanup button");
-assert(app.includes("permanentRemovalConfirmed"), "Recycle Bin executor should send native permanent-removal acknowledgement");
+assert(app.includes("permanentRemovalConfirmed: approvals.permanentConfirm"), "Recycle Bin executor should pass the user's permanent-removal confirmation explicitly");
 assert(app.includes("runNativeRecycleBinExecutor"), "Recycle Bin executor should be wired through the native adapter");
+assert(nativeAdapter.includes("permanentRemovalConfirmed: Boolean(boundary.permanentRemovalConfirmed)"), "native Recycle Bin adapter must not mint permanent-removal confirmation");
 assert(nativeAdapter.includes("requestMode: \"execute-recycle-bin\""), "native adapter should send the execute-recycle-bin request mode");
 assert(nativeAdapter.includes("spaceguard-recycle-bin-request/v1"), "native adapter should send the Recycle Bin request schema");
 assert(rustScanner.includes("execute_recycle_bin_cleanup"), "Rust native shell should implement Recycle Bin cleanup");
