@@ -10,7 +10,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const DEFAULT_OPENAI_MODEL: &str = "gpt-5.5";
+const DEFAULT_OPENAI_MODEL: &str = "gpt-5.2";
 const DEFAULT_OPENAI_ENDPOINT: &str = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_REASONING_EFFORT: &str = "low";
 

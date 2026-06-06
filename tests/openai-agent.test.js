@@ -5,22 +5,24 @@ const assert = require("assert");
 
   const primaryConfig = openai.getOpenAIAgentConfig({
     OPENAI_API_KEY: "test-openai-key",
-    OPENAI_MODEL: "gpt-5.5",
+    OPENAI_MODEL: "gpt-5-mini",
     OPENAI_REASONING_EFFORT: "low"
   });
   assert.strictEqual(primaryConfig.connected, true, "OPENAI_API_KEY should configure the OpenAI advisor");
-  assert.strictEqual(primaryConfig.model, "gpt-5.5", "OpenAI advisor should accept OPENAI_MODEL");
+  assert.strictEqual(primaryConfig.model, "gpt-5-mini", "OpenAI advisor should accept OPENAI_MODEL");
   assert.strictEqual(primaryConfig.keySource, "OPENAI_API_KEY", "OpenAI advisor should prefer OPENAI_API_KEY");
   assert.strictEqual(primaryConfig.reasoningEffort, "low", "OpenAI advisor should normalize reasoning effort");
   assert.strictEqual(primaryConfig.directToolAccess, false, "OpenAI advisor must not receive direct tool access");
+  const defaultModelConfig = openai.getOpenAIAgentConfig({ OPENAI_API_KEY: "test-openai-key" });
+  assert.strictEqual(defaultModelConfig.model, "gpt-5.2", "OpenAI advisor should default to the current documented GPT-5.2 model");
 
   const legacyConfig = openai.getOpenAIAgentConfig({
     VITE_OPENAI_API_KEY: "legacy-openai-key",
-    VITE_OPENAI_MODEL: "gpt-5-mini",
+    VITE_OPENAI_MODEL: "gpt-5-nano",
     VITE_OPENAI_REASONING_EFFORT: "none"
   });
   assert.strictEqual(legacyConfig.keySource, "VITE_OPENAI_API_KEY", "OpenAI advisor should keep the legacy Vite key fallback");
-  assert.strictEqual(legacyConfig.model, "gpt-5-mini", "OpenAI advisor should keep the legacy model fallback");
+  assert.strictEqual(legacyConfig.model, "gpt-5-nano", "OpenAI advisor should keep the legacy model fallback");
   assert.strictEqual(legacyConfig.reasoningEffort, "none", "OpenAI advisor should keep the legacy reasoning fallback");
 
   assert.strictEqual(openai.getNativeOpenAIAgentCapability({}).available, false, "browser host should not expose the native OpenAI command");
@@ -248,7 +250,7 @@ const assert = require("assert");
             return Promise.resolve({
               schemaVersion: "spaceguard-openai-agent-advice/v1",
               provider: "openai",
-              model: "gpt-5.5",
+              model: "gpt-5.2",
               requestId: "req_native_openai",
               responseId: "resp_native_openai",
               createdAt: "unix:1",
@@ -302,7 +304,7 @@ const assert = require("assert");
   assert.strictEqual(nativeInvocation.command, "openai_agent_advice", "OpenAI adapter should prefer the native Tauri advisor command");
   assert.strictEqual(nativeInvocation.payload.request.userPrompt, "Use the native advisor.", "native OpenAI request should pass the user prompt");
   assert.strictEqual(nativeInvocation.payload.request.context.schemaVersion, "spaceguard-openai-agent-context/v1", "native OpenAI request should pass bounded context");
-  assert.strictEqual(nativeInvocation.payload.request.model, "gpt-5.5", "native OpenAI request should pass model preference without a key");
+  assert.strictEqual(nativeInvocation.payload.request.model, "gpt-5.2", "native OpenAI request should pass the default model preference without a key");
   assert.strictEqual(JSON.stringify(nativeInvocation.payload).includes("renderer-key-should-not-cross"), false, "renderer API key must not be sent to the native command");
   assert.strictEqual(nativeResult.transport, "native-tauri", "native OpenAI result should preserve transport");
   assert.strictEqual(nativeResult.keySource, ".env:OPENAI_API_KEY", "native OpenAI result should expose key source only");
@@ -363,7 +365,7 @@ const assert = require("assert");
         json() {
           return Promise.resolve({
             id: "resp_test_openai",
-            model: "gpt-5.5",
+            model: "gpt-5-mini",
             output: [
               {
                 content: [
@@ -399,7 +401,7 @@ const assert = require("assert");
 
   assert.strictEqual(request.url, "https://api.openai.com/v1/responses", "OpenAI advisor should call the Responses API endpoint");
   assert.strictEqual(request.headers.Authorization, "Bearer test-openai-key", "OpenAI key should be sent only as an Authorization header");
-  assert.strictEqual(request.body.model, "gpt-5.5", "OpenAI request should use the configured model");
+  assert.strictEqual(request.body.model, "gpt-5-mini", "OpenAI request should use the configured model");
   assert.deepStrictEqual(request.body.reasoning, { effort: "low" }, "OpenAI request should include configured reasoning effort");
   assert.strictEqual(request.body.store, false, "OpenAI request should disable response storage");
   assert.strictEqual(request.body.text.format.type, "json_schema", "OpenAI request should use structured outputs");

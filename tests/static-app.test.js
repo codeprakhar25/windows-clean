@@ -321,7 +321,7 @@ assert(app.includes("appendOpenAIAgentRunRecord"), "OpenAI run history should ap
 assert(openAiAgent.includes("https://api.openai.com/v1/responses"), "OpenAI adapter should use the Responses API endpoint");
 assert(openAiAgent.includes("OPENAI_API_KEY"), "OpenAI adapter should read the primary .env API key");
 assert(openAiAgent.includes("VITE_OPENAI_API_KEY"), "OpenAI adapter should keep the Vite env API key fallback");
-assert(openAiAgent.includes("gpt-5.5"), "OpenAI adapter should default to the current GPT-5.5 model");
+assert(openAiAgent.includes("gpt-5.2"), "OpenAI adapter should default to the current documented GPT-5.2 model");
 assert(openAiAgent.includes("OPENAI_REASONING_EFFORT"), "OpenAI adapter should support configurable reasoning effort");
 assert(openAiAgent.includes("body.reasoning"), "OpenAI adapter should send configured reasoning effort");
 assert(openAiAgent.includes("openai_agent_advice"), "OpenAI adapter should prefer the native Tauri advisor command");

@@ -1,4 +1,4 @@
-const DEFAULT_OPENAI_MODEL = "gpt-5.5";
+const DEFAULT_OPENAI_MODEL = "gpt-5.2";
 const DEFAULT_OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_REASONING_EFFORT = "low";
 const NATIVE_OPENAI_AGENT_COMMAND = "openai_agent_advice";
