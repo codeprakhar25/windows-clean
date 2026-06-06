@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { routeSpecs } from "./run-setup-route.mjs";
+
 const SCRIPT_ID = "spaceguard-setup-doctor";
 export const EXECUTOR_FLAGS = [
   "SPACEGUARD_ENABLE_TEMP_EXECUTOR",
@@ -77,6 +79,10 @@ export function buildSetupDoctorReport({
   const reasoningEffort = configValue(["OPENAI_REASONING_EFFORT", "VITE_OPENAI_REASONING_EFFORT"], "low", valueOptions);
   const enabledFlags = EXECUTOR_FLAGS.filter((name) => flagEnabled(name, valueOptions));
   const validationStatus = getScopedExecutorValidationStatus(enabledFlags);
+  const selectedRoute = enabledFlags.length === 1 ? getRouteForExecutorFlag(enabledFlags[0]) : null;
+  const routeInput = selectedRoute?.routeInput || "npm-cache";
+  const routeSetupCommand = `npm run setup:route -- --route ${routeInput}`;
+  const routeValidationCommand = `npm run validate:route -- --route ${routeInput}`;
 
   return {
     schemaVersion: "spaceguard-setup-doctor/v1",
@@ -107,6 +113,7 @@ export function buildSetupDoctorReport({
       enabledFlags,
       selectedFlag: enabledFlags.length === 1 ? enabledFlags[0] : "",
       conflictingFlags: enabledFlags.length > 1 ? enabledFlags : [],
+      selectedRoute,
       validationStatus,
       safeToLaunchWriteMode: enabledFlags.length === 1,
       warning: getScopedExecutorWarning(enabledFlags)
@@ -117,11 +124,25 @@ export function buildSetupDoctorReport({
       build: "npm run build",
       openAiFixtureSmoke: "npm run openai:smoke:fixture",
       openAiSmoke: "npm run openai:smoke",
-      routeSetup: "npm run setup:route -- --route npm-cache",
-      routeValidation: "npm run validate:route -- --route npm-cache",
+      routeSetup: routeSetupCommand,
+      routeValidation: routeValidationCommand,
       nativeDev: "npm run native:dev"
     },
-    nextSteps: buildNextSteps({ openAiConfigured: openAiKey.source !== "missing", enabledFlags })
+    nextSteps: buildNextSteps({ openAiConfigured: openAiKey.source !== "missing", enabledFlags, routeInput })
+  };
+}
+
+function getRouteForExecutorFlag(envVar) {
+  const spec = routeSpecs.find((route) => route.envVar === envVar) || null;
+  if (!spec) return null;
+  return {
+    route: spec.route,
+    routeInput: spec.aliases?.[0] || spec.route,
+    title: spec.title,
+    envVar: spec.envVar,
+    requestMode: spec.requestMode,
+    panelId: spec.panelId,
+    actionLabel: spec.actionLabel
   };
 }
 
@@ -137,7 +158,7 @@ function getScopedExecutorWarning(enabledFlags) {
   return "No scoped executor flags are enabled; native mode remains read-only.";
 }
 
-function buildNextSteps({ openAiConfigured, enabledFlags }) {
+function buildNextSteps({ openAiConfigured, enabledFlags, routeInput = "npm-cache" }) {
   const steps = [];
   if (!fs.existsSync(dotenvPath)) {
     steps.push("Copy .env.example to .env before desktop setup.");
@@ -148,8 +169,8 @@ function buildNextSteps({ openAiConfigured, enabledFlags }) {
   } else {
     steps.push("Run npm run openai:smoke to validate the fixture-only OpenAI advisor path.");
   }
-  steps.push("Run npm run setup:route -- --route npm-cache with the route you plan to validate before enabling a scoped executor.");
-  steps.push("Run npm run validate:route -- --route npm-cache to capture the one-route Windows validation packet and proof checklist.");
+  steps.push(`Run npm run setup:route -- --route ${routeInput} with the route you plan to validate before enabling a scoped executor.`);
+  steps.push(`Run npm run validate:route -- --route ${routeInput} to capture the one-route Windows validation packet and proof checklist.`);
   if (!enabledFlags.length) {
     steps.push("Run npm run native:dev for read-only scanning, or enable exactly one scoped executor flag for Windows fixture validation.");
   } else if (enabledFlags.length === 1) {

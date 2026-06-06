@@ -36,7 +36,17 @@ const script = path.join(root, "scripts", "run-setup-doctor.mjs");
   assert.strictEqual(oneFlag.scopedExecutors.validationStatus, "one-route-ready", "one flag should be ready for one-route validation");
   assert.strictEqual(oneFlag.scopedExecutors.safeToLaunchWriteMode, true, "one flag should be safe to launch for one-route validation");
   assert.strictEqual(oneFlag.scopedExecutors.selectedFlag, "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "setup doctor should identify the selected route flag");
+  assert.strictEqual(oneFlag.scopedExecutors.selectedRoute.routeInput, "npm-cache", "setup doctor should map the selected flag to its route alias");
   assert(oneFlag.commands.routeValidation.includes("npm run validate:route -- --route npm-cache"), "setup doctor should expose route validation command");
+
+  const pnpmFlag = runDoctor({
+    SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR: "1"
+  });
+  assert.strictEqual(pnpmFlag.scopedExecutors.selectedFlag, "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR", "setup doctor should identify pnpm as the selected route flag");
+  assert.strictEqual(pnpmFlag.scopedExecutors.selectedRoute.routeInput, "pnpm-store", "setup doctor should map pnpm flag to pnpm-store route alias");
+  assert(pnpmFlag.commands.routeSetup.includes("npm run setup:route -- --route pnpm-store"), "setup doctor should expose selected pnpm route setup command");
+  assert(pnpmFlag.commands.routeValidation.includes("npm run validate:route -- --route pnpm-store"), "setup doctor should expose selected pnpm validation command");
+  assert(pnpmFlag.nextSteps.some((step) => step.includes("pnpm-store")), "setup doctor next steps should name the selected route alias");
 
   const noFlag = runDoctor();
   assert.strictEqual(noFlag.scopedExecutors.validationStatus, "readonly-ready", "no flags should remain read-only ready");

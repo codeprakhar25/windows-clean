@@ -429,6 +429,8 @@ assert(setupDoctorScript.includes("setup:route"), "setup doctor should expose th
 assert(setupDoctorScript.includes("validate:route"), "setup doctor should expose the route validation packet command");
 assert(setupDoctorScript.includes("multi-flag-blocked"), "setup doctor should expose multi-flag blocking status");
 assert(setupDoctorScript.includes("safeToLaunchWriteMode"), "setup doctor should expose one-route write launch readiness");
+assert(setupDoctorScript.includes("selectedRoute"), "setup doctor should expose the selected route for one enabled flag");
+assert(setupDoctorScript.includes("routeSpecs"), "setup doctor should use route setup specs for selected route commands");
 assert(setupDoctorScript.includes("SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR"), "setup doctor should check scoped executor flags");
 assert(setupDoctorScript.includes("spaceguard-setup-doctor/v1"), "setup doctor should emit a stable schema");
 assert(setupRouteScript.includes("spaceguard-route-setup-packet/v1"), "route setup script should emit a stable packet schema");
@@ -443,9 +445,11 @@ assert(validationRouteScript.includes("npm run validate:route -- --route npm-cac
 assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");
 assert(readme.includes("npm run validate:route -- --route npm-cache"), "README should document route validation packet usage");
 assert(readme.includes("multi-flag-blocked"), "README should document multi-flag setup blocking");
+assert(readme.includes("--route pnpm-store"), "README should document selected-route setup doctor commands");
 assert(realDataGuide.includes("npm run setup:route -- --route npm-cache"), "Windows setup guide should document route setup packet usage");
 assert(realDataGuide.includes("npm run validate:route -- --route npm-cache"), "Windows setup guide should document route validation packet usage");
 assert(realDataGuide.includes("multi-flag-blocked"), "Windows setup guide should document multi-flag setup blocking");
+assert(realDataGuide.includes("--route pnpm-store"), "Windows setup guide should document selected-route setup doctor commands");
 assert(openAiAgent.includes("forbiddenActions"), "OpenAI context should expose forbidden actions");
 assert(app.includes("Open manual review"), "OpenAI manual-only recommendations should expose a review action");
 assert(app.includes("manualReviewTargets"), "OpenAI manual-only recommendations should be visible in the panel");
