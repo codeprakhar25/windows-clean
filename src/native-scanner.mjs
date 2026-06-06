@@ -1001,6 +1001,8 @@ export function normalizeNativeScan(scanResult = {}) {
         dirs: Number(finding.dirs || 0),
         errors: Number(finding.errors || 0),
         note: finding.note || "",
+        metadataSources: normalizeNativeMetadataSources(finding.metadataSources || finding.metadata_sources),
+        evidenceSummary: normalizeNativeEvidenceSummary(finding.evidenceSummary || finding.evidence_summary),
         items: Array.isArray(finding.items)
           ? finding.items.map((item) => ({
               id: item.id || "",
@@ -1034,6 +1036,28 @@ export function normalizeNativeScan(scanResult = {}) {
     warnings: Array.isArray(scanResult.warnings) ? scanResult.warnings : [],
     writeCapability: Boolean(scanResult.writeCapability || scanResult.write_capability),
     destructiveCommands: Boolean(scanResult.destructiveCommands || scanResult.destructive_commands)
+  };
+}
+
+function normalizeNativeMetadataSources(value = null) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    uninstallRegistry: String(value.uninstallRegistry || value.uninstall_registry || "unknown"),
+    userAssist: String(value.userAssist || value.user_assist || "unknown"),
+    uninstallRegistryRows: Number(value.uninstallRegistryRows || value.uninstall_registry_rows || 0),
+    userAssistRows: Number(value.userAssistRows || value.user_assist_rows || 0)
+  };
+}
+
+function normalizeNativeEvidenceSummary(value = null) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    candidateCount: Number(value.candidateCount || value.candidate_count || 0),
+    registryMatched: Number(value.registryMatched || value.registry_matched || 0),
+    userAssistMatched: Number(value.userAssistMatched || value.user_assist_matched || 0),
+    usageProofMissing: Number(value.usageProofMissing || value.usage_proof_missing || 0),
+    manualOnly: Boolean(value.manualOnly ?? value.manual_only ?? false),
+    canCreateExecutor: Boolean(value.canCreateExecutor ?? value.can_create_executor ?? false)
   };
 }
 

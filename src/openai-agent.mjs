@@ -327,7 +327,12 @@ export function buildOpenAIAgentContext({
     .slice(0, 12);
   const projectDependencyReviewTargets = buildProjectDependencyReviewTargets({ nativeScan, itemReviewsByAction });
   const manualReviewTargets = buildManualReviewTargets({ nativeScan, itemReviewsByAction });
-  const installedAppReview = buildInstalledAppReviewContext(manualReviewTargets);
+  const installedAppEvidenceSummary = buildInstalledAppEvidenceSummaryContext({
+    nativeScan,
+    itemReviewsByAction,
+    manualReviewTargets
+  });
+  const installedAppReview = buildInstalledAppReviewContext(manualReviewTargets, installedAppEvidenceSummary);
   const installedAppUninstallWorkOrder = buildInstalledAppUninstallWorkOrderContext(installedAppReview, {
     planId: planSnapshot?.id || "",
     scanFingerprint: scanSession?.currentFingerprint || "",
@@ -1587,6 +1592,52 @@ function buildManualReviewTargets({ nativeScan = null, itemReviewsByAction = nul
     }));
 }
 
+function buildInstalledAppEvidenceSummaryContext({
+  nativeScan = null,
+  itemReviewsByAction = null,
+  manualReviewTargets = []
+} = {}) {
+  const appReview = itemReviewsByAction?.["installed-app-footprints"];
+  const nativeFinding = (nativeScan?.findings || []).find((finding) => finding.recipeId === "installed-app-footprints") || null;
+  return normalizeAgentInstalledAppEvidenceSummary(
+    appReview?.evidenceSummary || nativeFinding?.evidenceSummary,
+    manualReviewTargets,
+    appReview?.evidenceSummary?.metadataSources || nativeFinding?.metadataSources
+  );
+}
+
+function normalizeAgentInstalledAppEvidenceSummary(source = null, rows = [], metadataSources = null) {
+  const rowList = Array.isArray(rows) ? rows : [];
+  const summary = source && typeof source === "object" ? source : {};
+  const sourceMetadata = summary.metadataSources || metadataSources || {};
+  return {
+    metadataSources: {
+      uninstallRegistry: sourceMetadata.uninstallRegistry || sourceMetadata.uninstall_registry || "unknown",
+      userAssist: sourceMetadata.userAssist || sourceMetadata.user_assist || "unknown",
+      uninstallRegistryRows: Number(sourceMetadata.uninstallRegistryRows || sourceMetadata.uninstall_registry_rows || 0),
+      userAssistRows: Number(sourceMetadata.userAssistRows || sourceMetadata.user_assist_rows || 0)
+    },
+    candidateCount: Number(summary.candidateCount || summary.candidate_count || rowList.length || 0),
+    registryMatched: Number(
+      summary.registryMatched ??
+      summary.registry_matched ??
+      rowList.filter((row) => getAgentSignalValue(row.signals, "registry match") === "Windows uninstall metadata").length
+    ),
+    userAssistMatched: Number(
+      summary.userAssistMatched ??
+      summary.user_assist_matched ??
+      rowList.filter((row) => String(getAgentSignalValue(row.signals, "usage proof") || "").includes("UserAssist")).length
+    ),
+    usageProofMissing: Number(
+      summary.usageProofMissing ??
+      summary.usage_proof_missing ??
+      rowList.filter((row) => (getAgentSignalValue(row.signals, "usage proof") || "not proven") === "not proven").length
+    ),
+    manualOnly: summary.manualOnly ?? summary.manual_only ?? true,
+    canCreateExecutor: summary.canCreateExecutor ?? summary.can_create_executor ?? false
+  };
+}
+
 function buildProjectDependencyReviewTargets({ nativeScan = null, itemReviewsByAction = null } = {}) {
   const projectReview = itemReviewsByAction?.["node-modules-old"];
   const sourceItems = projectReview?.items?.length
@@ -1617,7 +1668,7 @@ function buildProjectDependencyReviewTargets({ nativeScan = null, itemReviewsByA
     }));
 }
 
-function buildInstalledAppReviewContext(manualReviewTargets = []) {
+function buildInstalledAppReviewContext(manualReviewTargets = [], evidenceSummary = null) {
   const rows = manualReviewTargets
     .map((target) => {
       const usageProof = getAgentSignalValue(target.signals, "usage proof") || "not proven";
@@ -1664,6 +1715,7 @@ function buildInstalledAppReviewContext(manualReviewTargets = []) {
     schemaVersion: "spaceguard-installed-app-review-context/v1",
     manualOnly: true,
     canCreateExecutor: false,
+    evidenceSummary,
     rows,
     counts: {
       total: rows.length,

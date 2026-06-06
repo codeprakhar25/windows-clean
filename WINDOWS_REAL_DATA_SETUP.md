@@ -293,7 +293,8 @@ For each Windows validation run, capture:
 - Local evidence backup if the reviewer needs to resume evidence ledgers or dry-run history in another browser profile.
 - Manual strategy checklist state for backup, archive, move, uninstall, or partition-prep evidence.
 - Structured installed-app review signals, including explicit `usage proof = not proven` evidence when no true app-usage source exists, or `UserAssist launch evidence` when read-only Windows launch-history names match an app candidate.
-- App uninstall review dossier status, manual-only flag, selected follow-up bytes, uninstall-entry count, and no executor authority.
+- Installed-app `metadataSources` and `evidenceSummary` source coverage: uninstall registry scanned/unavailable, UserAssist scanned/unavailable, source row counts, registry matches, UserAssist matches, missing usage-proof count, manual-only flag, and no executor authority.
+- App uninstall review dossier status, manual-only flag, selected follow-up bytes, uninstall-entry count, source coverage summary, and no executor authority.
 - App uninstall work order status, selected app rows, no-uninstall-string guardrail, manual-only flag, exported artifact path, and post-uninstall native rescan result.
 - WSL compaction work order status, measured `ext4.vhdx` rows, typed acknowledgement, backup/export evidence, no-shell-execution guardrail, exported artifact path, distro boot verification, and post-compaction native rescan result.
 - Scoped real cleanup status: enabled executor route list, broad cleanup locked state, feature flags, current plan id, scan fingerprint, consent receipt, and target-validation result.

@@ -83,7 +83,31 @@ struct ScanFinding {
     dirs: u64,
     errors: u64,
     note: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    metadata_sources: Option<ScanFindingMetadataSources>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    evidence_summary: Option<ScanFindingEvidenceSummary>,
     items: Vec<ScanItem>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScanFindingMetadataSources {
+    uninstall_registry: String,
+    user_assist: String,
+    uninstall_registry_rows: u64,
+    user_assist_rows: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScanFindingEvidenceSummary {
+    candidate_count: u64,
+    registry_matched: u64,
+    user_assist_matched: u64,
+    usage_proof_missing: u64,
+    manual_only: bool,
+    can_create_executor: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -9260,6 +9284,8 @@ fn measure_docker_build_cache() -> ScanFinding {
             dirs: 0,
             errors: 1,
             note: "Docker CLI inventory timed out; no cleanup target was created.".to_string(),
+            metadata_sources: None,
+            evidence_summary: None,
             items: Vec::new(),
         };
     }
@@ -9285,6 +9311,8 @@ fn measure_docker_build_cache() -> ScanFinding {
                 "Docker CLI inventory failed; no cleanup target was created. {}",
                 result.summary()
             ),
+            metadata_sources: None,
+            evidence_summary: None,
             items: Vec::new(),
         };
     }
@@ -9300,6 +9328,8 @@ fn measure_docker_build_cache() -> ScanFinding {
         dirs: 0,
         errors: 0,
         note: "Measured with `docker system df -v`; only build cache can be passed to the tool-native prune executor. Volumes, containers, images, and Docker data folders are not cleanup targets.".to_string(),
+        metadata_sources: None,
+        evidence_summary: None,
         items: Vec::new(),
     }
 }
@@ -9500,6 +9530,11 @@ fn measure_installed_app_footprints(
             "Read-only installed app footprint discovery. Windows uninstall metadata may enrich candidates, but uninstall decisions stay manual."
                 .to_string()
         },
+        metadata_sources: Some(installed_app_metadata_sources(
+            registry_inventory.len(),
+            usage_inventory.len(),
+        )),
+        evidence_summary: Some(installed_app_evidence_summary(&items)),
         items,
     }
 }
@@ -9688,6 +9723,61 @@ fn installed_app_review_signals(
     }
 
     signals
+}
+
+fn installed_app_metadata_sources(
+    uninstall_registry_rows: usize,
+    user_assist_rows: usize,
+) -> ScanFindingMetadataSources {
+    ScanFindingMetadataSources {
+        uninstall_registry: if cfg!(target_os = "windows") {
+            "scanned"
+        } else {
+            "unavailable"
+        }
+        .to_string(),
+        user_assist: if cfg!(target_os = "windows") {
+            "scanned"
+        } else {
+            "unavailable"
+        }
+        .to_string(),
+        uninstall_registry_rows: uninstall_registry_rows as u64,
+        user_assist_rows: user_assist_rows as u64,
+    }
+}
+
+fn installed_app_evidence_summary(items: &[ScanItem]) -> ScanFindingEvidenceSummary {
+    ScanFindingEvidenceSummary {
+        candidate_count: items.len() as u64,
+        registry_matched: items
+            .iter()
+            .filter(|item| {
+                scan_item_signal_value(item, "registry match") == Some("Windows uninstall metadata")
+            })
+            .count() as u64,
+        user_assist_matched: items
+            .iter()
+            .filter(|item| {
+                scan_item_signal_value(item, "usage proof")
+                    .map(|value| value.contains("UserAssist"))
+                    .unwrap_or(false)
+            })
+            .count() as u64,
+        usage_proof_missing: items
+            .iter()
+            .filter(|item| scan_item_signal_value(item, "usage proof") == Some("not proven"))
+            .count() as u64,
+        manual_only: true,
+        can_create_executor: false,
+    }
+}
+
+fn scan_item_signal_value<'a>(item: &'a ScanItem, label: &str) -> Option<&'a str> {
+    item.signals
+        .iter()
+        .find(|signal| signal.label.eq_ignore_ascii_case(label))
+        .map(|signal| signal.value.as_str())
 }
 
 fn installed_app_review_reason(
@@ -9931,10 +10021,10 @@ fn measure_node_modules_roots(
         "workspace",
         "workspaces",
     ]
-        .iter()
-        .map(|name| profile.join(name))
-        .filter(|path| path.exists())
-        .collect::<Vec<_>>();
+    .iter()
+    .map(|name| profile.join(name))
+    .filter(|path| path.exists())
+    .collect::<Vec<_>>();
 
     let mut roots = Vec::new();
     let mut limited = false;
@@ -10042,6 +10132,8 @@ fn measure_path(
             dirs: 0,
             errors: 0,
             note: "Skipped because the path is user-protected.".to_string(),
+            metadata_sources: None,
+            evidence_summary: None,
             items: Vec::new(),
         };
     }
@@ -10062,6 +10154,8 @@ fn measure_path(
                     note: format!(
                         "Measured through SHQueryRecycleBinW for drive root {root}; no filesystem traversal was required."
                     ),
+                    metadata_sources: None,
+                    evidence_summary: None,
                     items: Vec::new(),
                 };
             }
@@ -10079,6 +10173,8 @@ fn measure_path(
             dirs: 0,
             errors: 0,
             note: "Path was not present or could not be opened.".to_string(),
+            metadata_sources: None,
+            evidence_summary: None,
             items: Vec::new(),
         };
     };
@@ -10094,6 +10190,8 @@ fn measure_path(
             dirs: 0,
             errors: 0,
             note: "Skipped symbolic link or reparse point.".to_string(),
+            metadata_sources: None,
+            evidence_summary: None,
             items: Vec::new(),
         };
     }
@@ -10113,6 +10211,8 @@ fn measure_path(
             dirs: 0,
             errors: 0,
             note: "Large-file discovery only. Personal files require item review.".to_string(),
+            metadata_sources: None,
+            evidence_summary: None,
             items,
         };
     }
@@ -10146,6 +10246,8 @@ fn measure_path(
         } else {
             "Measured from filesystem metadata only.".to_string()
         },
+        metadata_sources: None,
+        evidence_summary: None,
         items: review_items_for_path(recipe_id, path, kind, &stats, request),
     }
 }
@@ -10881,6 +10983,8 @@ fn unsupported_finding(
         dirs: 0,
         errors: 0,
         note: note.to_string(),
+        metadata_sources: None,
+        evidence_summary: None,
         items: Vec::new(),
     }
 }
@@ -10901,6 +11005,8 @@ fn missing_finding(
         dirs: 0,
         errors: 0,
         note: note.to_string(),
+        metadata_sources: None,
+        evidence_summary: None,
         items: Vec::new(),
     }
 }

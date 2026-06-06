@@ -152,6 +152,20 @@ const assert = require("assert");
         path: "Program Files, ProgramData, LocalAppData\\Programs",
         bytes: 10 * guard.GB,
         status: "limited",
+        metadata_sources: {
+          uninstall_registry: "scanned",
+          user_assist: "scanned",
+          uninstall_registry_rows: 42,
+          user_assist_rows: 18
+        },
+        evidence_summary: {
+          candidate_count: 2,
+          registry_matched: 2,
+          user_assist_matched: 1,
+          usage_proof_missing: 1,
+          manual_only: true,
+          can_create_executor: false
+        },
         items: [
           {
             id: "app-old-ide",
@@ -250,6 +264,14 @@ const assert = require("assert");
   assert.strictEqual(largeFiles.scanStatus, "measured", "native large-file discovery should be marked measured");
   assert.strictEqual(appFootprints.bytes, 10 * guard.GB, "native app footprint discovery should replace demo bytes");
   assert.strictEqual(appFootprints.scanStatus, "limited", "native app footprint discovery should preserve limited status");
+  const appFinding = scan.findings.find((finding) => finding.recipeId === "installed-app-footprints");
+  assert.strictEqual(appFinding.metadataSources.uninstallRegistry, "scanned", "native app finding should expose uninstall registry scan source state");
+  assert.strictEqual(appFinding.metadataSources.userAssist, "scanned", "native app finding should expose UserAssist scan source state");
+  assert.strictEqual(appFinding.metadataSources.uninstallRegistryRows, 42, "native app finding should expose uninstall registry source count");
+  assert.strictEqual(appFinding.evidenceSummary.registryMatched, 2, "native app finding should summarize registry matches");
+  assert.strictEqual(appFinding.evidenceSummary.userAssistMatched, 1, "native app finding should summarize UserAssist matches");
+  assert.strictEqual(appFinding.evidenceSummary.usageProofMissing, 1, "native app finding should summarize missing usage proof");
+  assert.strictEqual(appFinding.evidenceSummary.canCreateExecutor, false, "native app finding evidence summary must not imply executor authority");
 
   const scanCoverage = guard.buildScanCoverageSummary({
     actionList: merged,
@@ -284,6 +306,9 @@ const assert = require("assert");
   assert.strictEqual(largeFileReview.items[0].decision, "undecided", "native large-file candidate should require user decision");
   const appFootprintReview = guard.buildItemReview("installed-app-footprints", merged, scan, []);
   assert.strictEqual(appFootprintReview.source, "native-readonly", "app footprint item review should use native candidates when available");
+  assert.strictEqual(appFootprintReview.evidenceSummary.metadataSources.userAssist, "scanned", "item review should preserve app evidence source state");
+  assert.strictEqual(appFootprintReview.evidenceSummary.userAssistMatched, 1, "item review should preserve UserAssist match summary");
+  assert.strictEqual(appFootprintReview.evidenceSummary.canCreateExecutor, false, "item review evidence summary must keep app uninstall manual-only");
   assert.strictEqual(appFootprintReview.items[0].name, "Old IDE 2023", "native app footprint candidate should be preserved");
   assert.strictEqual(appFootprintReview.items[0].signals[0].label, "usage proof", "app footprint review should preserve structured review signals");
   assert.strictEqual(appFootprintReview.items[0].signals[0].value, "not proven", "app footprint signals should make usage uncertainty explicit");
@@ -297,6 +322,11 @@ const assert = require("assert");
   assert.strictEqual(appFootprintReview.selectedBytes, 0, "app footprint candidates should not become executor recovery bytes");
   const appReviewDossier = guard.buildInstalledAppReviewDossier({ itemReviewsByAction: { "installed-app-footprints": appFootprintReview } });
   assert.strictEqual(appReviewDossier.status, "needs-user-review", "native app footprint candidates should populate app review dossier");
+  assert.strictEqual(appReviewDossier.evidenceSummary.metadataSources.uninstallRegistry, "scanned", "app review dossier should preserve uninstall registry source state");
+  assert.strictEqual(appReviewDossier.evidenceSummary.metadataSources.userAssist, "scanned", "app review dossier should preserve UserAssist source state");
+  assert.strictEqual(appReviewDossier.evidenceSummary.registryMatched, 2, "app review dossier should preserve registry match counts");
+  assert.strictEqual(appReviewDossier.evidenceSummary.usageProofMissing, 1, "app review dossier should preserve usage-proof missing counts");
+  assert.strictEqual(appReviewDossier.evidenceSummary.manualOnly, true, "app review dossier evidence must stay manual-only");
   assert.strictEqual(appReviewDossier.rows[0].usageProof, "not proven", "app review dossier should keep usage uncertainty explicit");
   assert.strictEqual(appReviewDossier.rows[0].uninstallEntry, "present", "app review dossier should keep uninstall-entry evidence");
   const oldIdeDossierRow = appReviewDossier.rows.find((row) => row.id === "app-old-ide");

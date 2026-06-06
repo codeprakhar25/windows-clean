@@ -135,6 +135,20 @@ const assert = require("assert");
         ]
       },
       "installed-app-footprints": {
+        evidenceSummary: {
+          metadataSources: {
+            uninstallRegistry: "scanned",
+            userAssist: "scanned",
+            uninstallRegistryRows: 42,
+            userAssistRows: 18
+          },
+          candidateCount: 1,
+          registryMatched: 1,
+          userAssistMatched: 0,
+          usageProofMissing: 1,
+          manualOnly: true,
+          canCreateExecutor: false
+        },
         items: [
           {
             id: "app-old-ide",
@@ -269,6 +283,9 @@ const assert = require("assert");
   assert.strictEqual(manualContext.installedAppReview.rows[0].usageProof, "not proven", "installed app review context should preserve missing usage proof");
   assert.strictEqual(manualContext.installedAppReview.rows[0].uninstallEntry, "present", "installed app review context should preserve uninstall-entry evidence");
   assert.strictEqual(manualContext.installedAppReview.rows[0].unusedReviewTier, "strong-review", "installed app review context should expose conservative unused-review tiering");
+  assert.strictEqual(manualContext.installedAppReview.evidenceSummary.metadataSources.userAssist, "scanned", "OpenAI context should preserve UserAssist source coverage");
+  assert.strictEqual(manualContext.installedAppReview.evidenceSummary.usageProofMissing, 1, "OpenAI context should preserve app usage-proof missing counts");
+  assert.strictEqual(manualContext.installedAppReview.evidenceSummary.canCreateExecutor, false, "OpenAI app evidence summary must not create executor authority");
   assert(manualContext.installedAppReview.rows[0].unusedReviewScore > 0, "installed app review context should expose unused-review score");
   assert(manualContext.installedAppReview.rows[0].scoreFactors.includes("missing UserAssist usage proof"), "installed app review context should expose score factors");
   assert(manualContext.installedAppReview.forbiddenActions.includes("automated-uninstall"), "installed app review context should forbid automated uninstall");

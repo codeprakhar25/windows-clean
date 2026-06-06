@@ -4860,6 +4860,12 @@ export function buildInstalledAppReviewDossier({ itemReviewsByAction = null, nat
       return (rank[left.status] ?? 9) - (rank[right.status] ?? 9) || right.bytes - left.bytes;
     })
     .slice(0, 16);
+  const nativeFinding = getInstalledAppFinding(nativeScan);
+  const evidenceSummary = normalizeInstalledAppEvidenceSummary(
+    review?.evidenceSummary || nativeFinding?.evidenceSummary,
+    rows,
+    review?.evidenceSummary?.metadataSources || nativeFinding?.metadataSources
+  );
   const selectedRows = rows.filter((row) => row.status === "manual-uninstall-selected");
   const reviewRows = rows.filter((row) => row.status === "needs-user-confirmation");
   const status = selectedRows.length
@@ -4878,6 +4884,7 @@ export function buildInstalledAppReviewDossier({ itemReviewsByAction = null, nat
     totalBytes: rows.reduce((sum, row) => sum + row.bytes, 0),
     reviewBytes: reviewRows.reduce((sum, row) => sum + row.bytes, 0),
     manualSelectedBytes: selectedRows.reduce((sum, row) => sum + row.bytes, 0),
+    evidenceSummary,
     rows,
     counts: {
       total: rows.length,
@@ -5336,6 +5343,7 @@ export function buildItemReview(actionId, actionList = actions, nativeScan = nul
   const sourceItems = nativeItems.length ? nativeItems : demoReviewItems[action.id] || [];
   const source = nativeItems.length ? "native-readonly" : sourceItems.length ? "demo-review" : "none";
   const items = sourceItems.map((item, index) => normalizeReviewItem(item, action, protectedPaths, approvals, index));
+  const evidenceSummary = buildItemReviewEvidenceSummary(action.id, nativeScan, items);
   const reviewBytes = items.filter((item) => item.recommendation === "review").reduce((sum, item) => sum + item.bytes, 0);
   const keepBytes = items.filter((item) => item.recommendation === "keep").reduce((sum, item) => sum + item.bytes, 0);
   const protectedBytes = items.filter((item) => item.protected).reduce((sum, item) => sum + item.bytes, 0);
@@ -5345,6 +5353,7 @@ export function buildItemReview(actionId, actionList = actions, nativeScan = nul
   return {
     action,
     source,
+    evidenceSummary,
     items,
     reviewBytes,
     keepBytes,
@@ -15371,6 +15380,48 @@ function collectNativeReviewItems(actionId, nativeScan) {
           }))
         : []
     );
+}
+
+function buildItemReviewEvidenceSummary(actionId, nativeScan = null, items = []) {
+  if (actionId !== "installed-app-footprints") return null;
+  const finding = getInstalledAppFinding(nativeScan);
+  return normalizeInstalledAppEvidenceSummary(finding?.evidenceSummary, items, finding?.metadataSources);
+}
+
+function getInstalledAppFinding(nativeScan = null) {
+  return (nativeScan?.findings || []).find((finding) => finding.recipeId === "installed-app-footprints") || null;
+}
+
+function normalizeInstalledAppEvidenceSummary(source = null, rows = [], metadataSources = null) {
+  const rowList = Array.isArray(rows) ? rows : [];
+  const sourceSummary = source && typeof source === "object" ? source : {};
+  const sourceMetadata = sourceSummary.metadataSources || metadataSources || {};
+  return {
+    metadataSources: {
+      uninstallRegistry: sourceMetadata.uninstallRegistry || sourceMetadata.uninstall_registry || "unknown",
+      userAssist: sourceMetadata.userAssist || sourceMetadata.user_assist || "unknown",
+      uninstallRegistryRows: Number(sourceMetadata.uninstallRegistryRows || sourceMetadata.uninstall_registry_rows || 0),
+      userAssistRows: Number(sourceMetadata.userAssistRows || sourceMetadata.user_assist_rows || 0)
+    },
+    candidateCount: Number(sourceSummary.candidateCount || sourceSummary.candidate_count || rowList.length || 0),
+    registryMatched: Number(
+      sourceSummary.registryMatched ??
+      sourceSummary.registry_matched ??
+      rowList.filter((row) => row.registryMatch && row.registryMatch !== "none").length
+    ),
+    userAssistMatched: Number(
+      sourceSummary.userAssistMatched ??
+      sourceSummary.user_assist_matched ??
+      rowList.filter((row) => String(row.usageProof || "").includes("UserAssist")).length
+    ),
+    usageProofMissing: Number(
+      sourceSummary.usageProofMissing ??
+      sourceSummary.usage_proof_missing ??
+      rowList.filter((row) => (row.usageProof || getReviewSignalValue(row.signals || [], "usage proof") || "not proven") === "not proven").length
+    ),
+    manualOnly: sourceSummary.manualOnly ?? sourceSummary.manual_only ?? true,
+    canCreateExecutor: sourceSummary.canCreateExecutor ?? sourceSummary.can_create_executor ?? false
+  };
 }
 
 function normalizeReviewItem(item, action, protectedPaths, approvals = {}, index = 0) {
