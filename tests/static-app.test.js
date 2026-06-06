@@ -560,6 +560,7 @@ assert(rustScanner.includes("pip_cache_file_forbidden"), "Rust pip cache cleanup
 assert(app.includes("DockerBuildCacheExecutorPanel"), "Docker build-cache executor panel should be rendered");
 assert(app.includes("docker-build-cache-executor-panel"), "Docker build-cache executor panel should be focusable");
 assert(app.includes("Run Docker prune"), "Docker build-cache executor should expose a user-triggered cleanup button");
+assert(app.includes('case "run-docker-build-cache-executor":\n      return "Run Docker prune";'), "OpenAI recommendation cards should label Docker build-cache executor actions");
 assert(app.includes("Docker build-cache executor boundary"), "Docker build-cache executor should show the command boundary");
 assert(app.includes("runNativeDockerBuildCacheExecutor"), "Docker build-cache executor should be wired through the native adapter");
 assert(nativeAdapter.includes("requestMode: \"execute-docker-build-cache\""), "native adapter should send the execute-docker-build-cache request mode");
@@ -1021,6 +1022,7 @@ assert(readme.includes("Installed app footprints"), "README should describe inst
 assert(!readme.includes("matrix always keeps real-run routes at zero in this build"), "README should not claim all real-run routes are zero after scoped executors exist");
 assert(!readme.includes("still cannot become a mutating executor"), "README should not describe the temp executor as permanently unable to mutate");
 assert(!readme.includes("real cleanup remains locked. Any runtime write capability"), "README should distinguish scoped executor runtime from broad unsafe write signals");
+assert(!readme.includes("while Docker, automated app uninstall, partition work, and broader tool-native prune commands remain future work or manual-only"), "README should not describe Docker build-cache cleanup as future work");
 assert(realDataGuide.includes("App footprint decisions"), "real-data guide should describe app footprint manual decisions");
 assert(realDataGuide.includes("NATIVE_BETA_DISTRIBUTION.md"), "real-data guide should link native beta distribution runbook");
 assert(!realDataGuide.includes("zero executor routes, and zero real-run rows before real-data planning"), "real-data guide should not claim zero executor routes as the current product truth");

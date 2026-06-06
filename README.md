@@ -544,7 +544,7 @@ The production shell should become a signed Windows desktop app with:
 - Append-only local cleanup ledger.
 - No cloud upload by default.
 
-The current native slice is intentionally scoped. The next product milestone is Windows validation evidence and post-run rescan proof for temp, reviewed Downloads, reviewed large-file archive, Recycle Bin, reviewed dependency, Gradle cache, user `.cache`, Android cache, shader cache, pip cache, npm cache, pnpm store, and browser cache executors, while Docker, automated app uninstall, partition work, and broader tool-native prune commands remain future work or manual-only.
+The current native slice is intentionally scoped. The next product milestone is Windows validation evidence and post-run rescan proof for temp, reviewed Downloads, reviewed large-file archive, Recycle Bin, reviewed dependency, Gradle cache, user `.cache`, Android cache, shader cache, pip cache, Docker build-cache, npm cache, pnpm store, and browser cache executors, while automated app uninstall, partition work, Docker volumes, and broader tool-native prune commands remain future work or manual-only.
 
 The native runtime also reports elevation state. This is evidence only: the app does not self-elevate, request UAC, or turn admin-sensitive routes into real executors.
 

@@ -7243,6 +7243,8 @@ function aiRecommendationActionLabel(row = {}) {
       return "Run shader cache";
     case "run-pip-cache-executor":
       return "Run pip cleanup";
+    case "run-docker-build-cache-executor":
+      return "Run Docker prune";
     case "run-npm-cache-executor":
       return "Run npm cleanup";
     case "run-pnpm-store-executor":
