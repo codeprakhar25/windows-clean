@@ -24,6 +24,16 @@ const assert = require("assert");
   assert.strictEqual(legacyConfig.keySource, "VITE_OPENAI_API_KEY", "OpenAI advisor should keep the legacy Vite key fallback");
   assert.strictEqual(legacyConfig.model, "gpt-5-nano", "OpenAI advisor should keep the legacy model fallback");
   assert.strictEqual(legacyConfig.reasoningEffort, "none", "OpenAI advisor should keep the legacy reasoning fallback");
+  const devProxyConfig = openai.getOpenAIAgentConfig({
+    DEV: true,
+    OPENAI_MODEL: "gpt-5-mini",
+    OPENAI_REASONING_EFFORT: "low"
+  });
+  assert.strictEqual(devProxyConfig.configured, true, "Vite dev should configure the server-side OpenAI proxy without exposing a key");
+  assert.strictEqual(devProxyConfig.apiKey, "", "Vite dev proxy config should not expose OPENAI_API_KEY to the renderer");
+  assert.strictEqual(devProxyConfig.localProxyConfigured, true, "Vite dev proxy should be marked as the local OpenAI transport");
+  assert.strictEqual(devProxyConfig.localProxyEndpoint, "/api/openai-agent/advice", "Vite dev proxy should use the same-origin advice endpoint");
+  assert.strictEqual(devProxyConfig.keySource, "server:.env", "Vite dev proxy should identify the server-side key source");
 
   assert.strictEqual(openai.getNativeOpenAIAgentCapability({}).available, false, "browser host should not expose the native OpenAI command");
   assert.strictEqual(
@@ -419,6 +429,69 @@ const assert = require("assert");
     /OPENAI_API_KEY/,
     "missing OpenAI key should explain the required .env setting"
   );
+  let proxyRequest = null;
+  const proxyResult = await openai.requestOpenAIAgentAdvice({
+    config: devProxyConfig,
+    userPrompt: "Rank the fastest route.",
+    context: {
+      schemaVersion: "spaceguard-openai-agent-context/v1",
+      runtime: { realRunEnabled: true },
+      agentTaskQueue: { rows: [] }
+    },
+    fetchImpl(url, options) {
+      proxyRequest = {
+        url,
+        headers: options.headers,
+        body: JSON.parse(options.body)
+      };
+      return Promise.resolve({
+        ok: true,
+        headers: {
+          get(name) {
+            return name === "x-request-id" ? "req_proxy" : "";
+          }
+        },
+        json() {
+          return Promise.resolve({
+            schemaVersion: "spaceguard-openai-agent-advice/v1",
+            provider: "openai",
+            model: "gpt-5-mini",
+            requestId: "req_proxy",
+            createdAt: "2026-06-06T00:00:00.000Z",
+            rawText: JSON.stringify({
+              summary: "Run the real scan first.",
+              nextAction: "Run native scan",
+              confidence: "medium",
+              recommendedActions: [],
+              blockedActions: [],
+              questions: [],
+              warnings: []
+            }),
+            advice: {
+              summary: "Run the real scan first.",
+              nextAction: "Run native scan",
+              confidence: "medium",
+              recommendedActions: [],
+              blockedActions: [],
+              questions: [],
+              warnings: []
+            },
+            responseId: "resp_proxy",
+            keySource: "server:.env",
+            transport: "vite-dev-proxy"
+          });
+        }
+      });
+    }
+  });
+  assert.strictEqual(proxyRequest.url, "/api/openai-agent/advice", "OpenAI dev proxy should use the same-origin advice endpoint");
+  assert.strictEqual(proxyRequest.headers.Authorization, undefined, "renderer proxy request must not carry an OpenAI Authorization header");
+  assert.strictEqual(proxyRequest.body.model, "gpt-5-mini", "OpenAI dev proxy should receive the configured model");
+  assert.strictEqual(proxyRequest.body.reasoningEffort, "low", "OpenAI dev proxy should receive the configured reasoning effort");
+  assert.strictEqual(proxyRequest.body.context.schemaVersion, "spaceguard-openai-agent-context/v1", "OpenAI dev proxy should receive bounded app context");
+  assert.strictEqual(proxyResult.transport, "vite-dev-proxy", "OpenAI dev proxy result should preserve transport provenance");
+  assert.strictEqual(proxyResult.keySource, "server:.env", "OpenAI dev proxy result should expose only the server key source");
+  assert(!JSON.stringify(proxyRequest).includes("test-openai-key"), "OpenAI dev proxy request must not include a browser-visible key");
 
   let request = null;
   const result = await openai.requestOpenAIAgentAdvice({

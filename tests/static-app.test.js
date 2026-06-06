@@ -344,6 +344,8 @@ assert(app.includes("appendOpenAIAgentRunRecord"), "OpenAI run history should ap
 assert(openAiAgent.includes("https://api.openai.com/v1/responses"), "OpenAI adapter should use the Responses API endpoint");
 assert(openAiAgent.includes("OPENAI_API_KEY"), "OpenAI adapter should read the primary .env API key");
 assert(openAiAgent.includes("VITE_OPENAI_API_KEY"), "OpenAI adapter should keep the Vite env API key fallback");
+assert(openAiAgent.includes("/api/openai-agent/advice"), "OpenAI adapter should support the local Vite dev proxy endpoint");
+assert(openAiAgent.includes("vite-dev-proxy"), "OpenAI adapter should preserve Vite dev proxy provenance");
 assert(openAiAgent.includes("gpt-5.2"), "OpenAI adapter should default to the current documented GPT-5.2 model");
 assert(openAiAgent.includes("OPENAI_REASONING_EFFORT"), "OpenAI adapter should support configurable reasoning effort");
 assert(openAiAgent.includes("body.reasoning"), "OpenAI adapter should send configured reasoning effort");
@@ -351,6 +353,10 @@ assert(openAiAgent.includes("openai_agent_advice"), "OpenAI adapter should prefe
 assert(openAiAgent.includes("getNativeOpenAIAgentCapability"), "OpenAI adapter should expose native advisor capability detection");
 assert(rustScanner.includes('"select-action"'), "native OpenAI schema should allow brokered UI selection recommendations");
 assert(!viteConfig.includes('envPrefix: ["VITE_", "OPENAI_"]'), "Vite must not expose OPENAI_* secrets to the renderer");
+assert(viteConfig.includes("loadEnv(mode, process.cwd(), \"\")"), "Vite should load normal .env keys on the server side");
+assert(viteConfig.includes("spaceguardOpenAIAgentProxy"), "Vite should install the local OpenAI agent proxy");
+assert(viteConfig.includes("/api/openai-agent/advice"), "Vite proxy should expose the OpenAI advice endpoint");
+assert(viteConfig.includes("requestOpenAIAgentAdvice"), "Vite proxy should reuse the guarded OpenAI adapter");
 assert(model.includes("spaceguard-selected-route-proof-packet/v1"), "model should expose selected-route proof packets");
 assert(model.includes("buildSelectedRouteProofPacketMarkdown"), "model should export selected-route proof packet markdown");
 assert(app.includes("buildSelectedRouteProofPacketMarkdown"), "app should wire selected-route proof packet markdown export");

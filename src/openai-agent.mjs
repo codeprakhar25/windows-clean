@@ -1,5 +1,6 @@
 const DEFAULT_OPENAI_MODEL = "gpt-5.2";
 const DEFAULT_OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
+const DEFAULT_OPENAI_PROXY_ENDPOINT = "/api/openai-agent/advice";
 const DEFAULT_OPENAI_REASONING_EFFORT = "low";
 const NATIVE_OPENAI_AGENT_COMMAND = "openai_agent_advice";
 const OPENAI_AGENT_RESPONSE_FORMAT = {
@@ -67,16 +68,20 @@ export function getOpenAIAgentConfig(env = import.meta.env || {}) {
   const apiKey = String(env.OPENAI_API_KEY || env.VITE_OPENAI_API_KEY || "").trim();
   const model = String(env.OPENAI_MODEL || env.VITE_OPENAI_MODEL || DEFAULT_OPENAI_MODEL).trim() || DEFAULT_OPENAI_MODEL;
   const endpoint = String(env.OPENAI_BASE_URL || env.VITE_OPENAI_BASE_URL || DEFAULT_OPENAI_ENDPOINT).trim() || DEFAULT_OPENAI_ENDPOINT;
+  const localProxyEndpoint = String(env.OPENAI_AGENT_PROXY_URL || env.VITE_OPENAI_AGENT_PROXY_URL || DEFAULT_OPENAI_PROXY_ENDPOINT).trim() || DEFAULT_OPENAI_PROXY_ENDPOINT;
+  const localProxyConfigured = !apiKey && Boolean(env.DEV || env.SPACEGUARD_OPENAI_PROXY === "1" || env.VITE_SPACEGUARD_OPENAI_PROXY === "1");
   const reasoningEffort = normalizeReasoningEffort(env.OPENAI_REASONING_EFFORT || env.VITE_OPENAI_REASONING_EFFORT || DEFAULT_OPENAI_REASONING_EFFORT);
-  const keySource = apiKey ? (env.OPENAI_API_KEY ? "OPENAI_API_KEY" : "VITE_OPENAI_API_KEY") : "missing";
+  const keySource = apiKey ? (env.OPENAI_API_KEY ? "OPENAI_API_KEY" : "VITE_OPENAI_API_KEY") : localProxyConfigured ? "server:.env" : "missing";
 
   return {
     provider: "openai",
-    connected: Boolean(apiKey),
-    configured: Boolean(apiKey),
+    connected: Boolean(apiKey || localProxyConfigured),
+    configured: Boolean(apiKey || localProxyConfigured),
     apiKey,
     model,
     endpoint,
+    localProxyEndpoint,
+    localProxyConfigured,
     keySource,
     reasoningEffort,
     advisoryOnly: true,
@@ -1482,11 +1487,35 @@ export async function requestOpenAIAgentAdvice({
     });
   }
 
-  if (!config?.apiKey) {
-    throw new Error("Set OPENAI_API_KEY in .env and restart the Vite/Tauri dev server.");
-  }
   if (typeof fetchImpl !== "function") {
     throw new Error("Fetch is not available in this runtime.");
+  }
+  if (!config?.apiKey && config?.localProxyConfigured) {
+    const response = await fetchImpl(config.localProxyEndpoint || DEFAULT_OPENAI_PROXY_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        userPrompt: String(userPrompt || "Find the fastest safe path to recover space from this scan."),
+        context,
+        model: config.model || DEFAULT_OPENAI_MODEL,
+        reasoningEffort: config.reasoningEffort || DEFAULT_OPENAI_REASONING_EFFORT
+      })
+    });
+    const requestId = response.headers?.get?.("x-request-id") || "";
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message = payload?.error?.message || payload?.message || `OpenAI proxy request failed with HTTP ${response.status}.`;
+      throw new Error(requestId ? `${message} Request id: ${requestId}` : message);
+    }
+    return normalizeOpenAIAgentResult(payload, {
+      fallbackModel: config.model || DEFAULT_OPENAI_MODEL,
+      transport: "vite-dev-proxy"
+    });
+  }
+  if (!config?.apiKey) {
+    throw new Error("Set OPENAI_API_KEY in .env and restart the Vite/Tauri dev server.");
   }
 
   const body = {
