@@ -107,6 +107,7 @@ import {
   buildScopedExecutorAgentPrompt,
   buildScopedExecutorCommandFlow,
   buildScopedExecutorRunGate,
+  buildSelectedRouteLaunchPacketMarkdown,
   buildNativeScanRequestGuard,
   buildStoragePressureDiagnosis,
   buildStorageStrategyPlan,
@@ -3666,6 +3667,23 @@ export default function App() {
     downloadTextFile("spaceguard-executor-smoke-run-packet.md", body, "text/markdown;charset=utf-8");
   }
 
+  function exportSelectedRouteLaunchPacket() {
+    const exportedPacket = { ...(scopedExecutorCommandFlow.launchPacket || {}), generatedAt: new Date().toISOString() };
+    const markdown = buildSelectedRouteLaunchPacketMarkdown(exportedPacket);
+    const body = [
+      markdown,
+      "",
+      "---",
+      "",
+      "## Structured Launch Packet JSON",
+      "",
+      "```json",
+      JSON.stringify(exportedPacket, null, 2),
+      "```"
+    ].join("\n");
+    downloadTextFile("spaceguard-selected-route-launch-packet.md", body, "text/markdown;charset=utf-8");
+  }
+
   function exportSupportBundle() {
     const exportedBundle = { ...supportBundle, generatedAt: new Date().toISOString() };
     const markdown = buildSupportBundleMarkdown(exportedBundle);
@@ -3968,6 +3986,7 @@ export default function App() {
               onAskAgent={askOpenAIAgent}
               onAgentAction={handleOpenAIAgentRecommendation}
               onExportSmokePacket={exportExecutorSmokeRunPacket}
+              onExportLaunchPacket={exportSelectedRouteLaunchPacket}
             />
 
             <NativeBetaDistributionPanel
@@ -4764,7 +4783,7 @@ function RealDataLaunchRoadmapPanel({ roadmap }) {
   );
 }
 
-function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRoute, onAskAgent, onAgentAction, onExportSmokePacket }) {
+function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRoute, onAskAgent, onAgentAction, onExportSmokePacket, onExportLaunchPacket }) {
   const next = flow.nextAction || {};
   const routeOptions = flow.routeOptions || [];
   const result = agent.result || null;
@@ -4988,6 +5007,10 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
           <Button type="button" variant="outline" size="sm" onClick={onExportSmokePacket}>
             <Download className="h-4 w-4" />
             Export smoke packet
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={onExportLaunchPacket} disabled={!launchPacket}>
+            <Download className="h-4 w-4" />
+            Export launch packet
           </Button>
         </div>
       </CardContent>

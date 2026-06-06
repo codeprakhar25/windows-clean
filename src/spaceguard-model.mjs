@@ -8506,6 +8506,49 @@ function buildSelectedRouteLaunchPacket({
   };
 }
 
+export function buildSelectedRouteLaunchPacketMarkdown(packet = null) {
+  const checks = Array.isArray(packet?.checks) ? packet.checks : [];
+  const commands = packet?.setupCommands || {};
+  const commandRows = [
+    ["Route flag", commands.enableEnv],
+    ["PowerShell flag", commands.enablePowerShell],
+    ["OpenAI fixture smoke", commands.openAiFixtureSmoke],
+    ["OpenAI live smoke", commands.openAiSmoke],
+    ["Route setup", commands.setupRoute],
+    ["Route validation", commands.validateRoute],
+    ["Native app", commands.nativeDev]
+  ].filter(([, command]) => command);
+  return [
+    "# SpaceGuard Selected Route Launch Packet",
+    "",
+    `Generated: ${packet?.generatedAt || "set-on-export"}`,
+    `Schema: ${packet?.schemaVersion || "spaceguard-selected-route-launch-packet/v1"}`,
+    `Status: ${packet?.status || "unknown"}`,
+    `Ready: ${packet?.ready ? "yes" : "no"}`,
+    `Route: ${packet?.route || "none"}`,
+    `Route alias: ${packet?.routeInput || "none"}`,
+    `Active route: ${packet?.activeRoute || "none"}`,
+    `Panel: ${packet?.panelId || "none"}`,
+    `Action: ${packet?.nextAction?.label || packet?.actionLabel || "none"}`,
+    `Proof status: ${packet?.proofStatus || "unknown"}`,
+    `Target evidence: ${packet?.targetEvidence || "none"}`,
+    `Expected bytes: ${formatBytes(packet?.expectedBytes || 0)}`,
+    `Blocker: ${packet?.blockedReason || "none"}`,
+    "",
+    "## Commands",
+    commandRows.length
+      ? commandRows.map(([label, command]) => `- ${label}: ${command}`).join("\n")
+      : "- No route commands available.",
+    "",
+    "## Evidence Checks",
+    checks.length
+      ? checks.map((check) => `- ${check.passed ? "PASS" : "WAIT"} ${check.label}: ${check.detail || "no detail"}`).join("\n")
+      : "- No launch checks available.",
+    "",
+    "This launch packet is evidence only. It does not grant cleanup authority; the native executor still requires the current scan, consent, feature flag, target validation, and post-run proof clearance."
+  ].join("\n");
+}
+
 export function buildScopedExecutorAgentPrompt(flow = null) {
   const route = String(flow?.route || flow?.selectedRoute || "").trim();
   const title = flow?.title || "selected scoped cleanup route";

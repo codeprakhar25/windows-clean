@@ -3697,6 +3697,11 @@ const assert = require("assert");
   assert(scopedCommandFlow.launchPacket.setupCommands.openAiSmoke.includes("--route npm-cache"), "launch packet should carry selected-route OpenAI smoke command");
   assert(scopedCommandFlow.launchPacket.checks.some((check) => check.id === "scan-fingerprint" && check.passed), "launch packet should include current scan evidence");
   assert(scopedCommandFlow.launchPacket.checks.some((check) => check.id === "consent" && check.passed), "launch packet should include current consent evidence");
+  const launchPacketMarkdown = guard.buildSelectedRouteLaunchPacketMarkdown(scopedCommandFlow.launchPacket);
+  assert(launchPacketMarkdown.includes("# SpaceGuard Selected Route Launch Packet"), "launch packet markdown should have a stable title");
+  assert(launchPacketMarkdown.includes("bounded-npm-cache-delete"), "launch packet markdown should include the selected route");
+  assert(launchPacketMarkdown.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "launch packet markdown should include the route feature flag");
+  assert(launchPacketMarkdown.includes("PASS Current native scan"), "launch packet markdown should include scan check evidence");
   assert(scopedCommandFlow.steps.some((step) => step.id === "scan" && step.targetPanel === "real-data-readiness-panel"), "command flow should route scan work to the real data panel");
   assert(scopedCommandFlow.steps.some((step) => step.id === "proof" && step.actionType === "run-post-run-rescan"), "command flow should include post-run proof as the final step");
   const multiRouteSmokePacket = guard.buildExecutorSmokeRunPacket({
