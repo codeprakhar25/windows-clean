@@ -497,7 +497,7 @@ The temp activation rehearsal exists for the no-real-data demo path. It builds a
 
 The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` route branch in non-mutating probe mode, but success means rejection, not cleanup: `accepted=false`, all entries rejected with native reject codes, zero reclaimed bytes, and a native echo that matches the current first-safe executor contract. Target-scope reject codes are diagnostic only and do not count as passing rejection evidence. Probe entries are never ledger recovery.
 
-When the selected route is known temp cleanup, the probe also reports the disabled `tempCleanupExecutor` scaffold. That scaffold is the first native implementation boundary to finish next; it remains feature-flag disabled until fixture, rollback/rescan, release, and support evidence pass.
+When the selected route maps to a scoped executor, the probe reports its scaffold and feature-flag status without mutating the filesystem. Disabled flags stay rejected; enabled routes still require current plan consent, scan fingerprint evidence, target validators, and post-run proof before execution.
 
 The probe entry preflight checks are the native proof that request shape, target allowlist, mutation lock, feature flag, and validation state are evaluated before any executor could run. The expected current outcome for known temp is preflight passing the shape/target/mutation checks, then blocking on the disabled feature flag and missing validation evidence.
 
@@ -518,7 +518,7 @@ The executor manifest is the real-data implementation map. It covers all route f
 
 Each manifest route lists required Windows validation checks, disposable fixtures, preconditions, proof, rollback posture, and whether real execution is still locked.
 
-The tool command inventory shows fixed command shapes so validation work is concrete. The current app does not run arbitrary shell commands, uninstall apps, or execute Windows cleanup APIs. The one tool-native write route is Docker build-cache cleanup: when `SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS=true`, the native executor may run the fixed `docker builder prune --force` command after the route, consent, scan fingerprint, and target validators pass.
+The tool command inventory shows fixed command shapes so validation work is concrete. The current app does not run arbitrary shell commands or app uninstallers. Most real executors use bounded filesystem APIs; reviewed Downloads and Recycle Bin routes use Windows Shell APIs (`SHFileOperationW`, `SHQueryRecycleBinW`, `SHEmptyRecycleBinW`) inside route validators. The only external-command write route is Docker build-cache cleanup: when `SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS=true`, the native executor may run the fixed `docker builder prune --force` command after the route, consent, scan fingerprint, and target validators pass.
 
 Broad cleanup remains locked. Scoped real cleanup is available only for named executor families when their runtime feature flag is enabled and every per-run precondition passes:
 

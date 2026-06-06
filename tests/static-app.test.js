@@ -1198,6 +1198,9 @@ assert(readme.includes("Local evidence backup"), "README should describe local e
 assert(readme.includes("Docker build-cache"), "README should list Docker build-cache as a scoped executor family");
 assert(readme.includes("pip cache"), "README should list pip cache as a scoped executor family");
 assert(readme.includes("shader cache"), "README should list shader cache as a scoped executor family");
+assert(readme.includes("The only external-command write route is Docker build-cache cleanup"), "README should distinguish Docker as the only external-command write route");
+assert(!readme.includes("The one tool-native write route is Docker build-cache cleanup"), "README should not imply Docker is the only write-capable route");
+assert(!readme.includes("or execute Windows cleanup APIs"), "README should not claim scoped Windows Shell API routes are absent");
 assert(!readme.includes("one scoped executor flag at a time"), "README should not imply only one scoped executor flag can exist in .env");
 assert(readme.includes("Read-only drive inventory"), "README should describe drive inventory");
 assert(readme.includes("Storage pressure diagnosis"), "README should describe storage pressure diagnosis");
