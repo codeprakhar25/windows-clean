@@ -326,6 +326,7 @@ assert(openAiAgent.includes("OPENAI_REASONING_EFFORT"), "OpenAI adapter should s
 assert(openAiAgent.includes("body.reasoning"), "OpenAI adapter should send configured reasoning effort");
 assert(openAiAgent.includes("openai_agent_advice"), "OpenAI adapter should prefer the native Tauri advisor command");
 assert(openAiAgent.includes("getNativeOpenAIAgentCapability"), "OpenAI adapter should expose native advisor capability detection");
+assert(rustScanner.includes('"select-action"'), "native OpenAI schema should allow brokered UI selection recommendations");
 assert(!viteConfig.includes('envPrefix: ["VITE_", "OPENAI_"]'), "Vite must not expose OPENAI_* secrets to the renderer");
 assert(openAiAgent.includes("directDeleteAuthority"), "OpenAI context should deny direct delete authority");
 assert(openAiAgent.includes("text: {"), "OpenAI adapter should configure Responses API text output");
