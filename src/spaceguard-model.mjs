@@ -8447,6 +8447,42 @@ export function buildScopedExecutorCommandFlow({
   };
 }
 
+export function buildScopedExecutorAgentPrompt(flow = null) {
+  const route = String(flow?.route || flow?.selectedRoute || "").trim();
+  const title = flow?.title || "selected scoped cleanup route";
+  const status = flow?.status || "unknown";
+  const row = flow?.primaryRow || {};
+  const setup = flow?.setupCommands || {};
+  const envVar = setup.envVar || row.envVar || "";
+  const requestMode = row.requestMode || setup.requestMode || "";
+  const panelId = row.panelId || setup.panelId || flow?.panelId || "";
+  const routeInput = setup.routeInput || route;
+  const targetEvidence = row.targetEvidence || row.blockedReason || "use the current app context";
+
+  if (!route) {
+    return [
+      "Use context.agentTaskQueue.rows to choose the next safe cleanup step.",
+      "No scoped executor route is selected in the command flow yet.",
+      "Recommend scan, route selection, consent, or review work before any executor recommendation.",
+      "Copy actionType, targetId, and route exactly from context.agentTaskQueue.rows for brokerable recommendations."
+    ].join(" ");
+  }
+
+  return [
+    `The user is validating the selected scoped executor route ${route} (${title}).`,
+    `Route alias: ${routeInput}.`,
+    envVar ? `Feature flag: ${envVar}.` : "",
+    requestMode ? `Native request mode: ${requestMode}.` : "",
+    panelId ? `UI panel: ${panelId}.` : "",
+    `Current command-flow status: ${status}.`,
+    `Target evidence: ${targetEvidence}.`,
+    "Use context.agentTaskQueue.rows as the authoritative task list.",
+    `Prefer the matching task for route ${route} only when its deterministic status is ready and the broker can route it.`,
+    "If scan fingerprint, consent, target evidence, feature flag, or post-run proof is missing, explain the blocker and recommend the next UI step instead.",
+    "Copy actionType, targetId, and route exactly from context.agentTaskQueue.rows for brokerable recommendations."
+  ].filter(Boolean).join(" ");
+}
+
 export function buildRealExecutorCapsule({
   executorManifest = null,
   executorPlan = null,

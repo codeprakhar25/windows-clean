@@ -3685,6 +3685,10 @@ const assert = require("assert");
   assert(scopedCommandFlow.setupCommands.validateRoute.includes("npm run validate:route -- --route npm-cache"), "command flow should expose the route validation packet command");
   assert(scopedCommandFlow.setupCommands.openAiFixtureSmoke.includes("npm run openai:smoke:fixture -- --route npm-cache"), "command flow should expose the route fixture OpenAI smoke command");
   assert(scopedCommandFlow.setupCommands.openAiSmoke.includes("npm run openai:smoke -- --route npm-cache"), "command flow should expose the route live OpenAI smoke command");
+  const scopedCommandAgentPrompt = guard.buildScopedExecutorAgentPrompt(scopedCommandFlow);
+  assert(scopedCommandAgentPrompt.includes("bounded-npm-cache-delete"), "command flow agent prompt should name the selected route");
+  assert(scopedCommandAgentPrompt.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "command flow agent prompt should name the selected route flag");
+  assert(scopedCommandAgentPrompt.includes("context.agentTaskQueue.rows"), "command flow agent prompt should tell OpenAI to use brokerable task rows");
   assert(scopedCommandFlow.steps.some((step) => step.id === "scan" && step.targetPanel === "real-data-readiness-panel"), "command flow should route scan work to the real data panel");
   assert(scopedCommandFlow.steps.some((step) => step.id === "proof" && step.actionType === "run-post-run-rescan"), "command flow should include post-run proof as the final step");
   const multiRouteSmokePacket = guard.buildExecutorSmokeRunPacket({

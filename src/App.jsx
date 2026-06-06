@@ -104,6 +104,7 @@ import {
   buildSafetyInterlock,
   buildScanCoverageSummary,
   buildScanSessionEvidence,
+  buildScopedExecutorAgentPrompt,
   buildScopedExecutorCommandFlow,
   buildScopedExecutorRunGate,
   buildNativeScanRequestGuard,
@@ -2205,13 +2206,14 @@ export default function App() {
     }
   }
 
-  async function askOpenAIAgent() {
+  async function askOpenAIAgent(promptOverride = "") {
     if (aiAdvice.status === "running") return;
+    const promptText = String(promptOverride || aiPrompt || "Find the fastest safe path to recover real space from this scan.").trim();
     setAiAdvice({ status: "running", result: null, error: "" });
     try {
       const result = await requestOpenAIAgentAdvice({
         context: openAiAgentContext,
-        userPrompt: aiPrompt,
+        userPrompt: promptText,
         config: openAiConfig
       });
       setAiAdvice({ status: "complete", result, error: "" });
@@ -2223,7 +2225,7 @@ export default function App() {
       const runRecord = buildOpenAIAgentRunRecord({
         result,
         context: openAiAgentContext,
-        userPrompt: aiPrompt,
+        userPrompt: promptText,
         planSnapshot,
         recommendationBroker
       });
@@ -4771,6 +4773,7 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
   const recommendedRows = (result?.recommendedActions || []).slice(0, 3);
   const hasAgentAdvice = Boolean(result);
   const setupCommands = flow.setupCommands || null;
+  const agentPrompt = buildScopedExecutorAgentPrompt(flow);
   const setupCommandRows = setupCommands
     ? [
         { label: ".env", command: setupCommands.enableEnv, detail: "Selected route flag" },
@@ -4945,7 +4948,7 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
             {flow.scanning ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             {flow.scanning ? "Scanning" : next.label || "Open route"}
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={onAskAgent} disabled={agent.running || !agent.configured}>
+          <Button type="button" variant="outline" size="sm" onClick={() => onAskAgent(agentPrompt)} disabled={agent.running || !agent.configured}>
             {agent.running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {agent.running ? "Asking OpenAI" : "Ask OpenAI for next cleanup step"}
           </Button>
