@@ -251,7 +251,7 @@ It currently scans or reports:
 - Browser cache roots only
 - Android Studio cache roots
 - WSL `ext4.vhdx` files
-- `node_modules` folders under common project roots
+- `node_modules` folders under common project roots such as `Code`, `dev`, `Projects`, `repos`, and `workspace`
 - Installed app footprints under Program Files, ProgramData, and LocalAppData\Programs
 - `hiberfil.sys` and `pagefile.sys` as advanced/blocked visibility
 

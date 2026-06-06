@@ -9918,7 +9918,18 @@ fn measure_node_modules_roots(
         return Vec::new();
     };
 
-    let candidates = ["Code", "source", "Documents", "dev"]
+    let candidates = [
+        "Code",
+        "source",
+        "Documents",
+        "dev",
+        "Developer",
+        "Development",
+        "Projects",
+        "repos",
+        "workspace",
+        "workspaces",
+    ]
         .iter()
         .map(|name| profile.join(name))
         .filter(|path| path.exists())

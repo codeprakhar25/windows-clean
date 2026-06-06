@@ -523,6 +523,9 @@ assert(!tempExecutionRejections.includes("permanent-confirmation-required"), "Te
 assert(app.includes("ProjectDependencyExecutorPanel"), "project dependency executor panel should be rendered");
 assert(app.includes("project-dependency-executor-panel"), "project dependency executor panel should be focusable");
 assert(app.includes("runNativeProjectDependencyExecutor"), "project dependency executor should be wired through the native adapter");
+assert(rustScanner.includes('"Projects"'), "project dependency scanner should search common Projects roots");
+assert(rustScanner.includes('"repos"'), "project dependency scanner should search common repos roots");
+assert(rustScanner.includes('"workspace"'), "project dependency scanner should search common workspace roots");
 assert(nativeAdapter.includes("requestMode: \"execute-project-deps\""), "native adapter should send the execute-project-deps request mode");
 assert(nativeAdapter.includes("projectDependencyExecutor"), "native adapter should normalize project dependency executor flag");
 assert(rustScanner.includes("execute_project_dependency_cleanup"), "Rust native shell should implement reviewed project dependency cleanup");

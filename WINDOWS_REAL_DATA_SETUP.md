@@ -163,7 +163,7 @@ In the app:
 1. Check **Windows setup assistant**. Browser demo is enough for rehearsal; desktop shell plus current read-only scan evidence is required for real local data.
 2. Complete **Demo rehearsal runbook** in browser demo mode first. It should show no native data required, no destructive commands, broad cleanup locked, and zero scoped real-run routes before you export the dry-run report.
 3. Review **Temp activation rehearsal** for the no-real-data path. It should show demo-only synthetic evidence, activation gate `feature-flag-disabled`, zero bytes, and mutation locked.
-4. Set **Real scan settings** for target drive, project artifact inclusion, traversal depth, per-root entry cap, and optional custom read-only roots.
+4. Set **Real scan settings** for target drive, project artifact inclusion, traversal depth, per-root entry cap, and optional custom read-only roots. Default project discovery searches common current-user folders such as `Code`, `dev`, `Projects`, `repos`, and `workspace`; add custom roots for projects outside those folders.
 5. Check **Native scan request guard**. Fix malformed drive scope, unapproved traversal caps, protected-path overlap, or broad system roots before the scan button can run.
 6. Click **Run real scan**.
 7. Check **Real data readiness** for native availability, write capability, destructive command state, and target-drive volume evidence.
