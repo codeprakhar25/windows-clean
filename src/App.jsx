@@ -201,6 +201,27 @@ const modes = [
   ["balanced", "Balanced"],
   ["emergency", "Emergency"]
 ];
+const scopedExecutorFlagSpecs = [
+  { flag: "tempCleanupExecutor", envVar: "SPACEGUARD_ENABLE_TEMP_EXECUTOR" },
+  { flag: "downloadsCleanupExecutor", envVar: "SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR" },
+  { flag: "largeFileArchiveExecutor", envVar: "SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR" },
+  { flag: "projectDependencyExecutor", envVar: "SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR" },
+  { flag: "browserCacheExecutor", envVar: "SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR" },
+  { flag: "gradleCacheExecutor", envVar: "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR" },
+  { flag: "userCacheExecutor", envVar: "SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR" },
+  { flag: "androidCacheExecutor", envVar: "SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR" },
+  { flag: "shaderCacheExecutor", envVar: "SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR" },
+  { flag: "pipCacheExecutor", envVar: "SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR" },
+  { flag: "toolNativePruneExecutors", envVar: "SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS" },
+  { flag: "npmCacheExecutor", envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR" },
+  { flag: "pnpmStoreExecutor", envVar: "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR" },
+  { flag: "recycleBinExecutor", envVar: "SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR" }
+];
+
+function getEnabledScopedExecutorFlagRows(flags = {}) {
+  return scopedExecutorFlagSpecs.filter((row) => Boolean(flags?.[row.flag]));
+}
+
 const nativeBetaEvidenceSpecs = [
   {
     id: "publicReleaseResearch",
@@ -1548,6 +1569,11 @@ export default function App() {
     [planSnapshot.id, scanSession.currentFingerprint, consentReceipt.planId, executionProofHandoff.status, largeFileArchiveDestination, approvals.permanentConfirm]
   );
   const consentMatchesCurrentPlan = Boolean(planSnapshot.id && consentReceipt.planId && consentReceipt.planId === planSnapshot.id);
+  const enabledScopedExecutorFlags = useMemo(
+    () => getEnabledScopedExecutorFlagRows(runtimeCapabilities.result.executorFlags || {}),
+    [runtimeCapabilities.result.executorFlags]
+  );
+  const singleScopedExecutorFlag = enabledScopedExecutorFlags.length <= 1;
   const openAiRecommendationBroker = useMemo(
     () =>
       buildOpenAIAgentRecommendationBroker({
@@ -2165,6 +2191,17 @@ export default function App() {
     return true;
   }
 
+  function blockExecutorForMultipleScopedFlags(setExecution) {
+    if (singleScopedExecutorFlag) return false;
+    setExecution({
+      status: "blocked",
+      result: null,
+      error: `Only one scoped executor flag may be enabled for a real run. Turn off all but one: ${enabledScopedExecutorFlags.map((row) => row.envVar).join(", ")}`
+    });
+    focusWorkflowPanel("scoped-executor-command-flow-panel");
+    return true;
+  }
+
   function armExecutionConsent() {
     const activeRoute = selectedScopedExecutorRoute || realExecutorCapsule?.route?.id || "";
     const scopedExecutorRuntime = isScopedExecutorRouteEnabled(activeRoute, runtimeCapabilities.result);
@@ -2386,6 +2423,7 @@ export default function App() {
     if (nativeRealExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeRealExecution)) return;
     if (blockExecutorForInactiveRoute("known-temp-delete", setNativeRealExecution)) return;
+    if (blockExecutorForMultipleScopedFlags(setNativeRealExecution)) return;
     if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.tempCleanupExecutor) {
       setNativeRealExecution({
         status: "blocked",
@@ -2427,6 +2465,7 @@ export default function App() {
     if (nativeProjectDependencyExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeProjectDependencyExecution)) return;
     if (blockExecutorForInactiveRoute("item-review-project-cache", setNativeProjectDependencyExecution)) return;
+    if (blockExecutorForMultipleScopedFlags(setNativeProjectDependencyExecution)) return;
     const projectRows = executorPlan.rows.filter((row) => row.route === "item-review-project-cache" && row.reviewTargets?.length);
     const projectTargets = projectRows.flatMap((row) => row.reviewTargets || []);
     if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.projectDependencyExecutor) {
@@ -2472,6 +2511,7 @@ export default function App() {
     if (nativeDownloadsExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeDownloadsExecution)) return;
     if (blockExecutorForInactiveRoute("item-review-recycle-bin", setNativeDownloadsExecution)) return;
+    if (blockExecutorForMultipleScopedFlags(setNativeDownloadsExecution)) return;
     const downloadRows = executorPlan.rows.filter((row) => row.route === "item-review-recycle-bin" && row.reviewTargets?.length);
     const downloadTargets = downloadRows.flatMap((row) => row.reviewTargets || []);
     if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.downloadsCleanupExecutor) {
@@ -2517,6 +2557,7 @@ export default function App() {
     if (nativeLargeFileArchiveExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeLargeFileArchiveExecution)) return;
     if (blockExecutorForInactiveRoute("item-review-large-files", setNativeLargeFileArchiveExecution)) return;
+    if (blockExecutorForMultipleScopedFlags(setNativeLargeFileArchiveExecution)) return;
     const archiveRows = executorPlan.rows.filter((row) => row.route === "item-review-large-files" && row.archiveTargets?.length);
     const archiveTargets = archiveRows.flatMap((row) => row.archiveTargets || []);
     const archiveDestination = largeFileArchiveDestination.trim();
@@ -2572,6 +2613,7 @@ export default function App() {
     if (nativeBrowserCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeBrowserCacheExecution)) return;
     if (blockExecutorForInactiveRoute("browser-cache-only", setNativeBrowserCacheExecution)) return;
+    if (blockExecutorForMultipleScopedFlags(setNativeBrowserCacheExecution)) return;
     const browserRows = executorPlan.rows.filter((row) => row.route === "browser-cache-only");
     const cacheTargets = (nativeScan.result?.findings || [])
       .filter((finding) => finding.recipeId === "browser-cache")
@@ -2626,6 +2668,7 @@ export default function App() {
     if (nativeGradleCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeGradleCacheExecution)) return;
     if (blockExecutorForInactiveRoute("bounded-cache-delete", setNativeGradleCacheExecution)) return;
+    if (blockExecutorForMultipleScopedFlags(setNativeGradleCacheExecution)) return;
     const gradleRows = executorPlan.rows.filter((row) => row.id === "gradle-cache" && row.route === "bounded-cache-delete");
     const finding = (nativeScan.result?.findings || [])
       .find((row) => row.recipeId === "gradle-cache" && (row.status === "measured" || row.status === "limited") && row.path);
@@ -2681,6 +2724,7 @@ export default function App() {
     if (nativeNpmCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeNpmCacheExecution)) return;
     if (blockExecutorForInactiveRoute("bounded-npm-cache-delete", setNativeNpmCacheExecution)) return;
+    if (blockExecutorForMultipleScopedFlags(setNativeNpmCacheExecution)) return;
     const npmRows = executorPlan.rows.filter((row) => row.id === "npm-cache" && row.route === "bounded-npm-cache-delete");
     const finding = (nativeScan.result?.findings || [])
       .find((row) => row.recipeId === "npm-cache" && (row.status === "measured" || row.status === "limited") && row.path);
@@ -2736,6 +2780,7 @@ export default function App() {
     if (nativeUserCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeUserCacheExecution)) return;
     if (blockExecutorForInactiveRoute("bounded-user-cache-delete", setNativeUserCacheExecution)) return;
+    if (blockExecutorForMultipleScopedFlags(setNativeUserCacheExecution)) return;
     const userCacheRows = executorPlan.rows.filter((row) => row.id === "user-cache" && row.route === "bounded-user-cache-delete");
     const finding = (nativeScan.result?.findings || [])
       .find((row) => row.recipeId === "user-cache" && (row.status === "measured" || row.status === "limited") && row.path);
@@ -2791,6 +2836,7 @@ export default function App() {
     if (nativeAndroidCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeAndroidCacheExecution)) return;
     if (blockExecutorForInactiveRoute("bounded-android-cache-delete", setNativeAndroidCacheExecution)) return;
+    if (blockExecutorForMultipleScopedFlags(setNativeAndroidCacheExecution)) return;
     const androidRows = executorPlan.rows.filter((row) => row.id === "android-cache" && row.route === "bounded-android-cache-delete");
     const androidTargets = (nativeScan.result?.findings || [])
       .filter((row) => row.recipeId === "android-cache" && (row.status === "measured" || row.status === "limited") && row.path)
@@ -2845,6 +2891,7 @@ export default function App() {
     if (nativeShaderCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeShaderCacheExecution)) return;
     if (blockExecutorForInactiveRoute("launcher-cache-cleanup", setNativeShaderCacheExecution)) return;
+    if (blockExecutorForMultipleScopedFlags(setNativeShaderCacheExecution)) return;
     const shaderRows = executorPlan.rows.filter((row) => row.id === "steam-shader-cache" && row.route === "launcher-cache-cleanup");
     const shaderTargets = (nativeScan.result?.findings || [])
       .filter((row) => row.recipeId === "steam-shader-cache" && (row.status === "measured" || row.status === "limited") && row.path)
@@ -2899,6 +2946,7 @@ export default function App() {
     if (nativePipCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativePipCacheExecution)) return;
     if (blockExecutorForInactiveRoute("bounded-pip-cache-delete", setNativePipCacheExecution)) return;
+    if (blockExecutorForMultipleScopedFlags(setNativePipCacheExecution)) return;
     const pipRows = executorPlan.rows.filter((row) => row.id === "pip-cache" && row.route === "bounded-pip-cache-delete");
     const finding = (nativeScan.result?.findings || [])
       .find((row) => row.recipeId === "pip-cache" && (row.status === "measured" || row.status === "limited") && row.path);
@@ -2955,6 +3003,7 @@ export default function App() {
     if (nativeDockerBuildCacheExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeDockerBuildCacheExecution)) return;
     if (blockExecutorForInactiveRoute("tool-native-docker-build-cache-prune", setNativeDockerBuildCacheExecution)) return;
+    if (blockExecutorForMultipleScopedFlags(setNativeDockerBuildCacheExecution)) return;
     const dockerRows = executorPlan.rows.filter((row) => row.id === "docker-build-cache" && row.route === "tool-native-docker-build-cache-prune");
     const finding = (nativeScan.result?.findings || [])
       .find((row) => row.recipeId === "docker-build-cache" && (row.status === "measured" || row.status === "limited") && row.path);
@@ -3011,6 +3060,7 @@ export default function App() {
     if (nativePnpmStoreExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativePnpmStoreExecution)) return;
     if (blockExecutorForInactiveRoute("bounded-pnpm-store-delete", setNativePnpmStoreExecution)) return;
+    if (blockExecutorForMultipleScopedFlags(setNativePnpmStoreExecution)) return;
     const pnpmRows = executorPlan.rows.filter((row) => row.id === "pnpm-store" && row.route === "bounded-pnpm-store-delete");
     const finding = (nativeScan.result?.findings || [])
       .find((row) => row.recipeId === "pnpm-store" && (row.status === "measured" || row.status === "limited") && row.path);
@@ -3066,6 +3116,7 @@ export default function App() {
     if (nativeRecycleBinExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativeRecycleBinExecution)) return;
     if (blockExecutorForInactiveRoute("shell-recycle-bin", setNativeRecycleBinExecution)) return;
+    if (blockExecutorForMultipleScopedFlags(setNativeRecycleBinExecution)) return;
     const recycleRows = executorPlan.rows.filter((row) => row.id === "recycle-bin" && row.route === "shell-recycle-bin");
     const finding = (nativeScan.result?.findings || [])
       .find((row) => row.recipeId === "recycle-bin" && (row.status === "measured" || row.status === "limited") && row.path);
@@ -4314,6 +4365,7 @@ export default function App() {
               contract={firstSafeExecutorContract}
               capsule={realExecutorCapsule}
               consentMatchesPlan={consentMatchesCurrentPlan}
+              singleScopedExecutorFlag={singleScopedExecutorFlag}
               onExecute={executeFirstSafeTempCleanup}
             />
             <RecycleBinExecutorPanel
@@ -4324,6 +4376,7 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               consentMatchesPlan={consentMatchesCurrentPlan}
+              singleScopedExecutorFlag={singleScopedExecutorFlag}
               permanentConfirmed={Boolean(approvals.permanentConfirm)}
               onExecute={executeRecycleBinCleanup}
             />
@@ -4335,6 +4388,7 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               consentMatchesPlan={consentMatchesCurrentPlan}
+              singleScopedExecutorFlag={singleScopedExecutorFlag}
               onExecute={executeGradleCacheCleanup}
             />
             <UserCacheExecutorPanel
@@ -4345,6 +4399,7 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               consentMatchesPlan={consentMatchesCurrentPlan}
+              singleScopedExecutorFlag={singleScopedExecutorFlag}
               onExecute={executeUserCacheCleanup}
             />
             <AndroidCacheExecutorPanel
@@ -4355,6 +4410,7 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               consentMatchesPlan={consentMatchesCurrentPlan}
+              singleScopedExecutorFlag={singleScopedExecutorFlag}
               onExecute={executeAndroidCacheCleanup}
             />
             <ShaderCacheExecutorPanel
@@ -4365,6 +4421,7 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               consentMatchesPlan={consentMatchesCurrentPlan}
+              singleScopedExecutorFlag={singleScopedExecutorFlag}
               onExecute={executeShaderCacheCleanup}
             />
             <PipCacheExecutorPanel
@@ -4375,6 +4432,7 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               consentMatchesPlan={consentMatchesCurrentPlan}
+              singleScopedExecutorFlag={singleScopedExecutorFlag}
               onExecute={executePipCacheCleanup}
             />
             <DockerBuildCacheExecutorPanel
@@ -4385,6 +4443,7 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               consentMatchesPlan={consentMatchesCurrentPlan}
+              singleScopedExecutorFlag={singleScopedExecutorFlag}
               onExecute={executeDockerBuildCacheCleanup}
             />
             <NpmCacheExecutorPanel
@@ -4395,6 +4454,7 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               consentMatchesPlan={consentMatchesCurrentPlan}
+              singleScopedExecutorFlag={singleScopedExecutorFlag}
               onExecute={executeNpmCacheCleanup}
             />
             <PnpmStoreExecutorPanel
@@ -4405,6 +4465,7 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               consentMatchesPlan={consentMatchesCurrentPlan}
+              singleScopedExecutorFlag={singleScopedExecutorFlag}
               onExecute={executePnpmStoreCleanup}
             />
             <DownloadsCleanupExecutorPanel
@@ -4414,6 +4475,7 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               consentMatchesPlan={consentMatchesCurrentPlan}
+              singleScopedExecutorFlag={singleScopedExecutorFlag}
               onExecute={executeReviewedDownloadsCleanup}
             />
             <LargeFileArchiveExecutorPanel
@@ -4423,6 +4485,7 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               consentMatchesPlan={consentMatchesCurrentPlan}
+              singleScopedExecutorFlag={singleScopedExecutorFlag}
               archiveDestination={largeFileArchiveDestination}
               onArchiveDestination={setLargeFileArchiveDestination}
               onExecute={executeLargeFileArchive}
@@ -4434,6 +4497,7 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               consentMatchesPlan={consentMatchesCurrentPlan}
+              singleScopedExecutorFlag={singleScopedExecutorFlag}
               onExecute={executeReviewedProjectDependencies}
             />
             <BrowserCacheExecutorPanel
@@ -4444,6 +4508,7 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               consentMatchesPlan={consentMatchesCurrentPlan}
+              singleScopedExecutorFlag={singleScopedExecutorFlag}
               onExecute={executeBrowserCacheCleanup}
             />
             <ExecutionProofHandoffPanel handoff={executionProofHandoff} onRescan={runPostRunReadonlyScan} />
@@ -9655,12 +9720,12 @@ function WriteBoundaryProbePanel({ probe, nativeWriteBoundary, runtimeCapabiliti
   );
 }
 
-function FirstSafeTempExecutorPanel({ runtimeCapabilities, execution, contract, capsule, consentMatchesPlan = false, onExecute }) {
+function FirstSafeTempExecutorPanel({ runtimeCapabilities, execution, contract, capsule, consentMatchesPlan = false, singleScopedExecutorFlag = true, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.tempCleanupExecutor);
   const selectedRows = capsule?.selectedRows || [];
   const preview = contract?.requestPreview || {};
   const routeReady = preview.route === "known-temp-delete" && selectedRows.length > 0;
-  const requestReady = Boolean(routeReady && preview.planId && preview.scanFingerprint && consentMatchesPlan);
+  const requestReady = Boolean(routeReady && preview.planId && preview.scanFingerprint && consentMatchesPlan && singleScopedExecutorFlag);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -9733,7 +9798,7 @@ function FirstSafeTempExecutorPanel({ runtimeCapabilities, execution, contract, 
   );
 }
 
-function GradleCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
+function GradleCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, singleScopedExecutorFlag = true, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.gradleCacheExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "gradle-cache" && row.route === "bounded-cache-delete");
   const finding = (nativeScan.result?.findings || [])
@@ -9747,7 +9812,7 @@ function GradleCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan
         status: finding.status
       }
     : null;
-  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan);
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan && singleScopedExecutorFlag);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -9835,7 +9900,7 @@ function GradleCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan
   );
 }
 
-function UserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
+function UserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, singleScopedExecutorFlag = true, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.userCacheExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "user-cache" && row.route === "bounded-user-cache-delete");
   const finding = (nativeScan.result?.findings || [])
@@ -9849,7 +9914,7 @@ function UserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, 
         status: finding.status
       }
     : null;
-  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan);
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan && singleScopedExecutorFlag);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -9937,7 +10002,7 @@ function UserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, 
   );
 }
 
-function AndroidCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
+function AndroidCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, singleScopedExecutorFlag = true, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.androidCacheExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "android-cache" && row.route === "bounded-android-cache-delete");
   const targets = (nativeScan.result?.findings || [])
@@ -9949,7 +10014,7 @@ function AndroidCacheExecutorPanel({ runtimeCapabilities, execution, executorPla
       bytes: Number(finding.bytes || 0),
       status: finding.status
     }));
-  const requestReady = Boolean(rows.length && targets.length && scanSession.currentFingerprint && consentMatchesPlan);
+  const requestReady = Boolean(rows.length && targets.length && scanSession.currentFingerprint && consentMatchesPlan && singleScopedExecutorFlag);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10041,7 +10106,7 @@ function AndroidCacheExecutorPanel({ runtimeCapabilities, execution, executorPla
   );
 }
 
-function ShaderCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
+function ShaderCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, singleScopedExecutorFlag = true, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.shaderCacheExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "steam-shader-cache" && row.route === "launcher-cache-cleanup");
   const targets = (nativeScan.result?.findings || [])
@@ -10053,7 +10118,7 @@ function ShaderCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan
       bytes: Number(finding.bytes || 0),
       status: finding.status
     }));
-  const requestReady = Boolean(rows.length && targets.length && scanSession.currentFingerprint && consentMatchesPlan);
+  const requestReady = Boolean(rows.length && targets.length && scanSession.currentFingerprint && consentMatchesPlan && singleScopedExecutorFlag);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10145,7 +10210,7 @@ function ShaderCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan
   );
 }
 
-function RecycleBinExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, permanentConfirmed, onExecute }) {
+function RecycleBinExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, singleScopedExecutorFlag = true, permanentConfirmed, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.recycleBinExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "recycle-bin" && row.route === "shell-recycle-bin");
   const finding = (nativeScan.result?.findings || [])
@@ -10160,7 +10225,7 @@ function RecycleBinExecutorPanel({ runtimeCapabilities, execution, executorPlan,
         files: Number(finding.files || 0)
       }
     : null;
-  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan && permanentConfirmed);
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan && singleScopedExecutorFlag && permanentConfirmed);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10249,7 +10314,7 @@ function RecycleBinExecutorPanel({ runtimeCapabilities, execution, executorPlan,
   );
 }
 
-function PipCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
+function PipCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, singleScopedExecutorFlag = true, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.pipCacheExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "pip-cache" && row.route === "bounded-pip-cache-delete");
   const finding = (nativeScan.result?.findings || [])
@@ -10263,7 +10328,7 @@ function PipCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, n
         status: finding.status
       }
     : null;
-  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan);
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan && singleScopedExecutorFlag);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10351,7 +10416,7 @@ function PipCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, n
   );
 }
 
-function DockerBuildCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
+function DockerBuildCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, singleScopedExecutorFlag = true, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.toolNativePruneExecutors);
   const rows = executorPlan.rows.filter((row) => row.id === "docker-build-cache" && row.route === "tool-native-docker-build-cache-prune");
   const finding = (nativeScan.result?.findings || [])
@@ -10365,7 +10430,7 @@ function DockerBuildCacheExecutorPanel({ runtimeCapabilities, execution, executo
         status: finding.status
       }
     : null;
-  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan);
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan && singleScopedExecutorFlag);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10453,7 +10518,7 @@ function DockerBuildCacheExecutorPanel({ runtimeCapabilities, execution, executo
   );
 }
 
-function NpmCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
+function NpmCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, singleScopedExecutorFlag = true, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.npmCacheExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "npm-cache" && row.route === "bounded-npm-cache-delete");
   const finding = (nativeScan.result?.findings || [])
@@ -10467,7 +10532,7 @@ function NpmCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, n
         status: finding.status
       }
     : null;
-  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan);
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan && singleScopedExecutorFlag);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10555,7 +10620,7 @@ function NpmCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, n
   );
 }
 
-function PnpmStoreExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
+function PnpmStoreExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, singleScopedExecutorFlag = true, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.pnpmStoreExecutor);
   const rows = executorPlan.rows.filter((row) => row.id === "pnpm-store" && row.route === "bounded-pnpm-store-delete");
   const finding = (nativeScan.result?.findings || [])
@@ -10569,7 +10634,7 @@ function PnpmStoreExecutorPanel({ runtimeCapabilities, execution, executorPlan, 
         status: finding.status
       }
     : null;
-  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan);
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentMatchesPlan && singleScopedExecutorFlag);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10657,11 +10722,11 @@ function PnpmStoreExecutorPanel({ runtimeCapabilities, execution, executorPlan, 
   );
 }
 
-function ProjectDependencyExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
+function ProjectDependencyExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, consentMatchesPlan = false, singleScopedExecutorFlag = true, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.projectDependencyExecutor);
   const rows = executorPlan.rows.filter((row) => row.route === "item-review-project-cache" && row.reviewTargets?.length);
   const targets = rows.flatMap((row) => row.reviewTargets || []);
-  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentMatchesPlan);
+  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentMatchesPlan && singleScopedExecutorFlag);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10758,11 +10823,11 @@ function ProjectDependencyExecutorPanel({ runtimeCapabilities, execution, execut
   );
 }
 
-function DownloadsCleanupExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
+function DownloadsCleanupExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, consentMatchesPlan = false, singleScopedExecutorFlag = true, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.downloadsCleanupExecutor);
   const rows = executorPlan.rows.filter((row) => row.route === "item-review-recycle-bin" && row.reviewTargets?.length);
   const targets = rows.flatMap((row) => row.reviewTargets || []);
-  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentMatchesPlan);
+  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentMatchesPlan && singleScopedExecutorFlag);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10856,11 +10921,11 @@ function DownloadsCleanupExecutorPanel({ runtimeCapabilities, execution, executo
   );
 }
 
-function LargeFileArchiveExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, consentMatchesPlan = false, archiveDestination, onArchiveDestination, onExecute }) {
+function LargeFileArchiveExecutorPanel({ runtimeCapabilities, execution, executorPlan, scanSession, consentReceipt, consentMatchesPlan = false, singleScopedExecutorFlag = true, archiveDestination, onArchiveDestination, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.largeFileArchiveExecutor);
   const rows = executorPlan.rows.filter((row) => row.route === "item-review-large-files" && row.archiveTargets?.length);
   const targets = rows.flatMap((row) => row.archiveTargets || []);
-  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentMatchesPlan && archiveDestination.trim());
+  const requestReady = Boolean(rows.length && scanSession.currentFingerprint && consentMatchesPlan && singleScopedExecutorFlag && archiveDestination.trim());
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
@@ -10985,7 +11050,7 @@ function reviewSignalBadgeVariant(tone = "") {
   return "outline";
 }
 
-function BrowserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, onExecute }) {
+function BrowserCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, consentMatchesPlan = false, singleScopedExecutorFlag = true, onExecute }) {
   const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.browserCacheExecutor);
   const selectedRows = executorPlan.rows.filter((row) => row.route === "browser-cache-only");
   const cacheTargets = (nativeScan.result?.findings || [])
@@ -10998,7 +11063,7 @@ function BrowserCacheExecutorPanel({ runtimeCapabilities, execution, executorPla
       bytes: Number(finding.bytes || 0),
       status: finding.status
     }));
-  const requestReady = Boolean(selectedRows.length && cacheTargets.length && scanSession.currentFingerprint && consentMatchesPlan);
+  const requestReady = Boolean(selectedRows.length && cacheTargets.length && scanSession.currentFingerprint && consentMatchesPlan && singleScopedExecutorFlag);
   const running = execution.status === "running";
   const result = execution.result;
   const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);

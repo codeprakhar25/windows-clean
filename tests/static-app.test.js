@@ -883,6 +883,9 @@ assert(app.includes("blockExecutorForPendingProof"), "scoped executor handlers s
 assert(app.includes("consentMatchesCurrentPlan"), "scoped executor handlers should require consent for the current plan");
 assert(app.includes("current-plan consent receipt"), "scoped executor errors should call out stale or missing current-plan consent");
 assert(app.includes("consentMatchesPlan ? \"current\""), "scoped executor panels should distinguish current consent from stale consent");
+assert(app.includes("blockExecutorForMultipleScopedFlags"), "direct scoped executor handlers should block multi-flag real runs");
+assert(app.includes("Only one scoped executor flag may be enabled for a real run"), "multi-flag executor errors should tell the operator to narrow scope");
+assert(app.includes("singleScopedExecutorFlag"), "scoped executor panels should disable run readiness when multiple route flags are enabled");
 assert(openAiAgent.includes("post-run-proof"), "OpenAI broker should check pending post-run proof before executor recommendations");
 assert(app.includes("runPostRunReadonlyScan"), "post-run verification should have a ledger-preserving native rescan action");
 assert(app.includes("executionProofContext"), "post-run verification should freeze the execution plan context");
