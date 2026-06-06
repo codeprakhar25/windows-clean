@@ -157,6 +157,22 @@ export function buildOpenAIAgentContext({
       }))
     )
     .slice(0, 16);
+  const reviewedDownloadsTargets = (executorPlan?.rows || [])
+    .filter((row) => row.route === "item-review-recycle-bin" && Array.isArray(row.reviewTargets))
+    .flatMap((row) =>
+      row.reviewTargets.map((target) => ({
+        id: target.id || row.id,
+        name: target.name || row.title,
+        route: row.route,
+        path: target.path || "",
+        bytes: Number(target.bytes || 0),
+        ageDays: Number(target.ageDays || 0),
+        kind: target.kind || "reviewed Downloads file",
+        reason: target.reason || "",
+        signals: normalizeAgentReviewSignals(target.signals)
+      }))
+    )
+    .slice(0, 16);
   const largeFileArchiveTargets = (executorPlan?.rows || [])
     .filter((row) => row.route === "item-review-large-files" && Array.isArray(row.archiveTargets))
     .flatMap((row) =>
@@ -438,6 +454,7 @@ export function buildOpenAIAgentContext({
     selectedActions: selected,
     topFindings,
     executableRows,
+    reviewedDownloadsTargets,
     reviewedProjectTargets,
     largeFileArchiveTargets,
     gradleCacheTargets,
@@ -872,9 +889,6 @@ function getExecutorRecommendationTargets(policy, context = null) {
   if (policy.targetList === "executableRows") {
     return (context?.executableRows || []).filter((row) => row.route === policy.route);
   }
-  if (policy.targetList === "reviewedDownloadsTargets") {
-    return (context?.executableRows || []).filter((row) => row.route === policy.route && Number(row.bytes || 0) > 0);
-  }
   return Array.isArray(context?.[policy.targetList]) ? context[policy.targetList] : [];
 }
 
@@ -1086,6 +1100,7 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
       selectedActions: selectedActions.length,
       topFindings: Array.isArray(context?.topFindings) ? context.topFindings.length : 0,
       executableRows: Array.isArray(context?.executableRows) ? context.executableRows.length : 0,
+      reviewedDownloadsTargets: Array.isArray(context?.reviewedDownloadsTargets) ? context.reviewedDownloadsTargets.length : 0,
       reviewedProjectTargets: Array.isArray(context?.reviewedProjectTargets) ? context.reviewedProjectTargets.length : 0,
       largeFileArchiveTargets: Array.isArray(context?.largeFileArchiveTargets) ? context.largeFileArchiveTargets.length : 0,
       gradleCacheTargets: Array.isArray(context?.gradleCacheTargets) ? context.gradleCacheTargets.length : 0,

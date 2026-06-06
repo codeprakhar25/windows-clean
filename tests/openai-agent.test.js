@@ -139,6 +139,23 @@ const assert = require("assert");
     executorPlan: {
       rows: [
         {
+          id: "downloads-installers",
+          title: "Old Downloads installers",
+          route: "item-review-recycle-bin",
+          reviewTargets: [
+            {
+              id: "setup-old",
+              name: "setup-old.exe",
+              path: "C:\\Users\\real\\Downloads\\setup-old.exe",
+              bytes: 512 * 1024 ** 2,
+              ageDays: 75,
+              kind: "installer",
+              reason: "Reviewed old installer",
+              signals: [{ label: "modified age", value: "75d", tone: "review" }]
+            }
+          ]
+        },
+        {
           id: "large-user-files",
           title: "Large personal files",
           route: "item-review-large-files",
@@ -222,6 +239,8 @@ const assert = require("assert");
   assert.strictEqual(manualContext.installedAppUninstallWorkOrder.canRunUninstaller, false, "OpenAI app uninstall work order must not run uninstallers");
   assert.strictEqual(manualContext.installedAppUninstallWorkOrder.rows[0].route, "manual-app-uninstall", "OpenAI app uninstall work order should route manual app follow-up explicitly");
   assert(manualContext.installedAppUninstallWorkOrder.forbiddenActions.includes("run-uninstall-string"), "OpenAI app uninstall work order should forbid uninstall-string execution");
+  assert.strictEqual(manualContext.reviewedDownloadsTargets[0].route, "item-review-recycle-bin", "OpenAI context should include exact reviewed Downloads Remove targets");
+  assert.strictEqual(manualContext.reviewedDownloadsTargets[0].id, "setup-old", "OpenAI Downloads context should preserve item-level target ids");
   assert.strictEqual(manualContext.largeFileArchiveTargets[0].route, "item-review-large-files", "OpenAI context should include reviewed large-file archive targets");
   assert.strictEqual(manualContext.largeFileArchiveTargets[0].decision, "archive", "OpenAI context should preserve archive decisions");
   assert.strictEqual(manualContext.userCacheTargets[0].route, "bounded-user-cache-delete", "OpenAI context should include scanned user .cache targets");
@@ -564,6 +583,67 @@ const assert = require("assert");
   });
   assert.strictEqual(fixtureTempBroker.rows[0].status, "ready", "fixture temp recommendation should be ready when its exact scoped target is selected");
   assert(fixtureTempBroker.rows[0].checks.some((check) => check.id === "target-id-match" && check.passed), "broker should prove the OpenAI target id matches the selected fixture target");
+  const downloadsWithoutReviewedTargetsBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "downloads-installers",
+          title: "Move old Downloads installer",
+          reason: "The model recommended Downloads cleanup but no exact reviewed file target is present.",
+          priority: "high",
+          actionType: "run-downloads-cleanup-executor",
+          targetId: "setup-old",
+          route: "item-review-recycle-bin"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-downloads" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, downloadsCleanupExecutor: true },
+      executableRows: [
+        {
+          id: "downloads-installers",
+          route: "item-review-recycle-bin",
+          title: "Old Downloads installers",
+          bytes: 512 * 1024 ** 2
+        }
+      ]
+    },
+    executionState: {
+      planId: "plan-downloads",
+      scanFingerprint: "scan-downloads",
+      consentPlanId: "plan-downloads"
+    }
+  });
+  assert.strictEqual(downloadsWithoutReviewedTargetsBroker.rows[0].status, "blocked", "broker should not treat a generic Downloads row as exact reviewed file authority");
+  assert.strictEqual(downloadsWithoutReviewedTargetsBroker.rows[0].canAct, false, "Downloads executor recommendation must need item-level reviewed targets");
+  assert(downloadsWithoutReviewedTargetsBroker.rows[0].checks.some((check) => check.id === "target-id-match" && !check.passed), "Downloads broker should expose the missing exact reviewed target");
+  const downloadsReviewedTargetBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "downloads-installers",
+          title: "Move old Downloads installer",
+          reason: "The exact reviewed installer is available.",
+          priority: "high",
+          actionType: "run-downloads-cleanup-executor",
+          targetId: "setup-old",
+          route: "item-review-recycle-bin"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-downloads" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, downloadsCleanupExecutor: true },
+      reviewedDownloadsTargets: [{ id: "setup-old", route: "item-review-recycle-bin", bytes: 512 * 1024 ** 2 }]
+    },
+    executionState: {
+      planId: "plan-downloads",
+      scanFingerprint: "scan-downloads",
+      consentPlanId: "plan-downloads"
+    }
+  });
+  assert.strictEqual(downloadsReviewedTargetBroker.rows[0].canAct, true, "broker should allow Downloads executor when the exact reviewed file target is present");
   const mismatchedTempTargetBroker = openai.buildOpenAIAgentRecommendationBroker({
     advice: {
       recommendedActions: [
