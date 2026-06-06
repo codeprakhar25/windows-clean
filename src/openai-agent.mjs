@@ -376,12 +376,19 @@ export function buildOpenAIAgentContext({
       manualOnly: true,
       nextStep: row.nextStep || "Choose a manual disposition; no executor route is available."
     }));
-  const enabledScopedExecutorFlags = getOpenAIEnabledScopedExecutorFlags(runtimeCapabilities?.executorFlags || {});
+  const nativeEnabledScopedExecutorFlags = Array.isArray(runtimeCapabilities?.enabledScopedExecutorFlags)
+    ? runtimeCapabilities.enabledScopedExecutorFlags.filter(Boolean)
+    : null;
+  const enabledScopedExecutorFlags = nativeEnabledScopedExecutorFlags || getOpenAIEnabledScopedExecutorFlags(runtimeCapabilities?.executorFlags || {});
+  const enabledScopedExecutorFlagCount = Number(runtimeCapabilities?.enabledScopedExecutorFlagCount ?? enabledScopedExecutorFlags.length);
   const runtimeSummary = {
     nativeAvailable: Boolean(runtimeCapabilities?.available),
     windows: Boolean(runtimeCapabilities?.windows),
     realRunEnabled: Boolean(runtimeCapabilities?.realRunEnabled),
     destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
+    executorScopeStatus:
+      runtimeCapabilities?.executorScopeStatus ||
+      (enabledScopedExecutorFlagCount > 1 ? "multiple-scoped-flags" : enabledScopedExecutorFlagCount === 1 ? "single-scoped-flag" : "no-scoped-flags"),
     tempCleanupExecutor: Boolean(runtimeCapabilities?.executorFlags?.tempCleanupExecutor),
     downloadsCleanupExecutor: Boolean(runtimeCapabilities?.executorFlags?.downloadsCleanupExecutor),
     largeFileArchiveExecutor: Boolean(runtimeCapabilities?.executorFlags?.largeFileArchiveExecutor),
@@ -397,7 +404,7 @@ export function buildOpenAIAgentContext({
     pnpmStoreExecutor: Boolean(runtimeCapabilities?.executorFlags?.pnpmStoreExecutor),
     recycleBinExecutor: Boolean(runtimeCapabilities?.executorFlags?.recycleBinExecutor),
     enabledScopedExecutorFlags,
-    enabledScopedExecutorFlagCount: enabledScopedExecutorFlags.length,
+    enabledScopedExecutorFlagCount,
     openAiAgentAdvice: Boolean(runtimeCapabilities?.openAiAgentAdvice),
     openAiAdvisorConfigured: Boolean(runtimeCapabilities?.openAiAdvisorConfigured),
     openAiKeySource: runtimeCapabilities?.openAiKeySource || "missing"
@@ -1410,6 +1417,7 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
         ? context.runtime.enabledScopedExecutorFlags.slice(0, 14)
         : getOpenAIEnabledScopedExecutorFlags(context?.runtime || {}),
       enabledScopedExecutorFlagCount: Number(context?.runtime?.enabledScopedExecutorFlagCount || getOpenAIEnabledScopedExecutorFlags(context?.runtime || {}).length),
+      executorScopeStatus: context?.runtime?.executorScopeStatus || "unknown",
       toolNativePruneExecutors: Boolean(context?.runtime?.toolNativePruneExecutors),
       openAiAgentAdvice: Boolean(context?.runtime?.openAiAgentAdvice),
       openAiAdvisorConfigured: Boolean(context?.runtime?.openAiAdvisorConfigured)

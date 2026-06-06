@@ -385,6 +385,7 @@ assert(openAiAgent.includes("planSnapshot"), "OpenAI context should include curr
 assert(openAiAgent.includes("proofAllowsNextExecutor"), "OpenAI context should include post-run proof state");
 assert(openAiAgent.includes("consentMatchesPlan"), "OpenAI context should include current consent state");
 assert(openAiAgent.includes("enabledScopedExecutorFlags"), "OpenAI context should expose enabled scoped executor flags");
+assert(openAiAgent.includes("executorScopeStatus"), "OpenAI context should expose native executor scope status");
 assert(openAiAgent.includes("agentTaskQueue"), "OpenAI context should include a deterministic task queue");
 assert(openAiAgent.includes("spaceguard-openai-agent-task-queue/v1"), "OpenAI task queue should expose a schema version");
 assert(app.includes("Agent task queue"), "OpenAI panel should show the deterministic agent task queue");

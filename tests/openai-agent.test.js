@@ -270,6 +270,28 @@ const assert = require("assert");
   assert.strictEqual(manualContext.execution.releaseReadyForRealRun, true, "OpenAI context should expose release readiness");
   assert.deepStrictEqual(manualContext.runtime.enabledScopedExecutorFlags, ["userCacheExecutor"], "OpenAI context should expose the enabled scoped executor flag list");
   assert.strictEqual(manualContext.runtime.enabledScopedExecutorFlagCount, 1, "OpenAI context should expose the enabled scoped executor flag count");
+  assert.strictEqual(manualContext.runtime.executorScopeStatus, "single-scoped-flag", "OpenAI context should expose derived executor scope status");
+  const nativeScopeContext = openai.buildOpenAIAgentContext({
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      realRunEnabled: false,
+      executorScopeStatus: "multiple-scoped-flags",
+      enabledScopedExecutorFlags: ["SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR"],
+      enabledScopedExecutorFlagCount: 2,
+      executorFlags: {
+        npmCacheExecutor: true,
+        pnpmStoreExecutor: true
+      }
+    }
+  });
+  assert.strictEqual(nativeScopeContext.runtime.executorScopeStatus, "multiple-scoped-flags", "OpenAI context should preserve native executor scope status");
+  assert.deepStrictEqual(
+    nativeScopeContext.runtime.enabledScopedExecutorFlags,
+    ["SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR"],
+    "OpenAI context should prefer native scoped executor flag names when present"
+  );
+  assert.strictEqual(nativeScopeContext.runtime.enabledScopedExecutorFlagCount, 2, "OpenAI context should preserve native scoped executor flag count");
   assert.strictEqual(manualContext.appBoundary.allowedActions.includes("recommend-manual-review"), true, "OpenAI context should permit manual-review recommendations");
   assert.strictEqual(manualContext.plan.id, "plan-openai-manual", "OpenAI context should include the current plan id");
   assert.strictEqual(manualContext.plan.selectedCount, 1, "OpenAI context should include current plan selection counts");
@@ -411,6 +433,7 @@ const assert = require("assert");
   assert.strictEqual(nativeRunRecord.context.counts.installedAppWorkOrderRows, 1, "OpenAI run records should retain compact app uninstall work-order counts");
   assert.strictEqual(nativeRunRecord.context.counts.wslVhdxTargets, 1, "OpenAI run records should retain compact WSL target counts");
   assert.strictEqual(nativeRunRecord.context.counts.wslCompactionRows, 1, "OpenAI run records should retain compact WSL work-order counts");
+  assert.strictEqual(nativeRunRecord.context.runtime.executorScopeStatus, "single-scoped-flag", "OpenAI run records should retain compact executor scope status");
   assert.strictEqual(nativeRunRecord.context.execution.scanFingerprintPresent, true, "OpenAI run records should retain compact scan proof presence");
   assert.strictEqual(nativeRunRecord.context.execution.proofStatus, "waiting-for-execution", "OpenAI run records should retain compact proof status");
   assert.strictEqual(nativeRunRecord.context.privacy.storesFullContext, false, "OpenAI run records should not persist the full path-level context");
