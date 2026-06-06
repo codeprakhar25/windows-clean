@@ -728,6 +728,50 @@ export async function runNativePnpmStoreExecutor(boundary = {}, host = globalThi
   return normalizeNativeWriteBoundary(result);
 }
 
+export async function runNativePipCacheExecutor(boundary = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      accepted: false,
+      reason: "Native pip cache executor is not available in the browser demo.",
+      entries: [],
+      warnings: ["Run the Tauri desktop shell before executing pip cache cleanup."]
+    };
+  }
+
+  const row = boundary.row || boundary.selectedRow || {};
+  const targetPath = row.targetPath || row.target || row.path || "";
+  const action = {
+    id: row.id || "pip-cache",
+    title: row.title || "pip package cache",
+    bytes: Number(row.bytes || boundary.expectedBytes || 0),
+    route: "bounded-pip-cache-delete",
+    targetPath
+  };
+  const expectedBytes = Number(boundary.expectedBytes ?? action.bytes);
+
+  const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
+    request: {
+      schemaVersion: "spaceguard-pip-cache-request/v1",
+      requestMode: "execute-pip-cache",
+      planId: boundary.planId || "",
+      route: "bounded-pip-cache-delete",
+      scanFingerprint: boundary.scanFingerprint || "",
+      consentPlanId: boundary.consentPlanId || "",
+      expectedBytes,
+      dryRunOnly: false,
+      mutationAttempted: true,
+      actions: [action]
+    }
+  });
+
+  return normalizeNativeWriteBoundary(result);
+}
+
 export async function runNativeRecycleBinExecutor(boundary = {}, host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {
@@ -1077,6 +1121,7 @@ function normalizeExecutorFlags(value = {}) {
     userCacheExecutor: Boolean(value.userCacheExecutor || value.user_cache_executor),
     androidCacheExecutor: Boolean(value.androidCacheExecutor || value.android_cache_executor),
     shaderCacheExecutor: Boolean(value.shaderCacheExecutor || value.shader_cache_executor),
+    pipCacheExecutor: Boolean(value.pipCacheExecutor || value.pip_cache_executor),
     npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
     pnpmStoreExecutor: Boolean(value.pnpmStoreExecutor || value.pnpm_store_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),

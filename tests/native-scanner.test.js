@@ -711,6 +711,53 @@ const assert = require("assert");
   assert.strictEqual(shaderCacheExecutionInvocation.payload.request.actions[0].targetPath.includes("NVIDIA\\DXCache"), true, "shader cache executor should pass concrete shader cache root path");
   assert.strictEqual(shaderCacheExecution.accepted, true, "shader cache executor should normalize accepted responses");
   assert.strictEqual(shaderCacheExecution.entries[0].route, "launcher-cache-cleanup", "shader cache executor should normalize executed route");
+  let pipExecutionInvocation = null;
+  const pipExecution = await native.runNativePipCacheExecutor(
+    {
+      row: { id: "pip-cache", title: "pip package cache", path: "C:\\Users\\real\\AppData\\Local\\pip\\Cache", bytes: 345 },
+      planId: "plan-pip",
+      scanFingerprint: "scan-pip",
+      consentPlanId: "plan-pip",
+      expectedBytes: 345
+    },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            pipExecutionInvocation = { command, payload };
+            return Promise.resolve({
+              mode: "native-pip-cache-executor",
+              real_run_enabled: true,
+              destructive_commands: true,
+              accepted: true,
+              reason: "accepted",
+              contract_echo: {
+                schema_version: payload.request.schemaVersion,
+                request_mode: payload.request.requestMode,
+                plan_id: payload.request.planId,
+                route: payload.request.route,
+                scan_fingerprint: payload.request.scanFingerprint,
+                consent_plan_id: payload.request.consentPlanId,
+                expected_bytes: payload.request.expectedBytes,
+                dry_run_only: payload.request.dryRunOnly,
+                mutation_attempted: payload.request.mutationAttempted,
+                action_count: payload.request.actions.length
+              },
+              entries: [{ id: "pip-cache", title: "pip package cache", route: "bounded-pip-cache-delete", result: "executed", reject_code: "", bytes: 345, note: "deleted old pip cache" }],
+              warnings: ["pip cache done"]
+            });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(pipExecutionInvocation.command, "execute_cleanup_plan", "pip cache executor should invoke execute_cleanup_plan");
+  assert.strictEqual(pipExecutionInvocation.payload.request.schemaVersion, "spaceguard-pip-cache-request/v1", "pip cache executor should use its schema");
+  assert.strictEqual(pipExecutionInvocation.payload.request.requestMode, "execute-pip-cache", "pip cache executor should send execute-pip-cache mode");
+  assert.strictEqual(pipExecutionInvocation.payload.request.route, "bounded-pip-cache-delete", "pip cache executor should stay on bounded-pip-cache-delete route");
+  assert.strictEqual(pipExecutionInvocation.payload.request.actions[0].targetPath.endsWith("pip\\Cache"), true, "pip cache executor should pass concrete pip cache root path");
+  assert.strictEqual(pipExecution.accepted, true, "pip cache executor should normalize accepted responses");
+  assert.strictEqual(pipExecution.entries[0].route, "bounded-pip-cache-delete", "pip cache executor should normalize executed route");
   let npmExecutionInvocation = null;
   const npmExecution = await native.runNativeNpmCacheExecutor(
     {
@@ -1052,6 +1099,7 @@ const assert = require("assert");
       gradle_cache_executor: true,
       user_cache_executor: true,
       shader_cache_executor: true,
+      pip_cache_executor: true,
       npm_cache_executor: true,
       pnpm_store_executor: true,
       recycle_bin_executor: true,
@@ -1080,6 +1128,7 @@ const assert = require("assert");
       userCacheExecutor: true,
       androidCacheExecutor: false,
       shaderCacheExecutor: true,
+      pipCacheExecutor: true,
       npmCacheExecutor: true,
       pnpmStoreExecutor: true,
       recycleBinExecutor: true,

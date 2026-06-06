@@ -96,6 +96,13 @@ $env:SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR="1"
 npm run native:dev
 ```
 
+Enable old-file cleanup under the current user's pip cache:
+
+```powershell
+$env:SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR="1"
+npm run native:dev
+```
+
 Enable old-file cleanup under the current user's npm `_cacache`:
 
 ```powershell
@@ -152,7 +159,7 @@ The native write-boundary command is:
 execute_cleanup_plan
 ```
 
-It validates request shape for dry-run probes and contains scoped real executor branches for `requestMode=execute-first-safe`, `requestMode=execute-project-deps`, `requestMode=execute-downloads-recycle-bin`, `requestMode=execute-large-file-archive`, `requestMode=execute-gradle-cache`, `requestMode=execute-user-cache`, `requestMode=execute-android-cache`, `requestMode=execute-shader-cache`, `requestMode=execute-npm-cache`, `requestMode=execute-pnpm-store`, `requestMode=execute-recycle-bin`, and `requestMode=execute-browser-cache`.
+It validates request shape for dry-run probes and contains scoped real executor branches for `requestMode=execute-first-safe`, `requestMode=execute-project-deps`, `requestMode=execute-downloads-recycle-bin`, `requestMode=execute-large-file-archive`, `requestMode=execute-gradle-cache`, `requestMode=execute-user-cache`, `requestMode=execute-android-cache`, `requestMode=execute-shader-cache`, `requestMode=execute-pip-cache`, `requestMode=execute-npm-cache`, `requestMode=execute-pnpm-store`, `requestMode=execute-recycle-bin`, and `requestMode=execute-browser-cache`.
 
 For `known-temp-delete`, setting `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1` in `.env` or the Windows Tauri process environment enables deletion of old files under allowlisted temp roots only. The executor rejects missing plan/scan/consent IDs, non-Windows runtimes, non-temp routes, forbidden targets, symlinks, recent files, folders, and broad personal/project paths. It returns a ledger-style native response with accepted state, bytes reclaimed, skipped count, and warnings. Without the feature flag, it still rejects with zero bytes.
 
@@ -171,6 +178,8 @@ For `user-cache`, setting `SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR=1` enables boun
 For `android-cache`, setting `SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR=1` enables bounded Android cache cleanup. The frontend sends only scanned Android Studio `caches`, `system\caches`, or `%UserProfile%\.android\build-cache` paths from the latest native read-only scan. The native executor deletes files older than 30 days, skips symlinks, recent files, lock/config/database/session/credential-like files, rejects `.android\avd`, SDKs, emulators, Gradle data, project folders, Program Files paths, and system paths, removes empty cache subdirectories bottom-up, and never runs Android Studio, SDK tools, or shell commands.
 
 For `steam-shader-cache`, setting `SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR=1` enables bounded shader cache cleanup. The frontend sends only scanned `%LocalAppData%\D3DSCache`, NVIDIA `DXCache`/`GLCache`/`NV_Cache`, AMD `DxCache`/`GLCache`/`VkCache`, and Intel `ShaderCache` roots from the latest native read-only scan. The native executor deletes files older than 14 days, skips symlinks, recent files, config/database/session/credential-like files, rejects game install folders, save-data paths, launcher profiles, package folders, Program Files paths, and system paths, removes empty cache subdirectories bottom-up, and never runs launchers, graphics tools, or shell commands.
+
+For `pip-cache`, setting `SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR=1` enables bounded pip cache cleanup. The frontend sends only the concrete `%LocalAppData%\pip\Cache` path from the latest native read-only scan. The native executor deletes files older than 14 days, skips symlinks, recent files, lock/config/database/session/credential-like files, rejects Python installs, virtualenvs, site-packages, pip config, selfcheck data, Program Files paths, and system paths, removes empty cache subdirectories bottom-up, and never runs pip, Python, or shell commands.
 
 For `npm-cache`, setting `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1` enables bounded npm cache cleanup. The frontend sends only the concrete `%LocalAppData%\npm-cache\_cacache` path from the latest native read-only scan. The native executor accepts only the current user's `_cacache` directory, deletes content blobs and cache temp files older than 14 days, keeps npm index metadata, skips symlinks, recent files, global packages, project `node_modules`, Program Files paths, and system paths, removes empty cache subdirectories bottom-up, and never runs npm or shell commands.
 
@@ -196,7 +205,7 @@ The **Real data launch roadmap** panel consolidates product status and rough del
 
 The **Native beta distribution** panel separates read-only beta packaging from real cleanup. It requires a current native read-only scan, local-only privacy, release/setup docs, install/uninstall path, redacted support workflow, signing or SmartScreen evidence, and no real-cleanup claim before native beta can be called ready.
 
-The **OpenAI cleanup agent** panel sends a bounded context packet to the OpenAI Responses API when the user clicks **Ask OpenAI**. In the desktop shell, the renderer invokes the native `openai_agent_advice` command; Rust reads `OPENAI_API_KEY` from the process environment or local `.env`, builds the strict Responses API request, and returns structured advice without exposing the secret to the webview. Browser-only demos can still use the legacy `VITE_OPENAI_API_KEY` fallback. The advisor defaults to `OPENAI_MODEL=gpt-5.5` and supports `OPENAI_REASONING_EFFORT` for Responses API reasoning settings. It includes scan status, current plan identity, selected actions, candidate samples, reviewed project dependency targets, scanned Gradle, user `.cache`, Android, shader, npm, and pnpm cache/store evidence, scanned browser cache roots, manual installed-app review targets, broad drive inventory rows, custom-root triage rows, executor readiness, consent match, scan fingerprint presence, post-run proof state, and runtime capability flags. Responses use a strict JSON schema with a bounded action vocabulary, so the app can display ranked next actions, blockers, questions, and warnings predictably. Successful advice calls write a compact local advisory run record with plan id, provider metadata, recommendation rows, proof status, and redacted context counts; it does not persist the API key, raw model text, raw scan fingerprint, or full local path context. Recommended executor actions render as user-clickable buttons in both the OpenAI panel and the **Real cleanup command flow**, but the click still routes through the same native feature flags, consent receipt, scan fingerprint, proof-state blocker, target validators, and UI preconditions. Manual discovery targets can only produce review guidance; they cannot become automated uninstall, direct folder deletion, shell, registry-edit, or partition actions. It does not grant the model filesystem access, approval authority, shell execution, or delete/move/archive authority.
+The **OpenAI cleanup agent** panel sends a bounded context packet to the OpenAI Responses API when the user clicks **Ask OpenAI**. In the desktop shell, the renderer invokes the native `openai_agent_advice` command; Rust reads `OPENAI_API_KEY` from the process environment or local `.env`, builds the strict Responses API request, and returns structured advice without exposing the secret to the webview. Browser-only demos can still use the legacy `VITE_OPENAI_API_KEY` fallback. The advisor defaults to `OPENAI_MODEL=gpt-5.5` and supports `OPENAI_REASONING_EFFORT` for Responses API reasoning settings. It includes scan status, current plan identity, selected actions, candidate samples, reviewed project dependency targets, scanned Gradle, user `.cache`, Android, shader, pip, npm, and pnpm cache/store evidence, scanned browser cache roots, manual installed-app review targets, broad drive inventory rows, custom-root triage rows, executor readiness, consent match, scan fingerprint presence, post-run proof state, and runtime capability flags. Responses use a strict JSON schema with a bounded action vocabulary, so the app can display ranked next actions, blockers, questions, and warnings predictably. Successful advice calls write a compact local advisory run record with plan id, provider metadata, recommendation rows, proof status, and redacted context counts; it does not persist the API key, raw model text, raw scan fingerprint, or full local path context. Recommended executor actions render as user-clickable buttons in both the OpenAI panel and the **Real cleanup command flow**, but the click still routes through the same native feature flags, consent receipt, scan fingerprint, proof-state blocker, target validators, and UI preconditions. Manual discovery targets can only produce review guidance; they cannot become automated uninstall, direct folder deletion, shell, registry-edit, or partition actions. It does not grant the model filesystem access, approval authority, shell execution, or delete/move/archive authority.
 
 The **App uninstall work order** turns selected installed-app footprint candidates into a manual follow-up artifact. It records the app name, path, measured footprint, publisher/version/install-date signals when available, usage-proof state, uninstall-entry evidence, and the exact guardrails: no automated uninstall, no uninstall-string execution, no Program Files deletion, no registry edits, and no recovered-space claim until a native rescan verifies the footprint changed.
 
@@ -264,7 +273,7 @@ SpaceGuard is not a generic PC optimizer. It is a guarded workflow:
 5. Execute only allowed actions.
 6. Rescan and produce a cleanup ledger.
 
-The planner includes recipes for Windows temp files, Recycle Bin, Windows.old, Gradle, npm, pnpm, Docker build cache, WSL virtual disks, Android Studio, old `node_modules`, Downloads, large personal file discovery, browser cache, hibernation, pagefile, and partition strategy.
+The planner includes recipes for Windows temp files, Recycle Bin, Windows.old, Gradle, pip, npm, pnpm, Docker build cache, WSL virtual disks, Android Studio, old `node_modules`, Downloads, large personal file discovery, shader cache, browser cache, hibernation, pagefile, and partition strategy.
 
 The demo also includes:
 
@@ -526,7 +535,7 @@ The production shell should become a signed Windows desktop app with:
 - Append-only local cleanup ledger.
 - No cloud upload by default.
 
-The current native slice is intentionally scoped. The next product milestone is Windows validation evidence and post-run rescan proof for temp, reviewed Downloads, reviewed large-file archive, Recycle Bin, reviewed dependency, Gradle cache, npm cache, pnpm store, and browser cache executors, while Docker, automated app uninstall, partition work, and broader tool-native prune commands remain future work or manual-only.
+The current native slice is intentionally scoped. The next product milestone is Windows validation evidence and post-run rescan proof for temp, reviewed Downloads, reviewed large-file archive, Recycle Bin, reviewed dependency, Gradle cache, user `.cache`, Android cache, shader cache, pip cache, npm cache, pnpm store, and browser cache executors, while Docker, automated app uninstall, partition work, and broader tool-native prune commands remain future work or manual-only.
 
 The native runtime also reports elevation state. This is evidence only: the app does not self-elevate, request UAC, or turn admin-sensitive routes into real executors.
 

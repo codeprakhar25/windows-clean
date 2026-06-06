@@ -86,6 +86,13 @@ const assert = require("assert");
           status: "measured"
         },
         {
+          recipeId: "pip-cache",
+          title: "pip package cache",
+          path: "C:\\Users\\real\\AppData\\Local\\pip\\Cache",
+          bytes: 512 * 1024 ** 2,
+          status: "measured"
+        },
+        {
           recipeId: "wsl-vhdx",
           title: "WSL virtual disk compaction",
           path: "C:\\Users\\real\\AppData\\Local\\Packages\\Ubuntu\\LocalState\\ext4.vhdx",
@@ -208,6 +215,7 @@ const assert = require("assert");
   assert.strictEqual(manualContext.userCacheTargets[0].route, "bounded-user-cache-delete", "OpenAI context should include scanned user .cache targets");
   assert.strictEqual(manualContext.androidCacheTargets[0].route, "bounded-android-cache-delete", "OpenAI context should include scanned Android cache targets");
   assert.strictEqual(manualContext.shaderCacheTargets[0].route, "launcher-cache-cleanup", "OpenAI context should include scanned shader cache targets");
+  assert.strictEqual(manualContext.pipCacheTargets[0].route, "bounded-pip-cache-delete", "OpenAI context should include scanned pip cache targets");
   assert.strictEqual(manualContext.wslVhdxTargets[0].route, "advanced-checklist", "OpenAI context should include scanned WSL VHDX manual targets");
   assert.strictEqual(manualContext.wslCompactionWorkOrder.manualOnly, true, "OpenAI WSL compaction work order should stay manual-only");
   assert.strictEqual(manualContext.wslCompactionWorkOrder.canRunShell, false, "OpenAI WSL compaction work order must not run shell commands");
@@ -611,6 +619,34 @@ const assert = require("assert");
   assert.strictEqual(shaderCacheBroker.rows[0].targetPanel, "shader-cache-executor-panel", "broker should route shader cache recommendations to the shader cache panel");
   assert.strictEqual(shaderCacheBroker.rows[0].canAct, true, "broker should allow shader cache executor only when deterministic gates pass");
   assert.strictEqual(shaderCacheBroker.rows[0].buttonLabel, "Run shader cache", "broker should label shader cache executor recommendations");
+  const pipCacheBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "pip-cache",
+          title: "Clean pip cache",
+          reason: "The scanned pip cache root has a scoped executor.",
+          priority: "medium",
+          actionType: "run-pip-cache-executor",
+          targetId: "pip-cache",
+          route: "bounded-pip-cache-delete"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-pip-cache" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, pipCacheExecutor: true },
+      pipCacheTargets: [{ id: "pip-cache", route: "bounded-pip-cache-delete", bytes: 4096 }]
+    },
+    executionState: {
+      planId: "plan-pip-cache",
+      scanFingerprint: "scan-pip-cache",
+      consentPlanId: "plan-pip-cache"
+    }
+  });
+  assert.strictEqual(pipCacheBroker.rows[0].targetPanel, "pip-cache-executor-panel", "broker should route pip cache recommendations to the pip cache panel");
+  assert.strictEqual(pipCacheBroker.rows[0].canAct, true, "broker should allow pip cache executor only when deterministic gates pass");
+  assert.strictEqual(pipCacheBroker.rows[0].buttonLabel, "Run pip cleanup", "broker should label pip cache executor recommendations");
 
   console.log("openai agent adapter ok");
 })();

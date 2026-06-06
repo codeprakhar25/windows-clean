@@ -323,6 +323,7 @@ assert(openAiAgent.includes("gradleCacheTargets"), "OpenAI context should includ
 assert(openAiAgent.includes("userCacheTargets"), "OpenAI context should include scanned user .cache targets");
 assert(openAiAgent.includes("androidCacheTargets"), "OpenAI context should include scanned Android cache targets");
 assert(openAiAgent.includes("shaderCacheTargets"), "OpenAI context should include scanned shader cache targets");
+assert(openAiAgent.includes("pipCacheTargets"), "OpenAI context should include scanned pip cache targets");
 assert(openAiAgent.includes("npmCacheTargets"), "OpenAI context should include scanned npm cache targets");
 assert(openAiAgent.includes("recycleBinTargets"), "OpenAI context should include scanned Recycle Bin targets");
 assert(openAiAgent.includes("browserCacheTargets"), "OpenAI context should include scanned browser cache targets");
@@ -348,6 +349,7 @@ assert(openAiAgent.includes("run-gradle-cache-executor"), "OpenAI schema should 
 assert(openAiAgent.includes("run-user-cache-executor"), "OpenAI schema should allow user .cache executor recommendations");
 assert(openAiAgent.includes("run-android-cache-executor"), "OpenAI schema should allow Android cache executor recommendations");
 assert(openAiAgent.includes("run-shader-cache-executor"), "OpenAI schema should allow shader cache executor recommendations");
+assert(openAiAgent.includes("run-pip-cache-executor"), "OpenAI schema should allow pip cache executor recommendations");
 assert(openAiAgent.includes("run-downloads-cleanup-executor"), "OpenAI schema should allow reviewed Downloads executor recommendations");
 assert(openAiAgent.includes("run-large-file-archive-executor"), "OpenAI schema should allow reviewed large-file archive recommendations");
 assert(openAiAgent.includes("run-npm-cache-executor"), "OpenAI schema should allow npm cache executor recommendations");
@@ -363,6 +365,7 @@ assert(app.includes("Gradle root"), "OpenAI panel should show Gradle cache targe
 assert(app.includes(".cache root"), "OpenAI panel should show user .cache target count");
 assert(app.includes("Android roots"), "OpenAI panel should show Android cache target count");
 assert(app.includes("Shader roots"), "OpenAI panel should show shader cache target count");
+assert(app.includes("pip root"), "OpenAI panel should show pip cache target count");
 assert(app.includes("npm root"), "OpenAI panel should show npm cache target count");
 assert(app.includes("pnpm root"), "OpenAI panel should show pnpm store target count");
 assert(openAiAgent.includes("pnpmStoreTargets"), "OpenAI context should include scanned pnpm store targets");
@@ -536,6 +539,21 @@ assert(rustScanner.includes("shader_cache_target_reject_code"), "Rust native she
 assert(rustScanner.includes("target-not-shader-cache"), "Rust native shell should reject non-shader cache targets");
 assert(rustScanner.includes("file_old_enough_for_shader_cache_delete"), "Rust shader cache cleanup should enforce the age threshold");
 assert(rustScanner.includes("shader_cache_file_forbidden"), "Rust shader cache cleanup should skip config and identity-like files");
+assert(app.includes("PipCacheExecutorPanel"), "pip cache executor panel should be rendered");
+assert(app.includes("pip-cache-executor-panel"), "pip cache executor panel should be focusable");
+assert(app.includes("Run pip cache cleanup"), "pip cache executor should expose a user-triggered cleanup button");
+assert(app.includes("pip executor boundary"), "pip cache executor should show the route boundary");
+assert(app.includes("runNativePipCacheExecutor"), "pip cache executor should be wired through the native adapter");
+assert(nativeAdapter.includes("requestMode: \"execute-pip-cache\""), "native adapter should send the execute-pip-cache request mode");
+assert(nativeAdapter.includes("spaceguard-pip-cache-request/v1"), "native adapter should send the pip cache request schema");
+assert(nativeAdapter.includes("pipCacheExecutor"), "native adapter should normalize pip cache executor flag");
+assert(rustScanner.includes("execute_pip_cache_cleanup"), "Rust native shell should implement pip cache cleanup");
+assert(rustScanner.includes("SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR"), "Rust native shell should require the pip cache executor feature flag");
+assert(rustScanner.includes("measure_pip_cache_roots"), "Rust native scanner should measure pip cache roots");
+assert(rustScanner.includes("pip_cache_target_reject_code"), "Rust native shell should validate pip cache targets");
+assert(rustScanner.includes("target-not-pip-cache"), "Rust native shell should reject non-pip cache targets");
+assert(rustScanner.includes("file_old_enough_for_pip_cache_delete"), "Rust pip cache cleanup should enforce the age threshold");
+assert(rustScanner.includes("pip_cache_file_forbidden"), "Rust pip cache cleanup should skip config and identity-like files");
 assert(app.includes("NpmCacheExecutorPanel"), "npm cache executor panel should be rendered");
 assert(app.includes("npm-cache-executor-panel"), "npm cache executor panel should be focusable");
 assert(app.includes("Run npm cache cleanup"), "npm cache executor should expose a user-triggered cleanup button");

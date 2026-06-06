@@ -3344,6 +3344,40 @@ const assert = require("assert");
   assert.strictEqual(shaderCacheSmokePacket.rows[0].envVar, "SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR", "shader cache smoke packet should name the executor env var");
   assert.strictEqual(shaderCacheSmokePacket.rows[0].requestMode, "execute-shader-cache", "shader cache smoke packet should name the native request mode");
   assert.strictEqual(shaderCacheSmokePacket.rows[0].panelId, "shader-cache-executor-panel", "shader cache smoke packet should point to the executor panel");
+  const pipCacheSmokePacket = guard.buildExecutorSmokeRunPacket({
+    executorPlan: guard.buildExecutorPlan({
+      selectedIds: new Set(["pip-cache"]),
+      actionList: guard.actions,
+      approvals: { groupConfirm: true, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
+      scanMode: "native-readonly"
+    }),
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      platform: "windows",
+      realRunEnabled: true,
+      destructiveCommands: true,
+      executorFlags: { pipCacheExecutor: true }
+    },
+    scanSession: { currentFingerprint: "scan-pip-cache-smoke" },
+    consentReceipt: { planId: "plan-pip-cache-smoke" },
+    executionProofHandoff: { status: "waiting-for-execution" },
+    planSnapshot: { id: "plan-pip-cache-smoke" },
+    nativeScan: {
+      findings: [
+        {
+          recipeId: "pip-cache",
+          status: "measured",
+          path: "C:\\Users\\qa\\AppData\\Local\\pip\\Cache",
+          bytes: 1024 * 1024 * 128
+        }
+      ]
+    }
+  });
+  assert.strictEqual(pipCacheSmokePacket.status, "ready-for-smoke", "enabled pip cache route should be ready for a smoke run");
+  assert.strictEqual(pipCacheSmokePacket.rows[0].envVar, "SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR", "pip cache smoke packet should name the executor env var");
+  assert.strictEqual(pipCacheSmokePacket.rows[0].requestMode, "execute-pip-cache", "pip cache smoke packet should name the native request mode");
+  assert.strictEqual(pipCacheSmokePacket.rows[0].panelId, "pip-cache-executor-panel", "pip cache smoke packet should point to the executor panel");
   const proofBlockedSmokePacket = guard.buildExecutorSmokeRunPacket({
     executorPlan: npmSmokeExecutorPlan,
     runtimeCapabilities: {

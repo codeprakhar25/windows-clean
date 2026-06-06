@@ -300,6 +300,7 @@ struct ExecutorFeatureFlags {
     user_cache_executor: bool,
     android_cache_executor: bool,
     shader_cache_executor: bool,
+    pip_cache_executor: bool,
     npm_cache_executor: bool,
     pnpm_store_executor: bool,
     recycle_bin_executor: bool,
@@ -413,6 +414,7 @@ fn scan_known_roots(request: Option<ScanRequest>) -> ScanResponse {
 
     findings.extend(measure_android_studio_roots(&request));
     findings.extend(measure_shader_cache_roots(&request));
+    findings.extend(measure_pip_cache_roots(&request));
     findings.extend(measure_browser_cache_roots(&request));
     findings.extend(measure_wsl_vhdx_roots(&request));
     findings.push(measure_installed_app_footprints(
@@ -701,6 +703,9 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
     }
     if request.request_mode.as_deref() == Some("execute-shader-cache") {
         return execute_shader_cache_cleanup(request);
+    }
+    if request.request_mode.as_deref() == Some("execute-pip-cache") {
+        return execute_pip_cache_cleanup(request);
     }
     if request.request_mode.as_deref() == Some("execute-npm-cache") {
         return execute_npm_cache_cleanup(request);
@@ -2536,6 +2541,174 @@ fn execute_shader_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutio
     }
 }
 
+fn execute_pip_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let flag_enabled = pip_cache_executor_enabled();
+    let rejections = pip_cache_execution_rejections(&request, flag_enabled);
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-pip-cache-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-pip-cache".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+
+    let entries = request
+        .actions
+        .into_iter()
+        .map(|action| {
+            let target_path = action.target_path.clone().unwrap_or_default();
+            let target_reject = pip_cache_target_reject_code(&target_path);
+            let route_match = action.route == route && route == "bounded-pip-cache-delete";
+            let can_execute = rejections.is_empty() && route_match && target_reject.is_none();
+
+            if can_execute {
+                let deleted = delete_pip_cache_target(&resolve_dry_run_target(&target_path));
+                return WriteExecutionEntry {
+                    id: action.id,
+                    title: action.title,
+                    route: action.route,
+                    result: if deleted.deleted_files > 0 || deleted.deleted_dirs > 0 {
+                        "executed".to_string()
+                    } else {
+                        "no-op".to_string()
+                    },
+                    reject_code: String::new(),
+                    bytes: deleted.deleted_bytes,
+                    preflight_status: "executed".to_string(),
+                    preflight_checks: vec![
+                        write_preflight_check(
+                            "route-bounded-pip-cache",
+                            "Bounded pip cache route",
+                            "passed",
+                            "Action route is bounded-pip-cache-delete.",
+                        ),
+                        write_preflight_check(
+                            "target-pip-cache",
+                            "pip cache target",
+                            "passed",
+                            "Target is the current user's LocalAppData\\pip\\Cache directory.",
+                        ),
+                        write_preflight_check(
+                            "feature-flag",
+                            "Executor feature flag",
+                            "passed",
+                            "SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR enabled pip cache cleanup.",
+                        ),
+                    ],
+                    note: format!(
+                        "pip cache executor deleted {} old cache file(s), {} empty cache dir(s), reclaimed {} byte(s), and skipped {} item(s).",
+                        deleted.deleted_files,
+                        deleted.deleted_dirs,
+                        deleted.deleted_bytes,
+                        deleted.skipped_count
+                    ),
+                };
+            }
+
+            let reject_code = if !route_match {
+                "route-not-bounded-pip-cache"
+            } else {
+                target_reject
+                    .or_else(|| rejections.first().copied())
+                    .unwrap_or("pip-cache-executor-disabled")
+            };
+
+            WriteExecutionEntry {
+                id: action.id,
+                title: action.title,
+                route: action.route,
+                result: "rejected".to_string(),
+                reject_code: reject_code.to_string(),
+                bytes: 0,
+                preflight_status: "target-blocked".to_string(),
+                preflight_checks: vec![
+                    write_preflight_check(
+                        "route-bounded-pip-cache",
+                        "Bounded pip cache route",
+                        if route_match { "passed" } else { "blocked" },
+                        if route_match {
+                            "Action route is bounded-pip-cache-delete."
+                        } else {
+                            "Only bounded-pip-cache-delete can use this executor."
+                        },
+                    ),
+                    write_preflight_check(
+                        "target-pip-cache",
+                        "pip cache target",
+                        if target_reject.is_none() { "passed" } else { "blocked" },
+                        if target_reject.is_none() {
+                            "Target is the current user's pip cache."
+                        } else {
+                            "Target is missing, forbidden, not the current user's LocalAppData\\pip\\Cache directory, or link-like."
+                        },
+                    ),
+                    write_preflight_check(
+                        "feature-flag",
+                        "Executor feature flag",
+                        if flag_enabled { "passed" } else { "blocked" },
+                        if flag_enabled {
+                            "pip cache executor feature flag is enabled."
+                        } else {
+                            "SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR is not enabled."
+                        },
+                    ),
+                ],
+                note: format!(
+                    "pip cache cleanup rejected with code {reject_code}. Plan {plan_id}; no bytes were removed for this action."
+                ),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let accepted = rejections.is_empty()
+        && entries
+            .iter()
+            .all(|entry| entry.result == "executed" || entry.result == "no-op");
+    let reclaimed = entries.iter().map(|entry| entry.bytes).sum::<u64>();
+    let mut warnings = pip_cache_execution_warnings(&rejections);
+    if accepted {
+        warnings.push(format!(
+            "pip cache cleanup completed for plan {plan_id}; reclaimed {reclaimed} byte(s). Run a fresh native scan and pip install if you need cache rehydration proof."
+        ));
+    }
+
+    WriteExecutionResponse {
+        mode: if accepted {
+            "native-pip-cache-executor"
+        } else {
+            "native-pip-cache-executor-rejected"
+        },
+        real_run_enabled: flag_enabled,
+        destructive_commands: flag_enabled,
+        accepted,
+        reason: if accepted {
+            format!("pip cache executor accepted the bounded cache target and reclaimed {reclaimed} byte(s).")
+        } else {
+            "pip cache executor rejected the request before mutation.".to_string()
+        },
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
+        entries,
+        warnings,
+    }
+}
+
 fn execute_pnpm_store_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
     let route = request.route.clone();
     let plan_id = request.plan_id.clone();
@@ -3071,6 +3244,7 @@ fn is_first_safe_write_route(route: &str) -> bool {
             | "bounded-user-cache-delete"
             | "bounded-android-cache-delete"
             | "launcher-cache-cleanup"
+            | "bounded-pip-cache-delete"
             | "bounded-npm-cache-delete"
             | "bounded-pnpm-store-delete"
     )
@@ -3319,6 +3493,30 @@ fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
                 },
             })
         }
+        "bounded-pip-cache-delete" => {
+            let enabled = cfg!(target_os = "windows") && pip_cache_executor_enabled();
+            Some(WriteExecutorScaffold {
+                route: "bounded-pip-cache-delete".to_string(),
+                title: "Bounded pip cache".to_string(),
+                feature_flag: "pipCacheExecutor".to_string(),
+                status: if enabled {
+                    "feature-flag-enabled".to_string()
+                } else {
+                    "feature-flag-disabled".to_string()
+                },
+                validation_status: if enabled {
+                    "pip-cache-only".to_string()
+                } else {
+                    "validation-required".to_string()
+                },
+                mutation_enabled: enabled,
+                reason: if enabled {
+                    "pip cache executor can remove old files and empty dirs under the current user's LocalAppData\\pip\\Cache root only.".to_string()
+                } else {
+                    "pip cache executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR is enabled on Windows.".to_string()
+                },
+            })
+        }
         "bounded-npm-cache-delete" => {
             let enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
             Some(WriteExecutorScaffold {
@@ -3383,6 +3581,7 @@ fn write_executor_scaffold_reject_code(route: &str) -> &'static str {
         "bounded-user-cache-delete" => "user-cache-executor-disabled",
         "bounded-android-cache-delete" => "android-cache-executor-disabled",
         "launcher-cache-cleanup" => "shader-cache-executor-disabled",
+        "bounded-pip-cache-delete" => "pip-cache-executor-disabled",
         "bounded-npm-cache-delete" => "npm-cache-executor-disabled",
         "bounded-pnpm-store-delete" => "pnpm-store-executor-disabled",
         _ => "real-executor-disabled",
@@ -3408,6 +3607,9 @@ fn write_action_target_reject_code(
     }
     if route == "launcher-cache-cleanup" {
         return shader_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
+    }
+    if route == "bounded-pip-cache-delete" {
+        return pip_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
     }
     if route == "bounded-npm-cache-delete" {
         return npm_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
@@ -3579,6 +3781,27 @@ fn write_target_forbidden(route: &str, target: &str) -> bool {
                 || target.contains("\\user data")
                 || target.contains("\\packages")
         }
+        "bounded-pip-cache-delete" => {
+            target.contains("downloads")
+                || target.contains("documents")
+                || target.contains("desktop")
+                || target.contains("node_modules")
+                || target.contains("\\.git")
+                || target.contains("\\windows\\")
+                || target.contains("\\program files")
+                || target.contains("\\programdata\\")
+                || target.contains("\\appdata\\roaming")
+                || target.contains("\\python")
+                || target.contains("\\site-packages")
+                || target.contains("\\scripts")
+                || target.contains("\\venv")
+                || target.contains("\\virtualenv")
+                || target.contains("\\projects")
+                || target.ends_with("\\pip")
+                || target.contains("\\pip\\pip.ini")
+                || target.contains("\\pip\\pip.conf")
+                || target.contains("\\selfcheck")
+        }
         "bounded-npm-cache-delete" => {
             target.contains("downloads")
                 || target.contains("documents")
@@ -3665,6 +3888,10 @@ fn write_target_allowed(route: &str, target: &str) -> bool {
                 || target.ends_with("\\appdata\\local\\intel\\shadercache")
                 || target.contains("\\appdata\\local\\intel\\shadercache\\")
         }
+        "bounded-pip-cache-delete" => {
+            target.ends_with("\\appdata\\local\\pip\\cache")
+                || target.contains("\\appdata\\local\\pip\\cache\\")
+        }
         "bounded-npm-cache-delete" => {
             target.ends_with("\\npm-cache\\_cacache") || target.contains("\\npm-cache\\_cacache\\")
         }
@@ -3730,6 +3957,9 @@ fn write_boundary_warning(code: &str) -> &'static str {
         }
         "shader-cache-executor-disabled" => {
             "Write request rejected: shaderCacheExecutor scaffold is feature-flag disabled."
+        }
+        "pip-cache-executor-disabled" => {
+            "Write request rejected: pipCacheExecutor scaffold is feature-flag disabled."
         }
         "npm-cache-executor-disabled" => {
             "Write request rejected: npmCacheExecutor scaffold is feature-flag disabled."
@@ -3818,6 +4048,12 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "route-not-launcher-cache-cleanup" => {
             "Write request rejected: shader cache cleanup requires route launcher-cache-cleanup."
         }
+        "target-not-pip-cache" => {
+            "Write request rejected: pip cache target is not the current user's LocalAppData\\pip\\Cache directory."
+        }
+        "route-not-bounded-pip-cache" => {
+            "Write request rejected: pip cache cleanup requires route bounded-pip-cache-delete."
+        }
         "target-not-npm-cache" => {
             "Write request rejected: npm cache target is not the current user's npm-cache\\_cacache directory."
         }
@@ -3873,6 +4109,10 @@ fn android_cache_executor_enabled() -> bool {
 
 fn shader_cache_executor_enabled() -> bool {
     runtime_feature_flag_enabled("SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR")
+}
+
+fn pip_cache_executor_enabled() -> bool {
+    runtime_feature_flag_enabled("SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR")
 }
 
 fn npm_cache_executor_enabled() -> bool {
@@ -4664,6 +4904,85 @@ fn shader_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
         .collect()
 }
 
+fn pip_cache_execution_rejections(
+    request: &WriteExecutionRequest,
+    flag_enabled: bool,
+) -> Vec<&'static str> {
+    let mut codes = Vec::new();
+    if !cfg!(target_os = "windows") {
+        codes.push("windows-required");
+    }
+    if !flag_enabled {
+        codes.push("pip-cache-executor-disabled");
+    }
+    if request.plan_id.trim().is_empty() {
+        codes.push("missing-plan-id");
+    }
+    if request
+        .scan_fingerprint
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-scan-fingerprint");
+    }
+    if request
+        .consent_plan_id
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-consent-plan-id");
+    }
+    if request.request_mode.as_deref() != Some("execute-pip-cache") {
+        codes.push("request-mode-invalid");
+    }
+    if request.route != "bounded-pip-cache-delete" {
+        codes.push("route-not-bounded-pip-cache");
+    }
+    if request.dry_run_only != Some(false) {
+        codes.push("dry-run-disabled-required");
+    }
+    if request.mutation_attempted != Some(true) {
+        codes.push("mutation-confirmation-required");
+    }
+    if request.actions.is_empty() {
+        codes.push("no-actions");
+    }
+    codes
+}
+
+fn pip_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
+    if codes.is_empty() {
+        return vec![
+            "pip cache executor removes old files and empty cache subdirectories under LocalAppData\\pip\\Cache only; Python installs, virtualenvs, site-packages, pip config, and package-manager commands remain forbidden.".to_string(),
+        ];
+    }
+    codes
+        .iter()
+        .map(|code| match *code {
+            "windows-required" => "pip cache cleanup is Windows-only in this build.",
+            "pip-cache-executor-disabled" => {
+                "Set SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR=1 before launching the Tauri app to enable pip cache cleanup."
+            }
+            "dry-run-disabled-required" => {
+                "pip cache cleanup requires dryRunOnly=false on the execute-pip-cache request."
+            }
+            "mutation-confirmation-required" => {
+                "pip cache cleanup requires mutationAttempted=true on the execute-pip-cache request."
+            }
+            "request-mode-invalid" => "pip cache cleanup requires requestMode=execute-pip-cache.",
+            "route-not-bounded-pip-cache" => {
+                "pip cache cleanup requires route bounded-pip-cache-delete."
+            }
+            _ => write_boundary_warning(code),
+        })
+        .map(String::from)
+        .collect()
+}
+
 fn npm_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
     if codes.is_empty() {
         return vec![
@@ -5155,6 +5474,46 @@ fn shader_cache_path_matches_current_user_roots(path: &Path) -> bool {
         .any(|(_, cache_path)| same_normalized_path(path, cache_path))
 }
 
+fn pip_cache_target_reject_code(value: &str) -> Option<&'static str> {
+    let path = resolve_dry_run_target(value);
+    if path.as_os_str().is_empty() {
+        return Some("target-missing");
+    }
+
+    let original = normalize_write_target(value);
+    let resolved = normalize_write_target(&path_to_string(&path));
+    if write_target_forbidden("bounded-pip-cache-delete", &original)
+        || write_target_forbidden("bounded-pip-cache-delete", &resolved)
+    {
+        return Some("target-forbidden");
+    }
+    if !write_target_allowed("bounded-pip-cache-delete", &original)
+        && !write_target_allowed("bounded-pip-cache-delete", &resolved)
+    {
+        return Some("target-not-pip-cache");
+    }
+
+    let Some(local_app_data) = env_path("LOCALAPPDATA").or_else(|| {
+        env_path("USERPROFILE")
+            .or_else(|| env_path("HOME"))
+            .map(|profile| profile.join("AppData").join("Local"))
+    }) else {
+        return Some("target-not-pip-cache");
+    };
+    let expected = local_app_data.join("pip").join("Cache");
+    if !same_normalized_path(&path, &expected) {
+        return Some("target-not-pip-cache");
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(&path) else {
+        return Some("target-missing");
+    };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Some("target-link-or-not-directory");
+    }
+    None
+}
+
 fn known_shader_cache_roots(local_app_data: &Path) -> Vec<(&'static str, PathBuf)> {
     vec![
         ("Direct3D shader cache", local_app_data.join("D3DSCache")),
@@ -5468,6 +5827,14 @@ struct AndroidCacheDeleteResult {
 
 #[derive(Default)]
 struct ShaderCacheDeleteResult {
+    deleted_bytes: u64,
+    deleted_files: u64,
+    deleted_dirs: u64,
+    skipped_count: u64,
+}
+
+#[derive(Default)]
+struct PipCacheDeleteResult {
     deleted_bytes: u64,
     deleted_files: u64,
     deleted_dirs: u64,
@@ -6138,6 +6505,150 @@ fn shader_cache_path_is_under_current_user_root(path: &Path) -> bool {
         .any(|(_, root)| path_is_under(path, root))
 }
 
+fn delete_pip_cache_target(root: &Path) -> PipCacheDeleteResult {
+    let mut result = PipCacheDeleteResult::default();
+    if pip_cache_target_reject_code(&path_to_string(root)).is_some() {
+        result.skipped_count += 1;
+        return result;
+    }
+
+    let mut queue = VecDeque::from([root.to_path_buf()]);
+    let mut dirs = Vec::new();
+    let mut visited = 0usize;
+    while let Some(path) = queue.pop_front() {
+        if visited >= 250_000 || result.deleted_files >= 120_000 {
+            result.skipped_count += 1;
+            break;
+        }
+        visited += 1;
+
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            result.skipped_count += 1;
+            continue;
+        };
+        if metadata.file_type().is_symlink() {
+            result.skipped_count += 1;
+            continue;
+        }
+        if metadata.is_file() {
+            delete_single_pip_cache_file(&path, &metadata, &mut result);
+            continue;
+        }
+        if metadata.is_dir() {
+            if pip_cache_dir_forbidden(&path, root) {
+                result.skipped_count += 1;
+                continue;
+            }
+            dirs.push(path.clone());
+            match fs::read_dir(&path) {
+                Ok(entries) => {
+                    for entry in entries.flatten() {
+                        queue.push_back(entry.path());
+                    }
+                }
+                Err(_) => result.skipped_count += 1,
+            }
+        }
+    }
+
+    dirs.sort_by(|left, right| right.components().count().cmp(&left.components().count()));
+    for dir in dirs {
+        if dir == root || pip_cache_dir_forbidden(&dir, root) {
+            continue;
+        }
+        match fs::remove_dir(&dir) {
+            Ok(_) => result.deleted_dirs = result.deleted_dirs.saturating_add(1),
+            Err(_) => result.skipped_count += 1,
+        }
+    }
+
+    result
+}
+
+fn delete_single_pip_cache_file(
+    path: &Path,
+    metadata: &fs::Metadata,
+    result: &mut PipCacheDeleteResult,
+) {
+    if !file_old_enough_for_pip_cache_delete(metadata) || pip_cache_file_forbidden(path) {
+        result.skipped_count += 1;
+        return;
+    }
+    let bytes = metadata.len();
+    match fs::remove_file(path) {
+        Ok(_) => {
+            result.deleted_bytes = result.deleted_bytes.saturating_add(bytes);
+            result.deleted_files = result.deleted_files.saturating_add(1);
+        }
+        Err(_) => result.skipped_count += 1,
+    }
+}
+
+fn file_old_enough_for_pip_cache_delete(metadata: &fs::Metadata) -> bool {
+    let Ok(modified) = metadata.modified() else {
+        return false;
+    };
+    let Ok(age) = SystemTime::now().duration_since(modified) else {
+        return false;
+    };
+    age.as_secs() >= 14 * 24 * 60 * 60
+}
+
+fn pip_cache_dir_forbidden(path: &Path, root: &Path) -> bool {
+    if path == root {
+        return false;
+    }
+    let clean = normalize_path(&path_to_string(path));
+    clean.contains("\\selfcheck")
+        || clean.contains("\\site-packages")
+        || clean.contains("\\venv")
+        || clean.contains("\\virtualenv")
+        || clean.contains("\\scripts")
+        || clean.contains("\\projects")
+}
+
+fn pip_cache_file_forbidden(path: &Path) -> bool {
+    if !pip_cache_path_is_under_current_user_root(path) {
+        return true;
+    }
+    let clean_path = normalize_path(&path_to_string(path));
+    if clean_path.contains("\\selfcheck\\") {
+        return true;
+    }
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.to_ascii_lowercase())
+        .unwrap_or_default();
+    file_name.is_empty()
+        || file_name.ends_with(".lock")
+        || file_name.ends_with(".db")
+        || file_name.ends_with(".sqlite")
+        || file_name.ends_with(".sqlite3")
+        || file_name.ends_with(".ini")
+        || file_name.ends_with(".conf")
+        || file_name.ends_with(".config")
+        || file_name.ends_with(".cfg")
+        || file_name.ends_with(".log")
+        || file_name.contains("credential")
+        || file_name.contains("password")
+        || file_name.contains("token")
+        || file_name.contains("session")
+        || file_name.contains("history")
+}
+
+fn pip_cache_path_is_under_current_user_root(path: &Path) -> bool {
+    let Some(local_app_data) = env_path("LOCALAPPDATA").or_else(|| {
+        env_path("USERPROFILE")
+            .or_else(|| env_path("HOME"))
+            .map(|profile| profile.join("AppData").join("Local"))
+    }) else {
+        return false;
+    };
+
+    path_is_under(path, &local_app_data.join("pip").join("Cache"))
+}
+
 fn delete_npm_cache_target(root: &Path) -> NpmCacheDeleteResult {
     let mut result = NpmCacheDeleteResult::default();
     if npm_cache_target_reject_code(&path_to_string(root)).is_some() {
@@ -6740,7 +7251,7 @@ fn openai_advice_row_schema() -> Value {
             "priority": { "type": "string", "enum": ["high", "medium", "low"] },
             "actionType": {
                 "type": "string",
-                "enum": ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-android-cache-executor", "run-shader-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+                "enum": ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-android-cache-executor", "run-shader-cache-executor", "run-pip-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             "targetId": { "type": "string" },
             "route": { "type": "string" }
@@ -6905,6 +7416,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
     let user_cache_enabled = cfg!(target_os = "windows") && user_cache_executor_enabled();
     let android_cache_enabled = cfg!(target_os = "windows") && android_cache_executor_enabled();
     let shader_cache_enabled = cfg!(target_os = "windows") && shader_cache_executor_enabled();
+    let pip_cache_enabled = cfg!(target_os = "windows") && pip_cache_executor_enabled();
     let npm_cache_enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
     let pnpm_store_enabled = cfg!(target_os = "windows") && pnpm_store_executor_enabled();
     let recycle_bin_enabled = cfg!(target_os = "windows") && recycle_bin_executor_enabled();
@@ -6921,6 +7433,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         || user_cache_enabled
         || android_cache_enabled
         || shader_cache_enabled
+        || pip_cache_enabled
         || npm_cache_enabled
         || pnpm_store_enabled
         || recycle_bin_enabled;
@@ -6952,6 +7465,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
             user_cache_executor: user_cache_enabled,
             android_cache_executor: android_cache_enabled,
             shader_cache_executor: shader_cache_enabled,
+            pip_cache_executor: pip_cache_enabled,
             npm_cache_executor: npm_cache_enabled,
             pnpm_store_executor: pnpm_store_enabled,
             recycle_bin_executor: recycle_bin_enabled,
@@ -8145,6 +8659,39 @@ fn measure_shader_cache_roots(request: &ScanRequest) -> Vec<ScanFinding> {
     }
 
     findings
+}
+
+fn measure_pip_cache_roots(request: &ScanRequest) -> Vec<ScanFinding> {
+    let Some(local) = env_path("LOCALAPPDATA").or_else(|| {
+        env_path("USERPROFILE")
+            .or_else(|| env_path("HOME"))
+            .map(|profile| profile.join("AppData").join("Local"))
+    }) else {
+        return vec![missing_finding(
+            "pip-cache",
+            "pip package cache",
+            "Python pip cache directory",
+            "LOCALAPPDATA was not available.",
+        )];
+    };
+
+    let path = local.join("pip").join("Cache");
+    if !path.exists() {
+        return vec![missing_finding(
+            "pip-cache",
+            "pip package cache",
+            "Python pip cache directory",
+            "No supported pip cache root was found.",
+        )];
+    }
+
+    vec![measure_path(
+        "pip-cache",
+        "pip package cache",
+        &path,
+        MeasureKind::FullTree,
+        request,
+    )]
 }
 
 fn measure_browser_cache_roots(request: &ScanRequest) -> Vec<ScanFinding> {

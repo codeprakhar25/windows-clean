@@ -349,6 +349,16 @@ export const executorPolicies = {
     verification: "Rescan Android cache roots and verify AVDs, SDKs, emulator images, Gradle data, and project folders stayed untouched.",
     guardrails: ["Age threshold", "Scanned Android cache roots only", "No AVD or SDK deletion", "No project source directories"]
   },
+  "pip-cache": {
+    route: "bounded-pip-cache-delete",
+    lane: "rebuildable",
+    label: "Bounded pip cache cleanup",
+    realRunEnabled: false,
+    dryRunSupported: true,
+    requiresNativeValidation: true,
+    verification: "Rescan pip cache and run pip install if cache rehydration proof is needed.",
+    guardrails: ["Age threshold", "Current-user pip cache only", "No Python install or virtualenv removal", "No site-packages deletion"]
+  },
   "npm-cache": {
     route: "bounded-npm-cache-delete",
     lane: "rebuildable",
@@ -685,6 +695,7 @@ export const releaseFeatureFlags = {
   userCacheExecutor: false,
   androidCacheExecutor: false,
   shaderCacheExecutor: false,
+  pipCacheExecutor: false,
   npmCacheExecutor: false,
   pnpmStoreExecutor: false,
   recycleBinExecutor: false,
@@ -778,6 +789,18 @@ export const toolNativeCommandSpecs = [
     status: "manual-boundary",
     evidence: "Use native scan evidence for current-user shader cache roots; compare cache roots before and after.",
     guardrails: ["No game install deletion", "No save-data deletion", "No launcher profile/config paths", "No shell execution in current build"]
+  },
+  {
+    id: "pip-cache",
+    tool: "filesystem",
+    actionId: "pip-cache",
+    route: "bounded-pip-cache-delete",
+    title: "pip package cache",
+    inspectCommand: "native scan LocalAppData pip cache",
+    futureCommand: "bounded pip cache cleanup only",
+    status: "manual-boundary",
+    evidence: "Use native scan evidence for the current-user pip cache root; compare root size before and after.",
+    guardrails: ["No Python install deletion", "No virtualenv deletion", "No site-packages deletion", "No shell execution in current build"]
   },
   {
     id: "windows-cleanup-api",
@@ -1077,6 +1100,17 @@ export const executorRouteRequirements = {
     fixtureIds: ["developer-tooling-fixture", "protected-path-fixture"],
     preconditions: ["Native Windows scan", "Current-user Android cache root", "Age threshold", "No AVD, SDK, emulator, Gradle, or project path"]
   },
+  "bounded-pip-cache-delete": {
+    title: "Bounded pip cache",
+    lane: "rebuildable",
+    phase: "second-safe",
+    implementation: "Delete only old files and empty cache dirs under the current user's LocalAppData pip Cache root.",
+    rollback: "pip redownloads missing wheels and HTTP cache entries on the next install; Python installs and virtualenvs remain untouched.",
+    proof: "Developer-tool fixture must show Python installs, virtualenvs, site-packages, pip config, and selfcheck data are not touched.",
+    requiredValidationIds: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "tool-native-dry-runs", "ledger-rescan-parity"],
+    fixtureIds: ["developer-tooling-fixture", "protected-path-fixture"],
+    preconditions: ["Native Windows scan", "Current-user LocalAppData pip cache root", "14-day age threshold", "No Python install, virtualenv, site-packages, or config path"]
+  },
   "bounded-npm-cache-delete": {
     title: "Bounded npm cache",
     lane: "rebuildable",
@@ -1354,6 +1388,20 @@ export const actions = [
     method: "Remove old npm _cacache content blobs and temp files",
     consequence: "Packages may be fetched again on the next install.",
     recommendation: "Clean old _cacache entries when package cache is a top space source.",
+    selectedByDefault: true,
+    executableInDemo: true
+  },
+  {
+    id: "pip-cache",
+    title: "pip package cache",
+    family: "Developer caches",
+    path: "%LocalAppData%\\pip\\Cache",
+    bytes: 2.8 * GB,
+    risk: "rebuildable",
+    gate: "groupConfirm",
+    method: "Remove old pip HTTP and wheel cache files from the scanned cache root",
+    consequence: "Python packages may be fetched again on the next pip install.",
+    recommendation: "Clean old pip cache entries when Python tooling is a top space source.",
     selectedByDefault: true,
     executableInDemo: true
   },
@@ -3946,6 +3994,7 @@ export function buildAIAgentIntegration({
         || runtimeCapabilities?.executorFlags?.userCacheExecutor
         || runtimeCapabilities?.executorFlags?.androidCacheExecutor
         || runtimeCapabilities?.executorFlags?.shaderCacheExecutor
+        || runtimeCapabilities?.executorFlags?.pipCacheExecutor
         || runtimeCapabilities?.executorFlags?.npmCacheExecutor
         || runtimeCapabilities?.executorFlags?.pnpmStoreExecutor
         || runtimeCapabilities?.executorFlags?.recycleBinExecutor
@@ -9648,6 +9697,7 @@ export function buildToolCommandInventory({
       spec.route === "bounded-user-cache-delete" ||
       spec.route === "bounded-android-cache-delete" ||
       spec.route === "launcher-cache-cleanup" ||
+      spec.route === "bounded-pip-cache-delete" ||
       spec.route === "bounded-npm-cache-delete" ||
       spec.route === "bounded-pnpm-store-delete" ||
       spec.route === "windows-cleanup-api";
@@ -13216,7 +13266,7 @@ export function buildReport({
           `- Detail-needed records: ${validationPack.validationChecks.filter((check) => check.evidenceValue && !check.evidenceComplete).length}`,
           `- VM scenarios: ${validationPack.vmScenarios.length}`,
           `- Fixture roots: ${validationPack.fixtureRoots.length}`,
-          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, downloads=${validationPack.runtime?.executorFlags?.downloadsCleanupExecutor ? "on" : "off"}, largeArchive=${validationPack.runtime?.executorFlags?.largeFileArchiveExecutor ? "on" : "off"}, projectDeps=${validationPack.runtime?.executorFlags?.projectDependencyExecutor ? "on" : "off"}, gradle=${validationPack.runtime?.executorFlags?.gradleCacheExecutor ? "on" : "off"}, npm=${validationPack.runtime?.executorFlags?.npmCacheExecutor ? "on" : "off"}, pnpm=${validationPack.runtime?.executorFlags?.pnpmStoreExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
+          `- Runtime executor flags: temp=${validationPack.runtime?.executorFlags?.tempCleanupExecutor ? "on" : "off"}, downloads=${validationPack.runtime?.executorFlags?.downloadsCleanupExecutor ? "on" : "off"}, largeArchive=${validationPack.runtime?.executorFlags?.largeFileArchiveExecutor ? "on" : "off"}, projectDeps=${validationPack.runtime?.executorFlags?.projectDependencyExecutor ? "on" : "off"}, gradle=${validationPack.runtime?.executorFlags?.gradleCacheExecutor ? "on" : "off"}, userCache=${validationPack.runtime?.executorFlags?.userCacheExecutor ? "on" : "off"}, android=${validationPack.runtime?.executorFlags?.androidCacheExecutor ? "on" : "off"}, shader=${validationPack.runtime?.executorFlags?.shaderCacheExecutor ? "on" : "off"}, pip=${validationPack.runtime?.executorFlags?.pipCacheExecutor ? "on" : "off"}, npm=${validationPack.runtime?.executorFlags?.npmCacheExecutor ? "on" : "off"}, pnpm=${validationPack.runtime?.executorFlags?.pnpmStoreExecutor ? "on" : "off"}, recycle=${validationPack.runtime?.executorFlags?.recycleBinExecutor ? "on" : "off"}, browser=${validationPack.runtime?.executorFlags?.browserCacheExecutor ? "on" : "off"}, toolNative=${validationPack.runtime?.executorFlags?.toolNativePruneExecutors ? "on" : "off"}`,
           `- Safety invariants waiting: ${validationPack.safetyInvariants.filter((item) => !item.passed).length}`,
           validationPack.validationChecks.length
             ? validationPack.validationChecks
@@ -13747,6 +13797,7 @@ function getTaskCapabilityForbiddenOperations(row, power) {
     row.route === "bounded-user-cache-delete" ||
     row.route === "bounded-android-cache-delete" ||
     row.route === "launcher-cache-cleanup" ||
+    row.route === "bounded-pip-cache-delete" ||
     row.route === "bounded-npm-cache-delete" ||
     row.route === "bounded-pnpm-store-delete"
   ) {
@@ -13754,6 +13805,9 @@ function getTaskCapabilityForbiddenOperations(row, power) {
   }
   if (row.route === "launcher-cache-cleanup") {
     forbidden.push("Touch game installs, saves, launcher profiles, configs, screenshots, or package folders.");
+  }
+  if (row.route === "bounded-pip-cache-delete") {
+    forbidden.push("Touch Python installs, virtualenvs, site-packages, pip config, or selfcheck data.");
   }
   if (power.id === "advanced-system-strategy") {
     forbidden.push("Change pagefile settings or interrupt WSL/system operations automatically.");
@@ -15786,6 +15840,13 @@ const executorSmokeRouteSpecs = {
     panelId: "shader-cache-executor-panel",
     actionLabel: "Run shader cache cleanup"
   },
+  "bounded-pip-cache-delete": {
+    flag: "pipCacheExecutor",
+    envVar: "SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR",
+    requestMode: "execute-pip-cache",
+    panelId: "pip-cache-executor-panel",
+    actionLabel: "Run pip cache cleanup"
+  },
   "bounded-npm-cache-delete": {
     flag: "npmCacheExecutor",
     envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
@@ -15917,6 +15978,7 @@ function getExecutorSmokeNativeTargetCount(route, nativeScan = null) {
     "bounded-user-cache-delete": ["user-cache"],
     "bounded-android-cache-delete": ["android-cache"],
     "launcher-cache-cleanup": ["steam-shader-cache"],
+    "bounded-pip-cache-delete": ["pip-cache"],
     "bounded-npm-cache-delete": ["npm-cache"],
     "bounded-pnpm-store-delete": ["pnpm-store"],
     "shell-recycle-bin": ["recycle-bin"]
@@ -16726,6 +16788,7 @@ function normalizeExecutorFeatureFlags(value = {}) {
     userCacheExecutor: Boolean(value.userCacheExecutor || value.user_cache_executor),
     androidCacheExecutor: Boolean(value.androidCacheExecutor || value.android_cache_executor),
     shaderCacheExecutor: Boolean(value.shaderCacheExecutor || value.shader_cache_executor),
+    pipCacheExecutor: Boolean(value.pipCacheExecutor || value.pip_cache_executor),
     npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
     pnpmStoreExecutor: Boolean(value.pnpmStoreExecutor || value.pnpm_store_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
@@ -16745,6 +16808,7 @@ function getScopedRealExecutorRoutes(runtimeCapabilities = {}) {
     flags.userCacheExecutor ? "bounded-user-cache-delete" : "",
     flags.androidCacheExecutor ? "bounded-android-cache-delete" : "",
     flags.shaderCacheExecutor ? "launcher-cache-cleanup" : "",
+    flags.pipCacheExecutor ? "bounded-pip-cache-delete" : "",
     flags.npmCacheExecutor ? "bounded-npm-cache-delete" : "",
     flags.pnpmStoreExecutor ? "bounded-pnpm-store-delete" : "",
     flags.recycleBinExecutor ? "shell-recycle-bin" : "",
@@ -16890,6 +16954,9 @@ function getFirstSafeAllowedRule(route, path) {
     if (text.includes("\\amd\\dxcache") || text.includes("\\amd\\glcache") || text.includes("\\amd\\vkcache")) return "AMD shader cache";
     if (text.includes("\\intel\\shadercache")) return "Intel shader cache";
   }
+  if (route === "bounded-pip-cache-delete") {
+    if (text.endsWith("\\appdata\\local\\pip\\cache") || text.includes("\\appdata\\local\\pip\\cache\\")) return "%LOCALAPPDATA%\\pip\\Cache";
+  }
   return "";
 }
 
@@ -16933,6 +17000,12 @@ function getFirstSafeForbiddenRule(route, path) {
     if (text.includes("\\saved games") || text.includes("\\saves") || text.includes("\\savegames")) return "Save-data paths are forbidden";
     if (text.includes("\\profiles") || text.includes("\\config") || text.includes("\\settings")) return "Launcher profile or config paths are forbidden";
     if (text.includes("\\screenshots") || text.includes("\\packages")) return "User media and package folders are forbidden";
+  }
+  if (route === "bounded-pip-cache-delete") {
+    if (text.includes("\\site-packages") || text.includes("\\python")) return "Python install and site-packages paths are forbidden";
+    if (text.includes("\\venv") || text.includes("\\virtualenv")) return "Virtualenv paths are forbidden";
+    if (text.includes("\\pip\\pip.ini") || text.includes("\\pip\\pip.conf")) return "pip config files are forbidden";
+    if (text.includes("\\selfcheck")) return "pip selfcheck data is forbidden";
   }
   return "";
 }

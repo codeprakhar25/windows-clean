@@ -29,7 +29,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-android-cache-executor", "run-shader-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-android-cache-executor", "run-shader-cache-executor", "run-pip-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -50,7 +50,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-android-cache-executor", "run-shader-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-android-cache-executor", "run-shader-cache-executor", "run-pip-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -246,6 +246,18 @@ export function buildOpenAIAgentContext({
       status: finding.status || "unknown"
     }))
     .slice(0, 8);
+  const pipCacheTargets = (nativeScan?.findings || [])
+    .filter((finding) => finding.recipeId === "pip-cache")
+    .filter((finding) => (finding.status === "measured" || finding.status === "limited") && finding.path)
+    .map((finding) => ({
+      id: "pip-cache",
+      title: finding.title || "pip package cache",
+      route: "bounded-pip-cache-delete",
+      path: finding.path,
+      bytes: Number(finding.bytes || 0),
+      status: finding.status || "unknown"
+    }))
+    .slice(0, 1);
   const pnpmStoreTargets = (nativeScan?.findings || [])
     .filter((finding) => finding.recipeId === "pnpm-store")
     .filter((finding) => (finding.status === "measured" || finding.status === "limited") && finding.path)
@@ -377,6 +389,7 @@ export function buildOpenAIAgentContext({
       userCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.userCacheExecutor),
       androidCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.androidCacheExecutor),
       shaderCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.shaderCacheExecutor),
+      pipCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.pipCacheExecutor),
       npmCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.npmCacheExecutor),
       pnpmStoreExecutor: Boolean(runtimeCapabilities?.executorFlags?.pnpmStoreExecutor),
       recycleBinExecutor: Boolean(runtimeCapabilities?.executorFlags?.recycleBinExecutor),
@@ -418,6 +431,7 @@ export function buildOpenAIAgentContext({
     userCacheTargets,
     androidCacheTargets,
     shaderCacheTargets,
+    pipCacheTargets,
     npmCacheTargets,
     pnpmStoreTargets,
     recycleBinTargets,
@@ -554,6 +568,12 @@ const OPENAI_RECOMMENDATION_EXECUTOR_POLICIES = {
     targetLabel: "scanned shader cache roots",
     route: "launcher-cache-cleanup",
     targetList: "shaderCacheTargets"
+  },
+  "run-pip-cache-executor": {
+    flag: "pipCacheExecutor",
+    targetLabel: "scanned pip cache root",
+    route: "bounded-pip-cache-delete",
+    targetList: "pipCacheTargets"
   },
   "run-npm-cache-executor": {
     flag: "npmCacheExecutor",
@@ -796,6 +816,8 @@ function getExecutorRecommendationButtonLabel(actionType) {
       return "Run Android cache";
     case "run-shader-cache-executor":
       return "Run shader cache";
+    case "run-pip-cache-executor":
+      return "Run pip cleanup";
     case "run-npm-cache-executor":
       return "Run npm cleanup";
     case "run-pnpm-store-executor":
@@ -827,6 +849,8 @@ function getExecutorRecommendationPanel(actionType) {
       return "android-cache-executor-panel";
     case "run-shader-cache-executor":
       return "shader-cache-executor-panel";
+    case "run-pip-cache-executor":
+      return "pip-cache-executor-panel";
     case "run-npm-cache-executor":
       return "npm-cache-executor-panel";
     case "run-pnpm-store-executor":
@@ -946,6 +970,7 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
       userCacheTargets: Array.isArray(context?.userCacheTargets) ? context.userCacheTargets.length : 0,
       androidCacheTargets: Array.isArray(context?.androidCacheTargets) ? context.androidCacheTargets.length : 0,
       shaderCacheTargets: Array.isArray(context?.shaderCacheTargets) ? context.shaderCacheTargets.length : 0,
+      pipCacheTargets: Array.isArray(context?.pipCacheTargets) ? context.pipCacheTargets.length : 0,
       npmCacheTargets: Array.isArray(context?.npmCacheTargets) ? context.npmCacheTargets.length : 0,
       pnpmStoreTargets: Array.isArray(context?.pnpmStoreTargets) ? context.pnpmStoreTargets.length : 0,
       recycleBinTargets: Array.isArray(context?.recycleBinTargets) ? context.recycleBinTargets.length : 0,
@@ -1433,6 +1458,7 @@ function normalizeActionType(value) {
     clean === "run-user-cache-executor" ||
     clean === "run-android-cache-executor" ||
     clean === "run-shader-cache-executor" ||
+    clean === "run-pip-cache-executor" ||
     clean === "run-npm-cache-executor" ||
     clean === "run-pnpm-store-executor" ||
     clean === "run-recycle-bin-executor" ||
