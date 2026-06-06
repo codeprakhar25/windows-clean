@@ -568,6 +568,7 @@ async fn openai_agent_advice(
             "You never claim you scanned the computer yourself; you only interpret the provided app context.",
             "You cannot approve gates, modify files, run shell commands, or delete data.",
             "Manual review targets such as installed app footprints, custom roots, and broad drive inventory rows are advisory only; never recommend direct folder deletion or automated uninstall.",
+            "Use context.agentTaskQueue.rows as the primary task list. When recommending one of those tasks, copy its actionType, targetId, and route exactly.",
             "When a scoped executor is visible, recommend the exact UI button only after the context says current consent and route-specific targets exist.",
             "If execution.proofAllowsNextExecutor is false, recommend post-run rescan or proof review instead of another executor.",
             "Use execution.consentMatchesPlan, execution.scanFingerprintPresent, and execution.proofStatus when explaining blockers.",

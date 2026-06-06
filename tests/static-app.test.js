@@ -363,6 +363,10 @@ assert(openAiAgent.includes("automated-uninstall"), "OpenAI installed app contex
 assert(openAiAgent.includes("planSnapshot"), "OpenAI context should include current plan snapshot identity");
 assert(openAiAgent.includes("proofAllowsNextExecutor"), "OpenAI context should include post-run proof state");
 assert(openAiAgent.includes("consentMatchesPlan"), "OpenAI context should include current consent state");
+assert(openAiAgent.includes("agentTaskQueue"), "OpenAI context should include a deterministic task queue");
+assert(openAiAgent.includes("spaceguard-openai-agent-task-queue/v1"), "OpenAI task queue should expose a schema version");
+assert(app.includes("Agent task queue"), "OpenAI panel should show the deterministic agent task queue");
+assert(rustScanner.includes("agentTaskQueue"), "native OpenAI prompt should tell the model to use the deterministic task queue");
 assert(openAiAgent.includes("scanFingerprintPresent"), "OpenAI run records should retain only compact scan-fingerprint evidence");
 assert(app.includes("Rescan proof"), "OpenAI panel should show post-run proof state");
 assert(openAiAgent.includes("spaceguard-openai-agent-run/v1"), "OpenAI adapter should expose local run provenance records");

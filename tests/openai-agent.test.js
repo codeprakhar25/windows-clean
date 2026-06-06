@@ -221,6 +221,18 @@ const assert = require("assert");
         }
       ]
     },
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      realRunEnabled: true,
+      executorFlags: {
+        userCacheExecutor: true,
+        androidCacheExecutor: true,
+        shaderCacheExecutor: true,
+        pipCacheExecutor: true,
+        toolNativePruneExecutors: true
+      }
+    },
     consentReceipt: { planId: "plan-openai-manual" },
     writeReadiness: { status: "ready-for-real-execution", readyForRealExecution: true },
     releaseGate: { readyForRealRun: true },
@@ -281,6 +293,11 @@ const assert = require("assert");
   assert(manualContext.wslCompactionWorkOrder.forbiddenActions.includes("run-optimize-vhd"), "OpenAI WSL compaction context should forbid Optimize-VHD execution");
   assert.strictEqual(manualContext.driveInventoryRows[0].canCreateExecutor, false, "drive inventory rows should be advisory-only in OpenAI context");
   assert.strictEqual(manualContext.customRootRows[0].manualOnly, true, "custom root rows should be manual-only in OpenAI context");
+  assert.strictEqual(manualContext.agentTaskQueue.schemaVersion, "spaceguard-openai-agent-task-queue/v1", "OpenAI context should include a deterministic agent task queue");
+  assert(manualContext.agentTaskQueue.rows.length > 0, "OpenAI task queue should rank real scan-derived tasks");
+  assert(manualContext.agentTaskQueue.rows.some((row) => row.actionType === "run-user-cache-executor" && row.targetId === "user-cache" && row.status === "ready"), "OpenAI task queue should expose ready scoped executor rows");
+  assert(manualContext.agentTaskQueue.rows.some((row) => row.actionType === "review-target" && row.targetId === "expo-shop-node-modules" && row.status === "needs-user-review"), "OpenAI task queue should expose review-only project dependency rows");
+  assert(manualContext.agentTaskQueue.rows.some((row) => row.actionType === "manual-only" && row.targetId === "app-old-ide" && row.manualOnly), "OpenAI task queue should keep app uninstall follow-up manual-only");
 
   let nativeInvocation = null;
   const nativeResult = await openai.requestOpenAIAgentAdvice({

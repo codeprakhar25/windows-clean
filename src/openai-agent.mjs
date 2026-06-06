@@ -366,6 +366,78 @@ export function buildOpenAIAgentContext({
       manualOnly: true,
       nextStep: row.nextStep || "Choose a manual disposition; no executor route is available."
     }));
+  const runtimeSummary = {
+    nativeAvailable: Boolean(runtimeCapabilities?.available),
+    windows: Boolean(runtimeCapabilities?.windows),
+    realRunEnabled: Boolean(runtimeCapabilities?.realRunEnabled),
+    destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
+    tempCleanupExecutor: Boolean(runtimeCapabilities?.executorFlags?.tempCleanupExecutor),
+    downloadsCleanupExecutor: Boolean(runtimeCapabilities?.executorFlags?.downloadsCleanupExecutor),
+    largeFileArchiveExecutor: Boolean(runtimeCapabilities?.executorFlags?.largeFileArchiveExecutor),
+    projectDependencyExecutor: Boolean(runtimeCapabilities?.executorFlags?.projectDependencyExecutor),
+    browserCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.browserCacheExecutor),
+    gradleCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.gradleCacheExecutor),
+    userCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.userCacheExecutor),
+    androidCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.androidCacheExecutor),
+    shaderCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.shaderCacheExecutor),
+    pipCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.pipCacheExecutor),
+    toolNativePruneExecutors: Boolean(runtimeCapabilities?.executorFlags?.toolNativePruneExecutors),
+    npmCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.npmCacheExecutor),
+    pnpmStoreExecutor: Boolean(runtimeCapabilities?.executorFlags?.pnpmStoreExecutor),
+    recycleBinExecutor: Boolean(runtimeCapabilities?.executorFlags?.recycleBinExecutor),
+    openAiAgentAdvice: Boolean(runtimeCapabilities?.openAiAgentAdvice),
+    openAiAdvisorConfigured: Boolean(runtimeCapabilities?.openAiAdvisorConfigured),
+    openAiKeySource: runtimeCapabilities?.openAiKeySource || "missing"
+  };
+  const executionSummary = {
+    planId: planSnapshot?.id || "",
+    scanFingerprint: scanSession?.currentFingerprint || "",
+    scanFingerprintPresent: Boolean(scanSession?.currentFingerprint),
+    consentPlanId: consentReceipt?.planId || "",
+    consentMatchesPlan: Boolean(planSnapshot?.id && consentReceipt?.planId && consentReceipt.planId === planSnapshot.id),
+    writeReadinessStatus: writeReadiness?.status || "unknown",
+    readyForRealExecution: Boolean(writeReadiness?.readyForRealExecution),
+    releaseReadyForRealRun: Boolean(releaseGate?.readyForRealRun),
+    validationReadyForRealRun: Boolean(validationPack?.readyForRealRun),
+    proofStatus: executionProofHandoff?.status || "waiting-for-execution",
+    proofAllowsNextExecutor: ["waiting-for-execution", "proof-complete"].includes(executionProofHandoff?.status || "waiting-for-execution"),
+    proofPrimary: executionProofHandoff?.primary || "",
+    canRunPostRunRescan: Boolean(executionProofHandoff?.canRunRescan),
+    rescanComparisonStatus: rescanComparison?.status || "not-run",
+    postRunScanEvidence: Boolean(rescanComparison?.postRunScanEvidence),
+    selectedExecutorRoutes: executableRows.map((row) => ({
+      id: row.id,
+      route: row.route,
+      title: row.title,
+      canExecute: Boolean(row.canExecute),
+      canSimulate: Boolean(row.canSimulate),
+      bytes: Number(row.bytes || 0)
+    }))
+  };
+  const agentTaskQueue = buildOpenAIAgentTaskQueue({
+    runtime: runtimeSummary,
+    execution: executionSummary,
+    executableRows,
+    projectDependencyReviewTargets,
+    reviewedDownloadsTargets,
+    reviewedProjectTargets,
+    largeFileArchiveTargets,
+    gradleCacheTargets,
+    userCacheTargets,
+    androidCacheTargets,
+    shaderCacheTargets,
+    pipCacheTargets,
+    dockerBuildCacheTargets,
+    npmCacheTargets,
+    pnpmStoreTargets,
+    recycleBinTargets,
+    browserCacheTargets,
+    manualReviewTargets,
+    installedAppUninstallWorkOrder,
+    wslCompactionWorkOrder,
+    driveInventoryRows,
+    customRootRows
+  });
 
   return {
     schemaVersion: "spaceguard-openai-agent-context/v1",
@@ -404,57 +476,12 @@ export function buildOpenAIAgentContext({
       candidateManifest: candidateSafetyManifest?.status || "unknown",
       storagePressure: storagePressureDiagnosis?.status || "unknown"
     },
-    runtime: {
-      nativeAvailable: Boolean(runtimeCapabilities?.available),
-      windows: Boolean(runtimeCapabilities?.windows),
-      realRunEnabled: Boolean(runtimeCapabilities?.realRunEnabled),
-      destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
-      tempCleanupExecutor: Boolean(runtimeCapabilities?.executorFlags?.tempCleanupExecutor),
-      downloadsCleanupExecutor: Boolean(runtimeCapabilities?.executorFlags?.downloadsCleanupExecutor),
-      largeFileArchiveExecutor: Boolean(runtimeCapabilities?.executorFlags?.largeFileArchiveExecutor),
-      projectDependencyExecutor: Boolean(runtimeCapabilities?.executorFlags?.projectDependencyExecutor),
-      browserCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.browserCacheExecutor),
-      gradleCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.gradleCacheExecutor),
-      userCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.userCacheExecutor),
-      androidCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.androidCacheExecutor),
-      shaderCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.shaderCacheExecutor),
-      pipCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.pipCacheExecutor),
-      toolNativePruneExecutors: Boolean(runtimeCapabilities?.executorFlags?.toolNativePruneExecutors),
-      npmCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.npmCacheExecutor),
-      pnpmStoreExecutor: Boolean(runtimeCapabilities?.executorFlags?.pnpmStoreExecutor),
-      recycleBinExecutor: Boolean(runtimeCapabilities?.executorFlags?.recycleBinExecutor),
-      openAiAgentAdvice: Boolean(runtimeCapabilities?.openAiAgentAdvice),
-      openAiAdvisorConfigured: Boolean(runtimeCapabilities?.openAiAdvisorConfigured),
-      openAiKeySource: runtimeCapabilities?.openAiKeySource || "missing"
-    },
-    execution: {
-      planId: planSnapshot?.id || "",
-      scanFingerprint: scanSession?.currentFingerprint || "",
-      scanFingerprintPresent: Boolean(scanSession?.currentFingerprint),
-      consentPlanId: consentReceipt?.planId || "",
-      consentMatchesPlan: Boolean(planSnapshot?.id && consentReceipt?.planId && consentReceipt.planId === planSnapshot.id),
-      writeReadinessStatus: writeReadiness?.status || "unknown",
-      readyForRealExecution: Boolean(writeReadiness?.readyForRealExecution),
-      releaseReadyForRealRun: Boolean(releaseGate?.readyForRealRun),
-      validationReadyForRealRun: Boolean(validationPack?.readyForRealRun),
-      proofStatus: executionProofHandoff?.status || "waiting-for-execution",
-      proofAllowsNextExecutor: ["waiting-for-execution", "proof-complete"].includes(executionProofHandoff?.status || "waiting-for-execution"),
-      proofPrimary: executionProofHandoff?.primary || "",
-      canRunPostRunRescan: Boolean(executionProofHandoff?.canRunRescan),
-      rescanComparisonStatus: rescanComparison?.status || "not-run",
-      postRunScanEvidence: Boolean(rescanComparison?.postRunScanEvidence),
-      selectedExecutorRoutes: executableRows.map((row) => ({
-        id: row.id,
-        route: row.route,
-        title: row.title,
-        canExecute: Boolean(row.canExecute),
-        canSimulate: Boolean(row.canSimulate),
-        bytes: Number(row.bytes || 0)
-      }))
-    },
+    runtime: runtimeSummary,
+    execution: executionSummary,
     selectedActions: selected,
     topFindings,
     executableRows,
+    agentTaskQueue,
     projectDependencyReviewTargets,
     reviewedDownloadsTargets,
     reviewedProjectTargets,
@@ -635,6 +662,250 @@ const OPENAI_RECOMMENDATION_EXECUTOR_POLICIES = {
     requiresPermanentConfirmation: true
   }
 };
+
+function buildOpenAIAgentTaskQueue({
+  runtime = {},
+  execution = {},
+  executableRows = [],
+  projectDependencyReviewTargets = [],
+  reviewedDownloadsTargets = [],
+  reviewedProjectTargets = [],
+  largeFileArchiveTargets = [],
+  gradleCacheTargets = [],
+  userCacheTargets = [],
+  androidCacheTargets = [],
+  shaderCacheTargets = [],
+  pipCacheTargets = [],
+  dockerBuildCacheTargets = [],
+  npmCacheTargets = [],
+  pnpmStoreTargets = [],
+  recycleBinTargets = [],
+  browserCacheTargets = [],
+  manualReviewTargets = [],
+  installedAppUninstallWorkOrder = null,
+  wslCompactionWorkOrder = null,
+  driveInventoryRows = [],
+  customRootRows = []
+} = {}) {
+  const rows = [
+    ...buildOpenAIExecutorTaskRows("run-temp-executor", executableRows.filter((row) => row.route === "known-temp-delete"), runtime, execution),
+    ...buildOpenAIExecutorTaskRows("run-downloads-cleanup-executor", reviewedDownloadsTargets, runtime, execution),
+    ...buildOpenAIExecutorTaskRows("run-large-file-archive-executor", largeFileArchiveTargets, runtime, execution),
+    ...buildOpenAIExecutorTaskRows("run-project-deps-executor", reviewedProjectTargets, runtime, execution),
+    ...buildOpenAIExecutorTaskRows("run-browser-cache-executor", browserCacheTargets, runtime, execution),
+    ...buildOpenAIExecutorTaskRows("run-gradle-cache-executor", gradleCacheTargets, runtime, execution),
+    ...buildOpenAIExecutorTaskRows("run-user-cache-executor", userCacheTargets, runtime, execution),
+    ...buildOpenAIExecutorTaskRows("run-android-cache-executor", androidCacheTargets, runtime, execution),
+    ...buildOpenAIExecutorTaskRows("run-shader-cache-executor", shaderCacheTargets, runtime, execution),
+    ...buildOpenAIExecutorTaskRows("run-pip-cache-executor", pipCacheTargets, runtime, execution),
+    ...buildOpenAIExecutorTaskRows("run-docker-build-cache-executor", dockerBuildCacheTargets, runtime, execution),
+    ...buildOpenAIExecutorTaskRows("run-npm-cache-executor", npmCacheTargets, runtime, execution),
+    ...buildOpenAIExecutorTaskRows("run-pnpm-store-executor", pnpmStoreTargets, runtime, execution),
+    ...buildOpenAIExecutorTaskRows("run-recycle-bin-executor", recycleBinTargets, runtime, execution),
+    ...buildOpenAIReviewTaskRows(projectDependencyReviewTargets, {
+      source: "project-dependency-review",
+      route: "item-review-project-cache",
+      focusActionId: "node-modules-old",
+      reason: "Ask the user to mark exact rebuildable dependency folders Remove before any project cleanup executor can run."
+    }),
+    ...buildOpenAIReviewTaskRows(manualReviewTargets, {
+      source: "installed-app-review",
+      actionType: "manual-only",
+      route: "manual-app-uninstall",
+      manualOnly: true,
+      reason: "Installed apps stay manual-only through Windows Settings or the vendor uninstaller."
+    }),
+    ...buildOpenAIReviewTaskRows(installedAppUninstallWorkOrder?.rows || [], {
+      source: "app-uninstall-work-order",
+      actionType: "manual-only",
+      route: "manual-app-uninstall",
+      manualOnly: true,
+      reason: "The user selected this app for manual uninstall follow-up; SpaceGuard must not run uninstallers."
+    }),
+    ...buildOpenAIReviewTaskRows(wslCompactionWorkOrder?.rows || [], {
+      source: "wsl-compaction-work-order",
+      actionType: "manual-only",
+      route: "advanced-checklist",
+      manualOnly: true,
+      reason: "WSL compaction is an advanced manual checklist outside SpaceGuard execution."
+    }),
+    ...buildOpenAIReviewTaskRows(driveInventoryRows, {
+      source: "drive-inventory",
+      actionType: "manual-only",
+      route: "drive-inventory-review",
+      manualOnly: true,
+      reason: "Top-level drive inventory is context for user inspection, not cleanup authority."
+    }),
+    ...buildOpenAIReviewTaskRows(customRootRows, {
+      source: "custom-root-triage",
+      actionType: "manual-only",
+      route: "custom-root-review",
+      manualOnly: true,
+      reason: "Custom roots require user disposition and never create an executor route."
+    })
+  ];
+  const dedupedRows = dedupeOpenAITaskRows(rows)
+    .sort(compareOpenAITaskRows)
+    .slice(0, 12);
+
+  return {
+    schemaVersion: "spaceguard-openai-agent-task-queue/v1",
+    advisoryOnly: true,
+    directToolAccess: false,
+    primary: dedupedRows.length
+      ? `${dedupedRows.length} deterministic task(s) are available for OpenAI to rank.`
+      : "Run a native scan or choose review targets before asking OpenAI for a cleanup plan.",
+    counts: {
+      total: dedupedRows.length,
+      ready: dedupedRows.filter((row) => row.status === "ready").length,
+      review: dedupedRows.filter((row) => row.status === "needs-user-review").length,
+      manual: dedupedRows.filter((row) => row.manualOnly).length,
+      blocked: dedupedRows.filter((row) => row.status === "blocked").length
+    },
+    rows: dedupedRows
+  };
+}
+
+function buildOpenAIExecutorTaskRows(actionType, targets = [], runtime = {}, execution = {}) {
+  const policy = OPENAI_RECOMMENDATION_EXECUTOR_POLICIES[actionType];
+  if (!policy) return [];
+  return (Array.isArray(targets) ? targets : []).slice(0, 12).map((target, index) => {
+    const status = getOpenAIExecutorTaskStatus({ policy, runtime, execution });
+    const targetId = String(target.id || `${policy.route}-${index + 1}`).trim();
+    const title = target.title || target.name || policy.targetLabel;
+    const bytes = Number(target.bytes || 0);
+    return {
+      id: `task-${actionType}-${targetId || index + 1}`,
+      source: "scoped-executor",
+      actionType,
+      targetId,
+      route: policy.route,
+      title,
+      bytes,
+      priority: getOpenAITaskPriority(bytes, status.status),
+      status: status.status,
+      canExecuteNow: status.status === "ready",
+      manualOnly: false,
+      executorFlag: policy.flag,
+      buttonLabel: getExecutorRecommendationButtonLabel(actionType),
+      reason: status.reason,
+      blocker: status.blocker,
+      checks: status.checks
+    };
+  });
+}
+
+function getOpenAIExecutorTaskStatus({ policy, runtime = {}, execution = {} }) {
+  const checks = [
+    buildBrokerCheck("native-runtime", "Native runtime", Boolean(runtime.nativeAvailable), runtime.nativeAvailable ? "native runtime available" : "desktop shell required"),
+    buildBrokerCheck("real-run-flag", "Scoped real-run flag", Boolean(runtime.realRunEnabled), runtime.realRunEnabled ? "real scoped execution exposed" : "real scoped execution disabled"),
+    buildBrokerCheck("feature-flag", "Route feature flag", Boolean(runtime[policy.flag]), runtime[policy.flag] ? `${policy.flag} enabled` : `${policy.flag} disabled`),
+    buildBrokerCheck("scan-fingerprint", "Scan fingerprint", Boolean(execution.scanFingerprintPresent), execution.scanFingerprintPresent ? "current scan fingerprint present" : "scan fingerprint missing"),
+    buildBrokerCheck("consent", "Consent receipt", Boolean(execution.consentMatchesPlan), execution.consentMatchesPlan ? "consent matches current plan" : "current plan consent missing"),
+    buildBrokerCheck("post-run-proof", "Post-run proof", Boolean(execution.proofAllowsNextExecutor), execution.proofAllowsNextExecutor ? `proof=${execution.proofStatus || "waiting-for-execution"}` : `proof=${execution.proofStatus || "blocked"}`)
+  ];
+  const failed = checks.find((check) => !check.passed);
+  if (failed) {
+    return {
+      status: "blocked",
+      blocker: failed.id,
+      reason: failed.detail,
+      checks
+    };
+  }
+  if (policy.requiresArchiveDestination) {
+    return {
+      status: "needs-user-review",
+      blocker: "archive-destination",
+      reason: "Choose an archive destination before recommending the large-file archive executor.",
+      checks
+    };
+  }
+  if (policy.requiresPermanentConfirmation) {
+    return {
+      status: "needs-user-review",
+      blocker: "permanent-confirmation",
+      reason: "Require explicit permanent-removal confirmation before recommending Recycle Bin emptying.",
+      checks
+    };
+  }
+  return {
+    status: "ready",
+    blocker: "",
+    reason: "All deterministic executor preconditions visible to the agent context are satisfied.",
+    checks
+  };
+}
+
+function buildOpenAIReviewTaskRows(targets = [], {
+  source,
+  actionType = "review-target",
+  route = "",
+  focusActionId = "",
+  manualOnly = false,
+  reason = ""
+} = {}) {
+  return (Array.isArray(targets) ? targets : []).slice(0, 12).map((target, index) => {
+    const targetId = String(target.id || `${source || "review"}-${index + 1}`).trim();
+    const bytes = Number(target.bytes || 0);
+    return {
+      id: `task-${source || actionType}-${targetId}`,
+      source: source || "review",
+      actionType,
+      targetId,
+      route: target.route || route,
+      focusActionId,
+      title: target.title || target.name || target.id || "Review target",
+      bytes,
+      priority: getOpenAITaskPriority(bytes, manualOnly ? "manual-only" : "needs-user-review"),
+      status: manualOnly ? "manual-only" : "needs-user-review",
+      canExecuteNow: false,
+      manualOnly: Boolean(manualOnly),
+      executorFlag: "",
+      buttonLabel: manualOnly ? "Open manual review" : "Open review",
+      reason: target.reason || reason,
+      blocker: manualOnly ? "manual-only" : "user-review-required",
+      checks: [
+        buildBrokerCheck("advisory-only", "Advisory boundary", true, "OpenAI can route this task to UI review only."),
+        buildBrokerCheck("target-id", "Known target", Boolean(targetId), targetId || "missing target id")
+      ]
+    };
+  });
+}
+
+function dedupeOpenAITaskRows(rows = []) {
+  const seen = new Set();
+  return (Array.isArray(rows) ? rows : []).filter((row) => {
+    const key = `${row.actionType || ""}::${row.targetId || ""}::${row.route || ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return Boolean(row.targetId || row.title);
+  });
+}
+
+function compareOpenAITaskRows(left, right) {
+  const statusScore = {
+    ready: 4,
+    "needs-user-review": 3,
+    "manual-only": 2,
+    blocked: 1
+  };
+  const leftStatus = statusScore[left.status] || 0;
+  const rightStatus = statusScore[right.status] || 0;
+  if (leftStatus !== rightStatus) return rightStatus - leftStatus;
+  const leftBytes = Number(left.bytes || 0);
+  const rightBytes = Number(right.bytes || 0);
+  if (leftBytes !== rightBytes) return rightBytes - leftBytes;
+  return String(left.title || "").localeCompare(String(right.title || ""));
+}
+
+function getOpenAITaskPriority(bytes = 0, status = "") {
+  const size = Number(bytes || 0);
+  if (status === "ready") return "high";
+  if (size >= 5 * 1024 ** 3) return "high";
+  if (size >= 1024 ** 3) return "medium";
+  return "low";
+}
 
 export function getOpenAIAgentRecommendationKey(row = {}) {
   return [
@@ -1152,6 +1423,7 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
       wslCompactionRows: Array.isArray(context?.wslCompactionWorkOrder?.rows) ? context.wslCompactionWorkOrder.rows.length : 0,
       driveInventoryRows: Array.isArray(context?.driveInventoryRows) ? context.driveInventoryRows.length : 0,
       customRootRows: Array.isArray(context?.customRootRows) ? context.customRootRows.length : 0,
+      agentTaskQueueRows: Array.isArray(context?.agentTaskQueue?.rows) ? context.agentTaskQueue.rows.length : 0,
       candidateSamples: Array.isArray(context?.candidateSamples) ? context.candidateSamples.length : 0
     },
     selectedActionIds: selectedActions.map((action) => action.id).filter(Boolean).slice(0, 24),
@@ -1223,6 +1495,7 @@ export async function requestOpenAIAgentAdvice({
       "You never claim you scanned the computer yourself; you only interpret the provided app context.",
       "You cannot approve gates, modify files, run shell commands, or delete data.",
       "Manual review targets such as installed app footprints, custom roots, and broad drive inventory rows are advisory only; never recommend direct folder deletion or automated uninstall.",
+      "Use context.agentTaskQueue.rows as the primary task list. When recommending one of those tasks, copy its actionType, targetId, and route exactly.",
       "When a scoped executor is visible, recommend the exact UI button only after the context says current consent and route-specific targets exist.",
       "If execution.proofAllowsNextExecutor is false, recommend post-run rescan or proof review instead of another executor.",
       "Use execution.consentMatchesPlan, execution.scanFingerprintPresent, and execution.proofStatus when explaining blockers.",

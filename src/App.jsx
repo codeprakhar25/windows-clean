@@ -7101,6 +7101,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, recomm
   const brokerRows = recommendationBroker?.rows || [];
   const brokerByKey = new Map(brokerRows.map((row) => [row.key, row]));
   const lastRun = runHistory[runHistory.length - 1] || null;
+  const agentTasks = context.agentTaskQueue?.rows || [];
   const nativeConfigured = Boolean(context.runtime.openAiAdvisorConfigured);
   const configured = Boolean(config.configured || nativeConfigured);
   const keySource = nativeConfigured ? context.runtime.openAiKeySource : config.keySource;
@@ -7149,6 +7150,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, recomm
           <QueueStat label="Rescan proof" value={rescanLabel} tone={execution.rescanComparisonStatus === "matched" ? "safe" : "review"} />
           <QueueStat label="AI ready" value={recommendationBroker?.counts?.ready || 0} tone={recommendationBroker?.counts?.ready ? "safe" : "review"} />
           <QueueStat label="AI blocked" value={recommendationBroker?.counts?.blocked || 0} tone={recommendationBroker?.counts?.blocked ? "restricted" : "safe"} />
+          <QueueStat label="Tasks" value={agentTasks.length} tone={agentTasks.length ? "advanced" : "review"} />
           <QueueStat label="AI runs" value={runHistory.length} tone={runHistory.length ? "safe" : "review"} />
         </div>
 
@@ -7176,6 +7178,29 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, recomm
             <span>Last advice: {lastRun ? `${lastRun.recommendedActions.length} recommendation(s)` : "none recorded"}</span>
           </div>
         </div>
+
+        {agentTasks.length ? (
+          <div className="rounded-md border bg-card p-3">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="mr-auto text-sm font-medium">Agent task queue</span>
+              <Badge variant="safe">{context.agentTaskQueue?.counts?.ready || 0} ready</Badge>
+              <Badge variant="review">{context.agentTaskQueue?.counts?.review || 0} review</Badge>
+              <Badge variant="outline">{context.agentTaskQueue?.counts?.manual || 0} manual</Badge>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2">
+              {agentTasks.slice(0, 4).map((task) => (
+                <div key={task.id} className="rounded-md border bg-muted/30 p-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="mr-auto min-w-0 text-sm font-medium">{task.title}</span>
+                    <Badge variant={task.status === "ready" ? "safe" : task.manualOnly ? "outline" : task.status === "blocked" ? "restricted" : "review"}>{task.status}</Badge>
+                    <Badge variant="outline">{formatBytes(task.bytes)}</Badge>
+                  </div>
+                  <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{task.actionType} / {task.route || "manual"}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <Textarea
           value={prompt}
