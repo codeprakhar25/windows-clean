@@ -250,11 +250,7 @@ const assert = require("assert");
       windows: true,
       realRunEnabled: true,
       executorFlags: {
-        userCacheExecutor: true,
-        androidCacheExecutor: true,
-        shaderCacheExecutor: true,
-        pipCacheExecutor: true,
-        toolNativePruneExecutors: true
+        userCacheExecutor: true
       }
     },
     consentReceipt: { planId: "plan-openai-manual" },
@@ -272,6 +268,8 @@ const assert = require("assert");
   assert.strictEqual(manualContext.execution.readyForRealExecution, true, "OpenAI context should expose write readiness");
   assert.strictEqual(manualContext.execution.validationReadyForRealRun, true, "OpenAI context should expose validation readiness");
   assert.strictEqual(manualContext.execution.releaseReadyForRealRun, true, "OpenAI context should expose release readiness");
+  assert.deepStrictEqual(manualContext.runtime.enabledScopedExecutorFlags, ["userCacheExecutor"], "OpenAI context should expose the enabled scoped executor flag list");
+  assert.strictEqual(manualContext.runtime.enabledScopedExecutorFlagCount, 1, "OpenAI context should expose the enabled scoped executor flag count");
   assert.strictEqual(manualContext.appBoundary.allowedActions.includes("recommend-manual-review"), true, "OpenAI context should permit manual-review recommendations");
   assert.strictEqual(manualContext.plan.id, "plan-openai-manual", "OpenAI context should include the current plan id");
   assert.strictEqual(manualContext.plan.selectedCount, 1, "OpenAI context should include current plan selection counts");
@@ -945,6 +943,62 @@ const assert = require("assert");
     }
   });
   assert.strictEqual(contextOnlyBroker.rows[0].status, "ready", "broker should use execution state embedded in the OpenAI context");
+  const multiFlagContext = openai.buildOpenAIAgentContext({
+    profile: { name: "Multi flag" },
+    scanMode: "real",
+    scanSession: { currentFingerprint: "scan-multi-flag" },
+    actionList: [
+      { id: "npm-cache", title: "npm cache", route: "bounded-npm-cache-delete", bytes: 1024, risk: "rebuildable", gate: "safe" }
+    ],
+    selectedIds: new Set(["npm-cache"]),
+    executorPlan: {
+      rows: [
+        { id: "npm-cache", title: "npm package cache", route: "bounded-npm-cache-delete", bytes: 1024, canExecute: true }
+      ]
+    },
+    nativeScan: {
+      findings: [
+        { recipeId: "npm-cache", title: "npm package cache", path: "C:\\Users\\real\\AppData\\Local\\npm-cache", bytes: 1024, status: "measured" }
+      ]
+    },
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      realRunEnabled: true,
+      executorFlags: {
+        npmCacheExecutor: true,
+        pnpmStoreExecutor: true
+      }
+    },
+    consentReceipt: { planId: "plan-multi-flag" },
+    planSnapshot: { id: "plan-multi-flag" },
+    executionProofHandoff: { status: "waiting-for-execution" }
+  });
+  assert.deepStrictEqual(
+    multiFlagContext.runtime.enabledScopedExecutorFlags,
+    ["npmCacheExecutor", "pnpmStoreExecutor"],
+    "OpenAI context should preserve multi-flag evidence for broker blocking"
+  );
+  assert(
+    multiFlagContext.agentTaskQueue.rows.some((row) =>
+      row.actionType === "run-npm-cache-executor" &&
+      row.status === "blocked" &&
+      row.checks.some((check) => check.id === "single-scoped-flag" && !check.passed)
+    ),
+    "OpenAI task queue should block scoped executor rows when multiple route flags are enabled"
+  );
+  const multiFlagBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: result.advice,
+    context: multiFlagContext,
+    executionState: {
+      planId: "plan-multi-flag",
+      scanFingerprint: "scan-multi-flag",
+      consentPlanId: "plan-multi-flag"
+    }
+  });
+  assert.strictEqual(multiFlagBroker.rows[0].status, "blocked", "OpenAI broker should block executor recommendations when multiple scoped flags are enabled");
+  assert.strictEqual(multiFlagBroker.rows[0].canAct, false, "multi-flag broker row should not route to execution");
+  assert(multiFlagBroker.rows[0].checks.some((check) => check.id === "single-scoped-flag" && !check.passed), "broker should expose the multi-flag blocker");
   const brokeredRunRecord = openai.buildOpenAIAgentRunRecord({
     result,
     context: { plan: { id: "plan-npm" }, runtime: { openAiKeySource: ".env:OPENAI_API_KEY" } },

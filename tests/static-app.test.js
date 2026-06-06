@@ -384,6 +384,7 @@ assert(openAiAgent.includes("automated-uninstall"), "OpenAI installed app contex
 assert(openAiAgent.includes("planSnapshot"), "OpenAI context should include current plan snapshot identity");
 assert(openAiAgent.includes("proofAllowsNextExecutor"), "OpenAI context should include post-run proof state");
 assert(openAiAgent.includes("consentMatchesPlan"), "OpenAI context should include current consent state");
+assert(openAiAgent.includes("enabledScopedExecutorFlags"), "OpenAI context should expose enabled scoped executor flags");
 assert(openAiAgent.includes("agentTaskQueue"), "OpenAI context should include a deterministic task queue");
 assert(openAiAgent.includes("spaceguard-openai-agent-task-queue/v1"), "OpenAI task queue should expose a schema version");
 assert(app.includes("Agent task queue"), "OpenAI panel should show the deterministic agent task queue");
@@ -396,6 +397,7 @@ assert(openAiAgent.includes("spaceguard-openai-recommendation-broker-summary/v1"
 assert(openAiAgent.includes("recommendationBroker: compactOpenAIAgentRecommendationBroker"), "OpenAI run records should include broker provenance");
 assert(openAiAgent.includes("directToolAccess: false"), "OpenAI recommendation broker should deny direct tool access");
 assert(openAiAgent.includes("feature-flag"), "OpenAI recommendation broker should check route feature flags");
+assert(openAiAgent.includes("single-scoped-flag"), "OpenAI recommendation broker should block multi-flag executor recommendations");
 assert(openAiAgent.includes("route-match"), "OpenAI recommendation broker should check that action type and route agree");
 assert(openAiAgent.includes("target-id-match"), "OpenAI recommendation broker should verify model target ids against deterministic targets");
 assert(openAiAgent.includes("recommendedRoute"), "OpenAI recommendation broker should retain the model-provided route for audit");

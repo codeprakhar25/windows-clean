@@ -376,6 +376,7 @@ export function buildOpenAIAgentContext({
       manualOnly: true,
       nextStep: row.nextStep || "Choose a manual disposition; no executor route is available."
     }));
+  const enabledScopedExecutorFlags = getOpenAIEnabledScopedExecutorFlags(runtimeCapabilities?.executorFlags || {});
   const runtimeSummary = {
     nativeAvailable: Boolean(runtimeCapabilities?.available),
     windows: Boolean(runtimeCapabilities?.windows),
@@ -395,6 +396,8 @@ export function buildOpenAIAgentContext({
     npmCacheExecutor: Boolean(runtimeCapabilities?.executorFlags?.npmCacheExecutor),
     pnpmStoreExecutor: Boolean(runtimeCapabilities?.executorFlags?.pnpmStoreExecutor),
     recycleBinExecutor: Boolean(runtimeCapabilities?.executorFlags?.recycleBinExecutor),
+    enabledScopedExecutorFlags,
+    enabledScopedExecutorFlagCount: enabledScopedExecutorFlags.length,
     openAiAgentAdvice: Boolean(runtimeCapabilities?.openAiAgentAdvice),
     openAiAdvisorConfigured: Boolean(runtimeCapabilities?.openAiAdvisorConfigured),
     openAiKeySource: runtimeCapabilities?.openAiKeySource || "missing"
@@ -673,6 +676,18 @@ const OPENAI_RECOMMENDATION_EXECUTOR_POLICIES = {
   }
 };
 
+function getOpenAIEnabledScopedExecutorFlags(runtimeOrFlags = {}) {
+  const rawFlags = runtimeOrFlags?.executorFlags || runtimeOrFlags?.executor_flags || runtimeOrFlags || {};
+  const seen = new Set();
+  return Object.values(OPENAI_RECOMMENDATION_EXECUTOR_POLICIES)
+    .filter((policy) => {
+      if (!policy?.flag || seen.has(policy.flag) || !rawFlags[policy.flag]) return false;
+      seen.add(policy.flag);
+      return true;
+    })
+    .map((policy) => policy.flag);
+}
+
 function buildOpenAIAgentTaskQueue({
   runtime = {},
   execution = {},
@@ -806,10 +821,14 @@ function buildOpenAIExecutorTaskRows(actionType, targets = [], runtime = {}, exe
 }
 
 function getOpenAIExecutorTaskStatus({ policy, runtime = {}, execution = {} }) {
+  const enabledScopedFlags = Array.isArray(runtime.enabledScopedExecutorFlags)
+    ? runtime.enabledScopedExecutorFlags
+    : getOpenAIEnabledScopedExecutorFlags(runtime);
   const checks = [
     buildBrokerCheck("native-runtime", "Native runtime", Boolean(runtime.nativeAvailable), runtime.nativeAvailable ? "native runtime available" : "desktop shell required"),
     buildBrokerCheck("real-run-flag", "Scoped real-run flag", Boolean(runtime.realRunEnabled), runtime.realRunEnabled ? "real scoped execution exposed" : "real scoped execution disabled"),
     buildBrokerCheck("feature-flag", "Route feature flag", Boolean(runtime[policy.flag]), runtime[policy.flag] ? `${policy.flag} enabled` : `${policy.flag} disabled`),
+    buildBrokerCheck("single-scoped-flag", "Single scoped flag", enabledScopedFlags.length <= 1, enabledScopedFlags.length <= 1 ? `${enabledScopedFlags.length} scoped executor flag(s) enabled` : `Turn off all but one scoped executor flag: ${enabledScopedFlags.join(", ")}`),
     buildBrokerCheck("scan-fingerprint", "Scan fingerprint", Boolean(execution.scanFingerprintPresent), execution.scanFingerprintPresent ? "current scan fingerprint present" : "scan fingerprint missing"),
     buildBrokerCheck("consent", "Consent receipt", Boolean(execution.consentMatchesPlan), execution.consentMatchesPlan ? "consent matches current plan" : "current plan consent missing"),
     buildBrokerCheck("post-run-proof", "Post-run proof", Boolean(execution.proofAllowsNextExecutor), execution.proofAllowsNextExecutor ? `proof=${execution.proofStatus || "waiting-for-execution"}` : `proof=${execution.proofStatus || "blocked"}`)
@@ -1092,6 +1111,9 @@ function buildSelectionRecommendationBrokerRow({ row = {}, actionType, key, cont
 function buildExecutorRecommendationBrokerRow({ row, actionType, key, policy, context, executionState }) {
   const runtime = context?.runtime || {};
   const execution = context?.execution || {};
+  const enabledScopedFlags = Array.isArray(runtime.enabledScopedExecutorFlags)
+    ? runtime.enabledScopedExecutorFlags
+    : getOpenAIEnabledScopedExecutorFlags(runtime);
   const planId = executionState.planId || execution.planId || context?.plan?.id || "";
   const consentPlanId = executionState.consentPlanId || execution.consentPlanId || "";
   const scanFingerprint = executionState.scanFingerprint || execution.scanFingerprint || "";
@@ -1109,6 +1131,7 @@ function buildExecutorRecommendationBrokerRow({ row, actionType, key, policy, co
     buildBrokerCheck("native-runtime", "Native runtime", Boolean(runtime.nativeAvailable), runtime.nativeAvailable ? "Tauri native runtime is available." : "Use the desktop shell before running scoped executors."),
     buildBrokerCheck("real-run-flag", "Scoped real-run flag", Boolean(runtime.realRunEnabled), runtime.realRunEnabled ? "Runtime exposes scoped real execution." : "Scoped real execution is disabled."),
     buildBrokerCheck("feature-flag", "Route feature flag", Boolean(runtime[policy.flag]), runtime[policy.flag] ? `${policy.flag} is enabled.` : `${policy.flag} is disabled.`),
+    buildBrokerCheck("single-scoped-flag", "Single scoped flag", enabledScopedFlags.length <= 1, enabledScopedFlags.length <= 1 ? `${enabledScopedFlags.length} scoped executor flag(s) enabled.` : `Turn off all but one scoped executor flag: ${enabledScopedFlags.join(", ")}`),
     buildBrokerCheck("route-match", "Action-route match", routeMatches, routeMatches ? `${actionType} maps to ${policy.route}.` : `OpenAI returned route ${recommendedRoute || "missing"} for ${actionType}; expected ${policy.route}.`),
     buildBrokerCheck("target-id-match", "Selected target", targetIdMatches, targetId ? `target=${targetId}; available=${targets.map((target) => target.id).filter(Boolean).join(",") || "none"}` : "OpenAI did not name a specific target id."),
     buildBrokerCheck("post-run-proof", "Post-run proof", proofAllowsExecution, proofAllowsExecution ? `proof=${proofStatus}` : `Finish post-run proof before another scoped executor. proof=${proofStatus}`),
@@ -1383,6 +1406,10 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
       windows: Boolean(context?.runtime?.windows),
       realRunEnabled: Boolean(context?.runtime?.realRunEnabled),
       destructiveCommands: Boolean(context?.runtime?.destructiveCommands),
+      enabledScopedExecutorFlags: Array.isArray(context?.runtime?.enabledScopedExecutorFlags)
+        ? context.runtime.enabledScopedExecutorFlags.slice(0, 14)
+        : getOpenAIEnabledScopedExecutorFlags(context?.runtime || {}),
+      enabledScopedExecutorFlagCount: Number(context?.runtime?.enabledScopedExecutorFlagCount || getOpenAIEnabledScopedExecutorFlags(context?.runtime || {}).length),
       toolNativePruneExecutors: Boolean(context?.runtime?.toolNativePruneExecutors),
       openAiAgentAdvice: Boolean(context?.runtime?.openAiAgentAdvice),
       openAiAdvisorConfigured: Boolean(context?.runtime?.openAiAdvisorConfigured)
