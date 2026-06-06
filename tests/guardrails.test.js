@@ -2519,6 +2519,16 @@ const assert = require("assert");
     scanMode: "native-readonly",
     nativeScan: { available: true, generatedAt: "2026-06-04T09:59:00.000Z", findings: [] }
   });
+  assert.strictEqual(
+    tempPostRunVerification.status,
+    "needs-post-run-native-rescan",
+    "post-run verification should reject native scans older than the ledger timestamp"
+  );
+  assert.strictEqual(
+    tempPostRunVerification.checkpoints[0].status,
+    "needs-post-run-native-rescan",
+    "checkpoint should wait for scan evidence captured after execution"
+  );
   const earlyNativeComparison = guard.buildRescanComparison({
     postRunVerification: tempPostRunVerification,
     ledger: tempLedger,

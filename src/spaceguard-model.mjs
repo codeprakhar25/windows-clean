@@ -11806,7 +11806,10 @@ export function buildPostRunVerificationPlan({
   const currentEntries = planId ? ledger.filter((entry) => entry.planId === planId) : ledger;
   const staleEntries = planId ? ledger.filter((entry) => entry.planId !== planId) : [];
   const rows = executorPlan?.rows || [];
-  const nativeEvidence = scanMode === "native-readonly" && Boolean(nativeScan);
+  const nativeEvidence = scanMode === "native-readonly" && Boolean(nativeScan?.available !== false && nativeScan);
+  const latestExecutionAt = latestComparableTimestamp(currentEntries.map((entry) => entry.executedAt));
+  const scanGeneratedAt = nativeScan?.generatedAt || "";
+  const postRunScanEvidence = Boolean(nativeEvidence && latestExecutionAt && isTimestampAtOrAfter(scanGeneratedAt, latestExecutionAt));
   const ledgerSource = inferLedgerSourceFromEntries(currentEntries.length ? currentEntries : ledger, scanMode);
   const runKind = getLedgerRunKind(ledgerSource);
   const runLabel = getLedgerRunLabel(ledgerSource);
@@ -11832,12 +11835,18 @@ export function buildPostRunVerificationPlan({
       consequence: row.consequence || "",
       status: skipped
         ? "skipped"
-        : nativeEvidence
+        : postRunScanEvidence
           ? "ready-for-comparison"
-          : "needs-native-rescan",
+          : nativeEvidence
+            ? "needs-post-run-native-rescan"
+            : "needs-native-rescan",
       evidenceRequired: skipped
         ? "Confirm skipped action remains visible in the ledger."
-        : row.verification || "Capture a read-only rescan of the affected root."
+        : postRunScanEvidence
+          ? row.verification || "Compare the affected root with post-run native scan evidence."
+          : latestExecutionAt
+            ? `Capture a read-only rescan after ledger timestamp ${latestExecutionAt}.`
+            : row.verification || "Capture a read-only rescan of the affected root."
     };
   });
 
@@ -11849,6 +11858,9 @@ export function buildPostRunVerificationPlan({
       planId,
       current: false,
       nativeEvidence,
+      postRunScanEvidence: false,
+      latestExecutionAt,
+      scanGeneratedAt,
       source: "",
       runKind: "not-run",
       runLabel: "Not run",
@@ -11869,6 +11881,9 @@ export function buildPostRunVerificationPlan({
       planId,
       current: false,
       nativeEvidence,
+      postRunScanEvidence: false,
+      latestExecutionAt,
+      scanGeneratedAt,
       source: ledgerSource,
       runKind,
       runLabel,
@@ -11883,15 +11898,22 @@ export function buildPostRunVerificationPlan({
 
   const skippedCount = checkpoints.filter((checkpoint) => checkpoint.status === "skipped").length;
   const expectedBytes = checkpoints.reduce((sum, checkpoint) => sum + checkpoint.expectedBytes, 0);
-  const status = nativeEvidence ? "ready-for-comparison" : "needs-native-rescan";
+  const status = postRunScanEvidence
+    ? "ready-for-comparison"
+    : nativeEvidence
+      ? "needs-post-run-native-rescan"
+      : "needs-native-rescan";
 
   return {
     schemaVersion: "spaceguard-post-run-verification/v1",
     status,
-    tone: nativeEvidence ? "safe" : "review",
+    tone: postRunScanEvidence ? "safe" : "review",
     planId,
     current: true,
     nativeEvidence,
+    postRunScanEvidence,
+    latestExecutionAt,
+    scanGeneratedAt,
     source: ledgerSource,
     runKind,
     runLabel,
@@ -11899,10 +11921,12 @@ export function buildPostRunVerificationPlan({
     checkpoints,
     skippedCount,
     expectedBytes,
-    detail: nativeEvidence
-      ? `${checkpoints.length} ${runLabel.toLowerCase()} checkpoint(s) can be compared against the current native scan evidence.`
+    detail: postRunScanEvidence
+      ? `${checkpoints.length} ${runLabel.toLowerCase()} checkpoint(s) can be compared against post-run native scan evidence.`
+      : nativeEvidence
+        ? `${checkpoints.length} ${runLabel.toLowerCase()} checkpoint(s) need a native read-only scan captured after the ledger timestamp.`
       : `${checkpoints.length} ${runLabel.toLowerCase()} checkpoint(s) need native read-only rescan evidence before validation.`,
-    steps: nativeEvidence
+    steps: postRunScanEvidence
       ? ["Compare each affected root with the ledger.", "Record skipped files and byte deltas.", "Export the verification checklist with the run record."]
       : scopedNativeExecution
         ? ["Run the Windows desktop read-only scan after scoped execution.", "Compare affected roots with the ledger.", "Block another scoped execution until rescan parity is reviewed."]
