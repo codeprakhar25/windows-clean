@@ -46,6 +46,9 @@ const script = path.join(root, "scripts", "run-setup-doctor.mjs");
   assert.strictEqual(pnpmFlag.scopedExecutors.selectedRoute.routeInput, "pnpm-store", "setup doctor should map pnpm flag to pnpm-store route alias");
   assert(pnpmFlag.commands.routeSetup.includes("npm run setup:route -- --route pnpm-store"), "setup doctor should expose selected pnpm route setup command");
   assert(pnpmFlag.commands.routeValidation.includes("npm run validate:route -- --route pnpm-store"), "setup doctor should expose selected pnpm validation command");
+  assert(pnpmFlag.commands.openAiFixtureSmoke.includes("npm run openai:smoke:fixture -- --route pnpm-store"), "setup doctor should expose selected pnpm fixture smoke command");
+  assert(pnpmFlag.commands.openAiSmoke.includes("npm run openai:smoke -- --route pnpm-store"), "setup doctor should expose selected pnpm OpenAI smoke command");
+  assert(pnpmFlag.openAi.fixtureSmokeCommand.includes("--route pnpm-store"), "setup doctor OpenAI summary should be route-specific");
   assert(pnpmFlag.nextSteps.some((step) => step.includes("pnpm-store")), "setup doctor next steps should name the selected route alias");
 
   const noFlag = runDoctor();

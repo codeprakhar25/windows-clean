@@ -16215,8 +16215,8 @@ function buildScopedExecutorSetupCommands(primaryRow = null) {
       setupDoctor: "npm run setup:doctor",
       setupRoute: "npm run setup:route -- --route npm-cache",
       validateRoute: "npm run validate:route -- --route npm-cache",
-      openAiFixtureSmoke: "npm run openai:smoke:fixture",
-      openAiSmoke: "npm run openai:smoke",
+      openAiFixtureSmoke: "npm run openai:smoke:fixture -- --route npm-cache",
+      openAiSmoke: "npm run openai:smoke -- --route npm-cache",
       nativeDev: "npm run native:dev",
       panelId: "",
       requestMode: ""
@@ -16234,8 +16234,8 @@ function buildScopedExecutorSetupCommands(primaryRow = null) {
     setupDoctor: "npm run setup:doctor",
     setupRoute: `npm run setup:route -- --route ${routeInput}`,
     validateRoute: `npm run validate:route -- --route ${routeInput}`,
-    openAiFixtureSmoke: "npm run openai:smoke:fixture",
-    openAiSmoke: "npm run openai:smoke",
+    openAiFixtureSmoke: `npm run openai:smoke:fixture -- --route ${routeInput}`,
+    openAiSmoke: `npm run openai:smoke -- --route ${routeInput}`,
     nativeDev: "npm run native:dev",
     panelId: primaryRow.panelId || "",
     requestMode: primaryRow.requestMode || ""

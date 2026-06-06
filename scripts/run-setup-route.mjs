@@ -237,8 +237,8 @@ export function buildPacket({ routeInput = "", env = {} } = {}) {
       enablePowerShell: `$env:${selected.envVar}="1"`,
       disablePowerShell: `$env:${selected.envVar}="0"`,
       setupRoute: `npm run setup:route -- --route ${selected.aliases[0] || selected.route}`,
-      fixtureOpenAiSmoke: "npm run openai:smoke:fixture",
-      openAiSmoke: "npm run openai:smoke",
+      fixtureOpenAiSmoke: `npm run openai:smoke:fixture -- --route ${selected.aliases[0] || selected.route}`,
+      openAiSmoke: `npm run openai:smoke -- --route ${selected.aliases[0] || selected.route}`,
       nativeDev: "npm run native:dev"
     },
     nextSteps: buildNextSteps({ status, selected, otherEnabled })

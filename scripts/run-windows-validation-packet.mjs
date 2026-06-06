@@ -84,14 +84,15 @@ export function buildWindowsValidationPacket({ routeInput = "", env = {} } = {})
 }
 
 function buildCommands(selected) {
+  const routeInput = selected.aliases?.[0] || selected.route;
   return {
     setupDoctor: "npm run setup:doctor",
-    setupRoute: `npm run setup:route -- --route ${selected.aliases?.[0] || selected.route}`,
-    validateRoute: `npm run validate:route -- --route ${selected.aliases?.[0] || selected.route}`,
+    setupRoute: `npm run setup:route -- --route ${routeInput}`,
+    validateRoute: `npm run validate:route -- --route ${routeInput}`,
     enablePowerShell: `$env:${selected.envVar}="1"`,
     disablePowerShell: `$env:${selected.envVar}="0"`,
-    openAiFixtureSmoke: "npm run openai:smoke:fixture",
-    openAiSmoke: "npm run openai:smoke",
+    openAiFixtureSmoke: `npm run openai:smoke:fixture -- --route ${routeInput}`,
+    openAiSmoke: `npm run openai:smoke -- --route ${routeInput}`,
     nativeDev: "npm run native:dev"
   };
 }
@@ -178,7 +179,7 @@ function buildOperatorSteps(selected, status) {
     "Run npm run setup:doctor and keep the JSON output.",
     `Run npm run setup:route -- --route ${selected.aliases?.[0] || selected.route}.`,
     `Enable only ${selected.envVar}=1 before launching the desktop shell.`,
-    "Run npm run openai:smoke:fixture; if OPENAI_API_KEY is configured, also run npm run openai:smoke.",
+    `Run npm run openai:smoke:fixture -- --route ${selected.aliases?.[0] || selected.route}; if OPENAI_API_KEY is configured, also run npm run openai:smoke -- --route ${selected.aliases?.[0] || selected.route}.`,
     "Launch npm run native:dev.",
     "Run real scan and export before-scan evidence.",
     `Open ${selected.panelId} and verify route ${selected.route} with requestMode ${selected.requestMode}.`,

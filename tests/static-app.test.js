@@ -417,6 +417,8 @@ assert(openAiSmokeScript.includes("requiredSmokeRecommendation"), "OpenAI smoke 
 assert(openAiSmokeScript.includes("validateSmokeAdvice"), "OpenAI smoke script should validate brokered advice before passing");
 assert(openAiSmokeScript.includes("OpenAI smoke did not return the required broker-ready recommendation"), "OpenAI smoke script should fail on unbrokered fixture advice");
 assert(openAiSmokeScript.includes("--fixture-only"), "OpenAI smoke script should support a no-network fixture-only mode");
+assert(openAiSmokeScript.includes("--route"), "OpenAI smoke script should support selected route validation");
+assert(openAiSmokeScript.includes("bounded-pnpm-store-delete"), "OpenAI smoke script should include pnpm store route fixture coverage");
 assert(openAiSmokeScript.includes("buildFixtureOnlyAdviceResult"), "OpenAI smoke script should validate local fixture advice without an API key");
 assert(packageJson.includes("\"openai:smoke\""), "package scripts should expose the OpenAI fixture smoke command");
 assert(packageJson.includes("\"openai:smoke:fixture\""), "package scripts should expose the no-network OpenAI fixture smoke command");
@@ -425,6 +427,7 @@ assert(packageJson.includes("\"setup:route\""), "package scripts should expose t
 assert(packageJson.includes("\"validate:route\""), "package scripts should expose the Windows route validation packet command");
 assert(setupDoctorScript.includes("OPENAI_API_KEY"), "setup doctor should check OpenAI key configuration");
 assert(setupDoctorScript.includes("openai:smoke:fixture"), "setup doctor should expose the local fixture smoke command");
+assert(setupDoctorScript.includes("openai:smoke:fixture -- --route"), "setup doctor should expose route-specific fixture smoke commands");
 assert(setupDoctorScript.includes("setup:route"), "setup doctor should expose the route setup packet command");
 assert(setupDoctorScript.includes("validate:route"), "setup doctor should expose the route validation packet command");
 assert(setupDoctorScript.includes("multi-flag-blocked"), "setup doctor should expose multi-flag blocking status");
@@ -438,10 +441,12 @@ assert(setupRouteScript.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "route
 assert(setupRouteScript.includes("execute-npm-cache"), "route setup script should report native request modes");
 assert(setupRouteScript.includes("npm-cache-executor-panel"), "route setup script should report executor panel ids");
 assert(setupRouteScript.includes("npm run setup:route -- --route npm-cache"), "route setup script should document route usage");
+assert(setupRouteScript.includes("openai:smoke:fixture -- --route"), "route setup script should expose route-specific fixture smoke commands");
 assert(validationRouteScript.includes("spaceguard-windows-validation-packet/v1"), "validation packet script should emit a stable schema");
 assert(validationRouteScript.includes("post-run-rescan-comparison"), "validation packet should require post-run rescan proof");
 assert(validationRouteScript.includes("enable-second-executor-flag"), "validation packet should forbid multi-route validation");
 assert(validationRouteScript.includes("npm run validate:route -- --route npm-cache"), "validation packet script should document route usage");
+assert(validationRouteScript.includes("openai:smoke:fixture -- --route"), "validation packet should expose route-specific fixture smoke commands");
 assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");
 assert(readme.includes("npm run validate:route -- --route npm-cache"), "README should document route validation packet usage");
 assert(readme.includes("multi-flag-blocked"), "README should document multi-flag setup blocking");
@@ -452,6 +457,7 @@ assert(realDataGuide.includes("multi-flag-blocked"), "Windows setup guide should
 assert(realDataGuide.includes("--route pnpm-store"), "Windows setup guide should document selected-route setup doctor commands");
 assert(openAiAgent.includes("forbiddenActions"), "OpenAI context should expose forbidden actions");
 assert(app.includes("Open manual review"), "OpenAI manual-only recommendations should expose a review action");
+assert(model.includes("openai:smoke:fixture -- --route"), "model setup commands should expose route-specific fixture smoke commands");
 assert(app.includes("manualReviewTargets"), "OpenAI manual-only recommendations should be visible in the panel");
 assert(app.includes("Project targets"), "OpenAI panel should show reviewed project target count");
 assert(app.includes("Gradle root"), "OpenAI panel should show Gradle cache target count");

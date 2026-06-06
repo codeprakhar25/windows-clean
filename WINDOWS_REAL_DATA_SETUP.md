@@ -39,8 +39,8 @@ Copy-Item .env.example .env
 # edit .env and set OPENAI_API_KEY
 # optional: set OPENAI_MODEL=gpt-5.2 and OPENAI_REASONING_EFFORT=low
 npm run setup:doctor
-npm run openai:smoke:fixture
-npm run openai:smoke
+npm run openai:smoke:fixture -- --route npm-cache
+npm run openai:smoke -- --route npm-cache
 npm run setup:route -- --route npm-cache
 npm run validate:route -- --route npm-cache
 npm run native:dev
@@ -48,13 +48,13 @@ npm run native:dev
 
 `npm run setup:doctor` is read-only. It checks `.env`, OpenAI key presence, model/reasoning defaults, and scoped executor flags without calling OpenAI, scanning folders, or running cleanup. Its `status` is `readonly-ready`, `one-route-ready`, or `multi-flag-blocked`; write-mode validation is safe to launch only when exactly one scoped executor flag is enabled.
 
-When exactly one scoped executor flag is enabled, `setup:doctor` maps that flag to the matching route alias and prints route-specific `setup:route` and `validate:route` commands. For example, `SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR=1` prints commands for `--route pnpm-store`, not the npm sample route.
+When exactly one scoped executor flag is enabled, `setup:doctor` maps that flag to the matching route alias and prints route-specific OpenAI smoke, `setup:route`, and `validate:route` commands. For example, `SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR=1` prints commands for `--route pnpm-store`, not the npm sample route.
 
-`npm run openai:smoke:fixture` validates the local fixture task queue and recommendation broker without an API key or network call.
+`npm run openai:smoke:fixture -- --route npm-cache` validates the local fixture task queue and recommendation broker without an API key or network call. Pass another route alias, for example `-- --route pnpm-store`, to validate that route's broker path.
 
-`npm run openai:smoke` validates the OpenAI key, strict advice schema, deterministic agent task queue, and recommendation broker against fixture data only. It exits non-zero unless OpenAI returns the required broker-ready npm cache recommendation from the fixture queue. It does not scan local folders, run cleanup, or use real disk findings.
+`npm run openai:smoke -- --route npm-cache` validates the OpenAI key, strict advice schema, deterministic agent task queue, and recommendation broker against fixture data only. It exits non-zero unless OpenAI returns the required broker-ready recommendation for the selected route fixture. It does not scan local folders, run cleanup, or use real disk findings.
 
-`npm run setup:route -- --route npm-cache` emits a read-only setup packet for the selected real cleanup route. It shows the exact scoped executor flag, native request mode, app panel id, conflicting enabled flags, and next commands before you launch the desktop shell.
+`npm run setup:route -- --route npm-cache` emits a read-only setup packet for the selected real cleanup route. It shows the exact scoped executor flag, native request mode, app panel id, conflicting enabled flags, route-specific OpenAI smoke commands, and next commands before you launch the desktop shell.
 
 `npm run validate:route -- --route npm-cache` emits a read-only Windows validation packet for the selected real cleanup route. It records the pre-run checklist, one-flag requirement, forbidden actions, evidence artifacts, and post-run rescan proof checklist. It does not scan folders, call OpenAI, or execute cleanup.
 

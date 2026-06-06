@@ -83,6 +83,8 @@ export function buildSetupDoctorReport({
   const routeInput = selectedRoute?.routeInput || "npm-cache";
   const routeSetupCommand = `npm run setup:route -- --route ${routeInput}`;
   const routeValidationCommand = `npm run validate:route -- --route ${routeInput}`;
+  const openAiFixtureSmokeCommand = `npm run openai:smoke:fixture -- --route ${routeInput}`;
+  const openAiSmokeCommand = `npm run openai:smoke -- --route ${routeInput}`;
 
   return {
     schemaVersion: "spaceguard-setup-doctor/v1",
@@ -105,8 +107,8 @@ export function buildSetupDoctorReport({
       modelSource: model.source,
       reasoningEffort: reasoningEffort.value,
       reasoningEffortSource: reasoningEffort.source,
-      fixtureSmokeCommand: "npm run openai:smoke:fixture",
-      smokeCommand: "npm run openai:smoke"
+      fixtureSmokeCommand: openAiFixtureSmokeCommand,
+      smokeCommand: openAiSmokeCommand
     },
     scopedExecutors: {
       enabledCount: enabledFlags.length,
@@ -122,8 +124,8 @@ export function buildSetupDoctorReport({
       install: "npm install",
       test: "npm test",
       build: "npm run build",
-      openAiFixtureSmoke: "npm run openai:smoke:fixture",
-      openAiSmoke: "npm run openai:smoke",
+      openAiFixtureSmoke: openAiFixtureSmokeCommand,
+      openAiSmoke: openAiSmokeCommand,
       routeSetup: routeSetupCommand,
       routeValidation: routeValidationCommand,
       nativeDev: "npm run native:dev"
@@ -163,11 +165,11 @@ function buildNextSteps({ openAiConfigured, enabledFlags, routeInput = "npm-cach
   if (!fs.existsSync(dotenvPath)) {
     steps.push("Copy .env.example to .env before desktop setup.");
   }
-  steps.push("Run npm run openai:smoke:fixture to validate the local task queue and broker without an API key.");
+  steps.push(`Run npm run openai:smoke:fixture -- --route ${routeInput} to validate the local task queue and broker without an API key.`);
   if (!openAiConfigured) {
-    steps.push("Set OPENAI_API_KEY in .env or the process environment before running npm run openai:smoke.");
+    steps.push(`Set OPENAI_API_KEY in .env or the process environment before running npm run openai:smoke -- --route ${routeInput}.`);
   } else {
-    steps.push("Run npm run openai:smoke to validate the fixture-only OpenAI advisor path.");
+    steps.push(`Run npm run openai:smoke -- --route ${routeInput} to validate the fixture-only OpenAI advisor path.`);
   }
   steps.push(`Run npm run setup:route -- --route ${routeInput} with the route you plan to validate before enabling a scoped executor.`);
   steps.push(`Run npm run validate:route -- --route ${routeInput} to capture the one-route Windows validation packet and proof checklist.`);

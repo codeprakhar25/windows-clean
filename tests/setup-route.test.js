@@ -35,6 +35,8 @@ let routeSetup;
   assert.strictEqual(disabledPacket.selected.requestMode, "execute-npm-cache", "npm route should expose its native request mode");
   assert.strictEqual(disabledPacket.selected.panelId, "npm-cache-executor-panel", "npm route should expose its panel id");
   assert(disabledPacket.commands.enablePowerShell.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "route setup should print the PowerShell enable command");
+  assert(disabledPacket.commands.fixtureOpenAiSmoke.includes("npm run openai:smoke:fixture -- --route npm-cache"), "route setup should print route-specific fixture smoke command");
+  assert(disabledPacket.commands.openAiSmoke.includes("npm run openai:smoke -- --route npm-cache"), "route setup should print route-specific OpenAI smoke command");
 
   const readyPacket = runPacket(["--route", "npm-cache"], { SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1" });
   assert.strictEqual(readyPacket.status, "ready", "enabled npm route should be ready for native dev launch");

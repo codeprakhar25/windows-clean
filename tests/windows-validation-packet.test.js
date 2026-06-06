@@ -29,6 +29,8 @@ function cleanEnv(extra = {}) {
   assert.strictEqual(blocked.selected.requestMode, "execute-npm-cache", "validation packet should expose the native request mode");
   assert.strictEqual(blocked.selected.panelId, "npm-cache-executor-panel", "validation packet should expose the app panel id");
   assert(blocked.commands.setupRoute.includes("npm run setup:route -- --route npm-cache"), "validation packet should point to setup:route");
+  assert(blocked.commands.openAiFixtureSmoke.includes("npm run openai:smoke:fixture -- --route npm-cache"), "validation packet should point to route-specific fixture smoke");
+  assert(blocked.commands.openAiSmoke.includes("npm run openai:smoke -- --route npm-cache"), "validation packet should point to route-specific OpenAI smoke");
   assert(blocked.commands.enablePowerShell.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "validation packet should print the PowerShell flag command");
   assert(blocked.preRunChecklist.some((row) => row.id === "single-scoped-flag" && row.status === "blocked"), "disabled route should block the single-flag preflight");
   assert(blocked.captureArtifacts.includes("before-native-scan-report"), "validation packet should require before-scan evidence");
