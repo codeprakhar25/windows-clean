@@ -2172,6 +2172,37 @@ export function selectedByDefault(action, protectedPaths = [], intakePolicy = nu
   return action.selectedByDefault && selectableAction(action, protectedPaths, intakePolicy);
 }
 
+export function buildModeDefaultSelection(mode = "balanced", {
+  goalBytes = 0,
+  actionList = actions,
+  protectedPaths = [],
+  intakePolicy = null
+} = {}) {
+  if (mode === "safe") {
+    return new Set(
+      actionList
+        .filter((action) => selectedByDefault(action, protectedPaths, intakePolicy))
+        .filter((action) => action.gate === "auto" || action.risk === "rebuildable")
+        .map((action) => action.id)
+    );
+  }
+
+  if (mode === "emergency") {
+    return new Set(
+      actionList
+        .filter((action) => selectableAction(action, protectedPaths, intakePolicy) && action.risk !== "advisory")
+        .map((action) => action.id)
+    );
+  }
+
+  const defaultSelected = new Set(
+    actionList
+      .filter((action) => selectedByDefault(action, protectedPaths, intakePolicy))
+      .map((action) => action.id)
+  );
+  return buildSuggestedPlan(goalBytes, defaultSelected, actionList, protectedPaths, intakePolicy);
+}
+
 export function computeTotals(selectedIds, actionList = actions, options = {}) {
   const selected = actionList.filter((action) => selectedIds.has(action.id));
   const selectedBytes = selected.reduce((sum, action) => sum + getPlannedActionBytes(action, options.approvals, options.itemReviewsByAction), 0);
@@ -4400,6 +4431,28 @@ export function buildAgentQuestionQueue({
       status: "active",
       action: nativeCapability?.available ? "run-real-scan" : "run-scan",
       options: nativeCapability?.available ? ["Run real read-only scan", "Treat old scan as audit-only"] : ["Run demo scan", "Use desktop shell for local evidence"]
+    });
+  }
+
+  const tempFixtureAction = actionList.find((action) => action.id === "temp-fixture-cleanup");
+  if (
+    scanned &&
+    !scanning &&
+    scanMode === "native-readonly" &&
+    tempFixtureAction &&
+    !selectedIds.has(tempFixtureAction.id) &&
+    selectableAction(tempFixtureAction, [], intakePolicy)
+  ) {
+    addQuestion({
+      id: "select-temp-fixture-cleanup",
+      lane: "planning",
+      priority: 94,
+      title: "Select seeded temp fixture",
+      prompt: "Should I select only the seeded temp fixture for the first real cleanup proof?",
+      detail: "This selects %TEMP%\\spaceguard-fixture and leaves broad Windows temp cleanup unselected.",
+      action: "select-action",
+      actionId: tempFixtureAction.id,
+      options: ["Select seeded fixture", "Keep plan empty"]
     });
   }
 

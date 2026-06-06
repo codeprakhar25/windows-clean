@@ -78,6 +78,7 @@ import {
   buildRescanComparison,
   buildRescanComparisonMarkdown,
   buildManualStrategyChecklist,
+  buildModeDefaultSelection,
   buildNativeBetaDistributionReadiness,
   buildNativeBetaEvidenceImport,
   buildNativeEvidenceQualityGate,
@@ -1943,24 +1944,14 @@ export default function App() {
   function applyModeDefaults(nextMode, force = false, planActions = actionList) {
     if (!scanned && !force) return;
 
-    if (nextMode === "safe") {
-      setSelectedIds(
-        new Set(
-          planActions
-            .filter((action) => action.gate === "auto" || (action.selectedByDefault && action.risk === "rebuildable"))
-            .filter((action) => selectableAction(action, protectedPaths, intakePolicy))
-            .map((action) => action.id)
-        )
-      );
-    }
-
-    if (nextMode === "balanced") {
-      setSelectedIds(buildSuggestedPlan(goalGb * GB, new Set(planActions.filter((action) => selectedByDefault(action, protectedPaths, intakePolicy)).map((action) => action.id)), planActions, protectedPaths, intakePolicy));
-    }
-
-    if (nextMode === "emergency") {
-      setSelectedIds(new Set(planActions.filter((action) => selectableAction(action, protectedPaths, intakePolicy) && action.risk !== "advisory").map((action) => action.id)));
-    }
+    setSelectedIds(
+      buildModeDefaultSelection(nextMode, {
+        goalBytes: goalGb * GB,
+        actionList: planActions,
+        protectedPaths,
+        intakePolicy
+      })
+    );
 
     clearExecutionState();
     setActiveStage("gate");
@@ -2019,6 +2010,15 @@ export default function App() {
     });
     if (willSelect && action.gate === "review") setFocusedReviewId(action.id);
     clearExecutionState();
+  }
+
+  function selectActionById(actionId) {
+    const action = actionList.find((item) => item.id === actionId);
+    if (!scanned || !action || !selectableAction(action, protectedPaths, intakePolicy)) return;
+    setSelectedIds((current) => new Set([...current, action.id]));
+    if (action.gate === "review") setFocusedReviewId(action.id);
+    clearExecutionState();
+    setActiveStage("gate");
   }
 
   async function simulateCleanup() {
@@ -3983,6 +3983,7 @@ export default function App() {
               onAllowAdminRoutes={() => setAdminAllowance(true)}
               onFocusReview={setFocusedReviewId}
               onFocusPanel={focusWorkflowPanel}
+              onSelectAction={selectActionById}
               onArmConsent={armExecutionConsent}
               onSimulate={simulateCleanup}
               onProbeWriteBoundary={probeNativeWriteBoundary}
@@ -4062,6 +4063,7 @@ export default function App() {
               onAllowAdminRoutes={() => setAdminAllowance(true)}
               onFocusReview={setFocusedReviewId}
               onFocusPanel={focusWorkflowPanel}
+              onSelectAction={selectActionById}
               onArmConsent={armExecutionConsent}
               onSimulate={simulateCleanup}
               onProbeWriteBoundary={probeNativeWriteBoundary}
@@ -5335,6 +5337,7 @@ function OperatingChecklistPanel({
   onAllowAdminRoutes,
   onFocusReview,
   onFocusPanel,
+  onSelectAction,
   onArmConsent,
   onSimulate,
   onProbeWriteBoundary
@@ -5352,6 +5355,7 @@ function OperatingChecklistPanel({
     if (row.action === "allow-admin-routes") onAllowAdminRoutes();
     if (row.action === "focus-review" && row.actionId) onFocusReview(row.actionId);
     if (row.action === "focus-panel" && row.targetPanel) onFocusPanel(row.targetPanel);
+    if (row.action === "select-action" && row.actionId) onSelectAction(row.actionId);
     if (row.action === "arm-consent") onArmConsent();
     if (row.action === "simulate") onSimulate();
     if (row.action === "probe-write-boundary") onProbeWriteBoundary();
@@ -6972,6 +6976,7 @@ function AgentQuestionPanel({
   onAllowAdminRoutes,
   onFocusReview,
   onFocusPanel,
+  onSelectAction,
   onArmConsent,
   onSimulate,
   onProbeWriteBoundary
@@ -6987,6 +6992,7 @@ function AgentQuestionPanel({
     if (question.action === "allow-admin-routes") onAllowAdminRoutes();
     if (question.action === "focus-review" && question.actionId) onFocusReview(question.actionId);
     if (question.action === "focus-panel" && question.targetPanel) onFocusPanel(question.targetPanel);
+    if (question.action === "select-action" && question.actionId) onSelectAction(question.actionId);
     if (question.action === "arm-consent") onArmConsent();
     if (question.action === "simulate") onSimulate();
     if (question.action === "run-real-scan") onRunRealScan();
@@ -7318,6 +7324,7 @@ function questionActionLabel(question) {
   if (question.action === "confirm-permanent-removal") return "Confirm removal";
   if (question.action === "allow-admin-routes") return "Allow admin routes";
   if (question.action === "focus-review") return "Open item review";
+  if (question.action === "select-action") return "Select action";
   if (question.action === "focus-panel" && question.targetPanel === "gate-panel") return "Open approvals";
   if (question.action === "focus-panel" && question.targetPanel === "manual-strategy-checklist-panel") return "Open checklist";
   if (question.action === "focus-panel" && question.targetPanel === "rollback-plan-panel") return "Open rollback proof";

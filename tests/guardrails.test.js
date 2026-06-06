@@ -48,6 +48,48 @@ const assert = require("assert");
     !guard.buildSuggestedPlan(90 * guard.GB, new Set()).has("pagefile"),
     "suggested plan must not include pagefile changes"
   );
+  const fixtureModeActions = [
+    {
+      id: "windows-temp",
+      title: "Windows temporary files",
+      bytes: 128 * guard.MB,
+      risk: "safe",
+      gate: "auto",
+      selectedByDefault: false
+    },
+    {
+      id: "temp-fixture-cleanup",
+      title: "Seeded temp fixture",
+      bytes: 8 * guard.MB,
+      risk: "safe",
+      gate: "auto",
+      selectedByDefault: false
+    },
+    {
+      id: "browser-cache",
+      title: "Browser cache only",
+      bytes: 64 * guard.MB,
+      risk: "safe",
+      gate: "auto",
+      selectedByDefault: true
+    },
+    {
+      id: "gradle-cache",
+      title: "Gradle dependency and build cache",
+      bytes: 256 * guard.MB,
+      risk: "rebuildable",
+      gate: "groupConfirm",
+      selectedByDefault: true
+    }
+  ];
+  const safeFixtureDefaults = guard.buildModeDefaultSelection("safe", {
+    actionList: fixtureModeActions,
+    goalBytes: guard.GB
+  });
+  assert(!safeFixtureDefaults.has("windows-temp"), "safe defaults must respect scanner suppression of broad temp cleanup");
+  assert(!safeFixtureDefaults.has("temp-fixture-cleanup"), "safe defaults must not auto-select the seeded real-delete fixture");
+  assert(safeFixtureDefaults.has("browser-cache"), "safe defaults should keep selected safe auto actions");
+  assert(safeFixtureDefaults.has("gradle-cache"), "safe defaults should keep selected rebuildable cache actions");
   const recycleOnly = new Set(["recycle-bin"]);
   assert.strictEqual(
     guard.getExecutionReadiness(recycleOnly, { groupConfirm: true, reviewed: {}, typed: {} }).ready,
@@ -1832,6 +1874,17 @@ const assert = require("assert");
   assert.strictEqual(scanFirstQuestions.schemaVersion, "spaceguard-question-queue/v1", "question queue should expose a schema version");
   assert.strictEqual(scanFirstQuestions.activeQuestion.id, "run-first-scan", "question queue should ask for scan first");
   assert.strictEqual(scanFirstQuestions.activeQuestion.action, "run-scan", "scan-first question should be actionable");
+  const fixtureSelectionQuestions = guard.buildAgentQuestionQueue({
+    scanned: true,
+    scanning: false,
+    scanMode: "native-readonly",
+    nativeCapability: { available: true },
+    actionList: fixtureModeActions,
+    selectedIds: new Set()
+  });
+  assert.strictEqual(fixtureSelectionQuestions.activeQuestion.id, "select-temp-fixture-cleanup", "question queue should prioritize the seeded fixture after native scan");
+  assert.strictEqual(fixtureSelectionQuestions.activeQuestion.action, "select-action", "fixture question should select the exact scoped action");
+  assert.strictEqual(fixtureSelectionQuestions.activeQuestion.actionId, "temp-fixture-cleanup", "fixture question must bind to the fixture action id");
 
   const gatedAdvisor = guard.buildRecoveryAdvisor({
     scanned: true,

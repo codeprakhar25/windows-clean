@@ -733,7 +733,9 @@ assert(app.includes("gate-panel"), "question queue should be able to focus appro
 assert(app.includes("manual-strategy-checklist-panel"), "question queue should be able to focus manual strategy checklist");
 assert(app.includes("rollback-plan-panel"), "question queue should be able to focus rollback proof");
 assert(app.includes("validation-evidence-panel"), "question queue should be able to focus validation evidence");
+assert(app.includes('question.action === "select-action"'), "agent question actions should select a scoped cleanup action");
 assert(app.includes("Open approvals"), "agent question action should label approval gate focus");
+assert(app.includes("Select action"), "agent question action should label scoped action selection");
 assert(app.includes("Open checklist"), "agent question action should label manual checklist focus");
 assert(app.includes("Open validation evidence"), "agent question action should label validation detail focus");
 assert(app.includes("Evidence path or artifact id"), "validation evidence should require artifact path input");
@@ -871,6 +873,7 @@ assert(model.includes("intake admin boundary"), "model should name admin intake 
 assert(model.includes("allow-admin-system-routes"), "question queue should ask admin intake questions");
 assert(model.includes("allow-admin-routes"), "question queue should expose admin allowance action");
 assert(model.includes("run-first-scan"), "question queue should ask scan-first questions");
+assert(model.includes("select-temp-fixture-cleanup"), "question queue should ask to select the seeded fixture action");
 assert(model.includes("approve-rebuildable-caches"), "question queue should ask approval questions");
 assert(model.includes("validation-evidence-detail"), "question queue should ask validation evidence questions");
 assert(model.includes("rollback-proof-detail"), "question queue should ask rollback proof questions");
