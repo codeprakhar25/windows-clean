@@ -736,11 +736,14 @@ function buildExecutorRecommendationBrokerRow({ row, actionType, key, policy, co
   const scanFingerprint = executionState.scanFingerprint || execution.scanFingerprint || "";
   const proofStatus = String(executionState.proofStatus || execution.proofStatus || "waiting-for-execution");
   const proofAllowsExecution = proofStatus === "waiting-for-execution" || proofStatus === "proof-complete";
+  const recommendedRoute = String(row.route || row.route_id || "").trim();
+  const routeMatches = recommendedRoute === policy.route;
   const targetCount = getExecutorRecommendationTargetCount(policy, context);
   const checks = [
     buildBrokerCheck("native-runtime", "Native runtime", Boolean(runtime.nativeAvailable), runtime.nativeAvailable ? "Tauri native runtime is available." : "Use the desktop shell before running scoped executors."),
     buildBrokerCheck("real-run-flag", "Scoped real-run flag", Boolean(runtime.realRunEnabled), runtime.realRunEnabled ? "Runtime exposes scoped real execution." : "Scoped real execution is disabled."),
     buildBrokerCheck("feature-flag", "Route feature flag", Boolean(runtime[policy.flag]), runtime[policy.flag] ? `${policy.flag} is enabled.` : `${policy.flag} is disabled.`),
+    buildBrokerCheck("route-match", "Action-route match", routeMatches, routeMatches ? `${actionType} maps to ${policy.route}.` : `OpenAI returned route ${recommendedRoute || "missing"} for ${actionType}; expected ${policy.route}.`),
     buildBrokerCheck("post-run-proof", "Post-run proof", proofAllowsExecution, proofAllowsExecution ? `proof=${proofStatus}` : `Finish post-run proof before another scoped executor. proof=${proofStatus}`),
     buildBrokerCheck("plan-id", "Current plan", Boolean(planId), planId || "missing plan id"),
     buildBrokerCheck("scan-fingerprint", "Scan fingerprint", Boolean(scanFingerprint), scanFingerprint || "missing scan fingerprint"),
@@ -765,7 +768,11 @@ function buildExecutorRecommendationBrokerRow({ row, actionType, key, policy, co
   }
   const blocked = checks.filter((check) => !check.passed);
   return buildBrokerRow({
-    row,
+    row: {
+      ...row,
+      recommendedRoute,
+      executorRoute: policy.route
+    },
     actionType,
     key,
     kind: "scoped-executor",
@@ -924,6 +931,8 @@ function compactOpenAIAgentRecommendationBroker(broker = null) {
       actionType: row.actionType || "manual-only",
       targetId: row.targetId || "",
       route: row.route || "",
+      recommendedRoute: row.recommendedRoute || "",
+      executorRoute: row.executorRoute || "",
       kind: row.kind || "",
       status: row.status || "unknown",
       canAct: Boolean(row.canAct),

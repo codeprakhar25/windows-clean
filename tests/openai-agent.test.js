@@ -431,6 +431,36 @@ const assert = require("assert");
   assert.strictEqual(readyBroker.rows[0].canAct, true, "ready broker row should be actionable");
   assert.strictEqual(readyBroker.rows[0].directToolAccess, false, "brokered recommendations should not grant direct tool access");
   assert.strictEqual(readyBroker.counts.ready, 1, "broker should count ready recommendations");
+  const mismatchedRouteBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "npm-cache",
+          title: "Clean npm cache",
+          reason: "The action type says npm, but the route string points somewhere else.",
+          priority: "high",
+          actionType: "run-npm-cache-executor",
+          targetId: "npm-cache",
+          route: "bounded-pnpm-store-delete"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-npm" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, npmCacheExecutor: true },
+      npmCacheTargets: [{ id: "npm-cache", route: "bounded-npm-cache-delete", bytes: 1024 }]
+    },
+    executionState: {
+      planId: "plan-npm",
+      scanFingerprint: "scan-npm",
+      consentPlanId: "plan-npm"
+    }
+  });
+  assert.strictEqual(mismatchedRouteBroker.rows[0].status, "blocked", "broker should block OpenAI executor recommendations when action type and route disagree");
+  assert.strictEqual(mismatchedRouteBroker.rows[0].canAct, false, "route-mismatched recommendations must not execute");
+  assert.strictEqual(mismatchedRouteBroker.rows[0].executorRoute, "bounded-npm-cache-delete", "broker should preserve the deterministic executor route");
+  assert.strictEqual(mismatchedRouteBroker.rows[0].recommendedRoute, "bounded-pnpm-store-delete", "broker should expose the model-provided route for audit");
+  assert(mismatchedRouteBroker.rows[0].checks.some((check) => check.id === "route-match" && !check.passed), "broker should expose route-match failure evidence");
   const manualAppBroker = openai.buildOpenAIAgentRecommendationBroker({
     advice: {
       recommendedActions: [

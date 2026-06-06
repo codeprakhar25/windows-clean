@@ -342,6 +342,10 @@ assert(openAiAgent.includes("spaceguard-openai-recommendation-broker-summary/v1"
 assert(openAiAgent.includes("recommendationBroker: compactOpenAIAgentRecommendationBroker"), "OpenAI run records should include broker provenance");
 assert(openAiAgent.includes("directToolAccess: false"), "OpenAI recommendation broker should deny direct tool access");
 assert(openAiAgent.includes("feature-flag"), "OpenAI recommendation broker should check route feature flags");
+assert(openAiAgent.includes("route-match"), "OpenAI recommendation broker should check that action type and route agree");
+assert(openAiAgent.includes("recommendedRoute"), "OpenAI recommendation broker should retain the model-provided route for audit");
+assert(openAiAgent.includes("executorRoute"), "OpenAI recommendation broker should expose the deterministic executor route");
+assert(app.includes("brokerRow?.executorRoute"), "OpenAI recommendation clicks should select the broker's deterministic route");
 assert(openAiAgent.includes("storesFullContext: false"), "OpenAI run records should not persist full path-level context");
 assert(openAiAgent.includes("storesRawModelText: false"), "OpenAI run records should not persist raw model text");
 assert(openAiAgent.includes("driveInventoryRows"), "OpenAI context should include drive inventory rows");

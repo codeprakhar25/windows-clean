@@ -2218,13 +2218,18 @@ export default function App() {
   }
 
   async function handleOpenAIAgentRecommendation(row = {}) {
-    if (row.route) setSelectedScopedExecutorRoute(row.route);
     const brokerRow = getOpenAIBrokerRow(row);
+    const actionType = String(row.actionType || "").toLowerCase();
+    const deterministicRoute = brokerRow?.kind === "scoped-executor"
+      ? brokerRow?.executorRoute || brokerRow?.route || row.route
+      : actionType.startsWith("run-")
+        ? row.route
+        : "";
+    if (deterministicRoute) setSelectedScopedExecutorRoute(deterministicRoute);
     if (brokerRow && !brokerRow.canAct) {
       if (brokerRow.targetPanel) focusWorkflowPanel(brokerRow.targetPanel);
       return;
     }
-    const actionType = String(row.actionType || "").toLowerCase();
     if (actionType === "rescan") {
       if (nativeCapability.available) {
         await runRealReadonlyScan();

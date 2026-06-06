@@ -45,6 +45,7 @@ The OpenAI integration is advisory, not an executor.
 - In the desktop shell, its Responses API call runs through native command `openai_agent_advice`; Rust reads `OPENAI_API_KEY`, `OPENAI_MODEL`, and `OPENAI_REASONING_EFFORT` from the process environment or local `.env` and requests strict JSON schema output named `spaceguard_cleanup_agent_advice`.
 - Browser-only demos may use the legacy `VITE_OPENAI_API_KEY` fallback, but the product path keeps the secret out of the renderer payload.
 - Its allowed action vocabulary is limited to ranking reviewed targets, explaining blockers, asking the user, recommending a rescan, or recommending a scoped executor button.
+- Scoped executor recommendations must match the deterministic action-to-route map. If the model returns `run-npm-cache-executor` with any route other than `bounded-npm-cache-delete`, the broker blocks the action, retains the model route for audit, and routes the UI through the deterministic executor panel only.
 - It can rank candidates, explain risk, suggest the next workflow branch, and draft questions for the user.
 - It cannot scan local folders directly.
 - It cannot approve consent, gates, item-review decisions, or protected-path changes.
