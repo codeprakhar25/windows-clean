@@ -19,6 +19,13 @@ const nativeBetaRunbook = fs.readFileSync(path.join(root, "NATIVE_BETA_DISTRIBUT
 const fixtureScript = fs.readFileSync(path.join(root, "scripts", "seed-spaceguard-fixtures.ps1"), "utf8");
 const fixtureInspectScript = fs.readFileSync(path.join(root, "scripts", "inspect-spaceguard-fixtures.ps1"), "utf8");
 
+function rustFunctionBlock(name) {
+  const start = rustScanner.indexOf(`fn ${name}(`);
+  assert(start >= 0, `Rust scanner should define ${name}`);
+  const next = rustScanner.indexOf("\nfn ", start + 1);
+  return rustScanner.slice(start, next === -1 ? rustScanner.length : next);
+}
+
 const requiredAppMarkers = [
   "SpaceGuard",
   "Dry-run agent",
@@ -469,6 +476,8 @@ assert(rustScanner.includes("scoped_executor_enabled_on_windows(npm_cache_execut
 assert(rustScanner.includes("runtime_env_value"), "Rust native shell should read local .env values for runtime configuration");
 assert(rustScanner.includes("fs::remove_file"), "Rust temp executor should perform file deletion only");
 assert(!rustScanner.includes("remove_dir_all"), "Rust executors must not use broad recursive directory removal");
+const tempExecutionRejections = rustFunctionBlock("temp_execution_rejections");
+assert(!tempExecutionRejections.includes("permanent-confirmation-required"), "Temp cleanup should not require permanent-removal confirmation");
 assert(app.includes("ProjectDependencyExecutorPanel"), "project dependency executor panel should be rendered");
 assert(app.includes("project-dependency-executor-panel"), "project dependency executor panel should be focusable");
 assert(app.includes("runNativeProjectDependencyExecutor"), "project dependency executor should be wired through the native adapter");
@@ -622,7 +631,9 @@ assert(nativeAdapter.includes("spaceguard-recycle-bin-request/v1"), "native adap
 assert(rustScanner.includes("execute_recycle_bin_cleanup"), "Rust native shell should implement Recycle Bin cleanup");
 assert(rustScanner.includes("SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR"), "Rust native shell should require the Recycle Bin executor feature flag");
 assert(rustScanner.includes("SHEmptyRecycleBinW"), "Rust native shell should use the Windows Shell Recycle Bin API");
-assert(rustScanner.includes("permanent-confirmation-required"), "Rust Recycle Bin cleanup should enforce native permanent confirmation");
+const recycleBinExecutionRejections = rustFunctionBlock("recycle_bin_execution_rejections");
+assert(recycleBinExecutionRejections.includes("permanent_removal_confirmed"), "Recycle Bin cleanup should enforce native permanent-removal confirmation");
+assert(recycleBinExecutionRejections.includes("permanent-confirmation-required"), "Recycle Bin cleanup should reject without permanent-removal confirmation");
 assert(app.includes("BrowserCacheExecutorPanel"), "browser cache executor panel should be rendered");
 assert(app.includes("browser-cache-executor-panel"), "browser cache executor panel should be focusable");
 assert(app.includes("Run browser cache cleanup"), "browser cache executor should expose a user-triggered cleanup button");

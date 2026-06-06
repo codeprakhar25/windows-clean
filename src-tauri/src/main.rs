@@ -4455,9 +4455,6 @@ fn temp_execution_rejections(
     if request.mutation_attempted != Some(true) {
         codes.push("mutation-confirmation-required");
     }
-    if request.permanent_removal_confirmed != Some(true) {
-        codes.push("permanent-confirmation-required");
-    }
     if request.actions.is_empty() {
         codes.push("no-actions");
     }
@@ -5492,6 +5489,9 @@ fn recycle_bin_execution_rejections(
     }
     if request.mutation_attempted != Some(true) {
         codes.push("mutation-confirmation-required");
+    }
+    if request.permanent_removal_confirmed != Some(true) {
+        codes.push("permanent-confirmation-required");
     }
     if request.actions.is_empty() {
         codes.push("no-actions");
