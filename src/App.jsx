@@ -2009,6 +2009,10 @@ export default function App() {
       else next.add(action.id);
       return next;
     });
+    if (willSelect) {
+      const scopedRoute = getScopedExecutorRouteForAction(action);
+      if (scopedRoute) setSelectedScopedExecutorRoute(scopedRoute);
+    }
     if (willSelect && action.gate === "review") setFocusedReviewId(action.id);
     clearExecutionState();
   }
