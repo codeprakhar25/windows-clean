@@ -8369,6 +8369,9 @@ export function buildScopedExecutorCommandFlow({
   preferredRoute = "",
   executionProofHandoff = null,
   nativeCapability = null,
+  ledger = [],
+  postRunVerification = null,
+  rescanComparison = null,
   scanning = false,
   generatedAt = "set-on-export"
 } = {}) {
@@ -8425,6 +8428,22 @@ export function buildScopedExecutorCommandFlow({
     generatedAt
   });
   const setupCommands = buildScopedExecutorSetupCommands(primaryRow);
+  const launchPacket = buildSelectedRouteLaunchPacket({
+    flowStatus: status,
+    primaryRow,
+    setupCommands,
+    nextAction,
+    launchGate,
+    proofStatus,
+    generatedAt
+  });
+  const proofPacket = buildSelectedRouteProofPacket({
+    launchPacket,
+    ledger,
+    postRunVerification,
+    rescanComparison,
+    generatedAt
+  });
 
   return {
     schemaVersion: "spaceguard-scoped-executor-command-flow/v1",
@@ -8439,15 +8458,8 @@ export function buildScopedExecutorCommandFlow({
     actionLabel: primaryRow?.actionLabel || "Select route",
     primaryRow,
     setupCommands,
-    launchPacket: buildSelectedRouteLaunchPacket({
-      flowStatus: status,
-      primaryRow,
-      setupCommands,
-      nextAction,
-      launchGate,
-      proofStatus,
-      generatedAt
-    }),
+    launchPacket,
+    proofPacket,
     nextAction,
     steps,
     counts: {
@@ -8547,6 +8559,242 @@ export function buildSelectedRouteLaunchPacketMarkdown(packet = null) {
     "",
     "This launch packet is evidence only. It does not grant cleanup authority; the native executor still requires the current scan, consent, feature flag, target validation, and post-run proof clearance."
   ].join("\n");
+}
+
+export function buildSelectedRouteProofPacket({
+  launchPacket = null,
+  ledger = [],
+  postRunVerification = null,
+  rescanComparison = null,
+  generatedAt = "set-on-export"
+} = {}) {
+  const route = String(launchPacket?.route || "").trim();
+  const proofIds = collectSelectedRouteProofIds(route, postRunVerification, rescanComparison);
+  const checkpoints = filterSelectedRouteRows(postRunVerification?.checkpoints || [], route, proofIds);
+  const rescanRows = filterSelectedRouteRows(rescanComparison?.rows || [], route, proofIds);
+  const ledgerEntries = filterSelectedRouteLedgerEntries(ledger, route, proofIds);
+  const counts = buildSelectedRouteProofCounts({ ledgerEntries, checkpoints, rescanRows });
+  const rescanStatus = rescanComparison?.status || "not-run";
+  const verificationStatus = postRunVerification?.status || "not-run";
+  const status = getSelectedRouteProofStatus({
+    route,
+    ledgerEntries,
+    checkpoints,
+    rescanRows,
+    rescanStatus,
+    verificationStatus
+  });
+  const readyForNextRoute = status === "proof-complete";
+
+  return {
+    schemaVersion: "spaceguard-selected-route-proof-packet/v1",
+    generatedAt,
+    status,
+    tone: readyForNextRoute ? "safe" : status === "proof-mismatch" || status === "stale-ledger" ? "restricted" : "review",
+    route,
+    routeInput: launchPacket?.routeInput || route,
+    title: launchPacket?.title || "No scoped executor selected",
+    planId: postRunVerification?.planId || rescanComparison?.planId || "",
+    launchStatus: launchPacket?.status || "unknown",
+    launchReady: Boolean(launchPacket?.ready),
+    proofStatus: launchPacket?.proofStatus || "",
+    verificationStatus,
+    rescanStatus,
+    runKind: rescanComparison?.runKind || postRunVerification?.runKind || "not-run",
+    runLabel: rescanComparison?.runLabel || postRunVerification?.runLabel || "Not run",
+    scopedNativeExecution: Boolean(rescanComparison?.scopedNativeExecution || postRunVerification?.scopedNativeExecution),
+    latestExecutionAt: rescanComparison?.latestExecutionAt || postRunVerification?.latestExecutionAt || "",
+    scanGeneratedAt: rescanComparison?.scanGeneratedAt || postRunVerification?.scanGeneratedAt || "",
+    postRunScanEvidence: Boolean(rescanComparison?.postRunScanEvidence || postRunVerification?.postRunScanEvidence),
+    readyForNextRoute,
+    counts,
+    ledgerEntries: ledgerEntries.map(compactSelectedRouteProofLedgerEntry),
+    checkpoints: checkpoints.map(compactSelectedRouteProofCheckpoint),
+    rescanRows: rescanRows.map(compactSelectedRouteProofRescanRow),
+    primary: getSelectedRouteProofPrimary(status, counts, rescanStatus),
+    steps: getSelectedRouteProofSteps(status)
+  };
+}
+
+export function buildSelectedRouteProofPacketMarkdown(packet = null) {
+  const ledgerRows = packet?.ledgerEntries?.length
+    ? packet.ledgerEntries
+        .map((entry) => [
+          `- ${entry.title}: ${entry.result || "unknown"}`,
+          `  - ID: ${entry.id}`,
+          `  - Bytes: ${formatBytes(entry.bytes)}`,
+          `  - Executed: ${entry.executedAt || "missing"}`,
+          `  - Source: ${entry.source || "unknown"}`
+        ].join("\n"))
+        .join("\n")
+    : "- No selected-route ledger entries.";
+  const rescanRows = packet?.rescanRows?.length
+    ? packet.rescanRows
+        .map((row) => [
+          `- ${row.title}: ${row.state}`,
+          `  - Route: ${row.route || "unknown"}`,
+          `  - Expected removal: ${formatBytes(row.expectedBytes)}`,
+          `  - Native remaining: ${formatBytes(row.actualBytes)}`,
+          `  - Evidence: ${row.evidence || "none"}`
+        ].join("\n"))
+        .join("\n")
+    : "- No selected-route rescan rows.";
+  const steps = packet?.steps?.length ? packet.steps.map((step) => `- ${step}`).join("\n") : "- Build a selected route proof packet.";
+
+  return [
+    "# SpaceGuard Selected Route Proof Packet",
+    "",
+    `Generated: ${packet?.generatedAt || "set-on-export"}`,
+    `Schema: ${packet?.schemaVersion || "spaceguard-selected-route-proof-packet/v1"}`,
+    `Status: ${packet?.status || "not-built"}`,
+    `Route: ${packet?.route || "none"}`,
+    `Route alias: ${packet?.routeInput || "none"}`,
+    `Plan: ${packet?.planId || "missing"}`,
+    `Launch status: ${packet?.launchStatus || "unknown"}`,
+    `Launch ready: ${packet?.launchReady ? "yes" : "no"}`,
+    `Verification: ${packet?.verificationStatus || "not-run"}`,
+    `Rescan comparison: ${packet?.rescanStatus || "not-run"}`,
+    `Run type: ${packet?.runLabel || "Not run"}`,
+    `Ready for next route: ${packet?.readyForNextRoute ? "yes" : "no"}`,
+    `Ledger entries: ${packet?.counts?.ledgerEntries || 0}`,
+    `Reclaimed bytes: ${formatBytes(packet?.counts?.reclaimedBytes || 0)}`,
+    `Post-run scan evidence: ${packet?.postRunScanEvidence ? "yes" : "no"}`,
+    `Ledger timestamp: ${packet?.latestExecutionAt || "missing"}`,
+    `Scan timestamp: ${packet?.scanGeneratedAt || "missing"}`,
+    "",
+    "## Steps",
+    steps,
+    "",
+    "## Ledger",
+    ledgerRows,
+    "",
+    "## Rescan Evidence",
+    rescanRows,
+    "",
+    "This proof packet is evidence only. It does not grant cleanup authority; it only proves whether the selected route can be followed by another scoped route."
+  ].join("\n");
+}
+
+function collectSelectedRouteProofIds(route, postRunVerification = null, rescanComparison = null) {
+  if (!route) return new Set();
+  const ids = new Set();
+  for (const checkpoint of postRunVerification?.checkpoints || []) {
+    if (checkpoint.route === route && checkpoint.id) ids.add(checkpoint.id);
+  }
+  for (const row of rescanComparison?.rows || []) {
+    if (row.route === route && row.id) ids.add(row.id);
+  }
+  return ids;
+}
+
+function filterSelectedRouteRows(rows = [], route = "", proofIds = new Set()) {
+  if (!Array.isArray(rows) || !rows.length || !route) return [];
+  return rows.filter((row) => row.route === route || proofIds.has(row.id));
+}
+
+function filterSelectedRouteLedgerEntries(ledger = [], route = "", proofIds = new Set()) {
+  if (!Array.isArray(ledger) || !ledger.length || !route) return [];
+  const directMatches = ledger.filter((entry) => entry.route === route || proofIds.has(entry.id));
+  if (directMatches.length || proofIds.size) return directMatches;
+  return ledger.length === 1 ? ledger : [];
+}
+
+function buildSelectedRouteProofCounts({ ledgerEntries = [], checkpoints = [], rescanRows = [] } = {}) {
+  return {
+    ledgerEntries: ledgerEntries.length,
+    checkpoints: checkpoints.length,
+    rescanRows: rescanRows.length,
+    matchedRows: rescanRows.filter((row) => row.state === "matched").length,
+    mismatchRows: rescanRows.filter((row) => row.state === "mismatch" || row.state === "no-finding").length,
+    waitingRows: rescanRows.filter((row) => row.state === "needs-post-run-native-rescan" || row.state === "needs-native-rescan").length,
+    skippedRows: rescanRows.filter((row) => row.state === "skipped").length,
+    reclaimedBytes: ledgerEntries.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0),
+    expectedBytes: rescanRows.reduce((sum, row) => sum + Number(row.expectedBytes || 0), 0),
+    actualRemainingBytes: rescanRows.reduce((sum, row) => sum + Number(row.actualBytes || 0), 0)
+  };
+}
+
+function getSelectedRouteProofStatus({
+  route = "",
+  ledgerEntries = [],
+  checkpoints = [],
+  rescanRows = [],
+  rescanStatus = "not-run",
+  verificationStatus = "not-run"
+} = {}) {
+  if (!route) return "route-missing";
+  if (!ledgerEntries.length) return "awaiting-execution";
+  if (verificationStatus === "stale-ledger" || rescanStatus === "stale-ledger") return "stale-ledger";
+  if (rescanStatus === "matched" && rescanRows.length && rescanRows.every((row) => row.state === "matched" || row.state === "skipped")) {
+    return rescanRows.some((row) => row.state === "matched") ? "proof-complete" : "proof-skipped";
+  }
+  if (rescanStatus === "mismatch" || rescanRows.some((row) => row.state === "mismatch" || row.state === "no-finding")) return "proof-mismatch";
+  if (verificationStatus === "ready-for-comparison" && !rescanRows.length && checkpoints.length) return "needs-comparison";
+  return "needs-post-run-rescan";
+}
+
+function compactSelectedRouteProofLedgerEntry(entry = {}) {
+  return {
+    id: entry.id || "",
+    title: entry.title || "Ledger entry",
+    route: entry.route || "",
+    planId: entry.planId || "",
+    executedAt: entry.executedAt || "",
+    result: entry.result || "",
+    bytes: Number(entry.bytes || 0),
+    method: entry.method || "",
+    source: entry.source || ""
+  };
+}
+
+function compactSelectedRouteProofCheckpoint(checkpoint = {}) {
+  return {
+    id: checkpoint.id || "",
+    title: checkpoint.title || "Checkpoint",
+    route: checkpoint.route || "",
+    path: checkpoint.path || "",
+    status: checkpoint.status || "",
+    expectedBytes: Number(checkpoint.expectedBytes || 0),
+    source: checkpoint.source || "",
+    evidenceRequired: checkpoint.evidenceRequired || ""
+  };
+}
+
+function compactSelectedRouteProofRescanRow(row = {}) {
+  return {
+    id: row.id || "",
+    title: row.title || "Rescan row",
+    route: row.route || "",
+    path: row.path || "",
+    state: row.state || "",
+    expectedBytes: Number(row.expectedBytes || 0),
+    actualBytes: Number(row.actualBytes || 0),
+    deltaBytes: Number(row.deltaBytes || 0),
+    nativeStatus: row.nativeStatus || "",
+    evidence: row.evidence || ""
+  };
+}
+
+function getSelectedRouteProofPrimary(status, counts, rescanStatus) {
+  if (status === "route-missing") return "Select one scoped executor route before building proof.";
+  if (status === "awaiting-execution") return "No selected-route ledger entry exists yet. Run the scoped executor before proof review.";
+  if (status === "proof-complete") return `${counts.ledgerEntries} ledger entry(s) and matched post-run rescan evidence prove this route.`;
+  if (status === "proof-mismatch") return "Post-run native evidence does not match the ledger. Review the affected root before another route.";
+  if (status === "stale-ledger") return "The ledger is stale for the current plan. Do not use it to prove this route.";
+  if (status === "needs-comparison") return "Post-run scan evidence exists; compare the selected route against the ledger.";
+  if (status === "proof-skipped") return "The selected route only produced skipped ledger evidence, so no reclaimed-space proof exists.";
+  return `Selected-route proof is waiting on post-run native rescan evidence (${rescanStatus || "not-run"}).`;
+}
+
+function getSelectedRouteProofSteps(status) {
+  if (status === "route-missing") return ["Select exactly one scoped executor route.", "Build the launch packet.", "Run proof review after execution."];
+  if (status === "awaiting-execution") return ["Run the selected scoped executor.", "Save the ledger row.", "Run a native read-only scan after execution."];
+  if (status === "proof-complete") return ["Export the proof packet.", "Keep the ledger and rescan evidence together.", "Only then consider another scoped route."];
+  if (status === "proof-mismatch") return ["Review the mismatch row.", "Repeat a post-run native rescan if needed.", "Do not run another scoped executor until parity is resolved."];
+  if (status === "stale-ledger") return ["Rebuild consent for the current plan.", "Run the current plan again if needed.", "Ignore stale ledger rows for route proof."];
+  if (status === "needs-comparison") return ["Compare the post-run scan against the ledger.", "Record matched or mismatch rows.", "Export the rescan comparison."];
+  if (status === "proof-skipped") return ["Keep skipped rows visible in the ledger.", "Do not count skipped rows as reclaimed space.", "Select another ready route if proof policy allows it."];
+  return ["Run a native read-only scan after execution.", "Compare affected roots with the ledger.", "Block another scoped executor until proof is complete."];
 }
 
 export function buildScopedExecutorAgentPrompt(flow = null) {

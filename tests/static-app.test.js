@@ -95,6 +95,7 @@ const requiredAppMarkers = [
   "AI authority boundary",
   "Real cleanup command flow",
   "AI recommendation path",
+  "Selected route proof packet",
   "Ask OpenAI for next cleanup step",
   "Follow AI recommendation",
   "direct tools blocked",
@@ -350,6 +351,11 @@ assert(openAiAgent.includes("openai_agent_advice"), "OpenAI adapter should prefe
 assert(openAiAgent.includes("getNativeOpenAIAgentCapability"), "OpenAI adapter should expose native advisor capability detection");
 assert(rustScanner.includes('"select-action"'), "native OpenAI schema should allow brokered UI selection recommendations");
 assert(!viteConfig.includes('envPrefix: ["VITE_", "OPENAI_"]'), "Vite must not expose OPENAI_* secrets to the renderer");
+assert(model.includes("spaceguard-selected-route-proof-packet/v1"), "model should expose selected-route proof packets");
+assert(model.includes("buildSelectedRouteProofPacketMarkdown"), "model should export selected-route proof packet markdown");
+assert(app.includes("buildSelectedRouteProofPacketMarkdown"), "app should wire selected-route proof packet markdown export");
+assert(app.includes("flow.proofPacket"), "command flow UI should receive the selected-route proof packet");
+assert(app.includes("Export proof packet"), "command flow UI should export the selected-route proof packet");
 assert(openAiAgent.includes("directDeleteAuthority"), "OpenAI context should deny direct delete authority");
 assert(openAiAgent.includes("text: {"), "OpenAI adapter should configure Responses API text output");
 assert(openAiAgent.includes("type: \"json_schema\""), "OpenAI adapter should request strict structured output");

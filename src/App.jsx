@@ -108,6 +108,7 @@ import {
   buildScopedExecutorCommandFlow,
   buildScopedExecutorRunGate,
   buildSelectedRouteLaunchPacketMarkdown,
+  buildSelectedRouteProofPacketMarkdown,
   buildNativeScanRequestGuard,
   buildStoragePressureDiagnosis,
   buildStorageStrategyPlan,
@@ -979,9 +980,12 @@ export default function App() {
         preferredRoute: selectedScopedExecutorRoute,
         executionProofHandoff,
         nativeCapability,
+        ledger: activeLedger,
+        postRunVerification,
+        rescanComparison,
         scanning
       }),
-    [executorSmokeRunPacket, selectedScopedExecutorRoute, executionProofHandoff, nativeCapability, scanning]
+    [executorSmokeRunPacket, selectedScopedExecutorRoute, executionProofHandoff, nativeCapability, activeLedger, postRunVerification, rescanComparison, scanning]
   );
   const firstSafeValidationGate = useMemo(
     () =>
@@ -3684,6 +3688,23 @@ export default function App() {
     downloadTextFile("spaceguard-selected-route-launch-packet.md", body, "text/markdown;charset=utf-8");
   }
 
+  function exportSelectedRouteProofPacket() {
+    const exportedPacket = { ...(scopedExecutorCommandFlow.proofPacket || {}), generatedAt: new Date().toISOString() };
+    const markdown = buildSelectedRouteProofPacketMarkdown(exportedPacket);
+    const body = [
+      markdown,
+      "",
+      "---",
+      "",
+      "## Structured Proof Packet JSON",
+      "",
+      "```json",
+      JSON.stringify(exportedPacket, null, 2),
+      "```"
+    ].join("\n");
+    downloadTextFile("spaceguard-selected-route-proof-packet.md", body, "text/markdown;charset=utf-8");
+  }
+
   function exportSupportBundle() {
     const exportedBundle = { ...supportBundle, generatedAt: new Date().toISOString() };
     const markdown = buildSupportBundleMarkdown(exportedBundle);
@@ -3987,6 +4008,7 @@ export default function App() {
               onAgentAction={handleOpenAIAgentRecommendation}
               onExportSmokePacket={exportExecutorSmokeRunPacket}
               onExportLaunchPacket={exportSelectedRouteLaunchPacket}
+              onExportProofPacket={exportSelectedRouteProofPacket}
             />
 
             <NativeBetaDistributionPanel
@@ -4783,7 +4805,7 @@ function RealDataLaunchRoadmapPanel({ roadmap }) {
   );
 }
 
-function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRoute, onAskAgent, onAgentAction, onExportSmokePacket, onExportLaunchPacket }) {
+function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRoute, onAskAgent, onAgentAction, onExportSmokePacket, onExportLaunchPacket, onExportProofPacket }) {
   const next = flow.nextAction || {};
   const routeOptions = flow.routeOptions || [];
   const result = agent.result || null;
@@ -4794,7 +4816,10 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
   const setupCommands = flow.setupCommands || null;
   const agentPrompt = buildScopedExecutorAgentPrompt(flow);
   const launchPacket = flow.launchPacket || null;
+  const proofPacket = flow.proofPacket || null;
   const launchChecks = (launchPacket?.checks || []).slice(0, 6);
+  const proofLedgerRows = (proofPacket?.ledgerEntries || []).slice(0, 3);
+  const proofRescanRows = (proofPacket?.rescanRows || []).slice(0, 3);
   const setupCommandRows = setupCommands
     ? [
         { label: ".env", command: setupCommands.enableEnv, detail: "Selected route flag" },
@@ -4927,6 +4952,66 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
           </div>
         ) : null}
 
+        {proofPacket ? (
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium">Selected route proof packet</span>
+              <Badge variant={proofPacket.tone || "review"}>{proofPacket.status}</Badge>
+              <Badge variant={proofPacket.readyForNextRoute ? "safe" : "review"}>{proofPacket.readyForNextRoute ? "next route clear" : "next route blocked"}</Badge>
+              {proofPacket.rescanStatus ? <Badge variant="outline">{proofPacket.rescanStatus}</Badge> : null}
+              {proofPacket.runLabel ? <Badge variant="outline">{proofPacket.runLabel}</Badge> : null}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+              <QueueStat label="Ledger" value={proofPacket.counts?.ledgerEntries || 0} tone={proofPacket.counts?.ledgerEntries ? "safe" : "review"} />
+              <QueueStat label="Matched" value={proofPacket.counts?.matchedRows || 0} tone={proofPacket.counts?.matchedRows ? "safe" : "review"} />
+              <QueueStat label="Mismatch" value={proofPacket.counts?.mismatchRows || 0} tone={proofPacket.counts?.mismatchRows ? "restricted" : "safe"} />
+              <QueueStat label="Waiting" value={proofPacket.counts?.waitingRows || 0} tone={proofPacket.counts?.waitingRows ? "review" : "safe"} />
+              <QueueStat label="Reclaimed" value={formatBytes(proofPacket.counts?.reclaimedBytes || 0)} tone={proofPacket.counts?.reclaimedBytes ? "safe" : "review"} />
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">{proofPacket.primary}</p>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              <div className="rounded-md border bg-card p-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium">Ledger proof</span>
+                  <span className="text-xs text-muted-foreground">{proofPacket.latestExecutionAt || "no execution timestamp"}</span>
+                </div>
+                {proofLedgerRows.length ? (
+                  <div className="grid gap-1">
+                    {proofLedgerRows.map((entry) => (
+                      <div key={`${entry.id}-${entry.executedAt}`} className="flex items-center gap-2 text-xs">
+                        <span className="mr-auto truncate">{entry.title}</span>
+                        <Badge variant={entry.result === "reclaimed" ? "safe" : "outline"}>{entry.result || "ledger"}</Badge>
+                        <span className="text-muted-foreground">{formatBytes(entry.bytes)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">No selected-route ledger row yet.</div>
+                )}
+              </div>
+              <div className="rounded-md border bg-card p-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium">Rescan proof</span>
+                  <span className="text-xs text-muted-foreground">{proofPacket.scanGeneratedAt || "no post-run scan"}</span>
+                </div>
+                {proofRescanRows.length ? (
+                  <div className="grid gap-1">
+                    {proofRescanRows.map((row) => (
+                      <div key={`${row.id}-${row.state}`} className="flex items-center gap-2 text-xs">
+                        <span className="mr-auto truncate">{row.title}</span>
+                        <Badge variant={row.state === "matched" ? "safe" : row.state === "mismatch" || row.state === "no-finding" ? "restricted" : "review"}>{row.state}</Badge>
+                        <span className="text-muted-foreground">{formatBytes(row.actualBytes)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">Run a native rescan after execution to create comparison rows.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="grid gap-2 md:grid-cols-4">
           {flow.steps.map((step) => {
             const stepDisabled = step.id === "execute" && step.status !== "active";
@@ -5011,6 +5096,10 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
           <Button type="button" variant="outline" size="sm" onClick={onExportLaunchPacket} disabled={!launchPacket}>
             <Download className="h-4 w-4" />
             Export launch packet
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={onExportProofPacket} disabled={!proofPacket}>
+            <Download className="h-4 w-4" />
+            Export proof packet
           </Button>
         </div>
       </CardContent>

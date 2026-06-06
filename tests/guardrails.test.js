@@ -3849,6 +3849,60 @@ const assert = require("assert");
   });
   assert.strictEqual(proofCompleteCommandFlow.status, "proof-complete", "command flow should identify completed post-run proof");
   assert.strictEqual(proofCompleteCommandFlow.nextAction.label, "Review proof", "proof-complete command flow should not lead with another executor run");
+  const tempProofSmokePacket = guard.buildExecutorSmokeRunPacket({
+    executorPlan: tempExecutorPlan,
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      platform: "windows",
+      realRunEnabled: true,
+      destructiveCommands: true,
+      executorFlags: { tempCleanupExecutor: true }
+    },
+    scanSession: { currentFingerprint: "scan-temp-proof" },
+    consentReceipt: { planId: tempPlanSnapshot.id },
+    executionProofHandoff: { status: "proof-complete" },
+    rescanComparison: matchedComparison,
+    planSnapshot: tempPlanSnapshot,
+    preferredRoute: "known-temp-delete",
+    nativeScan: {
+      available: true,
+      findings: [{ recipeId: "windows-temp", status: "measured", path: "%TEMP%", bytes: 0 }]
+    }
+  });
+  const selectedRouteProofFlow = guard.buildScopedExecutorCommandFlow({
+    smokeRunPacket: tempProofSmokePacket,
+    preferredRoute: "known-temp-delete",
+    executionProofHandoff: { status: "proof-complete" },
+    nativeCapability: { available: true },
+    ledger: tempLedger,
+    postRunVerification: tempPostRunVerification,
+    rescanComparison: matchedComparison,
+    scanning: false
+  });
+  assert.strictEqual(selectedRouteProofFlow.proofPacket.schemaVersion, "spaceguard-selected-route-proof-packet/v1", "command flow should expose a selected-route proof packet");
+  assert.strictEqual(selectedRouteProofFlow.proofPacket.status, "proof-complete", "matched rescan evidence should complete selected-route proof");
+  assert.strictEqual(selectedRouteProofFlow.proofPacket.route, "known-temp-delete", "proof packet should bind to the selected route");
+  assert.strictEqual(selectedRouteProofFlow.proofPacket.counts.ledgerEntries, 1, "proof packet should count selected-route ledger entries");
+  assert.strictEqual(selectedRouteProofFlow.proofPacket.rescanStatus, "matched", "proof packet should retain rescan comparison status");
+  assert.strictEqual(selectedRouteProofFlow.proofPacket.readyForNextRoute, true, "matched proof should clear the next-route blocker");
+  const proofPacketMarkdown = guard.buildSelectedRouteProofPacketMarkdown(selectedRouteProofFlow.proofPacket);
+  assert(proofPacketMarkdown.includes("# SpaceGuard Selected Route Proof Packet"), "proof packet markdown should have a stable title");
+  assert(proofPacketMarkdown.includes("known-temp-delete"), "proof packet markdown should include the selected route");
+  assert(proofPacketMarkdown.includes("matched"), "proof packet markdown should include matched rescan evidence");
+  assert(proofPacketMarkdown.includes("Ledger entries: 1"), "proof packet markdown should include ledger count");
+  const mismatchProofFlow = guard.buildScopedExecutorCommandFlow({
+    smokeRunPacket: tempProofSmokePacket,
+    preferredRoute: "known-temp-delete",
+    executionProofHandoff: { status: "proof-mismatch" },
+    nativeCapability: { available: true },
+    ledger: tempLedger,
+    postRunVerification: tempPostRunVerification,
+    rescanComparison: mismatchComparison,
+    scanning: false
+  });
+  assert.strictEqual(mismatchProofFlow.proofPacket.status, "proof-mismatch", "mismatched rescan evidence should block selected-route proof");
+  assert.strictEqual(mismatchProofFlow.proofPacket.readyForNextRoute, false, "mismatched proof must not clear the next-route blocker");
   const recordedValidationPack = guard.buildValidationEvidencePack({
     releaseGate: partialEvidenceGate,
     executorPlan,
