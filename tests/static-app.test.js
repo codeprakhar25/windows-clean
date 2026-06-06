@@ -344,6 +344,7 @@ assert(openAiAgent.includes("type: \"json_schema\""), "OpenAI adapter should req
 assert(openAiAgent.includes("spaceguard_cleanup_agent_advice"), "OpenAI adapter should name the cleanup agent schema");
 assert(openAiAgent.includes("reviewedDownloadsTargets"), "OpenAI context should include exact reviewed Downloads targets");
 assert(openAiAgent.includes("reviewedProjectTargets"), "OpenAI context should include reviewed project targets");
+assert(openAiAgent.includes("projectDependencyReviewTargets"), "OpenAI context should include advisory project dependency review targets");
 assert(openAiAgent.includes("gradleCacheTargets"), "OpenAI context should include scanned Gradle cache targets");
 assert(openAiAgent.includes("userCacheTargets"), "OpenAI context should include scanned user .cache targets");
 assert(openAiAgent.includes("androidCacheTargets"), "OpenAI context should include scanned Android cache targets");

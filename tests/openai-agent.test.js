@@ -114,6 +114,26 @@ const assert = require("assert");
       typed: { "wsl-vhdx": "COMPACT WSL" }
     },
     itemReviewsByAction: {
+      "node-modules-old": {
+        items: [
+          {
+            id: "expo-shop-node-modules",
+            name: "shop-app\\node_modules",
+            path: "C:\\Users\\real\\Code\\shop-app\\node_modules",
+            bytes: 4 * 1024 ** 3,
+            ageDays: 120,
+            kind: "Expo project dependency folder",
+            recommendation: "review",
+            decision: "undecided",
+            reason: "Rebuildable dependency folder is about 120 day(s) old; signals: project=shop-app, package=shop-app, package.json, lockfile=package-lock.json, manager=npm, frameworks=expo.",
+            signals: [
+              { label: "framework", value: "expo", tone: "advanced" },
+              { label: "package manager", value: "npm", tone: "safe" },
+              { label: "lockfile", value: "package-lock.json", tone: "safe" }
+            ]
+          }
+        ]
+      },
       "installed-app-footprints": {
         items: [
           {
@@ -225,6 +245,12 @@ const assert = require("assert");
   assert.strictEqual(manualContext.manualReviewTargets[0].selectedForRemoval, false, "manual uninstall decisions must not be represented as automatic removal authority");
   assert.strictEqual(manualContext.manualReviewTargets[0].signals[0].label, "usage proof", "OpenAI context should include structured app review signals");
   assert.strictEqual(manualContext.manualReviewTargets[0].signals[0].value, "not proven", "OpenAI context should not overclaim app usage proof");
+  assert(Array.isArray(manualContext.projectDependencyReviewTargets), "OpenAI context should expose project dependency review candidate rows");
+  assert.strictEqual(manualContext.projectDependencyReviewTargets[0].route, "item-review-project-cache", "OpenAI context should expose stale project dependency review candidates");
+  assert.strictEqual(manualContext.projectDependencyReviewTargets[0].kind, "Expo project dependency folder", "OpenAI context should preserve Expo project dependency hints");
+  assert.strictEqual(manualContext.projectDependencyReviewTargets[0].decision, "undecided", "OpenAI project dependency review candidates should preserve user decision state");
+  assert.strictEqual(manualContext.projectDependencyReviewTargets[0].canCreateExecutor, false, "OpenAI project dependency candidates must not create executor authority before user review");
+  assert.strictEqual(manualContext.projectDependencyReviewTargets[0].executorRequiresUserRemoveDecision, true, "OpenAI project dependency candidates should require user Remove decision before execution");
   assert.strictEqual(manualContext.installedAppReview.manualOnly, true, "installed app review context should stay manual-only");
   assert.strictEqual(manualContext.installedAppReview.canCreateExecutor, false, "installed app review context must not create executor authority");
   assert.strictEqual(manualContext.installedAppReview.rows[0].status, "manual-uninstall-selected", "installed app review context should preserve manual uninstall selections");
@@ -338,6 +364,7 @@ const assert = require("assert");
   assert.strictEqual(nativeRunRecord.schemaVersion, "spaceguard-openai-agent-run/v1", "OpenAI run records should expose a schema version");
   assert.strictEqual(nativeRunRecord.planId, "plan-openai-manual", "OpenAI run records should bind advice to a plan id");
   assert.strictEqual(nativeRunRecord.context.counts.manualReviewTargets, 1, "OpenAI run records should retain compact context counts");
+  assert.strictEqual(nativeRunRecord.context.counts.projectDependencyReviewTargets, 1, "OpenAI run records should retain compact project dependency review counts");
   assert.strictEqual(nativeRunRecord.context.counts.installedAppReviewRows, 1, "OpenAI run records should retain compact installed app review counts");
   assert.strictEqual(nativeRunRecord.context.counts.installedAppWorkOrderRows, 1, "OpenAI run records should retain compact app uninstall work-order counts");
   assert.strictEqual(nativeRunRecord.context.counts.wslVhdxTargets, 1, "OpenAI run records should retain compact WSL target counts");

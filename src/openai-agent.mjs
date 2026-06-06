@@ -325,6 +325,7 @@ export function buildOpenAIAgentContext({
       canCreateExecutor: false
     }))
     .slice(0, 12);
+  const projectDependencyReviewTargets = buildProjectDependencyReviewTargets({ nativeScan, itemReviewsByAction });
   const manualReviewTargets = buildManualReviewTargets({ nativeScan, itemReviewsByAction });
   const installedAppReview = buildInstalledAppReviewContext(manualReviewTargets);
   const installedAppUninstallWorkOrder = buildInstalledAppUninstallWorkOrderContext(installedAppReview, {
@@ -454,6 +455,7 @@ export function buildOpenAIAgentContext({
     selectedActions: selected,
     topFindings,
     executableRows,
+    projectDependencyReviewTargets,
     reviewedDownloadsTargets,
     reviewedProjectTargets,
     largeFileArchiveTargets,
@@ -1103,6 +1105,7 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
       selectedActions: selectedActions.length,
       topFindings: Array.isArray(context?.topFindings) ? context.topFindings.length : 0,
       executableRows: Array.isArray(context?.executableRows) ? context.executableRows.length : 0,
+      projectDependencyReviewTargets: Array.isArray(context?.projectDependencyReviewTargets) ? context.projectDependencyReviewTargets.length : 0,
       reviewedDownloadsTargets: Array.isArray(context?.reviewedDownloadsTargets) ? context.reviewedDownloadsTargets.length : 0,
       reviewedProjectTargets: Array.isArray(context?.reviewedProjectTargets) ? context.reviewedProjectTargets.length : 0,
       largeFileArchiveTargets: Array.isArray(context?.largeFileArchiveTargets) ? context.largeFileArchiveTargets.length : 0,
@@ -1281,6 +1284,36 @@ function buildManualReviewTargets({ nativeScan = null, itemReviewsByAction = nul
       manualOnly: true,
       officialAction: "Use Windows Settings or the vendor uninstaller only.",
       reason: item.reason || "Installed app footprint is manual review evidence, not an automated cleanup target.",
+      signals: normalizeAgentReviewSignals(item.signals)
+    }));
+}
+
+function buildProjectDependencyReviewTargets({ nativeScan = null, itemReviewsByAction = null } = {}) {
+  const projectReview = itemReviewsByAction?.["node-modules-old"];
+  const sourceItems = projectReview?.items?.length
+    ? projectReview.items
+    : (nativeScan?.findings || [])
+        .filter((finding) => finding.recipeId === "node-modules-old")
+        .flatMap((finding) => finding.items || []);
+
+  return sourceItems
+    .slice()
+    .sort((left, right) => Number(right.bytes || 0) - Number(left.bytes || 0))
+    .slice(0, 16)
+    .map((item) => ({
+      id: item.id || "",
+      name: item.name || "",
+      route: "item-review-project-cache",
+      path: item.path || "",
+      bytes: Number(item.bytes || 0),
+      ageDays: Number(item.ageDays || 0),
+      kind: item.kind || "project dependency folder",
+      recommendation: item.recommendation || "review",
+      decision: item.decision || "undecided",
+      canCreateExecutor: false,
+      manualOnly: false,
+      executorRequiresUserRemoveDecision: true,
+      reason: item.reason || "Project dependency folder needs user review before it can become a reviewed Remove target.",
       signals: normalizeAgentReviewSignals(item.signals)
     }));
 }
