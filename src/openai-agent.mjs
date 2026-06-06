@@ -738,12 +738,16 @@ function buildExecutorRecommendationBrokerRow({ row, actionType, key, policy, co
   const proofAllowsExecution = proofStatus === "waiting-for-execution" || proofStatus === "proof-complete";
   const recommendedRoute = String(row.route || row.route_id || "").trim();
   const routeMatches = recommendedRoute === policy.route;
-  const targetCount = getExecutorRecommendationTargetCount(policy, context);
+  const targets = getExecutorRecommendationTargets(policy, context);
+  const targetCount = targets.length;
+  const targetId = String(row.targetId || row.target_id || "").trim();
+  const targetIdMatches = !targetId || targets.some((target) => targetMatchesRecommendationId(target, targetId));
   const checks = [
     buildBrokerCheck("native-runtime", "Native runtime", Boolean(runtime.nativeAvailable), runtime.nativeAvailable ? "Tauri native runtime is available." : "Use the desktop shell before running scoped executors."),
     buildBrokerCheck("real-run-flag", "Scoped real-run flag", Boolean(runtime.realRunEnabled), runtime.realRunEnabled ? "Runtime exposes scoped real execution." : "Scoped real execution is disabled."),
     buildBrokerCheck("feature-flag", "Route feature flag", Boolean(runtime[policy.flag]), runtime[policy.flag] ? `${policy.flag} is enabled.` : `${policy.flag} is disabled.`),
     buildBrokerCheck("route-match", "Action-route match", routeMatches, routeMatches ? `${actionType} maps to ${policy.route}.` : `OpenAI returned route ${recommendedRoute || "missing"} for ${actionType}; expected ${policy.route}.`),
+    buildBrokerCheck("target-id-match", "Selected target", targetIdMatches, targetId ? `target=${targetId}; available=${targets.map((target) => target.id).filter(Boolean).join(",") || "none"}` : "OpenAI did not name a specific target id."),
     buildBrokerCheck("post-run-proof", "Post-run proof", proofAllowsExecution, proofAllowsExecution ? `proof=${proofStatus}` : `Finish post-run proof before another scoped executor. proof=${proofStatus}`),
     buildBrokerCheck("plan-id", "Current plan", Boolean(planId), planId || "missing plan id"),
     buildBrokerCheck("scan-fingerprint", "Scan fingerprint", Boolean(scanFingerprint), scanFingerprint || "missing scan fingerprint"),
@@ -813,14 +817,24 @@ function buildBrokerCheck(id, label, passed, detail) {
   };
 }
 
-function getExecutorRecommendationTargetCount(policy, context = null) {
+function getExecutorRecommendationTargets(policy, context = null) {
   if (policy.targetList === "executableRows") {
-    return (context?.executableRows || []).filter((row) => row.route === policy.route || row.id === "windows-temp").length;
+    return (context?.executableRows || []).filter((row) => row.route === policy.route);
   }
   if (policy.targetList === "reviewedDownloadsTargets") {
-    return (context?.executableRows || []).filter((row) => row.route === policy.route && Number(row.bytes || 0) > 0).length;
+    return (context?.executableRows || []).filter((row) => row.route === policy.route && Number(row.bytes || 0) > 0);
   }
-  return Array.isArray(context?.[policy.targetList]) ? context[policy.targetList].length : 0;
+  return Array.isArray(context?.[policy.targetList]) ? context[policy.targetList] : [];
+}
+
+function targetMatchesRecommendationId(target = {}, targetId = "") {
+  const availableId = String(target.id || "").trim();
+  if (!targetId) return true;
+  return availableId === targetId || availableId.startsWith(`${targetId}-`);
+}
+
+function getExecutorRecommendationTargetCount(policy, context = null) {
+  return getExecutorRecommendationTargets(policy, context).length;
 }
 
 function getExecutorRecommendationButtonLabel(actionType) {

@@ -461,6 +461,77 @@ const assert = require("assert");
   assert.strictEqual(mismatchedRouteBroker.rows[0].executorRoute, "bounded-npm-cache-delete", "broker should preserve the deterministic executor route");
   assert.strictEqual(mismatchedRouteBroker.rows[0].recommendedRoute, "bounded-pnpm-store-delete", "broker should expose the model-provided route for audit");
   assert(mismatchedRouteBroker.rows[0].checks.some((check) => check.id === "route-match" && !check.passed), "broker should expose route-match failure evidence");
+  const fixtureTempBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "temp-fixture-cleanup",
+          title: "Run seeded fixture cleanup",
+          reason: "The fixture route proves the executor without broad temp cleanup.",
+          priority: "high",
+          actionType: "run-temp-executor",
+          targetId: "temp-fixture-cleanup",
+          route: "known-temp-delete"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-fixture-temp" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, tempCleanupExecutor: true },
+      executableRows: [
+        {
+          id: "temp-fixture-cleanup",
+          route: "known-temp-delete",
+          title: "Seeded temp fixture",
+          targetPath: "%TEMP%\\spaceguard-fixture",
+          bytes: 8 * 1024 * 1024
+        }
+      ]
+    },
+    executionState: {
+      planId: "plan-fixture-temp",
+      scanFingerprint: "scan-fixture-temp",
+      consentPlanId: "plan-fixture-temp"
+    }
+  });
+  assert.strictEqual(fixtureTempBroker.rows[0].status, "ready", "fixture temp recommendation should be ready when its exact scoped target is selected");
+  assert(fixtureTempBroker.rows[0].checks.some((check) => check.id === "target-id-match" && check.passed), "broker should prove the OpenAI target id matches the selected fixture target");
+  const mismatchedTempTargetBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "windows-temp",
+          title: "Run broad temp cleanup",
+          reason: "The model named the broad temp action, not the selected fixture proof.",
+          priority: "high",
+          actionType: "run-temp-executor",
+          targetId: "windows-temp",
+          route: "known-temp-delete"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-fixture-temp" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, tempCleanupExecutor: true },
+      executableRows: [
+        {
+          id: "temp-fixture-cleanup",
+          route: "known-temp-delete",
+          title: "Seeded temp fixture",
+          targetPath: "%TEMP%\\spaceguard-fixture",
+          bytes: 8 * 1024 * 1024
+        }
+      ]
+    },
+    executionState: {
+      planId: "plan-fixture-temp",
+      scanFingerprint: "scan-fixture-temp",
+      consentPlanId: "plan-fixture-temp"
+    }
+  });
+  assert.strictEqual(mismatchedTempTargetBroker.rows[0].status, "blocked", "broker should block broad-temp recommendations when only the fixture target is selected");
+  assert.strictEqual(mismatchedTempTargetBroker.rows[0].canAct, false, "target-mismatched recommendations must not execute");
+  assert(mismatchedTempTargetBroker.rows[0].checks.some((check) => check.id === "target-id-match" && !check.passed), "broker should expose target-id mismatch evidence");
   const manualAppBroker = openai.buildOpenAIAgentRecommendationBroker({
     advice: {
       recommendedActions: [

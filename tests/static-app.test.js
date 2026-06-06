@@ -352,6 +352,7 @@ assert(openAiAgent.includes("recommendationBroker: compactOpenAIAgentRecommendat
 assert(openAiAgent.includes("directToolAccess: false"), "OpenAI recommendation broker should deny direct tool access");
 assert(openAiAgent.includes("feature-flag"), "OpenAI recommendation broker should check route feature flags");
 assert(openAiAgent.includes("route-match"), "OpenAI recommendation broker should check that action type and route agree");
+assert(openAiAgent.includes("target-id-match"), "OpenAI recommendation broker should verify model target ids against deterministic targets");
 assert(openAiAgent.includes("recommendedRoute"), "OpenAI recommendation broker should retain the model-provided route for audit");
 assert(openAiAgent.includes("executorRoute"), "OpenAI recommendation broker should expose the deterministic executor route");
 assert(app.includes("brokerRow?.executorRoute"), "OpenAI recommendation clicks should select the broker's deterministic route");
