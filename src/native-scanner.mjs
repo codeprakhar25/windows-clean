@@ -772,6 +772,50 @@ export async function runNativePipCacheExecutor(boundary = {}, host = globalThis
   return normalizeNativeWriteBoundary(result);
 }
 
+export async function runNativeDockerBuildCacheExecutor(boundary = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      accepted: false,
+      reason: "Native Docker build-cache executor is not available in the browser demo.",
+      entries: [],
+      warnings: ["Run the Tauri desktop shell before executing Docker build-cache cleanup."]
+    };
+  }
+
+  const row = boundary.row || boundary.selectedRow || {};
+  const targetPath = row.targetPath || row.target || row.path || "Docker Desktop build cache";
+  const action = {
+    id: row.id || "docker-build-cache",
+    title: row.title || "Docker build cache",
+    bytes: Number(row.bytes || boundary.expectedBytes || 0),
+    route: "tool-native-docker-build-cache-prune",
+    targetPath
+  };
+  const expectedBytes = Number(boundary.expectedBytes ?? action.bytes);
+
+  const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
+    request: {
+      schemaVersion: "spaceguard-docker-build-cache-request/v1",
+      requestMode: "execute-docker-build-cache",
+      planId: boundary.planId || "",
+      route: "tool-native-docker-build-cache-prune",
+      scanFingerprint: boundary.scanFingerprint || "",
+      consentPlanId: boundary.consentPlanId || "",
+      expectedBytes,
+      dryRunOnly: false,
+      mutationAttempted: true,
+      actions: [action]
+    }
+  });
+
+  return normalizeNativeWriteBoundary(result);
+}
+
 export async function runNativeRecycleBinExecutor(boundary = {}, host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {

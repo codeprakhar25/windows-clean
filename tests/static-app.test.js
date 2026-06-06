@@ -324,6 +324,7 @@ assert(openAiAgent.includes("userCacheTargets"), "OpenAI context should include 
 assert(openAiAgent.includes("androidCacheTargets"), "OpenAI context should include scanned Android cache targets");
 assert(openAiAgent.includes("shaderCacheTargets"), "OpenAI context should include scanned shader cache targets");
 assert(openAiAgent.includes("pipCacheTargets"), "OpenAI context should include scanned pip cache targets");
+assert(openAiAgent.includes("dockerBuildCacheTargets"), "OpenAI context should include Docker build-cache targets");
 assert(openAiAgent.includes("npmCacheTargets"), "OpenAI context should include scanned npm cache targets");
 assert(openAiAgent.includes("recycleBinTargets"), "OpenAI context should include scanned Recycle Bin targets");
 assert(openAiAgent.includes("browserCacheTargets"), "OpenAI context should include scanned browser cache targets");
@@ -350,6 +351,7 @@ assert(openAiAgent.includes("run-user-cache-executor"), "OpenAI schema should al
 assert(openAiAgent.includes("run-android-cache-executor"), "OpenAI schema should allow Android cache executor recommendations");
 assert(openAiAgent.includes("run-shader-cache-executor"), "OpenAI schema should allow shader cache executor recommendations");
 assert(openAiAgent.includes("run-pip-cache-executor"), "OpenAI schema should allow pip cache executor recommendations");
+assert(openAiAgent.includes("run-docker-build-cache-executor"), "OpenAI schema should allow Docker build-cache executor recommendations");
 assert(openAiAgent.includes("run-downloads-cleanup-executor"), "OpenAI schema should allow reviewed Downloads executor recommendations");
 assert(openAiAgent.includes("run-large-file-archive-executor"), "OpenAI schema should allow reviewed large-file archive recommendations");
 assert(openAiAgent.includes("run-npm-cache-executor"), "OpenAI schema should allow npm cache executor recommendations");
@@ -366,6 +368,7 @@ assert(app.includes(".cache root"), "OpenAI panel should show user .cache target
 assert(app.includes("Android roots"), "OpenAI panel should show Android cache target count");
 assert(app.includes("Shader roots"), "OpenAI panel should show shader cache target count");
 assert(app.includes("pip root"), "OpenAI panel should show pip cache target count");
+assert(app.includes("Docker cache"), "OpenAI panel should show Docker build-cache target count");
 assert(app.includes("npm root"), "OpenAI panel should show npm cache target count");
 assert(app.includes("pnpm root"), "OpenAI panel should show pnpm store target count");
 assert(openAiAgent.includes("pnpmStoreTargets"), "OpenAI context should include scanned pnpm store targets");
@@ -554,6 +557,21 @@ assert(rustScanner.includes("pip_cache_target_reject_code"), "Rust native shell 
 assert(rustScanner.includes("target-not-pip-cache"), "Rust native shell should reject non-pip cache targets");
 assert(rustScanner.includes("file_old_enough_for_pip_cache_delete"), "Rust pip cache cleanup should enforce the age threshold");
 assert(rustScanner.includes("pip_cache_file_forbidden"), "Rust pip cache cleanup should skip config and identity-like files");
+assert(app.includes("DockerBuildCacheExecutorPanel"), "Docker build-cache executor panel should be rendered");
+assert(app.includes("docker-build-cache-executor-panel"), "Docker build-cache executor panel should be focusable");
+assert(app.includes("Run Docker prune"), "Docker build-cache executor should expose a user-triggered cleanup button");
+assert(app.includes("Docker build-cache executor boundary"), "Docker build-cache executor should show the command boundary");
+assert(app.includes("runNativeDockerBuildCacheExecutor"), "Docker build-cache executor should be wired through the native adapter");
+assert(nativeAdapter.includes("requestMode: \"execute-docker-build-cache\""), "native adapter should send the execute-docker-build-cache request mode");
+assert(nativeAdapter.includes("spaceguard-docker-build-cache-request/v1"), "native adapter should send the Docker build-cache request schema");
+assert(nativeAdapter.includes("toolNativePruneExecutors"), "native adapter should normalize tool-native executor flag");
+assert(rustScanner.includes("execute_docker_build_cache_cleanup"), "Rust native shell should implement Docker build-cache cleanup");
+assert(rustScanner.includes("measure_docker_build_cache"), "Rust native scanner should inventory Docker build cache");
+assert(rustScanner.includes("SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS"), "Rust native shell should require the tool-native prune feature flag");
+assert(rustScanner.includes("Command::new(\"docker\")"), "Rust Docker executor should invoke only the Docker binary directly");
+assert(rustScanner.includes("docker_build_cache_prune_result"), "Rust Docker executor should parse Docker build-cache prune output");
+assert(!rustScanner.includes("remove_dir_all"), "Rust executors must not use broad recursive directory removal");
+assert(!rustScanner.includes("docker system prune --volumes"), "Rust Docker executor must not expose broad volume prune");
 assert(app.includes("NpmCacheExecutorPanel"), "npm cache executor panel should be rendered");
 assert(app.includes("npm-cache-executor-panel"), "npm cache executor panel should be focusable");
 assert(app.includes("Run npm cache cleanup"), "npm cache executor should expose a user-triggered cleanup button");
@@ -605,7 +623,7 @@ assert(rustScanner.includes("SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR"), "Rust n
 assert(rustScanner.includes("browser_cache_target_reject_code"), "Rust native shell should validate browser cache targets");
 assert(rustScanner.includes("target-not-browser-cache"), "Rust native shell should reject non-cache browser targets");
 assert(rustScanner.includes("file_old_enough_for_browser_cache_delete"), "Rust browser cache cleanup should skip active recent files");
-assert(!rustScanner.includes("Command::new"), "Rust cleanup executors must not shell out for cleanup");
+assert(!rustScanner.includes("powershell"), "Rust cleanup executors must not shell through PowerShell");
 assert(model.includes("installed-app-footprints"), "model should include installed app footprint review");
 assert(model.includes("manual-app-uninstall"), "installed app footprints should stay manual uninstall guidance");
 assert(model.includes("spaceguard-installed-app-review/v1"), "model should expose installed app review dossier schema");
@@ -975,7 +993,7 @@ assert(rustScanner.includes("real_run_enabled: false"), "native dry-run should r
 assert(rustScanner.includes("write_capability: false"), "native scanner should report write capability disabled");
 assert(rustScanner.includes("destructive_commands: false"), "native scanner should report destructive commands disabled");
 assert(rustScanner.includes("accepted: false"), "native write boundary should reject execution");
-assert(!/\bCommand::new\b|powercfg|reg\.exe/i.test(rustScanner), "native scanner should not contain shell, reg.exe, or powercfg execution");
+assert(!/Command::new\("cmd"|Command::new\("powershell"|powercfg|reg\.exe/i.test(rustScanner), "native scanner should not contain shell, reg.exe, or powercfg execution");
 assert(!/\bremove_dir_all\b/i.test(rustScanner), "native executors should not use recursive directory removal");
 assert(rustScanner.includes("fs::remove_dir(&dir)"), "project dependency executor may remove only traversed empty directories");
 assert(rustScanner.includes("delete_single_temp_file"), "temp deletion should be isolated to the temp file executor");

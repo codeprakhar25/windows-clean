@@ -6,7 +6,9 @@ use std::collections::VecDeque;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const DEFAULT_OPENAI_MODEL: &str = "gpt-5.5";
 const DEFAULT_OPENAI_ENDPOINT: &str = "https://api.openai.com/v1/responses";
@@ -429,12 +431,7 @@ fn scan_known_roots(request: Option<ScanRequest>) -> ScanResponse {
 
     findings.extend(measure_custom_roots(&request, &mut warnings));
 
-    findings.push(unsupported_finding(
-        "docker-build-cache",
-        "Docker build cache",
-        "Docker Desktop",
-        "Requires Docker CLI inventory before cleanup. Folder size is not used because it can mix cache, images, and volumes.",
-    ));
+    findings.push(measure_docker_build_cache());
     findings.push(unsupported_finding(
         "docker-volumes",
         "Docker anonymous volumes",
@@ -706,6 +703,9 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
     }
     if request.request_mode.as_deref() == Some("execute-pip-cache") {
         return execute_pip_cache_cleanup(request);
+    }
+    if request.request_mode.as_deref() == Some("execute-docker-build-cache") {
+        return execute_docker_build_cache_cleanup(request);
     }
     if request.request_mode.as_deref() == Some("execute-npm-cache") {
         return execute_npm_cache_cleanup(request);
@@ -2709,6 +2709,217 @@ fn execute_pip_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionRe
     }
 }
 
+fn execute_docker_build_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let flag_enabled = tool_native_prune_executors_enabled();
+    let rejections = docker_build_cache_execution_rejections(&request, flag_enabled);
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-docker-build-cache-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-docker-build-cache".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+
+    let mut command_result: Option<DockerCommandResult> = None;
+    let entries = request
+        .actions
+        .into_iter()
+        .map(|action| {
+            let target_path = action.target_path.clone().unwrap_or_default();
+            let target_reject = docker_build_cache_target_reject_code(&target_path);
+            let route_match =
+                action.route == route && route == "tool-native-docker-build-cache-prune";
+            let can_execute = rejections.is_empty() && route_match && target_reject.is_none();
+
+            if can_execute {
+                let result =
+                    run_docker_command(&["builder", "prune", "--force"], 90);
+                let reclaimed = docker_build_cache_prune_result(&result.stdout)
+                    .or_else(|| docker_build_cache_prune_result(&result.stderr))
+                    .unwrap_or(0);
+                let ok = result.ok && !result.timed_out;
+                let note = if ok {
+                    format!(
+                        "Docker build-cache executor ran `docker builder prune --force`, reclaimed {} byte(s), and never requested volumes, running containers, or broad system prune.",
+                        reclaimed
+                    )
+                } else {
+                    format!(
+                        "Docker build-cache prune did not complete successfully: {}",
+                        result.summary()
+                    )
+                };
+                command_result = Some(result);
+                return WriteExecutionEntry {
+                    id: action.id,
+                    title: action.title,
+                    route: action.route,
+                    result: if ok {
+                        "executed".to_string()
+                    } else {
+                        "command-failed".to_string()
+                    },
+                    reject_code: if ok {
+                        String::new()
+                    } else {
+                        "docker-command-failed".to_string()
+                    },
+                    bytes: reclaimed,
+                    preflight_status: if ok {
+                        "executed".to_string()
+                    } else {
+                        "command-failed".to_string()
+                    },
+                    preflight_checks: vec![
+                        write_preflight_check(
+                            "route-docker-build-cache",
+                            "Docker build-cache route",
+                            "passed",
+                            "Action route is tool-native-docker-build-cache-prune.",
+                        ),
+                        write_preflight_check(
+                            "target-docker-build-cache",
+                            "Docker build-cache target",
+                            "passed",
+                            "Target is the scanned Docker Desktop build-cache inventory row.",
+                        ),
+                        write_preflight_check(
+                            "command-allowlist",
+                            "Docker command allowlist",
+                            "passed",
+                            "Only docker builder prune --force is allowed; volumes and system prune are not requested.",
+                        ),
+                        write_preflight_check(
+                            "feature-flag",
+                            "Executor feature flag",
+                            "passed",
+                            "SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS enabled tool-native Docker cleanup.",
+                        ),
+                    ],
+                    note,
+                };
+            }
+
+            let reject_code = if !route_match {
+                "route-not-docker-build-cache-prune"
+            } else {
+                target_reject
+                    .or_else(|| rejections.first().copied())
+                    .unwrap_or("tool-native-prune-executors-disabled")
+            };
+
+            WriteExecutionEntry {
+                id: action.id,
+                title: action.title,
+                route: action.route,
+                result: "rejected".to_string(),
+                reject_code: reject_code.to_string(),
+                bytes: 0,
+                preflight_status: "target-blocked".to_string(),
+                preflight_checks: vec![
+                    write_preflight_check(
+                        "route-docker-build-cache",
+                        "Docker build-cache route",
+                        if route_match { "passed" } else { "blocked" },
+                        if route_match {
+                            "Action route is tool-native-docker-build-cache-prune."
+                        } else {
+                            "Only tool-native-docker-build-cache-prune can use this executor."
+                        },
+                    ),
+                    write_preflight_check(
+                        "target-docker-build-cache",
+                        "Docker build-cache target",
+                        if target_reject.is_none() {
+                            "passed"
+                        } else {
+                            "blocked"
+                        },
+                        if target_reject.is_none() {
+                            "Target is the Docker build-cache inventory row."
+                        } else {
+                            "Target is missing or is not the Docker build-cache inventory row."
+                        },
+                    ),
+                    write_preflight_check(
+                        "command-allowlist",
+                        "Docker command allowlist",
+                        "blocked",
+                        "No Docker command runs unless every plan, consent, route, target, and feature flag check passes.",
+                    ),
+                    write_preflight_check(
+                        "feature-flag",
+                        "Executor feature flag",
+                        if flag_enabled { "passed" } else { "blocked" },
+                        if flag_enabled {
+                            "tool-native prune executor feature flag is enabled."
+                        } else {
+                            "SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS is not enabled."
+                        },
+                    ),
+                ],
+                note: format!(
+                    "Docker build-cache cleanup rejected with code {reject_code}. Plan {plan_id}; no Docker command was started."
+                ),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let accepted = rejections.is_empty()
+        && entries
+            .iter()
+            .all(|entry| entry.result == "executed" || entry.result == "no-op");
+    let reclaimed = entries.iter().map(|entry| entry.bytes).sum::<u64>();
+    let mut warnings = docker_build_cache_execution_warnings(&rejections);
+    if let Some(result) = &command_result {
+        if !result.ok || result.timed_out {
+            warnings.push(result.summary());
+        }
+    }
+    if accepted {
+        warnings.push(format!(
+            "Docker build-cache prune completed for plan {plan_id}; reclaimed {reclaimed} byte(s). Run a fresh native scan and Docker build if you need rebuild proof."
+        ));
+    }
+
+    WriteExecutionResponse {
+        mode: if accepted {
+            "native-docker-build-cache-executor"
+        } else {
+            "native-docker-build-cache-executor-rejected"
+        },
+        real_run_enabled: flag_enabled,
+        destructive_commands: flag_enabled,
+        accepted,
+        reason: if accepted {
+            format!("Docker build-cache executor accepted the tool-native route and reclaimed {reclaimed} byte(s).")
+        } else {
+            "Docker build-cache executor rejected the request before a Docker command could run."
+                .to_string()
+        },
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
+        entries,
+        warnings,
+    }
+}
+
 fn execute_pnpm_store_cleanup(request: WriteExecutionRequest) -> WriteExecutionResponse {
     let route = request.route.clone();
     let plan_id = request.plan_id.clone();
@@ -3245,6 +3456,7 @@ fn is_first_safe_write_route(route: &str) -> bool {
             | "bounded-android-cache-delete"
             | "launcher-cache-cleanup"
             | "bounded-pip-cache-delete"
+            | "tool-native-docker-build-cache-prune"
             | "bounded-npm-cache-delete"
             | "bounded-pnpm-store-delete"
     )
@@ -3517,6 +3729,30 @@ fn write_executor_scaffold(route: &str) -> Option<WriteExecutorScaffold> {
                 },
             })
         }
+        "tool-native-docker-build-cache-prune" => {
+            let enabled = cfg!(target_os = "windows") && tool_native_prune_executors_enabled();
+            Some(WriteExecutorScaffold {
+                route: "tool-native-docker-build-cache-prune".to_string(),
+                title: "Docker build-cache prune".to_string(),
+                feature_flag: "toolNativePruneExecutors".to_string(),
+                status: if enabled {
+                    "feature-flag-enabled".to_string()
+                } else {
+                    "feature-flag-disabled".to_string()
+                },
+                validation_status: if enabled {
+                    "docker-build-cache-only".to_string()
+                } else {
+                    "validation-required".to_string()
+                },
+                mutation_enabled: enabled,
+                reason: if enabled {
+                    "Docker build-cache executor can run only docker builder prune --force; volumes, running containers, images, and broad system prune stay outside the route.".to_string()
+                } else {
+                    "Docker build-cache executor scaffold is present, but mutation remains disabled until SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS is enabled on Windows.".to_string()
+                },
+            })
+        }
         "bounded-npm-cache-delete" => {
             let enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
             Some(WriteExecutorScaffold {
@@ -3582,6 +3818,7 @@ fn write_executor_scaffold_reject_code(route: &str) -> &'static str {
         "bounded-android-cache-delete" => "android-cache-executor-disabled",
         "launcher-cache-cleanup" => "shader-cache-executor-disabled",
         "bounded-pip-cache-delete" => "pip-cache-executor-disabled",
+        "tool-native-docker-build-cache-prune" => "tool-native-prune-executors-disabled",
         "bounded-npm-cache-delete" => "npm-cache-executor-disabled",
         "bounded-pnpm-store-delete" => "pnpm-store-executor-disabled",
         _ => "real-executor-disabled",
@@ -3610,6 +3847,9 @@ fn write_action_target_reject_code(
     }
     if route == "bounded-pip-cache-delete" {
         return pip_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
+    }
+    if route == "tool-native-docker-build-cache-prune" {
+        return docker_build_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
     }
     if route == "bounded-npm-cache-delete" {
         return npm_cache_target_reject_code(target_path.as_deref().unwrap_or(""));
@@ -3802,6 +4042,16 @@ fn write_target_forbidden(route: &str, target: &str) -> bool {
                 || target.contains("\\pip\\pip.conf")
                 || target.contains("\\selfcheck")
         }
+        "tool-native-docker-build-cache-prune" => {
+            target.contains("\\")
+                || target.contains("/")
+                || target.contains("volume")
+                || target.contains("container")
+                || target.contains("image")
+                || target.contains("system prune")
+                || target.contains("--volumes")
+                || target.contains("data-root")
+        }
         "bounded-npm-cache-delete" => {
             target.contains("downloads")
                 || target.contains("documents")
@@ -3892,6 +4142,7 @@ fn write_target_allowed(route: &str, target: &str) -> bool {
             target.ends_with("\\appdata\\local\\pip\\cache")
                 || target.contains("\\appdata\\local\\pip\\cache\\")
         }
+        "tool-native-docker-build-cache-prune" => target == "docker desktop build cache",
         "bounded-npm-cache-delete" => {
             target.ends_with("\\npm-cache\\_cacache") || target.contains("\\npm-cache\\_cacache\\")
         }
@@ -3960,6 +4211,9 @@ fn write_boundary_warning(code: &str) -> &'static str {
         }
         "pip-cache-executor-disabled" => {
             "Write request rejected: pipCacheExecutor scaffold is feature-flag disabled."
+        }
+        "tool-native-prune-executors-disabled" => {
+            "Write request rejected: toolNativePruneExecutors scaffold is feature-flag disabled."
         }
         "npm-cache-executor-disabled" => {
             "Write request rejected: npmCacheExecutor scaffold is feature-flag disabled."
@@ -4054,6 +4308,15 @@ fn write_boundary_warning(code: &str) -> &'static str {
         "route-not-bounded-pip-cache" => {
             "Write request rejected: pip cache cleanup requires route bounded-pip-cache-delete."
         }
+        "target-not-docker-build-cache" => {
+            "Write request rejected: Docker cleanup target is not the Docker build-cache inventory row."
+        }
+        "route-not-docker-build-cache-prune" => {
+            "Write request rejected: Docker build-cache cleanup requires route tool-native-docker-build-cache-prune."
+        }
+        "docker-command-failed" => {
+            "Write request failed while running the allowlisted Docker build-cache command."
+        }
         "target-not-npm-cache" => {
             "Write request rejected: npm cache target is not the current user's npm-cache\\_cacache directory."
         }
@@ -4113,6 +4376,10 @@ fn shader_cache_executor_enabled() -> bool {
 
 fn pip_cache_executor_enabled() -> bool {
     runtime_feature_flag_enabled("SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR")
+}
+
+fn tool_native_prune_executors_enabled() -> bool {
+    runtime_feature_flag_enabled("SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS")
 }
 
 fn npm_cache_executor_enabled() -> bool {
@@ -4189,6 +4456,9 @@ fn temp_execution_rejections(
     }
     if request.actions.is_empty() {
         codes.push("no-actions");
+    }
+    if request.actions.len() > 1 {
+        codes.push("docker-action-count-invalid");
     }
     codes
 }
@@ -4983,6 +5253,90 @@ fn pip_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
         .collect()
 }
 
+fn docker_build_cache_execution_rejections(
+    request: &WriteExecutionRequest,
+    flag_enabled: bool,
+) -> Vec<&'static str> {
+    let mut codes = Vec::new();
+    if !cfg!(target_os = "windows") {
+        codes.push("windows-required");
+    }
+    if !flag_enabled {
+        codes.push("tool-native-prune-executors-disabled");
+    }
+    if request.plan_id.trim().is_empty() {
+        codes.push("missing-plan-id");
+    }
+    if request
+        .scan_fingerprint
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-scan-fingerprint");
+    }
+    if request
+        .consent_plan_id
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        codes.push("missing-consent-plan-id");
+    }
+    if request.request_mode.as_deref() != Some("execute-docker-build-cache") {
+        codes.push("request-mode-invalid");
+    }
+    if request.route != "tool-native-docker-build-cache-prune" {
+        codes.push("route-not-docker-build-cache-prune");
+    }
+    if request.dry_run_only != Some(false) {
+        codes.push("dry-run-disabled-required");
+    }
+    if request.mutation_attempted != Some(true) {
+        codes.push("mutation-confirmation-required");
+    }
+    if request.actions.is_empty() {
+        codes.push("no-actions");
+    }
+    codes
+}
+
+fn docker_build_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
+    if codes.is_empty() {
+        return vec![
+            "Docker build-cache executor runs only docker builder prune --force through Command::new(\"docker\"); Docker volumes, running containers, images, data-root folders, PowerShell, and broad system prune stay forbidden.".to_string(),
+        ];
+    }
+    codes
+        .iter()
+        .map(|code| match *code {
+            "windows-required" => "Docker build-cache cleanup is Windows-only in this build.",
+            "tool-native-prune-executors-disabled" => {
+                "Set SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS=1 before launching the Tauri app to enable Docker build-cache cleanup."
+            }
+            "dry-run-disabled-required" => {
+                "Docker build-cache cleanup requires dryRunOnly=false on the execute-docker-build-cache request."
+            }
+            "mutation-confirmation-required" => {
+                "Docker build-cache cleanup requires mutationAttempted=true on the execute-docker-build-cache request."
+            }
+            "request-mode-invalid" => {
+                "Docker build-cache cleanup requires requestMode=execute-docker-build-cache."
+            }
+            "docker-action-count-invalid" => {
+                "Docker build-cache cleanup accepts exactly one inventory action."
+            }
+            "route-not-docker-build-cache-prune" => {
+                "Docker build-cache cleanup requires route tool-native-docker-build-cache-prune."
+            }
+            _ => write_boundary_warning(code),
+        })
+        .map(String::from)
+        .collect()
+}
+
 fn npm_cache_execution_warnings(codes: &[&'static str]) -> Vec<String> {
     if codes.is_empty() {
         return vec![
@@ -5514,6 +5868,20 @@ fn pip_cache_target_reject_code(value: &str) -> Option<&'static str> {
     None
 }
 
+fn docker_build_cache_target_reject_code(value: &str) -> Option<&'static str> {
+    let clean = normalize_write_target(value);
+    if clean.trim().is_empty() {
+        return Some("target-missing");
+    }
+    if write_target_forbidden("tool-native-docker-build-cache-prune", &clean) {
+        return Some("target-forbidden");
+    }
+    if !write_target_allowed("tool-native-docker-build-cache-prune", &clean) {
+        return Some("target-not-docker-build-cache");
+    }
+    None
+}
+
 fn known_shader_cache_roots(local_app_data: &Path) -> Vec<(&'static str, PathBuf)> {
     vec![
         ("Direct3D shader cache", local_app_data.join("D3DSCache")),
@@ -5839,6 +6207,37 @@ struct PipCacheDeleteResult {
     deleted_files: u64,
     deleted_dirs: u64,
     skipped_count: u64,
+}
+
+#[derive(Default)]
+struct DockerCommandResult {
+    ok: bool,
+    timed_out: bool,
+    exit_code: Option<i32>,
+    stdout: String,
+    stderr: String,
+    error: String,
+}
+
+impl DockerCommandResult {
+    fn summary(&self) -> String {
+        if self.timed_out {
+            return "Docker command timed out before completion.".to_string();
+        }
+        if !self.error.is_empty() {
+            return format!("Docker command could not start: {}", self.error);
+        }
+        let detail = first_non_empty_line(&self.stderr)
+            .or_else(|| first_non_empty_line(&self.stdout))
+            .unwrap_or_else(|| "no output".to_string());
+        format!(
+            "Docker command exit={}; {}",
+            self.exit_code
+                .map(|code| code.to_string())
+                .unwrap_or_else(|| "unknown".to_string()),
+            detail
+        )
+    }
 }
 
 #[derive(Default)]
@@ -6649,6 +7048,143 @@ fn pip_cache_path_is_under_current_user_root(path: &Path) -> bool {
     path_is_under(path, &local_app_data.join("pip").join("Cache"))
 }
 
+fn run_docker_command(args: &[&str], timeout_secs: u64) -> DockerCommandResult {
+    let mut child = match Command::new("docker")
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(error) => {
+            return DockerCommandResult {
+                error: error.to_string(),
+                ..DockerCommandResult::default()
+            }
+        }
+    };
+
+    let started = Instant::now();
+    let timeout = Duration::from_secs(timeout_secs);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => match child.wait_with_output() {
+                Ok(output) => {
+                    return DockerCommandResult {
+                        ok: output.status.success(),
+                        timed_out: false,
+                        exit_code: output.status.code(),
+                        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+                        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+                        error: String::new(),
+                    }
+                }
+                Err(error) => {
+                    return DockerCommandResult {
+                        error: error.to_string(),
+                        ..DockerCommandResult::default()
+                    }
+                }
+            },
+            Ok(None) => {
+                if started.elapsed() >= timeout {
+                    let _ = child.kill();
+                    let output = child.wait_with_output().ok();
+                    return DockerCommandResult {
+                        ok: false,
+                        timed_out: true,
+                        exit_code: output.as_ref().and_then(|out| out.status.code()),
+                        stdout: output
+                            .as_ref()
+                            .map(|out| String::from_utf8_lossy(&out.stdout).to_string())
+                            .unwrap_or_default(),
+                        stderr: output
+                            .as_ref()
+                            .map(|out| String::from_utf8_lossy(&out.stderr).to_string())
+                            .unwrap_or_default(),
+                        error: String::new(),
+                    };
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+            Err(error) => {
+                return DockerCommandResult {
+                    error: error.to_string(),
+                    ..DockerCommandResult::default()
+                }
+            }
+        }
+    }
+}
+
+fn docker_build_cache_prune_result(output: &str) -> Option<u64> {
+    output.lines().find_map(|line| {
+        let clean = line.trim();
+        let lower = clean.to_ascii_lowercase();
+        if !lower.contains("total reclaimed space") {
+            return None;
+        }
+        clean
+            .split(':')
+            .last()
+            .and_then(|value| parse_docker_size_to_bytes(value.trim()))
+    })
+}
+
+fn docker_build_cache_inventory_bytes(output: &str) -> Option<u64> {
+    output.lines().find_map(|line| {
+        let clean = line.trim();
+        let lower = clean.to_ascii_lowercase();
+        if !lower.starts_with("build cache") {
+            return None;
+        }
+        let parts = clean.split_whitespace().collect::<Vec<_>>();
+        let size_token = parts.iter().rev().find(|part| {
+            part.chars().any(|ch| ch.is_ascii_digit())
+                && part.chars().any(|ch| ch.is_ascii_alphabetic())
+        })?;
+        parse_docker_size_to_bytes(size_token)
+    })
+}
+
+fn parse_docker_size_to_bytes(value: &str) -> Option<u64> {
+    let clean = value.trim().trim_end_matches(',');
+    if clean.is_empty() {
+        return None;
+    }
+    let mut number = String::new();
+    let mut unit = String::new();
+    for ch in clean.chars() {
+        if ch.is_ascii_digit() || ch == '.' {
+            number.push(ch);
+        } else if !ch.is_whitespace() {
+            unit.push(ch.to_ascii_lowercase());
+        }
+    }
+    if number.is_empty() {
+        return None;
+    }
+    let parsed = number.parse::<f64>().ok()?;
+    let multiplier = match unit.as_str() {
+        "" | "b" | "bytes" => 1_f64,
+        "kb" | "kib" | "k" => 1024_f64,
+        "mb" | "mib" | "m" => 1024_f64.powi(2),
+        "gb" | "gib" | "g" => 1024_f64.powi(3),
+        "tb" | "tib" | "t" => 1024_f64.powi(4),
+        _ => return None,
+    };
+    Some((parsed * multiplier).max(0.0) as u64)
+}
+
+fn first_non_empty_line(value: &str) -> Option<String> {
+    value
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(|line| line.chars().take(180).collect())
+}
+
 fn delete_npm_cache_target(root: &Path) -> NpmCacheDeleteResult {
     let mut result = NpmCacheDeleteResult::default();
     if npm_cache_target_reject_code(&path_to_string(root)).is_some() {
@@ -7251,7 +7787,7 @@ fn openai_advice_row_schema() -> Value {
             "priority": { "type": "string", "enum": ["high", "medium", "low"] },
             "actionType": {
                 "type": "string",
-                "enum": ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-android-cache-executor", "run-shader-cache-executor", "run-pip-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+                "enum": ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-android-cache-executor", "run-shader-cache-executor", "run-pip-cache-executor", "run-docker-build-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             "targetId": { "type": "string" },
             "route": { "type": "string" }
@@ -7417,6 +7953,8 @@ fn runtime_capabilities() -> RuntimeCapabilities {
     let android_cache_enabled = cfg!(target_os = "windows") && android_cache_executor_enabled();
     let shader_cache_enabled = cfg!(target_os = "windows") && shader_cache_executor_enabled();
     let pip_cache_enabled = cfg!(target_os = "windows") && pip_cache_executor_enabled();
+    let tool_native_prune_enabled =
+        cfg!(target_os = "windows") && tool_native_prune_executors_enabled();
     let npm_cache_enabled = cfg!(target_os = "windows") && npm_cache_executor_enabled();
     let pnpm_store_enabled = cfg!(target_os = "windows") && pnpm_store_executor_enabled();
     let recycle_bin_enabled = cfg!(target_os = "windows") && recycle_bin_executor_enabled();
@@ -7434,6 +7972,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         || android_cache_enabled
         || shader_cache_enabled
         || pip_cache_enabled
+        || tool_native_prune_enabled
         || npm_cache_enabled
         || pnpm_store_enabled
         || recycle_bin_enabled;
@@ -7466,11 +8005,11 @@ fn runtime_capabilities() -> RuntimeCapabilities {
             android_cache_executor: android_cache_enabled,
             shader_cache_executor: shader_cache_enabled,
             pip_cache_executor: pip_cache_enabled,
+            tool_native_prune_executors: tool_native_prune_enabled,
             npm_cache_executor: npm_cache_enabled,
             pnpm_store_executor: pnpm_store_enabled,
             recycle_bin_executor: recycle_bin_enabled,
             browser_cache_executor: browser_cache_enabled,
-            tool_native_prune_executors: false,
         },
         reason: if real_execution_enabled {
             "One or more scoped cleanup executors are enabled by environment flags."
@@ -8692,6 +9231,72 @@ fn measure_pip_cache_roots(request: &ScanRequest) -> Vec<ScanFinding> {
         MeasureKind::FullTree,
         request,
     )]
+}
+
+fn measure_docker_build_cache() -> ScanFinding {
+    if !cfg!(target_os = "windows") {
+        return unsupported_finding(
+            "docker-build-cache",
+            "Docker build cache",
+            "Docker Desktop build cache",
+            "Docker build-cache inventory is Windows-only in this build.",
+        );
+    }
+
+    let result = run_docker_command(&["system", "df", "-v"], 12);
+    if result.timed_out {
+        return ScanFinding {
+            recipe_id: "docker-build-cache".to_string(),
+            title: "Docker build cache".to_string(),
+            path: "Docker Desktop build cache".to_string(),
+            bytes: 0,
+            status: "limited".to_string(),
+            files: 0,
+            dirs: 0,
+            errors: 1,
+            note: "Docker CLI inventory timed out; no cleanup target was created.".to_string(),
+            items: Vec::new(),
+        };
+    }
+    if !result.error.is_empty() {
+        return missing_finding(
+            "docker-build-cache",
+            "Docker build cache",
+            "Docker Desktop build cache",
+            "Docker CLI was not available; install or start Docker Desktop before inventory.",
+        );
+    }
+    if !result.ok {
+        return ScanFinding {
+            recipe_id: "docker-build-cache".to_string(),
+            title: "Docker build cache".to_string(),
+            path: "Docker Desktop build cache".to_string(),
+            bytes: 0,
+            status: "limited".to_string(),
+            files: 0,
+            dirs: 0,
+            errors: 1,
+            note: format!(
+                "Docker CLI inventory failed; no cleanup target was created. {}",
+                result.summary()
+            ),
+            items: Vec::new(),
+        };
+    }
+
+    let bytes = docker_build_cache_inventory_bytes(&result.stdout).unwrap_or(0);
+    ScanFinding {
+        recipe_id: "docker-build-cache".to_string(),
+        title: "Docker build cache".to_string(),
+        path: "Docker Desktop build cache".to_string(),
+        bytes,
+        status: "measured".to_string(),
+        files: 0,
+        dirs: 0,
+        errors: 0,
+        note: "Measured with `docker system df -v`; only build cache can be passed to the tool-native prune executor. Volumes, containers, images, and Docker data folders are not cleanup targets.".to_string(),
+        items: Vec::new(),
+    }
 }
 
 fn measure_browser_cache_roots(request: &ScanRequest) -> Vec<ScanFinding> {

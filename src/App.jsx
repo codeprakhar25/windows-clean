@@ -151,6 +151,7 @@ import {
   mergeNativeScanIntoActions,
   runNativeDryRunScopeValidation,
   runNativeAndroidCacheExecutor,
+  runNativeDockerBuildCacheExecutor,
   runNativeDownloadsCleanupExecutor,
   runNativeBrowserCacheExecutor,
   runNativeExecutorDryRun,
@@ -267,6 +268,7 @@ export default function App() {
   const [nativeAndroidCacheExecution, setNativeAndroidCacheExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeShaderCacheExecution, setNativeShaderCacheExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativePipCacheExecution, setNativePipCacheExecution] = useState({ status: "idle", result: null, error: "" });
+  const [nativeDockerBuildCacheExecution, setNativeDockerBuildCacheExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeNpmCacheExecution, setNativeNpmCacheExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativePnpmStoreExecution, setNativePnpmStoreExecution] = useState({ status: "idle", result: null, error: "" });
   const [nativeRecycleBinExecution, setNativeRecycleBinExecution] = useState({ status: "idle", result: null, error: "" });
@@ -1754,6 +1756,8 @@ export default function App() {
     setNativeProjectDependencyExecution({ status: "idle", result: null, error: "" });
     setNativeBrowserCacheExecution({ status: "idle", result: null, error: "" });
     setNativeGradleCacheExecution({ status: "idle", result: null, error: "" });
+    setNativePipCacheExecution({ status: "idle", result: null, error: "" });
+    setNativeDockerBuildCacheExecution({ status: "idle", result: null, error: "" });
     setNativeNpmCacheExecution({ status: "idle", result: null, error: "" });
     setNativeRecycleBinExecution({ status: "idle", result: null, error: "" });
     setExecutionConsent({ accepted: false, planId: "", acceptedAt: "" });
@@ -2309,6 +2313,11 @@ export default function App() {
     if (actionType === "run-pip-cache-executor") {
       focusWorkflowPanel("pip-cache-executor-panel");
       await executePipCacheCleanup();
+      return;
+    }
+    if (actionType === "run-docker-build-cache-executor") {
+      focusWorkflowPanel("docker-build-cache-executor-panel");
+      await executeDockerBuildCacheCleanup();
       return;
     }
     if (actionType === "run-npm-cache-executor") {
@@ -2877,6 +2886,61 @@ export default function App() {
     }
   }
 
+  async function executeDockerBuildCacheCleanup() {
+    if (nativeDockerBuildCacheExecution.status === "running") return;
+    if (blockExecutorForPendingProof(setNativeDockerBuildCacheExecution)) return;
+    const dockerRows = executorPlan.rows.filter((row) => row.id === "docker-build-cache" && row.route === "tool-native-docker-build-cache-prune");
+    const finding = (nativeScan.result?.findings || [])
+      .find((row) => row.recipeId === "docker-build-cache" && (row.status === "measured" || row.status === "limited") && row.path);
+    const dockerTarget = finding
+      ? {
+          id: "docker-build-cache",
+          title: finding.title || "Docker build cache",
+          path: finding.path,
+          bytes: Number(finding.bytes || 0),
+          status: finding.status
+        }
+      : null;
+
+    if (!runtimeCapabilities.result.realRunEnabled || !runtimeCapabilities.result.executorFlags?.toolNativePruneExecutors) {
+      setNativeDockerBuildCacheExecution({
+        status: "blocked",
+        result: null,
+        error: "Docker build-cache executor is not enabled. Set SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS=1 before launching the Tauri app."
+      });
+      return;
+    }
+    if (!planSnapshot.id || !scanSession.currentFingerprint || !consentReceipt.planId || !dockerRows.length || !dockerTarget) {
+      setNativeDockerBuildCacheExecution({
+        status: "blocked",
+        result: null,
+        error: "Docker build-cache cleanup needs the docker-build-cache action selected, Docker CLI inventory evidence, current plan, scan fingerprint, and consent receipt."
+      });
+      return;
+    }
+
+    setActiveStage("execute");
+    setNativeDockerBuildCacheExecution({ status: "running", result: null, error: "" });
+    try {
+      const result = await runNativeDockerBuildCacheExecutor({
+        row: dockerTarget,
+        planId: planSnapshot.id,
+        scanFingerprint: scanSession.currentFingerprint,
+        consentPlanId: consentReceipt.planId,
+        expectedBytes: dockerTarget.bytes
+      });
+      setNativeDockerBuildCacheExecution({ status: "complete", result, error: "" });
+      const executedAt = new Date().toISOString();
+      commitExecutionLedger(buildNativeExecutionLedger(result, executedAt), { executedAt, source: "native-docker-build-cache-executor" });
+    } catch (error) {
+      setNativeDockerBuildCacheExecution({
+        status: "error",
+        result: null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
   async function executePnpmStoreCleanup() {
     if (nativePnpmStoreExecution.status === "running") return;
     if (blockExecutorForPendingProof(setNativePnpmStoreExecution)) return;
@@ -3004,6 +3068,7 @@ export default function App() {
     if (route === "bounded-android-cache-delete") return executeAndroidCacheCleanup();
     if (route === "launcher-cache-cleanup") return executeShaderCacheCleanup();
     if (route === "bounded-pip-cache-delete") return executePipCacheCleanup();
+    if (route === "tool-native-docker-build-cache-prune") return executeDockerBuildCacheCleanup();
     if (route === "bounded-npm-cache-delete") return executeNpmCacheCleanup();
     if (route === "bounded-pnpm-store-delete") return executePnpmStoreCleanup();
     if (route === "shell-recycle-bin") return executeRecycleBinCleanup();
@@ -4197,6 +4262,15 @@ export default function App() {
               scanSession={scanSession}
               consentReceipt={consentReceipt}
               onExecute={executePipCacheCleanup}
+            />
+            <DockerBuildCacheExecutorPanel
+              runtimeCapabilities={runtimeCapabilities}
+              execution={nativeDockerBuildCacheExecution}
+              executorPlan={executorPlan}
+              nativeScan={nativeScan}
+              scanSession={scanSession}
+              consentReceipt={consentReceipt}
+              onExecute={executeDockerBuildCacheCleanup}
             />
             <NpmCacheExecutorPanel
               runtimeCapabilities={runtimeCapabilities}
@@ -6972,7 +7046,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, recomm
   const configured = Boolean(config.configured || nativeConfigured);
   const keySource = nativeConfigured ? context.runtime.openAiKeySource : config.keySource;
   const transport = context.runtime.openAiAgentAdvice ? "native-tauri" : "browser-fetch";
-  const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.downloadsCleanupExecutor || context.runtime.largeFileArchiveExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor || context.runtime.gradleCacheExecutor || context.runtime.userCacheExecutor || context.runtime.androidCacheExecutor || context.runtime.npmCacheExecutor || context.runtime.pnpmStoreExecutor || context.runtime.recycleBinExecutor);
+  const scopedRealFlag = Boolean(context.runtime.tempCleanupExecutor || context.runtime.downloadsCleanupExecutor || context.runtime.largeFileArchiveExecutor || context.runtime.projectDependencyExecutor || context.runtime.browserCacheExecutor || context.runtime.gradleCacheExecutor || context.runtime.userCacheExecutor || context.runtime.androidCacheExecutor || context.runtime.shaderCacheExecutor || context.runtime.pipCacheExecutor || context.runtime.toolNativePruneExecutors || context.runtime.npmCacheExecutor || context.runtime.pnpmStoreExecutor || context.runtime.recycleBinExecutor);
   const execution = context.execution || {};
   const proofLabel = execution.proofStatus === "waiting-for-execution" ? "waiting" : String(execution.proofStatus || "waiting").replace(/^proof-/, "");
   const rescanLabel = execution.rescanComparisonStatus === "not-run" ? "none" : execution.rescanComparisonStatus || "none";
@@ -7006,6 +7080,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, recomm
           <QueueStat label="Android roots" value={context.androidCacheTargets?.length || 0} tone={context.androidCacheTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Shader roots" value={context.shaderCacheTargets?.length || 0} tone={context.shaderCacheTargets?.length ? "advanced" : "review"} />
           <QueueStat label="pip root" value={context.pipCacheTargets?.length || 0} tone={context.pipCacheTargets?.length ? "advanced" : "review"} />
+          <QueueStat label="Docker cache" value={context.dockerBuildCacheTargets?.length || 0} tone={context.dockerBuildCacheTargets?.length ? "advanced" : "review"} />
           <QueueStat label="npm root" value={context.npmCacheTargets?.length || 0} tone={context.npmCacheTargets?.length ? "advanced" : "review"} />
           <QueueStat label="pnpm root" value={context.pnpmStoreTargets?.length || 0} tone={context.pnpmStoreTargets?.length ? "advanced" : "review"} />
           <QueueStat label="Recycle" value={context.recycleBinTargets?.length || 0} tone={context.recycleBinTargets?.length ? "restricted" : "review"} />
@@ -9891,6 +9966,108 @@ function PipCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, n
         <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
           {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {running ? "Cleaning pip cache" : "Run pip cache cleanup"}
+        </Button>
+
+        {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}
+
+        {result?.warnings?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.warnings.slice(0, 3).map((warning) => (
+              <div key={warning} className="rounded-md border bg-card p-3 text-xs text-muted-foreground">{warning}</div>
+            ))}
+          </div>
+        ) : null}
+
+        {result?.entries?.length ? (
+          <div className="flex flex-col gap-2">
+            {result.entries.slice(0, 4).map((entry) => (
+              <div key={`${entry.id}-${entry.result}-${entry.bytes}`} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-auto min-w-0 text-sm font-medium">{entry.title}</span>
+                  <Badge variant={entry.result === "executed" ? "safe" : "review"}>{entry.result}</Badge>
+                  <Badge variant="outline">{formatBytes(entry.bytes)}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{entry.note}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function DockerBuildCacheExecutorPanel({ runtimeCapabilities, execution, executorPlan, nativeScan, scanSession, consentReceipt, onExecute }) {
+  const enabled = Boolean(runtimeCapabilities.result.realRunEnabled && runtimeCapabilities.result.executorFlags?.toolNativePruneExecutors);
+  const rows = executorPlan.rows.filter((row) => row.id === "docker-build-cache" && row.route === "tool-native-docker-build-cache-prune");
+  const finding = (nativeScan.result?.findings || [])
+    .find((row) => row.recipeId === "docker-build-cache" && (row.status === "measured" || row.status === "limited") && row.path);
+  const target = finding
+    ? {
+        id: "docker-build-cache",
+        title: finding.title || "Docker build cache",
+        path: finding.path,
+        bytes: Number(finding.bytes || 0),
+        status: finding.status
+      }
+    : null;
+  const requestReady = Boolean(rows.length && target && scanSession.currentFingerprint && consentReceipt.planId);
+  const running = execution.status === "running";
+  const result = execution.result;
+  const reclaimed = (result?.entries || []).reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+  const disabled = running || !enabled || !requestReady;
+
+  return (
+    <Card id="docker-build-cache-executor-panel">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-3">
+          Docker build-cache cleanup
+          <Badge variant={enabled ? "restricted" : "review"}>{enabled ? "feature on" : "feature off"}</Badge>
+        </CardTitle>
+        <CardDescription>
+          Runs one allowlisted Docker CLI command for build cache only. Volumes, running containers, images, Docker data folders, and broad prune commands are rejected.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-4 gap-2">
+          <QueueStat label="Selected" value={rows.length} tone={rows.length ? "advanced" : "review"} />
+          <QueueStat label="Inventory" value={target ? "scanned" : "missing"} tone={target ? "safe" : "review"} />
+          <QueueStat label="Recovered" value={formatBytes(reclaimed)} tone={reclaimed ? "safe" : "review"} />
+          <QueueStat label="Request" value={requestReady ? "ready" : "wait"} tone={requestReady ? "safe" : "review"} />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Docker build-cache executor boundary</span>
+            <Badge variant={enabled ? "restricted" : "safe"}>{enabled ? "can run Docker prune" : "cannot run"}</Badge>
+            <Badge variant="outline">tool-native-docker-build-cache-prune</Badge>
+            <Badge variant="safe">builder prune only</Badge>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <span>Enable with `SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS=1` before launching Tauri.</span>
+            <span>Request evidence: scan {scanSession.currentFingerprint ? "yes" : "no"}, consent {consentReceipt.planId ? "yes" : "no"}, selected Docker route {rows.length ? "yes" : "no"}.</span>
+            <span>Allowed command is `docker builder prune --force`; Docker volumes, running containers, image deletion, data-root deletion, shell commands, and `docker system prune` stay blocked.</span>
+          </div>
+        </div>
+
+        {target ? (
+          <div className="rounded-md border bg-card p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-auto min-w-0 text-sm font-medium">{target.title}</span>
+              <Badge variant="outline">{formatBytes(target.bytes)}</Badge>
+              <Badge variant={target.status === "limited" ? "review" : "safe"}>{target.status}</Badge>
+            </div>
+            <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{target.path}</p>
+          </div>
+        ) : (
+          <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+            Run a native read-only scan that completes Docker CLI inventory before this executor has a concrete target.
+          </div>
+        )}
+
+        <Button variant={enabled ? "default" : "outline"} size="sm" onClick={onExecute} disabled={disabled}>
+          {running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          {running ? "Running Docker prune" : "Run Docker prune"}
         </Button>
 
         {execution.error ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{execution.error}</div> : null}

@@ -380,14 +380,14 @@ export const executorPolicies = {
     guardrails: ["Age threshold", "Current-user store only", "No global bin removal", "No project node_modules deletion"]
   },
   "docker-build-cache": {
-    route: "tool-native-prune",
+    route: "tool-native-docker-build-cache-prune",
     lane: "tool-native",
     label: "Docker build-cache prune",
     realRunEnabled: false,
     dryRunSupported: true,
     requiresNativeValidation: true,
     verification: "Compare Docker build-cache inventory before and after.",
-    guardrails: ["Build cache only", "No volumes", "No running containers", "No images without explicit review"]
+    guardrails: ["docker builder prune --force only", "No volumes", "No running containers", "No image prune", "No Docker data-folder deletion"]
   },
   "windows-old": {
     route: "windows-cleanup-api",
@@ -734,13 +734,13 @@ export const toolNativeCommandSpecs = [
     id: "docker-build-cache",
     tool: "docker",
     actionId: "docker-build-cache",
-    route: "tool-native-prune",
+    route: "tool-native-docker-build-cache-prune",
     title: "Docker build cache",
     inspectCommand: "docker system df -v",
-    futureCommand: "docker builder prune",
-    status: "future-disabled",
+    futureCommand: "docker builder prune --force",
+    status: "manual-boundary",
     evidence: "Inventory Docker build cache separately from images, containers, and volumes.",
-    guardrails: ["No Docker volumes", "No running containers", "No docker system prune --volumes", "No shell execution in current build"]
+    guardrails: ["No Docker volumes", "No running containers", "No docker system prune --volumes", "No shell execution", "No Docker data-root deletion"]
   },
   {
     id: "gradle-cache",
@@ -870,7 +870,7 @@ export const windowsValidationChecks = [
     id: "tool-native-dry-runs",
     label: "Tool-native dry runs",
     lane: "executor",
-    requiredFor: "tool-native-prune",
+    requiredFor: "tool-native-docker-build-cache-prune",
     evidence: "npm, pnpm, Docker build-cache commands are inventoried without touching volumes, source, or running containers."
   },
   {
@@ -1133,16 +1133,16 @@ export const executorRouteRequirements = {
     fixtureIds: ["developer-tooling-fixture", "protected-path-fixture"],
     preconditions: ["Native Windows scan", "Current-user LocalAppData root", "Age threshold", "No project or global package path"]
   },
-  "tool-native-prune": {
+  "tool-native-docker-build-cache-prune": {
     title: "Tool-native prune commands",
     lane: "tool-native",
     phase: "second-safe",
-    implementation: "Prefer official dry-run or prune commands for pnpm and Docker build cache instead of raw directory wipes.",
-    rollback: "Tool caches rebuild; Docker volumes and running containers remain outside this route.",
+    implementation: "Run only the allowlisted Docker build-cache prune command after Docker CLI inventory.",
+    rollback: "Docker rebuilds missing build cache layers; Docker volumes and running containers remain outside this route.",
     proof: "Command evidence must show volumes, project source, and running workloads are not selected.",
     requiredValidationIds: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "tool-native-dry-runs", "ledger-rescan-parity"],
     fixtureIds: ["developer-tooling-fixture", "protected-path-fixture"],
-    preconditions: ["Native Windows scan", "Tool installed", "Tool command inventory", "No volume or source-path candidate"]
+    preconditions: ["Native Windows scan", "Docker CLI inventory", "Tool-native feature flag", "No volume, image, container, or source-path candidate"]
   },
   "windows-cleanup-api": {
     title: "Windows cleanup API",
@@ -1427,7 +1427,7 @@ export const actions = [
     bytes: 18.4 * GB,
     risk: "rebuildable",
     gate: "groupConfirm",
-    method: "Run Docker prune for unused build cache and dangling images",
+    method: "Run Docker builder prune for unused build cache",
     consequence: "Docker builds may be slower until layers are rebuilt.",
     recommendation: "Clean build cache before touching images or volumes.",
     selectedByDefault: false,
@@ -9692,7 +9692,7 @@ export function buildToolCommandInventory({
     const selectedRow = selectedRows.find((row) => row.id === spec.actionId || row.route === spec.route);
     const selected = Boolean(selectedRow);
     const supported =
-      spec.route === "tool-native-prune" ||
+      spec.route === "tool-native-docker-build-cache-prune" ||
       spec.route === "bounded-cache-delete" ||
       spec.route === "bounded-user-cache-delete" ||
       spec.route === "bounded-android-cache-delete" ||
@@ -13776,7 +13776,7 @@ function getTaskCapabilityAllowedOperations(row, power) {
     "Record zero-mutation ledger and verification evidence for this exact route.",
     "Ask for missing approval, review, or rollback evidence tied to this action."
   ];
-  if (row.route === "tool-native-prune") operations.push("Document the tool-native command path without executing shell commands.");
+  if (row.route === "tool-native-docker-build-cache-prune") operations.push("Use only the native Docker build-cache executor path for the allowlisted builder prune command.");
   if (row.route?.startsWith("item-review")) operations.push("Use only item-level Remove decisions in the planned byte count.");
   if (power.id === "manual-storage-strategy") operations.push("Track manual evidence and next steps without automating storage changes.");
   return operations;
@@ -13792,7 +13792,7 @@ function getTaskCapabilityForbiddenOperations(row, power) {
     forbidden.push("Touch cookies, sessions, saved logins, browser profiles, or extension data.");
   }
   if (
-    row.route === "tool-native-prune" ||
+    row.route === "tool-native-docker-build-cache-prune" ||
     row.route === "item-review-project-cache" ||
     row.route === "bounded-user-cache-delete" ||
     row.route === "bounded-android-cache-delete" ||
@@ -13905,7 +13905,7 @@ function buildTaskPowerBrokerAllowedOperations(power, grants = []) {
     "Issue dry-run receipts only for this selected plan and scan fingerprint.",
     "Run simulation only after grant evidence is current."
   ];
-  if (grants.some((grant) => grant.route === "tool-native-prune")) rows.push("Document tool-native command shape without executing it.");
+  if (grants.some((grant) => grant.route === "tool-native-docker-build-cache-prune")) rows.push("Keep Docker execution limited to the build-cache prune route.");
   if (power.id === "manual-storage-strategy") rows.push("Track manual evidence without automating storage changes.");
   return Array.from(new Set(rows));
 }
@@ -14285,7 +14285,7 @@ function getFallbackAgentTaskForbiddenOperations(row) {
     "Use this task to operate on sibling folders or unrelated cleanup targets.",
     "Self-elevate or request broader machine authority."
   ];
-  if (row.route === "tool-native-prune") forbidden.push("Run shell commands in the current build.");
+  if (row.route === "tool-native-docker-build-cache-prune") forbidden.push("Run broad Docker, volume, image, system-prune, or shell commands.");
   return forbidden;
 }
 
@@ -15847,6 +15847,13 @@ const executorSmokeRouteSpecs = {
     panelId: "pip-cache-executor-panel",
     actionLabel: "Run pip cache cleanup"
   },
+  "tool-native-docker-build-cache-prune": {
+    flag: "toolNativePruneExecutors",
+    envVar: "SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS",
+    requestMode: "execute-docker-build-cache",
+    panelId: "docker-build-cache-executor-panel",
+    actionLabel: "Run Docker prune"
+  },
   "bounded-npm-cache-delete": {
     flag: "npmCacheExecutor",
     envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
@@ -15979,6 +15986,7 @@ function getExecutorSmokeNativeTargetCount(route, nativeScan = null) {
     "bounded-android-cache-delete": ["android-cache"],
     "launcher-cache-cleanup": ["steam-shader-cache"],
     "bounded-pip-cache-delete": ["pip-cache"],
+    "tool-native-docker-build-cache-prune": ["docker-build-cache"],
     "bounded-npm-cache-delete": ["npm-cache"],
     "bounded-pnpm-store-delete": ["pnpm-store"],
     "shell-recycle-bin": ["recycle-bin"]
@@ -16809,11 +16817,11 @@ function getScopedRealExecutorRoutes(runtimeCapabilities = {}) {
     flags.androidCacheExecutor ? "bounded-android-cache-delete" : "",
     flags.shaderCacheExecutor ? "launcher-cache-cleanup" : "",
     flags.pipCacheExecutor ? "bounded-pip-cache-delete" : "",
+    flags.toolNativePruneExecutors ? "tool-native-docker-build-cache-prune" : "",
     flags.npmCacheExecutor ? "bounded-npm-cache-delete" : "",
     flags.pnpmStoreExecutor ? "bounded-pnpm-store-delete" : "",
     flags.recycleBinExecutor ? "shell-recycle-bin" : "",
-    flags.browserCacheExecutor ? "browser-cache-only" : "",
-    flags.toolNativePruneExecutors ? "tool-native-prune" : ""
+    flags.browserCacheExecutor ? "browser-cache-only" : ""
   ].filter(Boolean);
 }
 

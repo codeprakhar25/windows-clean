@@ -93,6 +93,13 @@ const assert = require("assert");
           status: "measured"
         },
         {
+          recipeId: "docker-build-cache",
+          title: "Docker build cache",
+          path: "Docker Desktop build cache",
+          bytes: 7 * 1024 ** 3,
+          status: "measured"
+        },
+        {
           recipeId: "wsl-vhdx",
           title: "WSL virtual disk compaction",
           path: "C:\\Users\\real\\AppData\\Local\\Packages\\Ubuntu\\LocalState\\ext4.vhdx",
@@ -216,6 +223,7 @@ const assert = require("assert");
   assert.strictEqual(manualContext.androidCacheTargets[0].route, "bounded-android-cache-delete", "OpenAI context should include scanned Android cache targets");
   assert.strictEqual(manualContext.shaderCacheTargets[0].route, "launcher-cache-cleanup", "OpenAI context should include scanned shader cache targets");
   assert.strictEqual(manualContext.pipCacheTargets[0].route, "bounded-pip-cache-delete", "OpenAI context should include scanned pip cache targets");
+  assert.strictEqual(manualContext.dockerBuildCacheTargets[0].route, "tool-native-docker-build-cache-prune", "OpenAI context should include scanned Docker build-cache targets");
   assert.strictEqual(manualContext.wslVhdxTargets[0].route, "advanced-checklist", "OpenAI context should include scanned WSL VHDX manual targets");
   assert.strictEqual(manualContext.wslCompactionWorkOrder.manualOnly, true, "OpenAI WSL compaction work order should stay manual-only");
   assert.strictEqual(manualContext.wslCompactionWorkOrder.canRunShell, false, "OpenAI WSL compaction work order must not run shell commands");
@@ -647,6 +655,34 @@ const assert = require("assert");
   assert.strictEqual(pipCacheBroker.rows[0].targetPanel, "pip-cache-executor-panel", "broker should route pip cache recommendations to the pip cache panel");
   assert.strictEqual(pipCacheBroker.rows[0].canAct, true, "broker should allow pip cache executor only when deterministic gates pass");
   assert.strictEqual(pipCacheBroker.rows[0].buttonLabel, "Run pip cleanup", "broker should label pip cache executor recommendations");
+  const dockerCacheBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "docker-build-cache",
+          title: "Clean Docker build cache",
+          reason: "Docker CLI inventory measured build cache and the tool-native executor is enabled.",
+          priority: "medium",
+          actionType: "run-docker-build-cache-executor",
+          targetId: "docker-build-cache",
+          route: "tool-native-docker-build-cache-prune"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-docker-cache" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, toolNativePruneExecutors: true },
+      dockerBuildCacheTargets: [{ id: "docker-build-cache", route: "tool-native-docker-build-cache-prune", bytes: 4096 }]
+    },
+    executionState: {
+      planId: "plan-docker-cache",
+      scanFingerprint: "scan-docker-cache",
+      consentPlanId: "plan-docker-cache"
+    }
+  });
+  assert.strictEqual(dockerCacheBroker.rows[0].targetPanel, "docker-build-cache-executor-panel", "broker should route Docker build-cache recommendations to the Docker executor panel");
+  assert.strictEqual(dockerCacheBroker.rows[0].canAct, true, "broker should allow Docker build-cache executor only when deterministic gates pass");
+  assert.strictEqual(dockerCacheBroker.rows[0].buttonLabel, "Run Docker prune", "broker should label Docker build-cache executor recommendations");
 
   console.log("openai agent adapter ok");
 })();

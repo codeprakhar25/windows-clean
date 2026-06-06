@@ -3378,6 +3378,40 @@ const assert = require("assert");
   assert.strictEqual(pipCacheSmokePacket.rows[0].envVar, "SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR", "pip cache smoke packet should name the executor env var");
   assert.strictEqual(pipCacheSmokePacket.rows[0].requestMode, "execute-pip-cache", "pip cache smoke packet should name the native request mode");
   assert.strictEqual(pipCacheSmokePacket.rows[0].panelId, "pip-cache-executor-panel", "pip cache smoke packet should point to the executor panel");
+  const dockerBuildCacheSmokePacket = guard.buildExecutorSmokeRunPacket({
+    executorPlan: guard.buildExecutorPlan({
+      selectedIds: new Set(["docker-build-cache"]),
+      actionList: guard.actions,
+      approvals: { groupConfirm: true, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
+      scanMode: "native-readonly"
+    }),
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      platform: "windows",
+      realRunEnabled: true,
+      destructiveCommands: true,
+      executorFlags: { toolNativePruneExecutors: true }
+    },
+    scanSession: { currentFingerprint: "scan-docker-build-cache-smoke" },
+    consentReceipt: { planId: "plan-docker-build-cache-smoke" },
+    executionProofHandoff: { status: "waiting-for-execution" },
+    planSnapshot: { id: "plan-docker-build-cache-smoke" },
+    nativeScan: {
+      findings: [
+        {
+          recipeId: "docker-build-cache",
+          status: "measured",
+          path: "Docker Desktop build cache",
+          bytes: 1024 * 1024 * 512
+        }
+      ]
+    }
+  });
+  assert.strictEqual(dockerBuildCacheSmokePacket.status, "ready-for-smoke", "enabled Docker build-cache route should be ready for a smoke run");
+  assert.strictEqual(dockerBuildCacheSmokePacket.rows[0].envVar, "SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS", "Docker smoke packet should name the executor env var");
+  assert.strictEqual(dockerBuildCacheSmokePacket.rows[0].requestMode, "execute-docker-build-cache", "Docker smoke packet should name the native request mode");
+  assert.strictEqual(dockerBuildCacheSmokePacket.rows[0].panelId, "docker-build-cache-executor-panel", "Docker smoke packet should point to the executor panel");
   const proofBlockedSmokePacket = guard.buildExecutorSmokeRunPacket({
     executorPlan: npmSmokeExecutorPlan,
     runtimeCapabilities: {

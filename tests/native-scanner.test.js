@@ -758,6 +758,41 @@ const assert = require("assert");
   assert.strictEqual(pipExecutionInvocation.payload.request.actions[0].targetPath.endsWith("pip\\Cache"), true, "pip cache executor should pass concrete pip cache root path");
   assert.strictEqual(pipExecution.accepted, true, "pip cache executor should normalize accepted responses");
   assert.strictEqual(pipExecution.entries[0].route, "bounded-pip-cache-delete", "pip cache executor should normalize executed route");
+  let dockerExecutionInvocation = null;
+  const dockerExecution = await native.runNativeDockerBuildCacheExecutor(
+    {
+      row: { id: "docker-build-cache", title: "Docker build cache", path: "Docker Desktop build cache", bytes: 6 * guard.GB },
+      planId: "plan-docker",
+      scanFingerprint: "scan-docker",
+      consentPlanId: "plan-docker",
+      expectedBytes: 6 * guard.GB
+    },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            dockerExecutionInvocation = { command, payload };
+            return Promise.resolve({
+              mode: "native-docker-build-cache-executor",
+              real_run_enabled: true,
+              destructive_commands: true,
+              accepted: true,
+              reason: "accepted",
+              entries: [{ id: "docker-build-cache", title: "Docker build cache", route: "tool-native-docker-build-cache-prune", result: "executed", reject_code: "", bytes: 6 * guard.GB, note: "pruned Docker build cache" }],
+              warnings: ["docker build cache done"]
+            });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(dockerExecutionInvocation.command, "execute_cleanup_plan", "Docker build cache executor should invoke execute_cleanup_plan");
+  assert.strictEqual(dockerExecutionInvocation.payload.request.schemaVersion, "spaceguard-docker-build-cache-request/v1", "Docker executor should use its schema");
+  assert.strictEqual(dockerExecutionInvocation.payload.request.requestMode, "execute-docker-build-cache", "Docker executor should send execute-docker-build-cache mode");
+  assert.strictEqual(dockerExecutionInvocation.payload.request.route, "tool-native-docker-build-cache-prune", "Docker executor should stay on the exact build-cache prune route");
+  assert.strictEqual(dockerExecutionInvocation.payload.request.actions[0].targetPath, "Docker Desktop build cache", "Docker executor should pass the scanned Docker inventory target");
+  assert.strictEqual(dockerExecution.accepted, true, "Docker executor should normalize accepted responses");
+  assert.strictEqual(dockerExecution.entries[0].route, "tool-native-docker-build-cache-prune", "Docker executor should normalize executed route");
   let npmExecutionInvocation = null;
   const npmExecution = await native.runNativeNpmCacheExecutor(
     {
@@ -1104,7 +1139,7 @@ const assert = require("assert");
       pnpm_store_executor: true,
       recycle_bin_executor: true,
       browser_cache_executor: true,
-      tool_native_prune_executors: false
+      tool_native_prune_executors: true
     },
     reason: "disabled"
   });
@@ -1133,7 +1168,7 @@ const assert = require("assert");
       pnpmStoreExecutor: true,
       recycleBinExecutor: true,
       browserCacheExecutor: true,
-      toolNativePruneExecutors: false
+      toolNativePruneExecutors: true
     },
     "native capabilities should normalize per-executor feature flags"
   );
