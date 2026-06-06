@@ -49,8 +49,11 @@ Configure the OpenAI advisor:
 cp .env.example .env
 # set OPENAI_API_KEY in .env
 # optional: set OPENAI_MODEL or OPENAI_REASONING_EFFORT
+npm run openai:smoke
 npm run native:dev
 ```
+
+`npm run openai:smoke` sends only a fixture context to the OpenAI advisor. It does not scan local folders or run cleanup; use it to validate the `.env` key, model, strict JSON schema, and recommendation broker before opening the desktop app.
 
 The same `.env` file can hold named scoped executor flags, for example `SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR=1`, when you are validating real cleanup on Windows. Validate and run one selected route at a time, then complete post-run rescan proof before running another executor.
 

@@ -18,6 +18,8 @@ const realDataGuide = fs.readFileSync(path.join(root, "WINDOWS_REAL_DATA_SETUP.m
 const nativeBetaRunbook = fs.readFileSync(path.join(root, "NATIVE_BETA_DISTRIBUTION.md"), "utf8");
 const fixtureScript = fs.readFileSync(path.join(root, "scripts", "seed-spaceguard-fixtures.ps1"), "utf8");
 const fixtureInspectScript = fs.readFileSync(path.join(root, "scripts", "inspect-spaceguard-fixtures.ps1"), "utf8");
+const openAiSmokeScriptPath = path.join(root, "scripts", "run-openai-advisor-smoke.mjs");
+const openAiSmokeScript = fs.existsSync(openAiSmokeScriptPath) ? fs.readFileSync(openAiSmokeScriptPath, "utf8") : "";
 
 function rustFunctionBlock(name) {
   const start = rustScanner.indexOf(`fn ${name}(`);
@@ -370,6 +372,10 @@ assert(openAiAgent.includes("run-pnpm-store-executor"), "OpenAI schema should al
 assert(openAiAgent.includes("run-recycle-bin-executor"), "OpenAI schema should allow Recycle Bin executor recommendations");
 assert(openAiAgent.includes("run-browser-cache-executor"), "OpenAI schema should allow browser cache executor recommendations");
 assert(openAiAgent.includes("manual-only"), "OpenAI schema should allow manual-only recommendations");
+assert(openAiSmokeScript.includes("run-openai-advisor-smoke"), "OpenAI fixture smoke script should identify itself");
+assert(openAiSmokeScript.includes("No local filesystem scan was performed"), "OpenAI smoke script should be fixture-only");
+assert(openAiSmokeScript.includes("OPENAI_API_KEY"), "OpenAI smoke script should read the key from .env or process env");
+assert(packageJson.includes("\"openai:smoke\""), "package scripts should expose the OpenAI fixture smoke command");
 assert(openAiAgent.includes("forbiddenActions"), "OpenAI context should expose forbidden actions");
 assert(app.includes("Open manual review"), "OpenAI manual-only recommendations should expose a review action");
 assert(app.includes("manualReviewTargets"), "OpenAI manual-only recommendations should be visible in the panel");

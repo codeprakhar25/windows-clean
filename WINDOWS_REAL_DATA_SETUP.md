@@ -38,8 +38,11 @@ Optional OpenAI advisor:
 Copy-Item .env.example .env
 # edit .env and set OPENAI_API_KEY
 # optional: set OPENAI_MODEL=gpt-5.5 and OPENAI_REASONING_EFFORT=low
+npm run openai:smoke
 npm run native:dev
 ```
+
+`npm run openai:smoke` validates the OpenAI key and strict advice schema against fixture data only. It does not scan local folders, run cleanup, or use real disk findings.
 
 Optional first-safe temp executor:
 
