@@ -592,7 +592,8 @@ const OPENAI_RECOMMENDATION_EXECUTOR_POLICIES = {
     flag: "androidCacheExecutor",
     targetLabel: "scanned Android cache roots",
     route: "bounded-android-cache-delete",
-    targetList: "androidCacheTargets"
+    targetList: "androidCacheTargets",
+    allowTargetPrefix: true
   },
   "run-shader-cache-executor": {
     flag: "shaderCacheExecutor",
@@ -809,7 +810,9 @@ function buildExecutorRecommendationBrokerRow({ row, actionType, key, policy, co
   const targets = getExecutorRecommendationTargets(policy, context);
   const targetCount = targets.length;
   const targetId = String(row.targetId || row.target_id || "").trim();
-  const targetIdMatches = Boolean(targetId) && targets.some((target) => targetMatchesRecommendationId(target, targetId));
+  const targetIdMatches = Boolean(targetId) && targets.some((target) =>
+    targetMatchesRecommendationId(target, targetId, { allowPrefix: Boolean(policy.allowTargetPrefix) })
+  );
   const checks = [
     buildBrokerCheck("native-runtime", "Native runtime", Boolean(runtime.nativeAvailable), runtime.nativeAvailable ? "Tauri native runtime is available." : "Use the desktop shell before running scoped executors."),
     buildBrokerCheck("real-run-flag", "Scoped real-run flag", Boolean(runtime.realRunEnabled), runtime.realRunEnabled ? "Runtime exposes scoped real execution." : "Scoped real execution is disabled."),
@@ -892,10 +895,10 @@ function getExecutorRecommendationTargets(policy, context = null) {
   return Array.isArray(context?.[policy.targetList]) ? context[policy.targetList] : [];
 }
 
-function targetMatchesRecommendationId(target = {}, targetId = "") {
+function targetMatchesRecommendationId(target = {}, targetId = "", { allowPrefix = false } = {}) {
   const availableId = String(target.id || "").trim();
   if (!targetId) return true;
-  return availableId === targetId || availableId.startsWith(`${targetId}-`);
+  return availableId === targetId || (allowPrefix && availableId.startsWith(`${targetId}-`));
 }
 
 function getExecutorRecommendationTargetCount(policy, context = null) {

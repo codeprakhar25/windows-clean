@@ -644,6 +644,34 @@ const assert = require("assert");
     }
   });
   assert.strictEqual(downloadsReviewedTargetBroker.rows[0].canAct, true, "broker should allow Downloads executor when the exact reviewed file target is present");
+  const downloadsPrefixTargetBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "downloads-installers",
+          title: "Move loosely named Downloads installer",
+          reason: "The model named a prefix, not the exact reviewed file target.",
+          priority: "high",
+          actionType: "run-downloads-cleanup-executor",
+          targetId: "setup",
+          route: "item-review-recycle-bin"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-downloads" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, downloadsCleanupExecutor: true },
+      reviewedDownloadsTargets: [{ id: "setup-old", route: "item-review-recycle-bin", bytes: 512 * 1024 ** 2 }]
+    },
+    executionState: {
+      planId: "plan-downloads",
+      scanFingerprint: "scan-downloads",
+      consentPlanId: "plan-downloads"
+    }
+  });
+  assert.strictEqual(downloadsPrefixTargetBroker.rows[0].status, "blocked", "reviewed Downloads executor should require the exact target id");
+  assert.strictEqual(downloadsPrefixTargetBroker.rows[0].canAct, false, "prefix-matched Downloads targets must not execute");
+  assert(downloadsPrefixTargetBroker.rows[0].checks.some((check) => check.id === "target-id-match" && !check.passed), "prefix target should fail the target-id-match check");
   const missingExecutorTargetBroker = openai.buildOpenAIAgentRecommendationBroker({
     advice: {
       recommendedActions: [
