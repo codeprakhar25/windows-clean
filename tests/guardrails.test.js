@@ -1895,6 +1895,21 @@ const assert = require("assert");
     "",
     "manual installed-app review must not become an active executor route"
   );
+  assert.strictEqual(
+    guard.isScopedExecutorRouteEnabled("bounded-npm-cache-delete", { realRunEnabled: true, executorFlags: { npmCacheExecutor: true } }),
+    true,
+    "enabled scoped npm flag should unlock only the npm executor route"
+  );
+  assert.strictEqual(
+    guard.isScopedExecutorRouteEnabled("known-temp-delete", { realRunEnabled: true, executorFlags: { npmCacheExecutor: true } }),
+    false,
+    "enabled scoped npm flag must not unlock temp consent or execution"
+  );
+  assert.strictEqual(
+    guard.isScopedExecutorRouteEnabled("bounded-npm-cache-delete", { realRunEnabled: true, executorFlags: {} }),
+    false,
+    "global realRunEnabled without the route flag must not unlock scoped route consent"
+  );
 
   const gatedAdvisor = guard.buildRecoveryAdvisor({
     scanned: true,

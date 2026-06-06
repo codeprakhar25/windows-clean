@@ -141,6 +141,7 @@ import {
   getScenario,
   getScopedExecutorRouteForAction,
   isActionProtected,
+  isScopedExecutorRouteEnabled,
   makeExecutionLedgerForActions,
   normalizeCustomRootTriageRecord,
   normalizeTargetDrive,
@@ -2146,21 +2147,8 @@ export default function App() {
   }
 
   function armExecutionConsent() {
-    const scopedExecutorRuntime = Boolean(
-      (runtimeCapabilities.result.executorFlags?.tempCleanupExecutor && realExecutorCapsule?.route?.id === "known-temp-delete")
-        || runtimeCapabilities.result.executorFlags?.downloadsCleanupExecutor
-        || runtimeCapabilities.result.executorFlags?.largeFileArchiveExecutor
-        || runtimeCapabilities.result.executorFlags?.projectDependencyExecutor
-        || runtimeCapabilities.result.executorFlags?.browserCacheExecutor
-        || runtimeCapabilities.result.executorFlags?.gradleCacheExecutor
-        || runtimeCapabilities.result.executorFlags?.userCacheExecutor
-        || runtimeCapabilities.result.executorFlags?.androidCacheExecutor
-        || runtimeCapabilities.result.executorFlags?.shaderCacheExecutor
-        || runtimeCapabilities.result.executorFlags?.pipCacheExecutor
-        || runtimeCapabilities.result.executorFlags?.npmCacheExecutor
-        || runtimeCapabilities.result.executorFlags?.pnpmStoreExecutor
-        || runtimeCapabilities.result.executorFlags?.recycleBinExecutor
-    );
+    const activeRoute = selectedScopedExecutorRoute || realExecutorCapsule?.route?.id || "";
+    const scopedExecutorRuntime = isScopedExecutorRouteEnabled(activeRoute, runtimeCapabilities.result);
     if (!runReadiness.ready || !planLock.readyForPreflight || (safetyInterlock.status === "unsafe-stop" && !scopedExecutorRuntime)) return;
     setExecutionConsent({
       accepted: true,

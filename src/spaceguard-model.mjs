@@ -17113,6 +17113,12 @@ function getScopedRealExecutorRoutes(runtimeCapabilities = {}) {
   ].filter(Boolean);
 }
 
+export function isScopedExecutorRouteEnabled(route = "", runtimeCapabilities = {}) {
+  const routeId = String(route || "").trim();
+  if (!routeId || !runtimeCapabilities?.realRunEnabled) return false;
+  return getScopedRealExecutorRoutes(runtimeCapabilities).includes(routeId);
+}
+
 function getRealExecutorCapsulePrimary(status, route, blockers = []) {
   if (status === "execution-available") return "A write-capable executor is available for the selected capsule.";
   if (!route) return "No first-safe executor capsule is selected yet.";
