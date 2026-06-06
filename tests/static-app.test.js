@@ -1018,8 +1018,12 @@ assert(readme.includes("Read-only drive inventory"), "README should describe dri
 assert(readme.includes("Storage pressure diagnosis"), "README should describe storage pressure diagnosis");
 assert(readme.includes("Native evidence quality"), "README should describe native evidence quality");
 assert(readme.includes("Installed app footprints"), "README should describe installed app footprint discovery");
+assert(!readme.includes("matrix always keeps real-run routes at zero in this build"), "README should not claim all real-run routes are zero after scoped executors exist");
+assert(!readme.includes("still cannot become a mutating executor"), "README should not describe the temp executor as permanently unable to mutate");
+assert(!readme.includes("real cleanup remains locked. Any runtime write capability"), "README should distinguish scoped executor runtime from broad unsafe write signals");
 assert(realDataGuide.includes("App footprint decisions"), "real-data guide should describe app footprint manual decisions");
 assert(realDataGuide.includes("NATIVE_BETA_DISTRIBUTION.md"), "real-data guide should link native beta distribution runbook");
+assert(!realDataGuide.includes("zero executor routes, and zero real-run rows before real-data planning"), "real-data guide should not claim zero executor routes as the current product truth");
 assert(nativeBetaRunbook.includes("Native Beta Distribution Runbook"), "native beta runbook should exist");
 assert(nativeBetaRunbook.includes("Install Path"), "native beta runbook should cover install evidence");
 assert(nativeBetaRunbook.includes("Uninstall Path"), "native beta runbook should cover uninstall evidence");

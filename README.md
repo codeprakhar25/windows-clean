@@ -427,7 +427,7 @@ Admin/system-sensitive routes are also intake-gated. Windows.old, hibernation ch
 
 Task runbook work orders are agent-facing instructions, not new permissions. A selected cache cleanup task can ask for its own approval or enter its own dry-run simulation after grants are issued, but it cannot reuse that power for Downloads, custom roots, browser identity data, partitions, registry keys, or any sibling folder.
 
-The restriction matrix is the refusal surface. Browser identity stores, Docker volumes, pagefile and registry tuning, partition writes, custom roots, admin/system routes, personal/project data, and tool-native shell commands each show what the agent may still do and what remains forbidden. Hard-blocked and manual-only rows cannot create executor routes, and the matrix always keeps real-run routes at zero in this build.
+The restriction matrix is the refusal surface. Browser identity stores, Docker volumes, pagefile and registry tuning, partition writes, custom roots, admin/system routes, personal/project data, and broad tool-native shell commands each show what the agent may still do and what remains forbidden. Hard-blocked and manual-only rows cannot create executor routes. Named scoped executors, including the fixed Docker build-cache prune route, are tracked separately by the executor layer and only appear when their feature flag is enabled.
 
 The Windows setup assistant is the first-run operational guide. It can recommend `npm run dev`, `npm run native:dev`, `npm run native:build`, and explicit UI exports, but it does not introduce destructive commands. Its forbidden command list includes direct delete, registry, power, format, and partition operations.
 
@@ -469,7 +469,7 @@ The first-safe validation gate converts that route contract plus Windows validat
 
 The first-safe work order is the handoff from validation into implementation. For the selected route it lists build items, acceptance tests, fixture ids, feature flag, rollback/rescan proof, and write-boundary reprobe requirements. A ready work order means an engineer can start the disabled executor slice; it does not mean the app can delete anything.
 
-The temp executor activation gate is the route-level decision after the work order. It explains why `known-temp-delete` still cannot become a mutating executor: missing preflight, disabled `tempCleanupExecutor`, validation blockers, release blockers, or unsafe runtime signals. Even a review-ready activation state keeps `activationAllowed=false`, `mutationEnabled=false`, and `realRunAllowed=false` in this build.
+The temp executor activation gate is the route-level decision after the work order. It explains whether `known-temp-delete` is blocked by missing preflight, disabled `tempCleanupExecutor`, validation blockers, release blockers, or unsafe runtime signals. When the route is not fully enabled and validated, the gate keeps `activationAllowed=false`, `mutationEnabled=false`, and `realRunAllowed=false`.
 
 The temp activation rehearsal exists for the no-real-data demo path. It builds a synthetic rejected probe with the current contract echo, disabled scaffold, zero bytes, and per-action preflight checks. The expected rehearsal status is `rehearsal-ready` with its nested activation gate at `feature-flag-disabled`; this is presentation and workflow proof only, not native validation evidence.
 
@@ -483,7 +483,7 @@ The fixture evidence import accepts the JSON produced by `scripts/inspect-spaceg
 
 Dry-run records are also saved to local browser storage as an append-only run history. A saved record can block a duplicate simulation for the same plan after reload, but it cannot unlock real execution. The history export is audit evidence only; real cleanup still requires native Windows validation and a post-run rescan.
 
-Broad deletion remains disabled. The executor layer classifies selected actions as dry-run routes, scoped feature-flagged executors, future safe-executor candidates, gated routes, or blocked routes. Temp files, reviewed Downloads files, reviewed large-file archives, Recycle Bin emptying, reviewed `node_modules`, Gradle cache roots, user `.cache`, Android cache roots, npm `_cacache`, pnpm store, and browser cache roots are the only write-capable families, and only when their Windows runtime flags are enabled.
+Broad deletion remains disabled. The executor layer classifies selected actions as dry-run routes, scoped feature-flagged executors, future safe-executor candidates, gated routes, or blocked routes. Temp files, reviewed Downloads files, reviewed large-file archives, Recycle Bin emptying, reviewed `node_modules`, Gradle cache roots, user `.cache`, Android cache roots, pip cache, Docker build cache, npm `_cacache`, pnpm store, and browser cache roots are the only write-capable families, and only when their Windows runtime flags are enabled.
 
 The executor manifest is the real-data implementation map. It covers all route families, not just selected actions:
 
@@ -494,7 +494,7 @@ The executor manifest is the real-data implementation map. It covers all route f
 
 Each manifest route lists required Windows validation checks, disposable fixtures, preconditions, proof, rollback posture, and whether real execution is still locked.
 
-The tool command inventory is declarative only. It can show command shapes such as package-manager cache verification or Docker build-cache inventory so validation work is concrete, but the current app does not spawn shell commands, uninstall apps, run Docker prune, or execute Windows cleanup APIs.
+The tool command inventory shows fixed command shapes so validation work is concrete. The current app does not run arbitrary shell commands, uninstall apps, or execute Windows cleanup APIs. The one tool-native write route is Docker build-cache cleanup: when `SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS=true`, the native executor may run the fixed `docker builder prune --force` command after the route, consent, scan fingerprint, and target validators pass.
 
 Broad cleanup remains locked. Scoped real cleanup is available only for named executor families when their runtime feature flag is enabled and every per-run precondition passes:
 
@@ -532,7 +532,7 @@ The workflow handoff is the default resume artifact. It includes the active agen
 
 The beta handoff manifest is the artifact index for public or native-beta sharing. It marks workflow handoff and support bundle as redacted public/support-safe rows, while validation packs, release packets, beta evidence ledgers, and full dry-run reports stay internal or path-level until explicitly approved.
 
-The release review packet is the default artifact for deciding whether the product can move from demo/read-only validation to the next review stage. It can be ready only when every review row passes and real cleanup remains locked. Any runtime write capability, destructive command signal, accepted write-boundary result, contract mismatch, or non-zero write-boundary byte count changes the packet to `unsafe-stop`.
+The release review packet is the default artifact for deciding whether the product can move from demo/read-only validation to the next review stage. It can be ready only when every review row passes and broad cleanup remains locked. Named scoped executor routes are listed separately. Unscoped runtime write capability, broad destructive command signals, accepted write-boundary results, contract mismatches, or non-zero write-boundary byte counts change the packet to `unsafe-stop`.
 
 ## Native App Direction
 

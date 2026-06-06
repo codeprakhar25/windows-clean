@@ -3980,27 +3980,8 @@ export function buildAIAgentIntegration({
   runtimeCapabilities = {}
 } = {}) {
   const providerConnected = Boolean(providerConfig?.connected || providerConfig?.apiKeyPresent || providerConfig?.endpoint);
-  const scopedExecutor = Boolean(
-    runtimeCapabilities?.realRunEnabled
-      && runtimeCapabilities?.destructiveCommands
-      && runtimeCapabilities?.safeExecutorsEnabled
-      && (
-        runtimeCapabilities?.executorFlags?.tempCleanupExecutor
-        || runtimeCapabilities?.executorFlags?.downloadsCleanupExecutor
-        || runtimeCapabilities?.executorFlags?.largeFileArchiveExecutor
-        || runtimeCapabilities?.executorFlags?.projectDependencyExecutor
-        || runtimeCapabilities?.executorFlags?.browserCacheExecutor
-        || runtimeCapabilities?.executorFlags?.gradleCacheExecutor
-        || runtimeCapabilities?.executorFlags?.userCacheExecutor
-        || runtimeCapabilities?.executorFlags?.androidCacheExecutor
-        || runtimeCapabilities?.executorFlags?.shaderCacheExecutor
-        || runtimeCapabilities?.executorFlags?.pipCacheExecutor
-        || runtimeCapabilities?.executorFlags?.npmCacheExecutor
-        || runtimeCapabilities?.executorFlags?.pnpmStoreExecutor
-        || runtimeCapabilities?.executorFlags?.recycleBinExecutor
-      )
-      && !runtimeCapabilities?.executorFlags?.toolNativePruneExecutors
-  );
+  const scopedRealExecutorRoutes = getScopedRealExecutorRoutes(runtimeCapabilities);
+  const scopedExecutor = Boolean(runtimeCapabilities?.realRunEnabled && scopedRealExecutorRoutes.length);
   const unsafeRuntime = Boolean((runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands) && !scopedExecutor);
   const activeQuestion = agentQuestionQueue?.activeQuestion || null;
   const contextPacket = {
@@ -4011,6 +3992,7 @@ export function buildAIAgentIntegration({
     nativeEvidenceQuality: nativeEvidenceQuality?.status || "not-evaluated",
     candidateSafety: candidateSafetyManifest?.status || "not-evaluated",
     realCleanupLocked: productCompletionAudit?.realCleanupLocked !== false,
+    scopedRealExecutorRoutes,
     pathLevelEvidence: Boolean(candidateSafetyManifest?.pathLevelEvidence || nativeEvidenceQuality?.pathLevelEvidence)
   };
   const allowedTasks = [
@@ -4074,7 +4056,7 @@ export function buildAIAgentIntegration({
       detail: unsafeRuntime
         ? "Runtime write capability is visible; AI integration must stop."
         : scopedExecutor
-          ? "A scoped executor is visible, but AI still has no direct tool access."
+          ? `Scoped executor route(s) are visible: ${scopedRealExecutorRoutes.join(", ")}. AI still has no direct tool access.`
           : "Real cleanup, destructive commands, and write execution remain unavailable.",
       action: unsafeRuntime ? "Restore dry-run lock before using AI." : "Keep AI advisory-only and apply suggestions through UI controls."
     })
@@ -11183,6 +11165,9 @@ export function buildReleaseReviewPacket({
   const passedRows = rows.filter((row) => row.status === "passed");
   const runtimeRealRunEnabled = Boolean(runtimeCapabilities?.realRunEnabled);
   const destructiveCommands = Boolean(runtimeCapabilities?.destructiveCommands);
+  const scopedRealExecutorRoutes = getScopedRealExecutorRoutes(runtimeCapabilities);
+  const scopedRealCleanupAvailable = Boolean(runtimeRealRunEnabled && scopedRealExecutorRoutes.length);
+  const unscopedWriteSignalVisible = Boolean((runtimeRealRunEnabled || destructiveCommands) && !scopedRealCleanupAvailable);
   const status = unsafeRows.length
     ? "unsafe-stop"
     : !planSnapshot?.selectedCount
@@ -11202,7 +11187,9 @@ export function buildReleaseReviewPacket({
     realRunEnabled: false,
     runtimeRealRunEnabled,
     destructiveCommands,
-    writeSignalVisible: Boolean(runtimeRealRunEnabled || destructiveCommands || unsafeRows.length),
+    scopedRealCleanupAvailable,
+    scopedRealExecutorRoutes,
+    writeSignalVisible: Boolean(unscopedWriteSignalVisible || unsafeRows.length),
     readyForRealExecution: false,
     planId: planSnapshot?.id || "",
     scanFingerprint: scanSession?.currentFingerprint || "",
@@ -11253,6 +11240,7 @@ export function buildReleaseReviewPacketMarkdown(packet) {
     `Real run enabled: ${packet?.realRunEnabled ? "yes" : "no"}`,
     `Runtime real run visible: ${packet?.runtimeRealRunEnabled ? "yes" : "no"}`,
     `Destructive commands visible: ${packet?.destructiveCommands ? "yes" : "no"}`,
+    `Scoped executor routes: ${packet?.scopedRealExecutorRoutes?.length ? packet.scopedRealExecutorRoutes.join(", ") : "none"}`,
     `Write signal visible: ${packet?.writeSignalVisible ? "yes" : "no"}`,
     `Ready for real execution: ${packet?.readyForRealExecution ? "yes" : "no"}`,
     "",
@@ -13364,7 +13352,10 @@ function buildReleaseReviewRows({
   runtimeCapabilities = {},
   consentReceipt = null
 } = {}) {
+  const scopedRealExecutorRoutes = getScopedRealExecutorRoutes(runtimeCapabilities);
+  const scopedRealCleanupAvailable = Boolean(runtimeCapabilities?.realRunEnabled && scopedRealExecutorRoutes.length);
   const runtimeWriteVisible = Boolean(runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands);
+  const unscopedRuntimeWriteVisible = Boolean(runtimeWriteVisible && !scopedRealCleanupAvailable);
   const probeUnsafe = writeBoundaryProbe?.status === "unsafe-signal" || writeBoundaryProbe?.status === "contract-mismatch" || writeBoundaryProbe?.accepted || Number(writeBoundaryProbe?.counts?.bytes || 0) > 0;
   const realActionVisible = Boolean(
     executorPlan?.realRunEnabled ||
@@ -13373,7 +13364,8 @@ function buildReleaseReviewRows({
       firstSafeExecutorContract?.realRunEnabled ||
       firstSafeExecutorContract?.destructiveActionAvailable
   );
-  const realCleanupLocked = !runtimeWriteVisible && !probeUnsafe && !realActionVisible;
+  const unscopedRealActionVisible = Boolean(realActionVisible && !scopedRealCleanupAvailable);
+  const realCleanupBoundarySafe = !unscopedRuntimeWriteVisible && !probeUnsafe && !unscopedRealActionVisible;
   const nativeBetaEvidenceMissing = Number(nativeBetaEvidenceLedger?.counts?.missing || 0);
   const nativeBetaEvidenceNeedsDetail = Number(nativeBetaEvidenceLedger?.counts?.needsDetail || 0);
   const nativeBetaEvidenceDraft = Number(nativeBetaEvidenceLedger?.counts?.draft || 0);
@@ -13503,7 +13495,7 @@ function buildReleaseReviewRows({
       lane: "privacy",
       label: "Privacy boundary local only",
       status: privacyBoundary?.cloudDisabled && privacyBoundary?.telemetryDisabled && privacyBoundary?.exportOnly
-        ? runtimeWriteVisible
+        ? unscopedRuntimeWriteVisible
           ? "unsafe"
           : "passed"
         : "blocked",
@@ -13551,12 +13543,14 @@ function buildReleaseReviewRows({
     {
       id: "real-cleanup-locked",
       lane: "safety",
-      label: "Real cleanup remains locked",
-      status: realCleanupLocked ? "passed" : "unsafe",
-      detail: realCleanupLocked
-        ? "Runtime, executor plan, capsule, contract, and write probe expose no real cleanup path."
+      label: "Real cleanup scoped or locked",
+      status: realCleanupBoundarySafe ? "passed" : "unsafe",
+      detail: realCleanupBoundarySafe
+        ? scopedRealCleanupAvailable
+          ? `Scoped executor route(s) are visible: ${scopedRealExecutorRoutes.join(", ")}. Broad cleanup remains locked.`
+          : "Runtime, executor plan, capsule, contract, and write probe expose no real cleanup path."
         : "A write-capable or mutation-like signal is visible and must stop release review.",
-      evidence: writeReadiness?.status || releaseGate?.blockedReason || ""
+      evidence: scopedRealCleanupAvailable ? scopedRealExecutorRoutes.join(",") : writeReadiness?.status || releaseGate?.blockedReason || ""
     }
   ];
 }

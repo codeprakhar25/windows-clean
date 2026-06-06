@@ -161,7 +161,7 @@ In the app:
 7. Check **Real data readiness** for native availability, write capability, destructive command state, and target-drive volume evidence.
 8. Check **Drive inventory** for top-level target-drive buckets. Inventory rows are read-only context only; they cannot create executor routes. Use narrower custom roots or item review for unknown/user-data buckets.
 9. Check **Storage pressure diagnosis** to answer why the drive is full, which causes dominate, and which safe branch comes next. Diagnosis is advisory and cannot grant cleanup authority.
-10. Check **Native evidence quality**. It should show planning-grade or partial read-only evidence, current scan freshness, measured coverage, local-only privacy, mutation lock, zero executor routes, and zero real-run rows before real-data planning.
+10. Check **Native evidence quality**. It should show planning-grade or partial read-only evidence, current scan freshness, measured coverage, local-only privacy, and a clear separation between read-only planning evidence and any named feature-flagged executor route.
 11. Check **Scan session** and confirm the captured fingerprint is current. If target drive, custom roots, traversal caps, project-artifact setting, or protected paths changed, rerun the native scan before planning.
 12. Review **Intake constraints**. Leave admin/system actions off unless this validation run intentionally includes Windows.old, hibernation, WSL compaction, or another admin-sensitive dry-run route.
 13. Check **Risk budget** to confirm selected routes stay within Safe, Balanced, or Emergency mode before dry-run consent.

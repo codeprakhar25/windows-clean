@@ -979,6 +979,50 @@ const assert = require("assert");
     "native-proven",
     "real cleanup row should be native-proven for scoped executor flags"
   );
+  const scopedDockerReleasePacket = guard.buildReleaseReviewPacket({
+    privacyBoundary: {
+      schemaVersion: "spaceguard-privacy-boundary/v1",
+      cloudDisabled: true,
+      telemetryDisabled: true,
+      exportOnly: true,
+      primary: "Local-only privacy boundary is ready."
+    },
+    runtimeCapabilities: {
+      available: true,
+      realRunEnabled: true,
+      destructiveCommands: true,
+      safeExecutorsEnabled: true,
+      executorFlags: { toolNativePruneExecutors: true }
+    }
+  });
+  assert.notStrictEqual(scopedDockerReleasePacket.status, "unsafe-stop", "release review should not stop on a named scoped executor route");
+  assert.strictEqual(scopedDockerReleasePacket.writeSignalVisible, false, "release review should reserve write-signal stops for unscoped runtime writes");
+  assert.strictEqual(scopedDockerReleasePacket.scopedRealCleanupAvailable, true, "release review should expose scoped real cleanup availability");
+  assert.deepStrictEqual(
+    scopedDockerReleasePacket.scopedRealExecutorRoutes,
+    ["tool-native-docker-build-cache-prune"],
+    "release review should list the Docker build-cache scoped route"
+  );
+  assert(
+    !scopedDockerReleasePacket.unsafeRows.some((row) => row.id === "privacy-boundary" || row.id === "real-cleanup-locked"),
+    "release review should keep privacy and cleanup boundary rows safe for named scoped executors"
+  );
+  const scopedDockerAiIntegration = guard.buildAIAgentIntegration({
+    providerConfig: { connected: true },
+    runtimeCapabilities: {
+      available: true,
+      realRunEnabled: true,
+      destructiveCommands: true,
+      safeExecutorsEnabled: true,
+      executorFlags: { toolNativePruneExecutors: true }
+    }
+  });
+  assert.strictEqual(scopedDockerAiIntegration.status, "advisory-connector-ready", "AI advisor should remain available when only a named scoped executor is visible");
+  assert.strictEqual(
+    scopedDockerAiIntegration.rows.find((row) => row.id === "mutation-boundary").status,
+    "scoped-executor-visible",
+    "AI mutation boundary should distinguish scoped executors from unsafe broad writes"
+  );
   const scopedExecutorHandoff = guard.buildWorkflowHandoffPacket({
     productCompletionAudit: scopedExecutorAudit,
     runtimeCapabilities: {
