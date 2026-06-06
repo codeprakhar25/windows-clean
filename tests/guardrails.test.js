@@ -3310,6 +3310,40 @@ const assert = require("assert");
   assert.strictEqual(androidCacheSmokePacket.rows[0].envVar, "SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR", "Android cache smoke packet should name the executor env var");
   assert.strictEqual(androidCacheSmokePacket.rows[0].requestMode, "execute-android-cache", "Android cache smoke packet should name the native request mode");
   assert.strictEqual(androidCacheSmokePacket.rows[0].panelId, "android-cache-executor-panel", "Android cache smoke packet should point to the executor panel");
+  const shaderCacheSmokePacket = guard.buildExecutorSmokeRunPacket({
+    executorPlan: guard.buildExecutorPlan({
+      selectedIds: new Set(["steam-shader-cache"]),
+      actionList: guard.actions,
+      approvals: { groupConfirm: true, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
+      scanMode: "native-readonly"
+    }),
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      platform: "windows",
+      realRunEnabled: true,
+      destructiveCommands: true,
+      executorFlags: { shaderCacheExecutor: true }
+    },
+    scanSession: { currentFingerprint: "scan-shader-cache-smoke" },
+    consentReceipt: { planId: "plan-shader-cache-smoke" },
+    executionProofHandoff: { status: "waiting-for-execution" },
+    planSnapshot: { id: "plan-shader-cache-smoke" },
+    nativeScan: {
+      findings: [
+        {
+          recipeId: "steam-shader-cache",
+          status: "measured",
+          path: "C:\\Users\\qa\\AppData\\Local\\NVIDIA\\DXCache",
+          bytes: 1024 * 1024 * 256
+        }
+      ]
+    }
+  });
+  assert.strictEqual(shaderCacheSmokePacket.status, "ready-for-smoke", "enabled shader cache route should be ready for a smoke run");
+  assert.strictEqual(shaderCacheSmokePacket.rows[0].envVar, "SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR", "shader cache smoke packet should name the executor env var");
+  assert.strictEqual(shaderCacheSmokePacket.rows[0].requestMode, "execute-shader-cache", "shader cache smoke packet should name the native request mode");
+  assert.strictEqual(shaderCacheSmokePacket.rows[0].panelId, "shader-cache-executor-panel", "shader cache smoke packet should point to the executor panel");
   const proofBlockedSmokePacket = guard.buildExecutorSmokeRunPacket({
     executorPlan: npmSmokeExecutorPlan,
     runtimeCapabilities: {

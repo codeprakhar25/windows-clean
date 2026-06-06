@@ -392,12 +392,12 @@ export const executorPolicies = {
   "steam-shader-cache": {
     route: "launcher-cache-cleanup",
     lane: "rebuildable",
-    label: "Launcher cache cleanup",
+    label: "Bounded shader cache cleanup",
     realRunEnabled: false,
     dryRunSupported: true,
     requiresNativeValidation: true,
-    verification: "Rescan launcher cache roots only.",
-    guardrails: ["Cache roots only", "No game uninstall", "No save-data paths"]
+    verification: "Rescan shader cache roots only.",
+    guardrails: ["Scanned shader cache roots only", "No game uninstall", "No save-data paths", "No launcher profile/config paths"]
   },
   "downloads-installers": {
     route: "item-review-recycle-bin",
@@ -684,6 +684,7 @@ export const releaseFeatureFlags = {
   gradleCacheExecutor: false,
   userCacheExecutor: false,
   androidCacheExecutor: false,
+  shaderCacheExecutor: false,
   npmCacheExecutor: false,
   pnpmStoreExecutor: false,
   recycleBinExecutor: false,
@@ -765,6 +766,18 @@ export const toolNativeCommandSpecs = [
     status: "manual-boundary",
     evidence: "Use native scan evidence for Android Studio caches and %UserProfile%\\.android\\build-cache; compare cache roots before and after.",
     guardrails: ["No AVD deletion", "No SDK deletion", "No project folder deletion", "No shell execution in current build"]
+  },
+  {
+    id: "shader-cache",
+    tool: "filesystem",
+    actionId: "steam-shader-cache",
+    route: "launcher-cache-cleanup",
+    title: "Graphics shader caches",
+    inspectCommand: "native scan LocalAppData shader cache roots",
+    futureCommand: "bounded shader cache cleanup only",
+    status: "manual-boundary",
+    evidence: "Use native scan evidence for current-user shader cache roots; compare cache roots before and after.",
+    guardrails: ["No game install deletion", "No save-data deletion", "No launcher profile/config paths", "No shell execution in current build"]
   },
   {
     id: "windows-cleanup-api",
@@ -1109,15 +1122,15 @@ export const executorRouteRequirements = {
     preconditions: ["Native Windows scan", "Admin boundary", "Stable install acknowledgement", "No direct system-directory delete"]
   },
   "launcher-cache-cleanup": {
-    title: "Launcher cache cleanup",
+    title: "Bounded shader cache cleanup",
     lane: "rebuildable",
     phase: "second-safe",
-    implementation: "Clean launcher cache roots only; never uninstall games or touch save-data paths.",
-    rollback: "Launchers rebuild cache and may re-verify assets.",
-    proof: "Gaming profile evidence must show installed game content and saves are excluded.",
+    implementation: "Delete only old files and empty dirs under scanned current-user LocalAppData shader cache roots.",
+    rollback: "Graphics drivers and games rebuild shader caches; installed game content and saves remain untouched.",
+    proof: "Gaming profile evidence must show game install folders, launcher profiles, configs, and saves are excluded.",
     requiredValidationIds: ["windows-native-build", "scanner-fixtures", "protected-path-fixtures", "ledger-rescan-parity"],
     fixtureIds: ["protected-path-fixture"],
-    preconditions: ["Native Windows scan", "Launcher cache root match", "No game install path", "No save-data path"]
+    preconditions: ["Native Windows scan", "Current-user shader cache root match", "14-day age threshold", "No game install, save, profile, or config path"]
   },
   "item-review-recycle-bin": {
     title: "Reviewed user items",
@@ -1473,15 +1486,15 @@ export const actions = [
   },
   {
     id: "steam-shader-cache",
-    title: "Game shader and launcher caches",
+    title: "Graphics shader caches",
     family: "Games",
-    path: "Steam, Epic, Xbox app cache folders",
+    path: "%LOCALAPPDATA% shader cache folders",
     bytes: 7.7 * GB,
     risk: "rebuildable",
     gate: "groupConfirm",
-    method: "Clean shader/download caches, not installed game content",
+    method: "Clean old graphics shader cache files, not installed game content",
     consequence: "Some games may rebuild shaders or verify files later.",
-    recommendation: "Clean caches; do not uninstall games without explicit review.",
+    recommendation: "Clean scanned shader cache roots; do not uninstall games without explicit review.",
     selectedByDefault: false,
     executableInDemo: true
   },
@@ -3932,6 +3945,7 @@ export function buildAIAgentIntegration({
         || runtimeCapabilities?.executorFlags?.gradleCacheExecutor
         || runtimeCapabilities?.executorFlags?.userCacheExecutor
         || runtimeCapabilities?.executorFlags?.androidCacheExecutor
+        || runtimeCapabilities?.executorFlags?.shaderCacheExecutor
         || runtimeCapabilities?.executorFlags?.npmCacheExecutor
         || runtimeCapabilities?.executorFlags?.pnpmStoreExecutor
         || runtimeCapabilities?.executorFlags?.recycleBinExecutor
@@ -9633,6 +9647,7 @@ export function buildToolCommandInventory({
       spec.route === "bounded-cache-delete" ||
       spec.route === "bounded-user-cache-delete" ||
       spec.route === "bounded-android-cache-delete" ||
+      spec.route === "launcher-cache-cleanup" ||
       spec.route === "bounded-npm-cache-delete" ||
       spec.route === "bounded-pnpm-store-delete" ||
       spec.route === "windows-cleanup-api";
@@ -13731,10 +13746,14 @@ function getTaskCapabilityForbiddenOperations(row, power) {
     row.route === "item-review-project-cache" ||
     row.route === "bounded-user-cache-delete" ||
     row.route === "bounded-android-cache-delete" ||
+    row.route === "launcher-cache-cleanup" ||
     row.route === "bounded-npm-cache-delete" ||
     row.route === "bounded-pnpm-store-delete"
   ) {
     forbidden.push("Delete project source folders, Docker volumes, or package globals.");
+  }
+  if (row.route === "launcher-cache-cleanup") {
+    forbidden.push("Touch game installs, saves, launcher profiles, configs, screenshots, or package folders.");
   }
   if (power.id === "advanced-system-strategy") {
     forbidden.push("Change pagefile settings or interrupt WSL/system operations automatically.");
@@ -15760,6 +15779,13 @@ const executorSmokeRouteSpecs = {
     panelId: "android-cache-executor-panel",
     actionLabel: "Run Android cache cleanup"
   },
+  "launcher-cache-cleanup": {
+    flag: "shaderCacheExecutor",
+    envVar: "SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR",
+    requestMode: "execute-shader-cache",
+    panelId: "shader-cache-executor-panel",
+    actionLabel: "Run shader cache cleanup"
+  },
   "bounded-npm-cache-delete": {
     flag: "npmCacheExecutor",
     envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
@@ -15890,6 +15916,7 @@ function getExecutorSmokeNativeTargetCount(route, nativeScan = null) {
     "bounded-cache-delete": ["gradle-cache"],
     "bounded-user-cache-delete": ["user-cache"],
     "bounded-android-cache-delete": ["android-cache"],
+    "launcher-cache-cleanup": ["steam-shader-cache"],
     "bounded-npm-cache-delete": ["npm-cache"],
     "bounded-pnpm-store-delete": ["pnpm-store"],
     "shell-recycle-bin": ["recycle-bin"]
@@ -16698,6 +16725,7 @@ function normalizeExecutorFeatureFlags(value = {}) {
     gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
     userCacheExecutor: Boolean(value.userCacheExecutor || value.user_cache_executor),
     androidCacheExecutor: Boolean(value.androidCacheExecutor || value.android_cache_executor),
+    shaderCacheExecutor: Boolean(value.shaderCacheExecutor || value.shader_cache_executor),
     npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
     pnpmStoreExecutor: Boolean(value.pnpmStoreExecutor || value.pnpm_store_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
@@ -16716,6 +16744,7 @@ function getScopedRealExecutorRoutes(runtimeCapabilities = {}) {
     flags.gradleCacheExecutor ? "bounded-cache-delete" : "",
     flags.userCacheExecutor ? "bounded-user-cache-delete" : "",
     flags.androidCacheExecutor ? "bounded-android-cache-delete" : "",
+    flags.shaderCacheExecutor ? "launcher-cache-cleanup" : "",
     flags.npmCacheExecutor ? "bounded-npm-cache-delete" : "",
     flags.pnpmStoreExecutor ? "bounded-pnpm-store-delete" : "",
     flags.recycleBinExecutor ? "shell-recycle-bin" : "",
@@ -16854,6 +16883,13 @@ function getFirstSafeAllowedRule(route, path) {
     if (text.includes("\\androidstudio") && text.includes("\\caches")) return "Android Studio cache folder";
     if (text.endsWith("\\.android\\build-cache") || text.includes("\\.android\\build-cache\\")) return "%USERPROFILE%\\.android\\build-cache";
   }
+  if (route === "launcher-cache-cleanup") {
+    if (text.includes("\\d3dscache")) return "%LOCALAPPDATA%\\D3DSCache";
+    if (text.includes("\\nvidia\\dxcache") || text.includes("\\nvidia\\glcache")) return "NVIDIA shader cache";
+    if (text.includes("\\nvidia corporation\\nv_cache")) return "NVIDIA legacy shader cache";
+    if (text.includes("\\amd\\dxcache") || text.includes("\\amd\\glcache") || text.includes("\\amd\\vkcache")) return "AMD shader cache";
+    if (text.includes("\\intel\\shadercache")) return "Intel shader cache";
+  }
   return "";
 }
 
@@ -16891,6 +16927,12 @@ function getFirstSafeForbiddenRule(route, path) {
     if (text.includes("\\android\\sdk") || text.includes("\\system-images") || text.includes("\\platforms") || text.includes("\\build-tools")) return "Android SDK content is forbidden";
     if (text.includes("\\emulator") || text.includes("\\platform-tools")) return "Android tool binaries are forbidden";
     if (text.includes("node_modules") || text.includes("\\.git") || text.includes("\\projects")) return "Project folders are forbidden";
+  }
+  if (route === "launcher-cache-cleanup") {
+    if (text.includes("\\steamapps") || text.includes("\\epic games") || text.includes("\\xboxgames")) return "Game install folders are forbidden";
+    if (text.includes("\\saved games") || text.includes("\\saves") || text.includes("\\savegames")) return "Save-data paths are forbidden";
+    if (text.includes("\\profiles") || text.includes("\\config") || text.includes("\\settings")) return "Launcher profile or config paths are forbidden";
+    if (text.includes("\\screenshots") || text.includes("\\packages")) return "User media and package folders are forbidden";
   }
   return "";
 }

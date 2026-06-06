@@ -79,6 +79,13 @@ const assert = require("assert");
           status: "measured"
         },
         {
+          recipeId: "steam-shader-cache",
+          title: "NVIDIA DirectX shader cache",
+          path: "C:\\Users\\real\\AppData\\Local\\NVIDIA\\DXCache",
+          bytes: 1024 ** 3,
+          status: "measured"
+        },
+        {
           recipeId: "wsl-vhdx",
           title: "WSL virtual disk compaction",
           path: "C:\\Users\\real\\AppData\\Local\\Packages\\Ubuntu\\LocalState\\ext4.vhdx",
@@ -200,6 +207,7 @@ const assert = require("assert");
   assert.strictEqual(manualContext.largeFileArchiveTargets[0].decision, "archive", "OpenAI context should preserve archive decisions");
   assert.strictEqual(manualContext.userCacheTargets[0].route, "bounded-user-cache-delete", "OpenAI context should include scanned user .cache targets");
   assert.strictEqual(manualContext.androidCacheTargets[0].route, "bounded-android-cache-delete", "OpenAI context should include scanned Android cache targets");
+  assert.strictEqual(manualContext.shaderCacheTargets[0].route, "launcher-cache-cleanup", "OpenAI context should include scanned shader cache targets");
   assert.strictEqual(manualContext.wslVhdxTargets[0].route, "advanced-checklist", "OpenAI context should include scanned WSL VHDX manual targets");
   assert.strictEqual(manualContext.wslCompactionWorkOrder.manualOnly, true, "OpenAI WSL compaction work order should stay manual-only");
   assert.strictEqual(manualContext.wslCompactionWorkOrder.canRunShell, false, "OpenAI WSL compaction work order must not run shell commands");
@@ -575,6 +583,34 @@ const assert = require("assert");
   assert.strictEqual(androidCacheBroker.rows[0].targetPanel, "android-cache-executor-panel", "broker should route Android cache recommendations to the Android cache panel");
   assert.strictEqual(androidCacheBroker.rows[0].canAct, true, "broker should allow Android cache executor only when deterministic gates pass");
   assert.strictEqual(androidCacheBroker.rows[0].buttonLabel, "Run Android cache", "broker should label Android cache executor recommendations");
+  const shaderCacheBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "shader-cache",
+          title: "Clean shader cache",
+          reason: "The scanned shader cache roots have a scoped executor.",
+          priority: "medium",
+          actionType: "run-shader-cache-executor",
+          targetId: "shader-cache-1",
+          route: "launcher-cache-cleanup"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-shader-cache" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, shaderCacheExecutor: true },
+      shaderCacheTargets: [{ id: "shader-cache-1", route: "launcher-cache-cleanup", bytes: 4096 }]
+    },
+    executionState: {
+      planId: "plan-shader-cache",
+      scanFingerprint: "scan-shader-cache",
+      consentPlanId: "plan-shader-cache"
+    }
+  });
+  assert.strictEqual(shaderCacheBroker.rows[0].targetPanel, "shader-cache-executor-panel", "broker should route shader cache recommendations to the shader cache panel");
+  assert.strictEqual(shaderCacheBroker.rows[0].canAct, true, "broker should allow shader cache executor only when deterministic gates pass");
+  assert.strictEqual(shaderCacheBroker.rows[0].buttonLabel, "Run shader cache", "broker should label shader cache executor recommendations");
 
   console.log("openai agent adapter ok");
 })();

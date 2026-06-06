@@ -660,6 +660,57 @@ const assert = require("assert");
   assert.strictEqual(androidCacheExecutionInvocation.payload.request.actions[0].targetPath.includes("AndroidStudio2025.1\\caches"), true, "Android cache executor should pass concrete Android Studio cache root path");
   assert.strictEqual(androidCacheExecution.accepted, true, "Android cache executor should normalize accepted responses");
   assert.strictEqual(androidCacheExecution.entries[0].route, "bounded-android-cache-delete", "Android cache executor should normalize executed route");
+  let shaderCacheExecutionInvocation = null;
+  const shaderCacheExecution = await native.runNativeShaderCacheExecutor(
+    {
+      rows: [
+        { id: "shader-cache-1", title: "NVIDIA DirectX shader cache", path: "C:\\Users\\real\\AppData\\Local\\NVIDIA\\DXCache", bytes: 555 },
+        { id: "shader-cache-2", title: "Direct3D shader cache", path: "C:\\Users\\real\\AppData\\Local\\D3DSCache", bytes: 222 }
+      ],
+      planId: "plan-shader-cache",
+      scanFingerprint: "scan-shader-cache",
+      consentPlanId: "plan-shader-cache",
+      expectedBytes: 777
+    },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            shaderCacheExecutionInvocation = { command, payload };
+            return Promise.resolve({
+              mode: "native-shader-cache-executor",
+              real_run_enabled: true,
+              destructive_commands: true,
+              accepted: true,
+              reason: "accepted",
+              contract_echo: {
+                schema_version: payload.request.schemaVersion,
+                request_mode: payload.request.requestMode,
+                plan_id: payload.request.planId,
+                route: payload.request.route,
+                scan_fingerprint: payload.request.scanFingerprint,
+                consent_plan_id: payload.request.consentPlanId,
+                expected_bytes: payload.request.expectedBytes,
+                dry_run_only: payload.request.dryRunOnly,
+                mutation_attempted: payload.request.mutationAttempted,
+                action_count: payload.request.actions.length
+              },
+              entries: [{ id: "shader-cache-1", title: "NVIDIA DirectX shader cache", route: "launcher-cache-cleanup", result: "executed", reject_code: "", bytes: 555, note: "deleted old shader cache" }],
+              warnings: ["shader cache done"]
+            });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(shaderCacheExecutionInvocation.command, "execute_cleanup_plan", "shader cache executor should invoke execute_cleanup_plan");
+  assert.strictEqual(shaderCacheExecutionInvocation.payload.request.schemaVersion, "spaceguard-shader-cache-request/v1", "shader cache executor should use its schema");
+  assert.strictEqual(shaderCacheExecutionInvocation.payload.request.requestMode, "execute-shader-cache", "shader cache executor should send execute-shader-cache mode");
+  assert.strictEqual(shaderCacheExecutionInvocation.payload.request.route, "launcher-cache-cleanup", "shader cache executor should stay on launcher-cache-cleanup route");
+  assert.strictEqual(shaderCacheExecutionInvocation.payload.request.actions.length, 2, "shader cache executor should pass every scanned cache root");
+  assert.strictEqual(shaderCacheExecutionInvocation.payload.request.actions[0].targetPath.includes("NVIDIA\\DXCache"), true, "shader cache executor should pass concrete shader cache root path");
+  assert.strictEqual(shaderCacheExecution.accepted, true, "shader cache executor should normalize accepted responses");
+  assert.strictEqual(shaderCacheExecution.entries[0].route, "launcher-cache-cleanup", "shader cache executor should normalize executed route");
   let npmExecutionInvocation = null;
   const npmExecution = await native.runNativeNpmCacheExecutor(
     {
@@ -1000,6 +1051,7 @@ const assert = require("assert");
       large_file_archive_executor: true,
       gradle_cache_executor: true,
       user_cache_executor: true,
+      shader_cache_executor: true,
       npm_cache_executor: true,
       pnpm_store_executor: true,
       recycle_bin_executor: true,
@@ -1027,6 +1079,7 @@ const assert = require("assert");
       gradleCacheExecutor: true,
       userCacheExecutor: true,
       androidCacheExecutor: false,
+      shaderCacheExecutor: true,
       npmCacheExecutor: true,
       pnpmStoreExecutor: true,
       recycleBinExecutor: true,

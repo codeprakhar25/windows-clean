@@ -639,6 +639,51 @@ export async function runNativeAndroidCacheExecutor(boundary = {}, host = global
   return normalizeNativeWriteBoundary(result);
 }
 
+export async function runNativeShaderCacheExecutor(boundary = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      available: false,
+      mode: "browser-demo",
+      realRunEnabled: false,
+      destructiveCommands: false,
+      accepted: false,
+      reason: "Native shader cache executor is not available in the browser demo.",
+      entries: [],
+      warnings: ["Run the Tauri desktop shell before executing shader cache cleanup."]
+    };
+  }
+
+  const rows = Array.isArray(boundary.rows) && boundary.rows.length
+    ? boundary.rows
+    : [boundary.row || boundary.selectedRow || {}];
+  const actions = rows.map((row, index) => ({
+    id: row.id || `shader-cache-${index + 1}`,
+    title: row.title || "Graphics shader cache folder",
+    bytes: Number(row.bytes || 0),
+    route: "launcher-cache-cleanup",
+    targetPath: row.targetPath || row.target || row.path || ""
+  }));
+  const expectedBytes = Number(boundary.expectedBytes ?? actions.reduce((sum, action) => sum + Number(action.bytes || 0), 0));
+
+  const result = await host.__TAURI__.core.invoke("execute_cleanup_plan", {
+    request: {
+      schemaVersion: "spaceguard-shader-cache-request/v1",
+      requestMode: "execute-shader-cache",
+      planId: boundary.planId || "",
+      route: "launcher-cache-cleanup",
+      scanFingerprint: boundary.scanFingerprint || "",
+      consentPlanId: boundary.consentPlanId || "",
+      expectedBytes,
+      dryRunOnly: false,
+      mutationAttempted: true,
+      actions
+    }
+  });
+
+  return normalizeNativeWriteBoundary(result);
+}
+
 export async function runNativePnpmStoreExecutor(boundary = {}, host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {
@@ -1031,6 +1076,7 @@ function normalizeExecutorFlags(value = {}) {
     gradleCacheExecutor: Boolean(value.gradleCacheExecutor || value.gradle_cache_executor),
     userCacheExecutor: Boolean(value.userCacheExecutor || value.user_cache_executor),
     androidCacheExecutor: Boolean(value.androidCacheExecutor || value.android_cache_executor),
+    shaderCacheExecutor: Boolean(value.shaderCacheExecutor || value.shader_cache_executor),
     npmCacheExecutor: Boolean(value.npmCacheExecutor || value.npm_cache_executor),
     pnpmStoreExecutor: Boolean(value.pnpmStoreExecutor || value.pnpm_store_executor),
     recycleBinExecutor: Boolean(value.recycleBinExecutor || value.recycle_bin_executor),
