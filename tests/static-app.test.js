@@ -639,6 +639,8 @@ assert(model.includes("buildWslCompactionWorkOrder"), "model should build WSL co
 assert(model.includes("buildWslCompactionWorkOrderMarkdown"), "model should export WSL compaction work orders");
 assert(model.includes("No Optimize-VHD execution."), "WSL compaction work order should forbid native compaction execution");
 assert(model.includes("Modification age is not usage proof"), "installed app policy should not overclaim usage detection");
+assert(model.includes("unusedReviewScore"), "installed app dossier should expose conservative unused-review scoring");
+assert(app.includes("Unused review score"), "installed app review UI should show unused-review scoring");
 assert(app.includes("Mark uninstall"), "item review should label app footprint decisions as manual uninstall follow-up");
 assert(app.includes("App uninstall review"), "App should expose installed app review dossier panel");
 assert(app.includes("installed-app-review-dossier"), "installed app review dossier should be focusable");
@@ -1024,6 +1026,7 @@ assert(readme.includes("Read-only drive inventory"), "README should describe dri
 assert(readme.includes("Storage pressure diagnosis"), "README should describe storage pressure diagnosis");
 assert(readme.includes("Native evidence quality"), "README should describe native evidence quality");
 assert(readme.includes("Installed app footprints"), "README should describe installed app footprint discovery");
+assert(readme.includes("unused-review score"), "README should describe installed-app unused-review scoring");
 assert(readme.includes("active smoke route"), "README should explain one active smoke route and queued ready routes");
 assert(!readme.includes("matrix always keeps real-run routes at zero in this build"), "README should not claim all real-run routes are zero after scoped executors exist");
 assert(!readme.includes("still cannot become a mutating executor"), "README should not describe the temp executor as permanently unable to mutate");

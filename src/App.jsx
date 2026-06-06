@@ -4787,7 +4787,7 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
           {flow.primaryRow?.blockedReason ? <p className="mt-2 text-xs text-muted-foreground">{flow.primaryRow.blockedReason}</p> : null}
         </div>
 
-        <div className="grid gap-2 md:grid-cols-5">
+        <div className="grid gap-2 md:grid-cols-4">
           {flow.steps.map((step) => {
             const stepDisabled = step.id === "execute" && step.status !== "active";
             return (
@@ -5715,7 +5715,7 @@ function PlanLockPanel({ planLock }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid gap-2 md:grid-cols-4">
+        <div className="grid gap-2 md:grid-cols-5">
           <QueueStat label="Preflight" value={planLock.readyForPreflight ? "ready" : "blocked"} tone={planLock.readyForPreflight ? "safe" : "restricted"} />
           <QueueStat label="Launch" value={planLock.readyForLaunch ? "ready" : "blocked"} tone={planLock.readyForLaunch ? "safe" : "review"} />
           <QueueStat label="Consent" value={planLock.consentCurrent ? "current" : "waiting"} tone={planLock.consentCurrent ? "safe" : "review"} />
@@ -7531,7 +7531,7 @@ function ItemReviewPanel({ itemReview, selected, onSelectAction, onDecision, onA
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid gap-2 md:grid-cols-4">
+        <div className="grid gap-2 md:grid-cols-5">
           <ReviewStat label={manualUninstallReview ? "Manual uninstall" : "Remove"} value={formatBytes(itemReview.removeBytes)} />
           <ReviewStat label={manualUninstallReview ? "Executor bytes" : "Move/archive"} value={formatBytes(manualUninstallReview ? itemReview.selectedBytes : itemReview.manualDispositionBytes || 0)} />
           <ReviewStat label="Keep" value={String(itemReview.keepCount)} />
@@ -7670,6 +7670,7 @@ function InstalledAppReviewDossierPanel({ dossier, onFocusReview }) {
           <ReviewStat label="Review" value={String(dossier.counts.review)} />
           <ReviewStat label="Selected" value={formatBytes(dossier.manualSelectedBytes)} />
           <ReviewStat label="Uninstall entry" value={String(dossier.counts.uninstallEntry)} />
+          <ReviewStat label="Strong" value={String(dossier.counts.strongReview || 0)} />
         </div>
         <div className="rounded-md border bg-muted/30 p-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -7691,11 +7692,15 @@ function InstalledAppReviewDossierPanel({ dossier, onFocusReview }) {
                   {row.status}
                 </Badge>
                 <Badge variant={row.uninstallEntry === "present" ? "safe" : "review"}>{row.uninstallEntry}</Badge>
+                <Badge variant={row.unusedReviewTier === "strong-review" ? "advanced" : row.unusedReviewTier === "moderate-review" ? "review" : "outline"}>
+                  {row.unusedReviewTier}
+                </Badge>
                 <Badge variant={row.confidence === "medium" ? "review" : "outline"}>{row.confidence}</Badge>
                 <span className="text-sm font-medium text-muted-foreground">{formatBytes(row.bytes)}</span>
               </div>
               <div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
                 <div>Usage proof: {row.usageProof}</div>
+                <div>Unused review score: {row.unusedReviewScore}</div>
                 <div>Registry: {row.registryMatch}</div>
                 <div>Age: {row.ageDays}d</div>
               </div>
@@ -7781,6 +7786,9 @@ function InstalledAppUninstallWorkOrderPanel({ workOrder, onFocusReview, onExpor
                 <div className="mr-auto min-w-0 text-sm font-medium">{row.name}</div>
                 <Badge variant={row.uninstallEntry === "present" ? "safe" : "review"}>{row.uninstallEntry}</Badge>
                 <Badge variant={row.usageProof === "not proven" ? "restricted" : "safe"}>{row.usageProof}</Badge>
+                <Badge variant={row.unusedReviewTier === "strong-review" ? "advanced" : row.unusedReviewTier === "moderate-review" ? "review" : "outline"}>
+                  {row.unusedReviewScore}
+                </Badge>
                 <span className="text-sm font-medium text-muted-foreground">{formatBytes(row.bytes)}</span>
               </div>
               <div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-3">

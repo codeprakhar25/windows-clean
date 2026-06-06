@@ -1181,6 +1181,15 @@ function buildInstalledAppReviewContext(manualReviewTargets = []) {
         : target.recommendation === "review"
           ? "needs-user-confirmation"
           : "keep-or-low-confidence";
+      const unusedReview = buildAgentUnusedReviewScore({
+        usageProof,
+        uninstallEntry,
+        registryMatch,
+        recommendation: target.recommendation,
+        decision: target.decision,
+        ageDays: target.ageDays,
+        bytes: target.bytes
+      });
       return {
         id: target.id,
         name: target.name,
@@ -1194,6 +1203,9 @@ function buildInstalledAppReviewContext(manualReviewTargets = []) {
         usageProof,
         uninstallEntry,
         registryMatch,
+        unusedReviewScore: unusedReview.score,
+        unusedReviewTier: unusedReview.tier,
+        scoreFactors: unusedReview.factors,
         manualOnly: true,
         canCreateExecutor: false,
         officialAction: target.officialAction || "Use Windows Settings or the vendor uninstaller only.",
@@ -1234,6 +1246,9 @@ function buildInstalledAppUninstallWorkOrderContext(installedAppReview = null, {
       usageProof: row.usageProof || "not proven",
       uninstallEntry: row.uninstallEntry || "unknown",
       registryMatch: row.registryMatch || "none",
+      unusedReviewScore: Number(row.unusedReviewScore || 0),
+      unusedReviewTier: row.unusedReviewTier || "weak-review",
+      scoreFactors: Array.isArray(row.scoreFactors) ? row.scoreFactors.slice(0, 6) : [],
       officialAction: row.officialAction || "Use Windows Settings or the vendor uninstaller only.",
       manualOnly: true,
       canCreateExecutor: false
@@ -1268,6 +1283,84 @@ function buildInstalledAppUninstallWorkOrderContext(installedAppReview = null, {
       "Run a native rescan after uninstall."
     ],
     forbiddenActions: ["automated-uninstall", "delete-program-files", "run-uninstall-string", "edit-registry"]
+  };
+}
+
+function buildAgentUnusedReviewScore({
+  usageProof = "not proven",
+  uninstallEntry = "unknown",
+  registryMatch = "none",
+  recommendation = "review",
+  decision = "undecided",
+  ageDays = 0,
+  bytes = 0
+} = {}) {
+  let score = 0;
+  const factors = [];
+  const usage = String(usageProof || "not proven").toLowerCase();
+  if (usage.includes("userassist")) {
+    score -= 35;
+    factors.push("UserAssist launch evidence lowers uninstall confidence");
+  } else if (usage === "not proven" || usage.includes("not proven")) {
+    score += 30;
+    factors.push("missing UserAssist usage proof");
+  } else {
+    factors.push("usage evidence is ambiguous");
+  }
+
+  const age = Number(ageDays || 0);
+  if (age >= 180) {
+    score += 20;
+    factors.push("older than 180 days");
+  } else if (age >= 90) {
+    score += 12;
+    factors.push("older than 90 days");
+  } else if (age >= 45) {
+    score += 6;
+    factors.push("older than 45 days");
+  } else {
+    factors.push("recent or unknown modification age");
+  }
+
+  const size = Number(bytes || 0);
+  if (size >= 5 * 1024 ** 3) {
+    score += 15;
+    factors.push("large 5GB+ footprint");
+  } else if (size >= 1024 ** 3) {
+    score += 8;
+    factors.push("large 1GB+ footprint");
+  }
+
+  if (uninstallEntry === "present") {
+    score += 8;
+    factors.push("Windows uninstall entry present");
+  } else if (uninstallEntry === "missing") {
+    score -= 8;
+    factors.push("uninstall entry missing");
+  }
+
+  if (registryMatch && registryMatch !== "none") {
+    score += 5;
+    factors.push("Windows uninstall metadata matched");
+  }
+
+  if (recommendation === "review") {
+    score += 10;
+    factors.push("scanner marked for user review");
+  } else if (recommendation === "keep") {
+    score -= 10;
+    factors.push("scanner recommended keeping without user confirmation");
+  }
+
+  if (decision === "remove") {
+    factors.push("user marked for manual uninstall follow-up");
+  }
+
+  const bounded = Math.max(0, Math.min(100, Math.round(score)));
+  return {
+    score: bounded,
+    tier: bounded >= 70 ? "strong-review" : bounded >= 45 ? "moderate-review" : "weak-review",
+    factors
   };
 }
 

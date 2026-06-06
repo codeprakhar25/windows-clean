@@ -272,6 +272,13 @@ const assert = require("assert");
   assert.strictEqual(appReviewDossier.status, "needs-user-review", "native app footprint candidates should populate app review dossier");
   assert.strictEqual(appReviewDossier.rows[0].usageProof, "not proven", "app review dossier should keep usage uncertainty explicit");
   assert.strictEqual(appReviewDossier.rows[0].uninstallEntry, "present", "app review dossier should keep uninstall-entry evidence");
+  const oldIdeDossierRow = appReviewDossier.rows.find((row) => row.id === "app-old-ide");
+  const unityDossierRow = appReviewDossier.rows.find((row) => row.id === "app-unity-hub");
+  assert(oldIdeDossierRow.unusedReviewScore > unityDossierRow.unusedReviewScore, "missing usage proof should rank above usage-backed app candidates");
+  assert.strictEqual(oldIdeDossierRow.unusedReviewTier, "strong-review", "large old apps with no usage proof should become strong review candidates");
+  assert.strictEqual(unityDossierRow.unusedReviewTier, "weak-review", "UserAssist launch evidence should lower app uninstall confidence");
+  assert(oldIdeDossierRow.scoreFactors.includes("missing UserAssist usage proof"), "app score should explain missing usage proof");
+  assert(unityDossierRow.scoreFactors.includes("UserAssist launch evidence lowers uninstall confidence"), "app score should explain usage-backed caution");
   assert(
     appReviewDossier.rows.some((row) => row.usageProof === "UserAssist launch evidence"),
     "app review dossier should preserve UserAssist usage evidence for review"

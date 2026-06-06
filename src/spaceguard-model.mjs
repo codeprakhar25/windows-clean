@@ -4822,7 +4822,8 @@ export function buildInstalledAppReviewDossier({ itemReviewsByAction = null, nat
       selected: selectedRows.length,
       registryMatched: rows.filter((row) => row.registryMatch !== "none").length,
       uninstallEntry: rows.filter((row) => row.uninstallEntry === "present").length,
-      usageProofMissing: rows.filter((row) => row.usageProof === "not proven").length
+      usageProofMissing: rows.filter((row) => row.usageProof === "not proven").length,
+      strongReview: rows.filter((row) => row.unusedReviewTier === "strong-review").length
     },
     guardrails: [
       "No automated uninstall.",
@@ -4916,6 +4917,9 @@ function normalizeInstalledAppWorkOrderRow(row = {}) {
     version: row.version || getReviewSignalValue(signals, "version") || "",
     installDate: row.installDate || getReviewSignalValue(signals, "install date") || "",
     officialAction: row.officialAction || getReviewSignalValue(signals, "official action") || "Windows Settings or vendor uninstaller",
+    unusedReviewScore: Number(row.unusedReviewScore || 0),
+    unusedReviewTier: row.unusedReviewTier || "weak-review",
+    scoreFactors: Array.isArray(row.scoreFactors) ? row.scoreFactors : [],
     reason: row.reason || "Selected for manual uninstall follow-up.",
     checklist: [
       "Confirm the user recognizes this app and agrees it is unused.",
@@ -5008,6 +5012,7 @@ export function buildInstalledAppUninstallWorkOrderMarkdown(workOrder = null) {
         `- Publisher: ${row.publisher || "unknown"}`,
         `- Version: ${row.version || "unknown"}`,
         `- Usage proof: ${row.usageProof || "not proven"}`,
+        `- Unused review score: ${row.unusedReviewScore || 0} (${row.unusedReviewTier || "weak-review"})`,
         `- Registry match: ${row.registryMatch || "none"}`,
         `- Uninstall entry: ${row.uninstallEntry || "unknown"}`,
         `- Official action: ${row.officialAction || "Windows Settings or vendor uninstaller"}`,
@@ -5316,6 +5321,15 @@ function normalizeInstalledAppDossierRow(item = {}) {
     : recommendation === "review"
       ? "needs-user-confirmation"
       : "keep-or-low-confidence";
+  const unusedReview = buildInstalledAppUnusedReviewScore({
+    usageProof,
+    uninstallEntry,
+    registryMatch,
+    recommendation,
+    decision,
+    ageDays,
+    bytes
+  });
 
   return {
     id: item.id || item.path || item.name || "installed-app",
@@ -5328,6 +5342,9 @@ function normalizeInstalledAppDossierRow(item = {}) {
     decision,
     status,
     confidence: status === "manual-uninstall-selected" ? "user-selected" : uninstallEntry === "present" && registryMatch !== "none" ? "medium" : "low",
+    unusedReviewScore: unusedReview.score,
+    unusedReviewTier: unusedReview.tier,
+    scoreFactors: unusedReview.factors,
     usageProof,
     uninstallEntry,
     registryMatch,
@@ -5338,6 +5355,84 @@ function normalizeInstalledAppDossierRow(item = {}) {
     reason: item.reason || "Installed app footprint is manual review evidence only.",
     nextStep: getInstalledAppRowNextStep(status),
     signals
+  };
+}
+
+function buildInstalledAppUnusedReviewScore({
+  usageProof = "not proven",
+  uninstallEntry = "unknown",
+  registryMatch = "none",
+  recommendation = "review",
+  decision = "undecided",
+  ageDays = 0,
+  bytes = 0
+} = {}) {
+  let score = 0;
+  const factors = [];
+  const usage = String(usageProof || "not proven").toLowerCase();
+  if (usage.includes("userassist")) {
+    score -= 35;
+    factors.push("UserAssist launch evidence lowers uninstall confidence");
+  } else if (usage === "not proven" || usage.includes("not proven")) {
+    score += 30;
+    factors.push("missing UserAssist usage proof");
+  } else {
+    factors.push("usage evidence is ambiguous");
+  }
+
+  const age = Number(ageDays || 0);
+  if (age >= 180) {
+    score += 20;
+    factors.push("older than 180 days");
+  } else if (age >= 90) {
+    score += 12;
+    factors.push("older than 90 days");
+  } else if (age >= 45) {
+    score += 6;
+    factors.push("older than 45 days");
+  } else {
+    factors.push("recent or unknown modification age");
+  }
+
+  const size = Number(bytes || 0);
+  if (size >= 5 * GB) {
+    score += 15;
+    factors.push("large 5GB+ footprint");
+  } else if (size >= GB) {
+    score += 8;
+    factors.push("large 1GB+ footprint");
+  }
+
+  if (uninstallEntry === "present") {
+    score += 8;
+    factors.push("Windows uninstall entry present");
+  } else if (uninstallEntry === "missing") {
+    score -= 8;
+    factors.push("uninstall entry missing");
+  }
+
+  if (registryMatch && registryMatch !== "none") {
+    score += 5;
+    factors.push("Windows uninstall metadata matched");
+  }
+
+  if (recommendation === "review") {
+    score += 10;
+    factors.push("scanner marked for user review");
+  } else if (recommendation === "keep") {
+    score -= 10;
+    factors.push("scanner recommended keeping without user confirmation");
+  }
+
+  if (decision === "remove") {
+    factors.push("user marked for manual uninstall follow-up");
+  }
+
+  const bounded = Math.max(0, Math.min(100, Math.round(score)));
+  return {
+    score: bounded,
+    tier: bounded >= 70 ? "strong-review" : bounded >= 45 ? "moderate-review" : "weak-review",
+    factors
   };
 }
 
