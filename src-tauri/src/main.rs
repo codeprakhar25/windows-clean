@@ -10238,6 +10238,7 @@ fn review_items_for_path(
     request: &ScanRequest,
 ) -> Vec<ScanItem> {
     match recipe_id {
+        "windows-temp" => temp_fixture_items(root, request),
         "downloads-installers" => top_file_items(recipe_id, root, kind, request, 12),
         "large-user-files" => large_user_file_items(root, request, 15),
         "node-modules-old" => vec![project_dependency_scan_item(recipe_id, root, stats.bytes)],
@@ -10245,6 +10246,81 @@ fn review_items_for_path(
         "installed-app-footprints" => top_child_items(recipe_id, root, request, 10),
         _ => Vec::new(),
     }
+}
+
+fn temp_fixture_items(root: &Path, request: &ScanRequest) -> Vec<ScanItem> {
+    if !is_current_user_temp_root(root) {
+        return Vec::new();
+    }
+
+    let fixture_root = root.join("spaceguard-fixture");
+    if is_path_protected(&fixture_root, &request.protected_paths) {
+        return Vec::new();
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(&fixture_root) else {
+        return Vec::new();
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Vec::new();
+    }
+
+    let max_entries = request.max_entries_per_root.unwrap_or(25_000).min(500);
+    let mut queue = VecDeque::from([fixture_root]);
+    let mut visited = 0usize;
+    let mut items = Vec::new();
+
+    while let Some(path) = queue.pop_front() {
+        if visited >= max_entries || items.len() >= 16 {
+            break;
+        }
+        visited += 1;
+
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if metadata.file_type().is_symlink() {
+            continue;
+        }
+        if metadata.is_file() {
+            let mut item =
+                scan_item_from_path("windows-temp", &path, metadata.len(), "fixture temp file");
+            item.recommendation = "review".to_string();
+            item.reason =
+                "Disposable SpaceGuard temp fixture file; use only for executor proof.".to_string();
+            item.signals
+                .push(review_signal("fixture", "spaceguard-fixture", "safe"));
+            items.push(item);
+            continue;
+        }
+        if metadata.is_dir() {
+            if let Ok(entries) = fs::read_dir(&path) {
+                for entry in entries.flatten() {
+                    queue.push_back(entry.path());
+                }
+            }
+        }
+    }
+
+    items.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+    items
+}
+
+fn is_current_user_temp_root(root: &Path) -> bool {
+    [env_path("TEMP"), env_path("TMP")]
+        .into_iter()
+        .flatten()
+        .any(|candidate| same_path_text(root, &candidate))
+}
+
+fn same_path_text(left: &Path, right: &Path) -> bool {
+    let left_text = path_to_string(left)
+        .trim_end_matches(['\\', '/'])
+        .to_ascii_lowercase();
+    let right_text = path_to_string(right)
+        .trim_end_matches(['\\', '/'])
+        .to_ascii_lowercase();
+    left_text == right_text
 }
 
 fn project_dependency_scan_item(recipe_id: &str, node_modules: &Path, bytes: u64) -> ScanItem {

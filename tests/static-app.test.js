@@ -966,6 +966,8 @@ assert(nativeAdapter.includes("candidateCount"), "native adapter should normaliz
 assert(nativeAdapter.includes("skippedCount"), "native adapter should normalize dry-run skipped counts");
 assert(nativeAdapter.includes("targetScopeStatus"), "native adapter should normalize dry-run target-scope status");
 assert(nativeAdapter.includes("execute_cleanup_plan"), "native adapter should invoke the rejecting write boundary command");
+assert(nativeAdapter.includes("TEMP_FIXTURE_ACTION_ID"), "native adapter should define the temp fixture action id");
+assert(nativeAdapter.includes("%TEMP%\\\\spaceguard-fixture"), "native adapter should keep the fixture target scoped to the temp fixture root");
 assert(nativeAdapter.includes("rejectCode"), "native adapter should normalize write-boundary reject codes");
 assert(nativeAdapter.includes("targetPath"), "native adapter should pass selected target paths to the write boundary");
 assert(nativeAdapter.includes("executorScaffold"), "native adapter should normalize write executor scaffold metadata");
@@ -992,6 +994,9 @@ assert(rustScanner.includes("skipped_count"), "Rust native dry-run should report
 assert(rustScanner.includes("target_scope_status"), "Rust native dry-run should report target-scope status");
 assert(rustScanner.includes("write_action_target_reject_code(&action.route, &action.target_path)"), "Rust native dry-run should reuse target-scope rejection before candidate enumeration");
 assert(rustScanner.includes("execute_cleanup_plan"), "Rust rejecting write boundary command should exist");
+assert(rustScanner.includes("fn temp_fixture_items"), "Rust scanner should emit temp fixture item evidence");
+assert(rustScanner.includes("is_current_user_temp_root"), "Rust temp fixture scanner should stay scoped to the current user temp root");
+assert(rustScanner.includes("spaceguard-fixture"), "Rust temp fixture scanner should look for the named fixture root");
 assert(rustScanner.includes("openai_agent_advice"), "Rust native OpenAI advisor command should exist");
 assert(rustScanner.includes("OPENAI_API_KEY"), "Rust native OpenAI advisor should read OPENAI_API_KEY");
 assert(rustScanner.includes("dotenv_candidate_paths"), "Rust native OpenAI advisor should read local .env files");
@@ -1055,12 +1060,15 @@ assert(readme.includes("Storage pressure diagnosis"), "README should describe st
 assert(readme.includes("Native evidence quality"), "README should describe native evidence quality");
 assert(readme.includes("Installed app footprints"), "README should describe installed app footprint discovery");
 assert(readme.includes("unused-review score"), "README should describe installed-app unused-review scoring");
+assert(readme.includes("Seeded temp fixture"), "README should describe fixture-only temp cleanup");
 assert(readme.includes("active smoke route"), "README should explain one active smoke route and queued ready routes");
 assert(!readme.includes("matrix always keeps real-run routes at zero in this build"), "README should not claim all real-run routes are zero after scoped executors exist");
 assert(!readme.includes("still cannot become a mutating executor"), "README should not describe the temp executor as permanently unable to mutate");
 assert(!readme.includes("real cleanup remains locked. Any runtime write capability"), "README should distinguish scoped executor runtime from broad unsafe write signals");
 assert(!readme.includes("while Docker, automated app uninstall, partition work, and broader tool-native prune commands remain future work or manual-only"), "README should not describe Docker build-cache cleanup as future work");
 assert(realDataGuide.includes("App footprint decisions"), "real-data guide should describe app footprint manual decisions");
+assert(realDataGuide.includes("Seeded temp fixture"), "real-data guide should describe fixture-only first cleanup");
+assert(realDataGuide.includes("not selected by default"), "real-data guide should describe broad temp default suppression");
 assert(realDataGuide.includes("NATIVE_BETA_DISTRIBUTION.md"), "real-data guide should link native beta distribution runbook");
 assert(!realDataGuide.includes("zero executor routes, and zero real-run rows before real-data planning"), "real-data guide should not claim zero executor routes as the current product truth");
 assert(nativeBetaRunbook.includes("Native Beta Distribution Runbook"), "native beta runbook should exist");
