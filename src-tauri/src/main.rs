@@ -311,6 +311,9 @@ struct RuntimeCapabilities {
     openai_advisor_configured: bool,
     openai_key_source: String,
     safe_executors_enabled: bool,
+    enabled_scoped_executor_flags: Vec<&'static str>,
+    enabled_scoped_executor_flag_count: usize,
+    executor_scope_status: &'static str,
     executor_flags: ExecutorFeatureFlags,
     reason: String,
 }
@@ -8153,22 +8156,20 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         .map(|(_, source)| source)
         .unwrap_or_else(|| "missing".to_string());
     let openai_advisor_configured = openai_key_source != "missing";
-    let real_execution_enabled = temp_enabled
-        || project_dependency_enabled
-        || downloads_cleanup_enabled
-        || large_file_archive_enabled
-        || browser_cache_enabled
-        || gradle_cache_enabled
-        || user_cache_enabled
-        || android_cache_enabled
-        || shader_cache_enabled
-        || pip_cache_enabled
-        || tool_native_prune_enabled
-        || npm_cache_enabled
-        || pnpm_store_enabled
-        || recycle_bin_enabled;
+    let enabled_scoped_executor_flags = enabled_scoped_executor_flags_on_windows();
+    let enabled_scoped_executor_flag_count = enabled_scoped_executor_flags.len();
+    let executor_scope_status = if enabled_scoped_executor_flag_count > 1 {
+        "multiple-scoped-flags"
+    } else if enabled_scoped_executor_flag_count == 1 {
+        "single-scoped-flag"
+    } else {
+        "no-scoped-flags"
+    };
+    let real_execution_enabled = enabled_scoped_executor_flag_count == 1;
     RuntimeCapabilities {
-        mode: if real_execution_enabled {
+        mode: if enabled_scoped_executor_flag_count > 1 {
+            "native-scope-invalid"
+        } else if real_execution_enabled {
             "native-scoped-write"
         } else {
             "native-readonly"
@@ -8186,6 +8187,9 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         openai_advisor_configured,
         openai_key_source,
         safe_executors_enabled: real_execution_enabled,
+        enabled_scoped_executor_flags,
+        enabled_scoped_executor_flag_count,
+        executor_scope_status,
         executor_flags: ExecutorFeatureFlags {
             temp_cleanup_executor: temp_enabled,
             project_dependency_executor: project_dependency_enabled,
@@ -8202,8 +8206,10 @@ fn runtime_capabilities() -> RuntimeCapabilities {
             recycle_bin_executor: recycle_bin_enabled,
             browser_cache_executor: browser_cache_enabled,
         },
-        reason: if real_execution_enabled {
-            "One or more scoped cleanup executors are enabled by environment flags."
+        reason: if enabled_scoped_executor_flag_count > 1 {
+            "Multiple scoped cleanup executor flags are enabled; turn off all but one before real cleanup."
+        } else if real_execution_enabled {
+            "Exactly one scoped cleanup executor is enabled by environment flag."
         } else {
             "Real executors are disabled until a scoped executor flag is enabled on Windows."
         }

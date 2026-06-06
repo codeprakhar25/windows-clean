@@ -1218,6 +1218,21 @@ function normalizeWriteContractEcho(value = null) {
 }
 
 export function normalizeNativeRuntimeCapabilities(result = {}) {
+  const executorFlags = normalizeExecutorFlags(result.executorFlags || result.executor_flags);
+  const derivedEnabledScopedExecutorFlags = Object.entries(executorFlags)
+    .filter(([, enabled]) => enabled)
+    .map(([flag]) => flag);
+  const enabledScopedExecutorFlags = Array.isArray(result.enabledScopedExecutorFlags || result.enabled_scoped_executor_flags)
+    ? (result.enabledScopedExecutorFlags || result.enabled_scoped_executor_flags).filter(Boolean)
+    : derivedEnabledScopedExecutorFlags;
+  const enabledScopedExecutorFlagCount = Number(
+    result.enabledScopedExecutorFlagCount ?? result.enabled_scoped_executor_flag_count ?? enabledScopedExecutorFlags.length
+  );
+  const executorScopeStatus =
+    result.executorScopeStatus ||
+    result.executor_scope_status ||
+    (enabledScopedExecutorFlagCount > 1 ? "multiple-scoped-flags" : enabledScopedExecutorFlagCount === 1 ? "single-scoped-flag" : "no-scoped-flags");
+  const multiScopedFlagBlock = enabledScopedExecutorFlagCount > 1 || executorScopeStatus === "multiple-scoped-flags";
   return {
     available: true,
     mode: result.mode || "native-readonly",
@@ -1225,16 +1240,19 @@ export function normalizeNativeRuntimeCapabilities(result = {}) {
     windows: Boolean(result.windows),
     elevated: Boolean(result.elevated),
     elevationSource: result.elevationSource || result.elevation_source || "",
-    realRunEnabled: Boolean(result.realRunEnabled || result.real_run_enabled),
-    destructiveCommands: Boolean(result.destructiveCommands || result.destructive_commands),
+    realRunEnabled: Boolean(result.realRunEnabled || result.real_run_enabled) && !multiScopedFlagBlock,
+    destructiveCommands: Boolean(result.destructiveCommands || result.destructive_commands) && !multiScopedFlagBlock,
     scanKnownRoots: Boolean(result.scanKnownRoots || result.scan_known_roots),
     simulateCleanupPlan: Boolean(result.simulateCleanupPlan || result.simulate_cleanup_plan),
     executeCleanupPlan: Boolean(result.executeCleanupPlan || result.execute_cleanup_plan),
     openAiAgentAdvice: Boolean(result.openAiAgentAdvice || result.openaiAgentAdvice || result.openai_agent_advice),
     openAiAdvisorConfigured: Boolean(result.openAiAdvisorConfigured || result.openaiAdvisorConfigured || result.openai_advisor_configured),
     openAiKeySource: result.openAiKeySource || result.openaiKeySource || result.openai_key_source || "missing",
-    safeExecutorsEnabled: Boolean(result.safeExecutorsEnabled || result.safe_executors_enabled),
-    executorFlags: normalizeExecutorFlags(result.executorFlags || result.executor_flags),
+    safeExecutorsEnabled: Boolean(result.safeExecutorsEnabled || result.safe_executors_enabled) && !multiScopedFlagBlock,
+    enabledScopedExecutorFlags,
+    enabledScopedExecutorFlagCount,
+    executorScopeStatus,
+    executorFlags,
     reason: result.reason || ""
   };
 }

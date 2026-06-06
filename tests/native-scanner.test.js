@@ -1210,20 +1210,23 @@ const assert = require("assert");
   assert.strictEqual(preflightWrite.entries[0].preflightChecks[1].status, "blocked", "write boundary should preserve blocked preflight checks");
 
   const capabilities = native.normalizeNativeRuntimeCapabilities({
-    mode: "native-readonly",
+    mode: "native-scope-invalid",
     platform: "windows",
     windows: true,
     elevated: true,
     elevation_source: "IsUserAnAdmin",
-    real_run_enabled: false,
-    destructive_commands: false,
+    real_run_enabled: true,
+    destructive_commands: true,
     scan_known_roots: true,
     simulate_cleanup_plan: true,
     execute_cleanup_plan: true,
     openai_agent_advice: true,
     openai_advisor_configured: true,
     openai_key_source: ".env:OPENAI_API_KEY",
-    safe_executors_enabled: false,
+    safe_executors_enabled: true,
+    enabled_scoped_executor_flags: ["SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR"],
+    enabled_scoped_executor_flag_count: 2,
+    executor_scope_status: "multiple-scoped-flags",
     executor_flags: {
       temp_cleanup_executor: false,
       project_dependency_executor: true,
@@ -1243,7 +1246,16 @@ const assert = require("assert");
   });
   assert.strictEqual(capabilities.elevated, true, "native capabilities should normalize elevation state");
   assert.strictEqual(capabilities.elevationSource, "IsUserAnAdmin", "native capabilities should normalize elevation source");
-  assert.strictEqual(capabilities.realRunEnabled, false, "native capabilities should keep real run disabled");
+  assert.strictEqual(capabilities.realRunEnabled, false, "native capabilities should suppress real run when multiple scoped flags are enabled");
+  assert.strictEqual(capabilities.destructiveCommands, false, "native capabilities should suppress destructive command claims when multiple scoped flags are enabled");
+  assert.strictEqual(capabilities.safeExecutorsEnabled, false, "native capabilities should suppress safe executor claims when multiple scoped flags are enabled");
+  assert.strictEqual(capabilities.executorScopeStatus, "multiple-scoped-flags", "native capabilities should normalize executor scope status");
+  assert.strictEqual(capabilities.enabledScopedExecutorFlagCount, 2, "native capabilities should normalize enabled scoped flag count");
+  assert.deepStrictEqual(
+    capabilities.enabledScopedExecutorFlags,
+    ["SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR"],
+    "native capabilities should normalize enabled scoped flag names"
+  );
   assert.strictEqual(capabilities.scanKnownRoots, true, "native capabilities should expose scanner availability");
   assert.strictEqual(capabilities.simulateCleanupPlan, true, "native capabilities should expose dry-run availability");
   assert.strictEqual(capabilities.executeCleanupPlan, true, "native capabilities should expose route executor availability");

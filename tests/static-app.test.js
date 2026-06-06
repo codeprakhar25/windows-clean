@@ -1112,6 +1112,12 @@ assert(nativeAdapter.includes("openAiAgentAdvice"), "native adapter should norma
 assert(nativeAdapter.includes("openAiAdvisorConfigured"), "native adapter should normalize OpenAI key configuration");
 assert(nativeAdapter.includes("openAiKeySource"), "native adapter should normalize OpenAI key source");
 assert(nativeAdapter.includes("executorFlags"), "native adapter should normalize per-executor feature flags");
+assert(nativeAdapter.includes("enabledScopedExecutorFlags"), "native adapter should normalize enabled scoped executor flag names");
+assert(nativeAdapter.includes("executorScopeStatus"), "native adapter should normalize executor scope status");
+assert(nativeAdapter.includes("multiScopedFlagBlock"), "native adapter should suppress write authority when multiple scoped executor flags are enabled");
+assert(rustScanner.includes("enabled_scoped_executor_flags"), "Rust runtime capabilities should expose enabled scoped executor flag names");
+assert(rustScanner.includes("executor_scope_status"), "Rust runtime capabilities should expose executor scope status");
+assert(rustScanner.includes("native-scope-invalid"), "Rust runtime capabilities should invalidate multi-flag scoped write mode");
 assert(nativeAdapter.includes("items.map"), "native adapter should preserve item-level review candidates");
 assert(tauriConfig.includes('"withGlobalTauri": true'), "Tauri config should expose the global bridge used by the adapter");
 assert(rustScanner.includes("scan_known_roots"), "Rust scanner command should exist");
