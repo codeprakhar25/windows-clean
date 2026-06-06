@@ -3749,6 +3749,14 @@ const assert = require("assert");
   assert.strictEqual(activePnpmRunGate.schemaVersion, "spaceguard-scoped-executor-run-gate/v1", "scoped executor run gate should expose a schema");
   assert.strictEqual(activePnpmRunGate.status, "ready-to-run", "active selected route should be allowed to execute");
   assert.strictEqual(activePnpmRunGate.ready, true, "active selected route should pass the run gate");
+  const overrideNpmRunGate = guard.buildScopedExecutorRunGate({
+    route: "bounded-npm-cache-delete",
+    smokeRunPacket: multiRouteSmokePacket,
+    activeRouteOverride: "bounded-npm-cache-delete",
+    executionProofHandoff: { status: "waiting-for-execution" }
+  });
+  assert.strictEqual(overrideNpmRunGate.status, "ready-to-run", "fresh route override should beat a stale packet active route");
+  assert.strictEqual(overrideNpmRunGate.activeRoute, "bounded-npm-cache-delete", "run gate should expose the overridden active route");
   const queuedNpmRunGate = guard.buildScopedExecutorRunGate({
     route: "bounded-npm-cache-delete",
     smokeRunPacket: multiRouteSmokePacket,

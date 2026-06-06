@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Archive,
@@ -342,10 +342,21 @@ export default function App() {
   const [localEvidenceBackupImportResult, setLocalEvidenceBackupImportResult] = useState(null);
   const [executionConsent, setExecutionConsent] = useState({ accepted: false, planId: "", acceptedAt: "" });
   const [selectedScopedExecutorRoute, setSelectedScopedExecutorRoute] = useState("");
+  const selectedScopedExecutorRouteRef = useRef("");
 
   const scenario = useMemo(() => getScenario(scenarioId), [scenarioId]);
   const nativeCapability = useMemo(() => getNativeScannerCapability(globalThis), []);
   const openAiConfig = useMemo(() => getOpenAIAgentConfig(import.meta.env), []);
+
+  function selectScopedExecutorRoute(route = "") {
+    const nextRoute = String(route || "");
+    selectedScopedExecutorRouteRef.current = nextRoute;
+    setSelectedScopedExecutorRoute(nextRoute);
+  }
+
+  useEffect(() => {
+    selectedScopedExecutorRouteRef.current = selectedScopedExecutorRoute;
+  }, [selectedScopedExecutorRoute]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2012,7 +2023,7 @@ export default function App() {
     });
     if (willSelect) {
       const scopedRoute = getScopedExecutorRouteForAction(action);
-      if (scopedRoute) setSelectedScopedExecutorRoute(scopedRoute);
+      if (scopedRoute) selectScopedExecutorRoute(scopedRoute);
     }
     if (willSelect && action.gate === "review") setFocusedReviewId(action.id);
     clearExecutionState();
@@ -2023,7 +2034,7 @@ export default function App() {
     if (!scanned || !action || !selectableAction(action, protectedPaths, intakePolicy)) return;
     setSelectedIds((current) => new Set([...current, action.id]));
     const scopedRoute = getScopedExecutorRouteForAction(action);
-    if (scopedRoute) setSelectedScopedExecutorRoute(scopedRoute);
+    if (scopedRoute) selectScopedExecutorRoute(scopedRoute);
     if (action.gate === "review") setFocusedReviewId(action.id);
     clearExecutionState();
     setActiveStage("gate");
@@ -2133,6 +2144,7 @@ export default function App() {
     const gate = buildScopedExecutorRunGate({
       route,
       smokeRunPacket: executorSmokeRunPacket,
+      activeRouteOverride: selectedScopedExecutorRouteRef.current,
       executionProofHandoff
     });
     if (gate.status !== "inactive-route") return false;
@@ -2141,7 +2153,7 @@ export default function App() {
       result: null,
       error: gate.primary
     });
-    setSelectedScopedExecutorRoute(gate.activeRoute || route);
+    selectScopedExecutorRoute(gate.activeRoute || route);
     focusWorkflowPanel("scoped-executor-command-flow-panel");
     return true;
   }
@@ -2242,7 +2254,7 @@ export default function App() {
       if (brokerRow.targetPanel) focusWorkflowPanel(brokerRow.targetPanel);
       return;
     }
-    if (deterministicRoute) setSelectedScopedExecutorRoute(deterministicRoute);
+    if (deterministicRoute) selectScopedExecutorRoute(deterministicRoute);
     if (actionType === "rescan") {
       if (nativeCapability.available) {
         await runRealReadonlyScan();
@@ -3950,7 +3962,7 @@ export default function App() {
                 runHistory: openAiAgentRunHistory
               }}
               onAction={handleScopedExecutorCommand}
-              onSelectRoute={setSelectedScopedExecutorRoute}
+              onSelectRoute={selectScopedExecutorRoute}
               onAskAgent={askOpenAIAgent}
               onAgentAction={handleOpenAIAgentRecommendation}
               onExportSmokePacket={exportExecutorSmokeRunPacket}

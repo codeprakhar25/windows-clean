@@ -16468,14 +16468,15 @@ export function buildScopedExecutorRunGate({
   route = "",
   smokeRunPacket = null,
   executionProofHandoff = null,
+  activeRouteOverride = "",
   generatedAt = "set-on-export"
 } = {}) {
   const packet = smokeRunPacket || buildExecutorSmokeRunPacket();
   const requestedRoute = String(route || "").trim();
   const rows = packet?.rows || [];
   const requestedRow = rows.find((row) => row.route === requestedRoute || row.id === requestedRoute) || null;
-  const activeRoute = packet?.activeRoute || packet?.activeRow?.route || "";
-  const activeRow = packet?.activeRow || rows.find((row) => row.route === activeRoute) || null;
+  const activeRoute = String(activeRouteOverride || packet?.activeRoute || packet?.activeRow?.route || "").trim();
+  const activeRow = rows.find((row) => row.route === activeRoute || row.id === activeRoute) || packet?.activeRow || null;
   const proofStatus = executionProofHandoff?.status || packet?.proofStatus || "waiting-for-execution";
   const proofBlocked = Boolean(proofStatus && proofStatus !== "waiting-for-execution" && proofStatus !== "proof-complete");
   const inactiveRoute = Boolean(requestedRoute && activeRoute && requestedRoute !== activeRoute);

@@ -314,7 +314,7 @@ assert(app.includes("OpenAIRecommendationCard"), "OpenAI recommendation cards sh
 assert(app.includes("Open gate"), "blocked OpenAI recommendations should route users to the relevant gate");
 const openAiHandlerStart = app.indexOf("async function handleOpenAIAgentRecommendation");
 const blockedOpenAiRecommendationIndex = app.indexOf("if (brokerRow && !brokerRow.canAct)", openAiHandlerStart);
-const openAiRouteArmIndex = app.indexOf("setSelectedScopedExecutorRoute(deterministicRoute)", openAiHandlerStart);
+const openAiRouteArmIndex = app.indexOf("selectScopedExecutorRoute(deterministicRoute)", openAiHandlerStart);
 assert(openAiHandlerStart >= 0, "OpenAI recommendation handler should exist");
 assert(blockedOpenAiRecommendationIndex > openAiHandlerStart, "OpenAI handler should check blocked broker rows");
 assert(openAiRouteArmIndex > openAiHandlerStart, "OpenAI handler should arm deterministic executor routes");
@@ -455,10 +455,11 @@ assert(model.includes("spaceguard-scoped-executor-run-gate/v1"), "model should e
 assert(model.includes("inactive-route"), "scoped executor run gate should block queued inactive routes");
 assert(app.includes("buildScopedExecutorRunGate"), "app should wire the scoped executor run gate");
 assert(app.includes("blockExecutorForInactiveRoute"), "native executor handlers should block inactive scoped routes");
+assert(app.includes("activeRouteOverride: selectedScopedExecutorRouteRef.current"), "inactive route gate should read the synchronously selected route override");
 assert(app.includes("ScopedExecutorCommandFlowPanel"), "scoped executor command flow panel should be rendered");
 assert(app.includes("scoped-executor-command-flow-panel"), "scoped executor command flow should be focusable");
 assert(app.includes("getScopedExecutorRouteForAction(action)"), "selecting an agent action should resolve its scoped executor route");
-assert(app.includes("setSelectedScopedExecutorRoute(scopedRoute)"), "selecting an agent action should activate the matching scoped executor route");
+assert(app.includes("selectScopedExecutorRoute(scopedRoute)"), "selecting an agent action should activate the matching scoped executor route");
 const toggleActionStart = app.indexOf("function toggleAction(action)");
 const toggleActionEnd = app.indexOf("function selectActionById", toggleActionStart);
 const toggleActionBlock = app.slice(toggleActionStart, toggleActionEnd);
