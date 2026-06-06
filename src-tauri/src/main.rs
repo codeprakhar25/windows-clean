@@ -699,6 +699,12 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
         archive_destination: None,
         actions: Vec::new(),
     });
+    if real_write_request_attempted(&request) {
+        let enabled_flags = enabled_scoped_executor_flags_on_windows();
+        if enabled_flags.len() > 1 {
+            return reject_multiple_scoped_executor_flags(&request, &enabled_flags);
+        }
+    }
     if request.request_mode.as_deref() == Some("execute-first-safe") {
         return execute_first_safe_temp_cleanup(request);
     }
@@ -816,6 +822,162 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
         executor_scaffold,
         entries,
         warnings,
+    }
+}
+
+fn real_write_request_attempted(request: &WriteExecutionRequest) -> bool {
+    request.dry_run_only == Some(false) || request.mutation_attempted == Some(true)
+}
+
+fn enabled_scoped_executor_flags_on_windows() -> Vec<&'static str> {
+    let flags = [
+        ("SPACEGUARD_ENABLE_TEMP_EXECUTOR", temp_executor_enabled()),
+        (
+            "SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR",
+            project_dependency_executor_enabled(),
+        ),
+        (
+            "SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR",
+            downloads_cleanup_executor_enabled(),
+        ),
+        (
+            "SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR",
+            large_file_archive_executor_enabled(),
+        ),
+        (
+            "SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR",
+            browser_cache_executor_enabled(),
+        ),
+        (
+            "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR",
+            gradle_cache_executor_enabled(),
+        ),
+        (
+            "SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR",
+            user_cache_executor_enabled(),
+        ),
+        (
+            "SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR",
+            android_cache_executor_enabled(),
+        ),
+        (
+            "SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR",
+            shader_cache_executor_enabled(),
+        ),
+        (
+            "SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR",
+            pip_cache_executor_enabled(),
+        ),
+        (
+            "SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS",
+            tool_native_prune_executors_enabled(),
+        ),
+        (
+            "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
+            npm_cache_executor_enabled(),
+        ),
+        (
+            "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR",
+            pnpm_store_executor_enabled(),
+        ),
+        (
+            "SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR",
+            recycle_bin_executor_enabled(),
+        ),
+    ];
+
+    flags
+        .iter()
+        .filter_map(|(name, enabled)| {
+            if scoped_executor_enabled_on_windows(*enabled) {
+                Some(*name)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn reject_multiple_scoped_executor_flags(
+    request: &WriteExecutionRequest,
+    enabled_flags: &[&'static str],
+) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let enabled_flags_label = enabled_flags.join(", ");
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-write-boundary-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-cleanup".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+    let entries = request
+        .actions
+        .iter()
+        .map(|action| WriteExecutionEntry {
+            id: action.id.clone(),
+            title: action.title.clone(),
+            route: action.route.clone(),
+            result: "rejected".to_string(),
+            reject_code: "multiple-scoped-executor-flags".to_string(),
+            bytes: 0,
+            preflight_status: "executor-scope-blocked".to_string(),
+            preflight_checks: vec![
+                write_preflight_check(
+                    "single-scoped-executor-flag",
+                    "Single scoped executor flag",
+                    "blocked",
+                    "Only one scoped executor feature flag may be enabled for a mutating native request.",
+                ),
+                write_preflight_check(
+                    "mutation-dispatch",
+                    "Mutation dispatch",
+                    "blocked",
+                    "Native executor dispatch was stopped before route selection.",
+                ),
+                write_preflight_check(
+                    "mutation-lock",
+                    "Mutation lock",
+                    "passed",
+                    "No filesystem mutation was attempted and all requested bytes remain untouched.",
+                ),
+            ],
+            note: format!(
+                "Real cleanup rejected before dispatch with code multiple-scoped-executor-flags. Enabled scoped executor flags: {enabled_flags_label}. Plan {plan_id}; no bytes were removed or moved for this action."
+            ),
+        })
+        .collect::<Vec<_>>();
+
+    WriteExecutionResponse {
+        mode: "native-executor-scope-rejected",
+        real_run_enabled: false,
+        destructive_commands: false,
+        accepted: false,
+        reason: "Native executor dispatch rejected the request because multiple scoped executor flags are enabled.".to_string(),
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
+        entries,
+        warnings: vec![
+            format!(
+                "Only one scoped executor flag may be enabled for a real run. Turn off all but one before launching Tauri: {enabled_flags_label}."
+            ),
+            "No filesystem mutation was attempted because native executor dispatch was blocked before route selection.".to_string(),
+        ],
     }
 }
 

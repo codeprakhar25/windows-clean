@@ -888,6 +888,10 @@ assert(app.includes("consentMatchesPlan ? \"current\""), "scoped executor panels
 assert(app.includes("blockExecutorForMultipleScopedFlags"), "direct scoped executor handlers should block multi-flag real runs");
 assert(app.includes("Only one scoped executor flag may be enabled for a real run"), "multi-flag executor errors should tell the operator to narrow scope");
 assert(app.includes("singleScopedExecutorFlag"), "scoped executor panels should disable run readiness when multiple route flags are enabled");
+assert(rustScanner.includes("enabled_scoped_executor_flags_on_windows"), "Rust native executor should count enabled scoped route flags before dispatch");
+assert(rustScanner.includes("real_write_request_attempted(&request)"), "Rust native executor should apply multi-flag checks only to mutating requests");
+assert(rustScanner.includes("multiple-scoped-executor-flags"), "Rust native executor should reject mutating requests when multiple scoped flags are enabled");
+assert(rustScanner.includes("native-executor-scope-rejected"), "Rust native executor should return a scoped pre-dispatch rejection response");
 assert(openAiAgent.includes("post-run-proof"), "OpenAI broker should check pending post-run proof before executor recommendations");
 assert(app.includes("runPostRunReadonlyScan"), "post-run verification should have a ledger-preserving native rescan action");
 assert(app.includes("executionProofContext"), "post-run verification should freeze the execution plan context");
