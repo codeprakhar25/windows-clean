@@ -568,6 +568,9 @@ assert(app.includes("buildPrivacyBoundary"), "privacy boundary should be wired")
 assert(app.includes("buildPublicBetaReadiness"), "public beta readiness should be wired");
 assert(app.includes("buildReleaseGate"), "release gate should be wired");
 assert(app.includes("executorFlags"), "release gate should consume per-executor runtime feature flags");
+assert(app.includes("Executor scope:"), "release gate should show native executor scope status");
+assert(app.includes("Scoped flags:"), "release gate should show native scoped executor flag count");
+assert(app.includes("Enabled flags:"), "release gate should show native scoped executor flag names when present");
 assert(app.includes("buildReleaseReviewPacket"), "release review packet should be wired");
 assert(app.includes("buildReleaseReviewPacketMarkdown"), "release review packet export should be wired");
 assert(app.includes("buildWriteReadiness"), "write readiness should be wired");

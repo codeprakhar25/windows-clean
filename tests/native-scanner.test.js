@@ -30,6 +30,9 @@ const assert = require("assert");
   assert.strictEqual(capabilityUnavailable.elevated, false, "browser runtime capability must not imply elevation");
   assert.strictEqual(capabilityUnavailable.realRunEnabled, false, "browser runtime capability must keep real run disabled");
   assert.strictEqual(capabilityUnavailable.executeCleanupPlan, false, "browser runtime capability must not expose write command");
+  assert.strictEqual(capabilityUnavailable.executorScopeStatus, "no-scoped-flags", "browser runtime capability should expose a default executor scope status");
+  assert.strictEqual(capabilityUnavailable.enabledScopedExecutorFlagCount, 0, "browser runtime capability should expose zero scoped executor flags");
+  assert.deepStrictEqual(capabilityUnavailable.enabledScopedExecutorFlags, [], "browser runtime capability should expose an empty scoped flag list");
   let scanInvocation = null;
   const invokedScan = await native.runNativeReadonlyScan(
     {

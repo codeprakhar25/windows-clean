@@ -882,6 +882,9 @@ export async function getNativeRuntimeCapabilities(host = globalThis) {
       openAiAdvisorConfigured: false,
       openAiKeySource: "missing",
       safeExecutorsEnabled: false,
+      enabledScopedExecutorFlags: [],
+      enabledScopedExecutorFlagCount: 0,
+      executorScopeStatus: "no-scoped-flags",
       executorFlags: defaultExecutorFlags(),
       reason: "Browser demo cannot perform native scans or cleanup."
     };

@@ -321,6 +321,9 @@ export default function App() {
       openAiAdvisorConfigured: false,
       openAiKeySource: "missing",
       safeExecutorsEnabled: false,
+      enabledScopedExecutorFlags: [],
+      enabledScopedExecutorFlagCount: 0,
+      executorScopeStatus: "no-scoped-flags",
       executorFlags: {
         tempCleanupExecutor: false,
         projectDependencyExecutor: false,
@@ -9108,6 +9111,10 @@ function ExecutorSmokeRunPacketPanel({ packet, onExport }) {
 function ReleaseGatePanel({ releaseGate, runtimeCapabilities }) {
   const previewRows = releaseGate.missingRows.slice(0, 5);
   const vmRows = releaseGate.vmRows.slice(0, 3);
+  const runtimeResult = runtimeCapabilities.result || {};
+  const nativeScopedFlags = Array.isArray(runtimeResult.enabledScopedExecutorFlags) ? runtimeResult.enabledScopedExecutorFlags : [];
+  const nativeScopedFlagCount = runtimeResult.enabledScopedExecutorFlagCount ?? nativeScopedFlags.length;
+  const nativeScopeStatus = runtimeResult.executorScopeStatus || "unknown";
 
   return (
     <Card>
@@ -9144,7 +9151,14 @@ function ReleaseGatePanel({ releaseGate, runtimeCapabilities }) {
             <span>Scan command: {runtimeCapabilities.result.scanKnownRoots ? "yes" : "no"}</span>
             <span>Dry-run command: {runtimeCapabilities.result.simulateCleanupPlan ? "yes" : "no"}</span>
             <span>Write command: {runtimeCapabilities.result.executeCleanupPlan ? "route executor available" : "no"}</span>
+            <span>Executor scope: {nativeScopeStatus}</span>
+            <span>Scoped flags: {nativeScopedFlagCount}</span>
           </div>
+          {nativeScopedFlags.length ? (
+            <p className="mt-2 break-all text-xs text-muted-foreground">
+              Enabled flags: {nativeScopedFlags.join(", ")}
+            </p>
+          ) : null}
         </div>
 
         <div className="space-y-2">
