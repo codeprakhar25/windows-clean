@@ -24,6 +24,8 @@ const setupDoctorScriptPath = path.join(root, "scripts", "run-setup-doctor.mjs")
 const setupDoctorScript = fs.existsSync(setupDoctorScriptPath) ? fs.readFileSync(setupDoctorScriptPath, "utf8") : "";
 const setupRouteScriptPath = path.join(root, "scripts", "run-setup-route.mjs");
 const setupRouteScript = fs.existsSync(setupRouteScriptPath) ? fs.readFileSync(setupRouteScriptPath, "utf8") : "";
+const validationRouteScriptPath = path.join(root, "scripts", "run-windows-validation-packet.mjs");
+const validationRouteScript = fs.existsSync(validationRouteScriptPath) ? fs.readFileSync(validationRouteScriptPath, "utf8") : "";
 
 function rustFunctionBlock(name) {
   const start = rustScanner.indexOf(`fn ${name}(`);
@@ -420,9 +422,11 @@ assert(packageJson.includes("\"openai:smoke\""), "package scripts should expose 
 assert(packageJson.includes("\"openai:smoke:fixture\""), "package scripts should expose the no-network OpenAI fixture smoke command");
 assert(packageJson.includes("\"setup:doctor\""), "package scripts should expose the setup doctor command");
 assert(packageJson.includes("\"setup:route\""), "package scripts should expose the route setup packet command");
+assert(packageJson.includes("\"validate:route\""), "package scripts should expose the Windows route validation packet command");
 assert(setupDoctorScript.includes("OPENAI_API_KEY"), "setup doctor should check OpenAI key configuration");
 assert(setupDoctorScript.includes("openai:smoke:fixture"), "setup doctor should expose the local fixture smoke command");
 assert(setupDoctorScript.includes("setup:route"), "setup doctor should expose the route setup packet command");
+assert(setupDoctorScript.includes("validate:route"), "setup doctor should expose the route validation packet command");
 assert(setupDoctorScript.includes("SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR"), "setup doctor should check scoped executor flags");
 assert(setupDoctorScript.includes("spaceguard-setup-doctor/v1"), "setup doctor should emit a stable schema");
 assert(setupRouteScript.includes("spaceguard-route-setup-packet/v1"), "route setup script should emit a stable packet schema");
@@ -430,8 +434,14 @@ assert(setupRouteScript.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "route
 assert(setupRouteScript.includes("execute-npm-cache"), "route setup script should report native request modes");
 assert(setupRouteScript.includes("npm-cache-executor-panel"), "route setup script should report executor panel ids");
 assert(setupRouteScript.includes("npm run setup:route -- --route npm-cache"), "route setup script should document route usage");
+assert(validationRouteScript.includes("spaceguard-windows-validation-packet/v1"), "validation packet script should emit a stable schema");
+assert(validationRouteScript.includes("post-run-rescan-comparison"), "validation packet should require post-run rescan proof");
+assert(validationRouteScript.includes("enable-second-executor-flag"), "validation packet should forbid multi-route validation");
+assert(validationRouteScript.includes("npm run validate:route -- --route npm-cache"), "validation packet script should document route usage");
 assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");
+assert(readme.includes("npm run validate:route -- --route npm-cache"), "README should document route validation packet usage");
 assert(realDataGuide.includes("npm run setup:route -- --route npm-cache"), "Windows setup guide should document route setup packet usage");
+assert(realDataGuide.includes("npm run validate:route -- --route npm-cache"), "Windows setup guide should document route validation packet usage");
 assert(openAiAgent.includes("forbiddenActions"), "OpenAI context should expose forbidden actions");
 assert(app.includes("Open manual review"), "OpenAI manual-only recommendations should expose a review action");
 assert(app.includes("manualReviewTargets"), "OpenAI manual-only recommendations should be visible in the panel");
