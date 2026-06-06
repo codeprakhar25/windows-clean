@@ -936,7 +936,8 @@ export default function App() {
         planSnapshot,
         nativeScan: nativeScan.result,
         archiveDestination: largeFileArchiveDestination,
-        permanentRemovalConfirmed: Boolean(approvals.permanentConfirm)
+        permanentRemovalConfirmed: Boolean(approvals.permanentConfirm),
+        preferredRoute: selectedScopedExecutorRoute
       }),
     [
       executorPlan,
@@ -950,7 +951,8 @@ export default function App() {
       planSnapshot,
       nativeScan.result,
       largeFileArchiveDestination,
-      approvals.permanentConfirm
+      approvals.permanentConfirm,
+      selectedScopedExecutorRoute
     ]
   );
   const scopedExecutorCommandFlow = useMemo(
@@ -8630,9 +8632,11 @@ function ExecutorSmokeRunPacketPanel({ packet, onExport }) {
         <CardDescription>{packet.primary}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid gap-2 sm:grid-cols-5">
           <QueueStat label="Routes" value={packet.counts.routes} tone={packet.counts.routes ? "review" : "restricted"} />
           <QueueStat label="Ready" value={packet.counts.ready} tone={packet.counts.ready ? "safe" : "review"} />
+          <QueueStat label="Active" value={packet.activeRoute ? packet.activeRoute.split("-")[0] : "none"} tone={packet.activeRoute ? "safe" : "review"} />
+          <QueueStat label="Queued" value={packet.counts.queuedReady || 0} tone={packet.counts.queuedReady ? "review" : "safe"} />
           <QueueStat label="Proof" value={packet.proofStatus === "waiting-for-execution" ? "clear" : packet.proofStatus.replace(/^proof-/, "")} tone={packet.proofAllowsNextExecutor ? "safe" : "restricted"} />
         </div>
 

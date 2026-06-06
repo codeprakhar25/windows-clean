@@ -3515,6 +3515,7 @@ const assert = require("assert");
     consentReceipt: { planId: "plan-package-cache-smoke" },
     executionProofHandoff: { status: "waiting-for-execution" },
     planSnapshot: { id: "plan-package-cache-smoke" },
+    preferredRoute: "bounded-pnpm-store-delete",
     nativeScan: {
       findings: [
         {
@@ -3532,6 +3533,14 @@ const assert = require("assert");
       ]
     }
   });
+  assert.strictEqual(multiRouteSmokePacket.activeRoute, "bounded-pnpm-store-delete", "smoke packet should mark exactly one user-selected active route");
+  assert.strictEqual(multiRouteSmokePacket.counts.active, 1, "smoke packet should count one active smoke route");
+  assert.strictEqual(multiRouteSmokePacket.counts.queuedReady, 1, "smoke packet should queue other ready routes behind the active route");
+  assert.deepStrictEqual(
+    multiRouteSmokePacket.queuedReadyRows.map((row) => row.route),
+    ["bounded-npm-cache-delete"],
+    "smoke packet should keep non-selected ready routes queued for later proof-gated execution"
+  );
   const selectedPnpmCommandFlow = guard.buildScopedExecutorCommandFlow({
     smokeRunPacket: multiRouteSmokePacket,
     preferredRoute: "bounded-pnpm-store-delete",

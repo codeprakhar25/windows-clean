@@ -293,7 +293,7 @@ The demo also includes:
 - Native beta distribution readiness for signing, setup docs, install/uninstall, support workflow, read-only scan evidence, no-cleanup claims, and exportable beta evidence records.
 - OpenAI cleanup agent panel for advisory ranking, next-step suggestions, blocked-action explanations, and user questions from real scan context.
 - Real cleanup command flow that combines scan, consent, user-selected scoped executor route, OpenAI recommendation follow-through, execution, and post-run rescan proof in one operator surface.
-- Executor smoke-run packet for the selected scoped route, feature flag, request mode, consent, scan fingerprint, post-run proof state, and proof export checklist.
+- Executor smoke-run packet for the selected scoped route, feature flag, request mode, consent, scan fingerprint, post-run proof state, and proof export checklist. When multiple selected routes are ready, the packet marks one active smoke route and queues the other ready routes behind post-run proof.
 - First-safe temp executor panel for old files under allowlisted temp roots, feature-flagged in the Windows native runtime.
 - Recycle Bin executor panel for permanent Shell Recycle Bin emptying, requiring the permanent-removal confirmation gate and native request acknowledgement.
 - Gradle cache executor panel for old files under the current user's `.gradle\caches` root, with project folders and Gradle daemon/wrapper/config paths rejected.

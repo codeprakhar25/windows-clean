@@ -8053,6 +8053,7 @@ export function buildExecutorSmokeRunPacket({
   nativeScan = null,
   archiveDestination = "",
   permanentRemovalConfirmed = false,
+  preferredRoute = "",
   generatedAt = "set-on-export"
 } = {}) {
   const runtime = runtimeCapabilities || {};
@@ -8079,6 +8080,8 @@ export function buildExecutorSmokeRunPacket({
     })
   );
   const readyRows = rows.filter((row) => row.status === "ready");
+  const activeReadyRow = selectExecutorSmokeActiveRow(rows, preferredRoute);
+  const queuedReadyRows = readyRows.filter((row) => row !== activeReadyRow);
   const proofBlockedRows = rows.filter((row) => row.status === "needs-proof");
   const blockedRows = rows.filter((row) => row.status === "blocked");
   const validationReady = Boolean(validationPack?.readyForRealRun || releaseGate?.readyForRealRun);
@@ -8089,7 +8092,7 @@ export function buildExecutorSmokeRunPacket({
       ? "proof-complete"
       : proofBlockedRows.length
         ? "needs-proof"
-        : readyRows.length
+        : activeReadyRow
           ? "ready-for-smoke"
           : "blocked";
 
@@ -8113,6 +8116,9 @@ export function buildExecutorSmokeRunPacket({
     rescanComparisonStatus: rescanComparison?.status || "not-run",
     postRunScanEvidence: Boolean(rescanComparison?.postRunScanEvidence),
     selectedRoutes: rows.map((row) => row.route),
+    activeRoute: activeReadyRow?.route || "",
+    activeRow: activeReadyRow || null,
+    queuedReadyRows,
     rows,
     readyRows,
     blockedRows,
@@ -8120,12 +8126,14 @@ export function buildExecutorSmokeRunPacket({
     counts: {
       routes: rows.length,
       ready: readyRows.length,
+      active: activeReadyRow ? 1 : 0,
+      queuedReady: queuedReadyRows.length,
       blocked: blockedRows.length,
       needsProof: proofBlockedRows.length,
       validationReady: validationReady ? 1 : 0
     },
-    primary: getExecutorSmokeRunPrimary(status, { readyRows, blockedRows, proofBlockedRows }),
-    steps: getExecutorSmokeRunSteps(status, { readyRows, blockedRows, proofBlockedRows })
+    primary: getExecutorSmokeRunPrimary(status, { readyRows, activeReadyRow, queuedReadyRows, blockedRows, proofBlockedRows }),
+    steps: getExecutorSmokeRunSteps(status, { readyRows, activeReadyRow, blockedRows, proofBlockedRows })
   };
 }
 
@@ -8163,6 +8171,8 @@ export function buildExecutorSmokeRunPacketMarkdown(packet = null) {
     `Validation ready: ${packet?.validationReady ? "yes" : "no"}`,
     `Proof status: ${packet?.proofStatus || "unknown"}`,
     `Rescan comparison: ${packet?.rescanComparisonStatus || "not-run"}`,
+    `Active route: ${packet?.activeRoute || "none"}`,
+    `Queued ready routes: ${packet?.counts?.queuedReady || 0}`,
     "",
     "## Operator Steps",
     steps,
@@ -16007,16 +16017,31 @@ function buildExecutorSmokeOperatorSteps(spec) {
   ];
 }
 
-function getExecutorSmokeRunPrimary(status, { readyRows = [], blockedRows = [], proofBlockedRows = [] } = {}) {
-  if (status === "ready-for-smoke") return `${readyRows.length} scoped route(s) are ready for a Windows smoke run.`;
+function selectExecutorSmokeActiveRow(rows = [], preferredRoute = "") {
+  const readyRows = rows.filter((row) => row.status === "ready");
+  const preferred = String(preferredRoute || "").trim();
+  if (preferred) {
+    const selected = readyRows.find((row) => row.route === preferred || row.id === preferred);
+    if (selected) return selected;
+  }
+  return readyRows[0] || null;
+}
+
+function getExecutorSmokeRunPrimary(status, { readyRows = [], activeReadyRow = null, queuedReadyRows = [], blockedRows = [], proofBlockedRows = [] } = {}) {
+  if (status === "ready-for-smoke") {
+    const queued = queuedReadyRows.length
+      ? ` ${queuedReadyRows.length} other ready route(s) are queued until this run has post-run proof.`
+      : "";
+    return `${activeReadyRow?.title || readyRows[0]?.title || "One scoped route"} is ready for a Windows smoke run.${queued}`;
+  }
   if (status === "proof-complete") return "Post-run proof is complete for the latest scoped execution.";
   if (status === "needs-proof") return `${proofBlockedRows.length} route(s) are blocked until current post-run proof is finished.`;
   if (status === "blocked") return blockedRows[0]?.blockedReason || "Selected scoped routes are missing runtime or consent evidence.";
   return "Select a scoped executor route before building a smoke-run packet.";
 }
 
-function getExecutorSmokeRunSteps(status, { readyRows = [], blockedRows = [], proofBlockedRows = [] } = {}) {
-  if (status === "ready-for-smoke") return readyRows[0]?.operatorSteps || ["Run the selected scoped executor.", "Run post-run rescan.", "Export proof."];
+function getExecutorSmokeRunSteps(status, { readyRows = [], activeReadyRow = null, blockedRows = [], proofBlockedRows = [] } = {}) {
+  if (status === "ready-for-smoke") return activeReadyRow?.operatorSteps || readyRows[0]?.operatorSteps || ["Run the selected scoped executor.", "Run post-run rescan.", "Export proof."];
   if (status === "proof-complete") return ["Export the rescan comparison.", "Attach the ledger and smoke-run packet.", "Do not broaden route scope from this proof."];
   if (status === "needs-proof") return proofBlockedRows[0]?.operatorSteps?.slice(-2) || ["Run post-run rescan.", "Export rescan comparison."];
   if (status === "blocked") return blockedRows.slice(0, 3).map((row) => `${row.title}: ${row.blockedReason}`);
