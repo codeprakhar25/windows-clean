@@ -2504,6 +2504,102 @@ const assert = require("assert");
   });
   assert.strictEqual(unixTimestampComparison.postRunScanEvidence, true, "native unix timestamps should compare against ISO ledger timestamps");
   assert.strictEqual(unixTimestampComparison.status, "matched", "native unix timestamp scans should be allowed to prove matched parity");
+  const fixtureAction = {
+    id: "temp-fixture-cleanup",
+    title: "Seeded temp fixture",
+    family: "Windows",
+    path: "%TEMP%\\spaceguard-fixture",
+    bytes: 8 * guard.MB,
+    risk: "safe",
+    gate: "auto",
+    method: "Delete only the seeded SpaceGuard temp fixture root.",
+    consequence: "Disposable validation fixture files are removed; normal temp files stay untouched.",
+    recommendation: "Run this before broad temp cleanup to prove the real executor path.",
+    selectedByDefault: false,
+    executableInDemo: true,
+    scanSource: "native-readonly",
+    scanStatus: "measured"
+  };
+  const fixtureActionList = [...developerActions, fixtureAction];
+  const fixturePlanSnapshot = guard.buildPlanSnapshot({
+    selectedIds: new Set(["temp-fixture-cleanup"]),
+    actionList: fixtureActionList,
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    protectedPaths: [],
+    scanMode: "native-readonly",
+    goalBytes: 10 * guard.GB
+  });
+  const fixtureExecutorPlan = guard.buildExecutorPlan({
+    selectedIds: new Set(["temp-fixture-cleanup"]),
+    actionList: fixtureActionList,
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    protectedPaths: [],
+    scanMode: "native-readonly"
+  });
+  const fixtureLedger = guard.makeExecutionLedgerForActions(new Set(["temp-fixture-cleanup"]), fixtureActionList, [], {
+    approvals: { groupConfirm: true, reviewed: {}, typed: {} },
+    planSnapshot: fixturePlanSnapshot,
+    executedAt: "2026-06-04T10:10:00.000Z"
+  });
+  const fixturePostRunVerification = guard.buildPostRunVerificationPlan({
+    planSnapshot: fixturePlanSnapshot,
+    ledger: fixtureLedger,
+    executorPlan: fixtureExecutorPlan,
+    scanMode: "native-readonly",
+    nativeScan: { available: true, generatedAt: "2026-06-04T10:15:00.000Z", findings: [] }
+  });
+  const fixtureMatchedComparison = guard.buildRescanComparison({
+    postRunVerification: fixturePostRunVerification,
+    ledger: fixtureLedger,
+    scanMode: "native-readonly",
+    nativeScan: {
+      available: true,
+      generatedAt: "2026-06-04T10:15:00.000Z",
+      findings: [
+        {
+          recipeId: "windows-temp",
+          title: "Windows temp",
+          path: "%TEMP%",
+          bytes: 5 * guard.GB,
+          status: "measured",
+          items: []
+        }
+      ]
+    }
+  });
+  assert.strictEqual(fixtureMatchedComparison.status, "matched", "fixture cleanup should match when broad temp still has bytes but the fixture item is gone");
+  assert.strictEqual(fixtureMatchedComparison.rows[0].actualBytes, 0, "fixture comparison should use fixture item bytes, not broad temp root bytes");
+  const fixtureStillPresentComparison = guard.buildRescanComparison({
+    postRunVerification: fixturePostRunVerification,
+    ledger: fixtureLedger,
+    scanMode: "native-readonly",
+    nativeScan: {
+      available: true,
+      generatedAt: "2026-06-04T10:15:00.000Z",
+      findings: [
+        {
+          recipeId: "windows-temp",
+          title: "Windows temp",
+          path: "%TEMP%",
+          bytes: 5 * guard.GB,
+          status: "measured",
+          items: [
+            {
+              id: "fixture-leftover",
+              name: "known-temp.tmp",
+              path: "%TEMP%\\spaceguard-fixture\\known-temp.tmp",
+              bytes: 8 * guard.MB,
+              ageDays: 14,
+              kind: "fixture temp file",
+              recommendation: "review"
+            }
+          ]
+        }
+      ]
+    }
+  });
+  assert.strictEqual(fixtureStillPresentComparison.status, "mismatch", "fixture cleanup should mismatch when a fixture item remains after the run");
+  assert.strictEqual(fixtureStillPresentComparison.rows[0].actualBytes, 8 * guard.MB, "fixture mismatch should report remaining fixture item bytes");
   const skippedPlanSnapshot = guard.buildPlanSnapshot({
     selectedIds: new Set(["browser-identity"]),
     actionList: developerActions,

@@ -15630,6 +15630,7 @@ function buildRescanComparisonRow({
   const measured = finding && (finding.status === "measured" || finding.status === "limited");
   const actualBytes = measured ? Number(finding.bytes || 0) : 0;
   const deltaBytes = measured ? Math.abs(actualBytes - expectedRemainingBytes) : expectedRemainingBytes;
+  const effectiveToleranceBytes = isTempFixtureCheckpoint(checkpoint) ? 0 : toleranceBytes;
   let state = "needs-native-rescan";
   let evidence = "Run the Windows desktop read-only scanner after the ledger is created.";
 
@@ -15649,9 +15650,9 @@ function buildRescanComparisonRow({
     evidence = finding
       ? `Native finding status is ${finding.status}; measured or limited evidence is required.`
       : "No matching native finding exists for this affected route.";
-  } else if (deltaBytes <= toleranceBytes) {
+  } else if (deltaBytes <= effectiveToleranceBytes) {
     state = "matched";
-    evidence = `Native remaining size is within ${formatBytes(toleranceBytes)} tolerance.`;
+    evidence = `Native remaining size is within ${formatBytes(effectiveToleranceBytes)} tolerance.`;
   } else {
     state = "mismatch";
     evidence = `Native remaining size differs by ${formatBytes(deltaBytes)}.`;
@@ -15669,6 +15670,7 @@ function buildRescanComparisonRow({
     expectedRemainingBytes,
     actualBytes,
     deltaBytes,
+    toleranceBytes: effectiveToleranceBytes,
     nativeStatus: finding?.status || "missing",
     nativePath: finding?.path || "",
     latestExecutionAt,
@@ -15680,6 +15682,8 @@ function buildRescanComparisonRow({
 function findNativeFindingForCheckpoint(checkpoint, nativeScan) {
   const findings = nativeScan?.findings || [];
   if (!findings.length) return null;
+  const fixtureFinding = findNativeTempFixtureFindingForCheckpoint(checkpoint, findings);
+  if (fixtureFinding) return fixtureFinding;
   const byRecipe = findings.filter((finding) => finding.recipeId === checkpoint.id);
   if (byRecipe.length) return sumNativeFindings(byRecipe);
   const checkpointPath = normalizeComparablePath(checkpoint.path);
@@ -15689,6 +15693,40 @@ function findNativeFindingForCheckpoint(checkpoint, nativeScan) {
     return findingPath && (checkpointPath.includes(findingPath) || findingPath.includes(checkpointPath));
   });
   return byPath.length ? sumNativeFindings(byPath) : null;
+}
+
+function findNativeTempFixtureFindingForCheckpoint(checkpoint, findings = []) {
+  if (!isTempFixtureCheckpoint(checkpoint)) return null;
+  const tempFindings = findings.filter((finding) => finding.recipeId === "windows-temp" && (finding.status === "measured" || finding.status === "limited"));
+  if (!tempFindings.length) return null;
+  const hasItemEvidence = tempFindings.some((finding) => Array.isArray(finding.items));
+  if (!hasItemEvidence) return null;
+  const checkpointPath = normalizeComparablePath(checkpoint.path);
+  const fixtureItems = tempFindings.flatMap((finding) =>
+    (finding.items || [])
+      .filter((item) => isTempFixturePathLike(item.path || item.id || item.name))
+      .filter((item) => {
+        const itemPath = normalizeComparablePath(item.path || "");
+        return !checkpointPath || !itemPath || itemPath.includes(checkpointPath) || checkpointPath.includes(itemPath) || isTempFixturePathLike(item.path || "");
+      })
+      .map((item) => ({ ...item, sourceStatus: finding.status }))
+  );
+
+  return {
+    recipeId: checkpoint.id,
+    title: checkpoint.title,
+    path: fixtureItems.length ? fixtureItems.map((item) => item.path).filter(Boolean).join(", ") : checkpoint.path,
+    status: tempFindings.some((finding) => finding.status === "limited") ? "limited" : "measured",
+    bytes: fixtureItems.reduce((sum, item) => sum + Number(item.bytes || 0), 0)
+  };
+}
+
+function isTempFixtureCheckpoint(checkpoint = {}) {
+  return checkpoint.id === "temp-fixture-cleanup" || isTempFixturePathLike(checkpoint.path);
+}
+
+function isTempFixturePathLike(value = "") {
+  return String(value || "").toLowerCase().includes("spaceguard-fixture");
 }
 
 function sumNativeFindings(findings) {
