@@ -2269,6 +2269,12 @@ export default function App() {
       focusWorkflowPanel("item-review-panel");
       return;
     }
+    if (actionType === "select-action") {
+      const actionId = brokerRow?.targetId || row.targetId || row.id;
+      if (actionId) selectActionById(actionId);
+      focusWorkflowPanel("cleanup-actions-panel");
+      return;
+    }
     if (actionType === "ask-user") {
       focusWorkflowPanel("agent-question-panel");
       return;
@@ -4105,7 +4111,7 @@ export default function App() {
               removeProtectedPath={removeProtectedPath}
             />
 
-            <Card>
+            <Card id="cleanup-actions-panel">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -7273,6 +7279,8 @@ function OpenAIRecommendationCard({ row, brokerRow, running, onAction }) {
 
 function aiRecommendationActionLabel(row = {}) {
   switch (row.actionType) {
+    case "select-action":
+      return "Select action";
     case "review-target":
       return "Open review";
     case "run-temp-executor":

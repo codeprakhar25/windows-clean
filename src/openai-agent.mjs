@@ -29,7 +29,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-android-cache-executor", "run-shader-cache-executor", "run-pip-cache-executor", "run-docker-build-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["select-action", "review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-android-cache-executor", "run-shader-cache-executor", "run-pip-cache-executor", "run-docker-build-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -50,7 +50,7 @@ const OPENAI_AGENT_RESPONSE_FORMAT = {
             priority: { type: "string", enum: ["high", "medium", "low"] },
             actionType: {
               type: "string",
-              enum: ["review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-android-cache-executor", "run-shader-cache-executor", "run-pip-cache-executor", "run-docker-build-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
+              enum: ["select-action", "review-target", "run-temp-executor", "run-downloads-cleanup-executor", "run-large-file-archive-executor", "run-project-deps-executor", "run-browser-cache-executor", "run-gradle-cache-executor", "run-user-cache-executor", "run-android-cache-executor", "run-shader-cache-executor", "run-pip-cache-executor", "run-docker-build-cache-executor", "run-npm-cache-executor", "run-pnpm-store-executor", "run-recycle-bin-executor", "rescan", "ask-user", "manual-only"]
             },
             targetId: { type: "string" },
             route: { type: "string" }
@@ -359,7 +359,7 @@ export function buildOpenAIAgentContext({
       directDeleteAuthority: false,
       userApprovalRequired: true,
       executorAuthority: "native code only after explicit user action",
-      allowedActions: ["rank-reviewed-targets", "explain-blockers", "ask-user", "recommend-rescan", "recommend-scoped-executor-button", "recommend-manual-review"],
+      allowedActions: ["rank-reviewed-targets", "explain-blockers", "ask-user", "recommend-rescan", "recommend-plan-selection", "recommend-scoped-executor-button", "recommend-manual-review"],
       forbiddenActions: ["delete-files", "approve-gates", "scan-folders", "run-shell", "edit-registry", "change-partitions"]
     },
     machine: {
@@ -663,6 +663,9 @@ function buildOpenAIAgentRecommendationBrokerRow(row = {}, context = null, execu
   const policy = OPENAI_RECOMMENDATION_EXECUTOR_POLICIES[actionType] || null;
   const key = getOpenAIAgentRecommendationKey({ ...row, actionType });
   if (policy) return buildExecutorRecommendationBrokerRow({ row, actionType, key, policy, context, executionState });
+  if (actionType === "select-action") {
+    return buildSelectionRecommendationBrokerRow({ row, actionType, key, context });
+  }
   if (actionType === "rescan") {
     return buildBrokerRow({
       row,
@@ -725,6 +728,54 @@ function buildOpenAIAgentRecommendationBrokerRow(row = {}, context = null, execu
     targetPanel: getManualRecommendationPanel(row),
     blockedReason: "Manual-only recommendations never create executor authority.",
     checks: [buildBrokerCheck("manual-only", "Manual-only boundary", true, "Routes to review panels, not filesystem mutation.")]
+  });
+}
+
+function buildSelectionRecommendationBrokerRow({ row = {}, actionType, key, context = null }) {
+  const targetId = String(row.targetId || row.target_id || row.id || "").trim();
+  const targets = getSelectionRecommendationTargets(context);
+  const target = targetId
+    ? targets.find((candidate) => targetMatchesRecommendationId(candidate, targetId))
+    : null;
+  const targetSelectable = isOpenAISelectableActionTarget(target);
+  const recommendedRoute = String(row.route || row.route_id || "").trim();
+  const targetRoute = String(target?.route || "").trim();
+  const routeMatches = !recommendedRoute || !targetRoute || recommendedRoute === targetRoute;
+  const selectedIds = new Set(Array.isArray(context?.plan?.selectedIds) ? context.plan.selectedIds : []);
+  const alreadySelected = Boolean(target?.id && selectedIds.has(target.id));
+  const checks = [
+    buildBrokerCheck("advisory-only", "Advisory boundary", true, "OpenAI can request UI selection only; it cannot approve gates or execute cleanup."),
+    buildBrokerCheck("target-known", "Known action target", Boolean(target), targetId ? `target=${targetId}` : "missing target id"),
+    buildBrokerCheck(
+      "target-selectable",
+      "Selectable cleanup action",
+      targetSelectable,
+      target
+        ? `${target.id}: risk=${target.risk || "unknown"} gate=${target.gate || "unknown"}`
+        : "missing target"
+    ),
+    buildBrokerCheck("route-match", "Target route match", routeMatches, routeMatches ? (recommendedRoute || targetRoute || "route optional for selection") : `OpenAI route ${recommendedRoute}; target route ${targetRoute}.`),
+    buildBrokerCheck("already-selected", "Current plan selection", true, alreadySelected ? `${target?.id} is already selected.` : `${target?.id || targetId || "target"} can be added to the plan.`)
+  ];
+  const blocked = checks.filter((check) => !check.passed);
+
+  return buildBrokerRow({
+    row: {
+      ...row,
+      targetId: target?.id || targetId,
+      recommendedRoute,
+      executorRoute: targetRoute
+    },
+    actionType,
+    key,
+    kind: "selection",
+    status: blocked.length ? "blocked" : "ready",
+    tone: blocked.length ? "restricted" : "safe",
+    canAct: blocked.length === 0,
+    buttonLabel: "Select action",
+    targetPanel: "cleanup-actions-panel",
+    blockedReason: blocked[0]?.detail || "",
+    checks
   });
 }
 
@@ -835,6 +886,29 @@ function targetMatchesRecommendationId(target = {}, targetId = "") {
 
 function getExecutorRecommendationTargetCount(policy, context = null) {
   return getExecutorRecommendationTargets(policy, context).length;
+}
+
+function getSelectionRecommendationTargets(context = null) {
+  const rows = [
+    ...(Array.isArray(context?.topFindings) ? context.topFindings : []),
+    ...(Array.isArray(context?.selectedActions) ? context.selectedActions : [])
+  ];
+  const seen = new Set();
+  return rows.filter((row) => {
+    const id = String(row?.id || "").trim();
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function isOpenAISelectableActionTarget(target = null) {
+  if (!target?.id) return false;
+  const gate = String(target.gate || "").toLowerCase();
+  const risk = String(target.risk || "").toLowerCase();
+  if (gate === "blocked" || gate === "advisory") return false;
+  if (risk === "restricted" || risk === "advisory" || risk === "advanced") return false;
+  return true;
 }
 
 function getExecutorRecommendationButtonLabel(actionType) {
@@ -1590,6 +1664,7 @@ function normalizePriority(value) {
 function normalizeActionType(value) {
   const clean = String(value || "").toLowerCase();
   if (
+    clean === "select-action" ||
     clean === "review-target" ||
     clean === "run-temp-executor" ||
     clean === "run-downloads-cleanup-executor" ||

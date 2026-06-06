@@ -360,6 +360,10 @@ assert(openAiAgent.includes("target-id-match"), "OpenAI recommendation broker sh
 assert(openAiAgent.includes("recommendedRoute"), "OpenAI recommendation broker should retain the model-provided route for audit");
 assert(openAiAgent.includes("executorRoute"), "OpenAI recommendation broker should expose the deterministic executor route");
 assert(app.includes("brokerRow?.executorRoute"), "OpenAI recommendation clicks should select the broker's deterministic route");
+assert(openAiAgent.includes("select-action"), "OpenAI schema should allow brokered UI selection recommendations");
+assert(openAiAgent.includes("target-selectable"), "OpenAI select-action broker should prove target selectability");
+assert(app.includes("Select action"), "OpenAI select-action recommendations should expose a selection button label");
+assert(app.includes("cleanup-actions-panel"), "OpenAI select-action recommendations should focus the cleanup action list");
 assert(openAiAgent.includes("storesFullContext: false"), "OpenAI run records should not persist full path-level context");
 assert(openAiAgent.includes("storesRawModelText: false"), "OpenAI run records should not persist raw model text");
 assert(openAiAgent.includes("driveInventoryRows"), "OpenAI context should include drive inventory rows");

@@ -431,6 +431,72 @@ const assert = require("assert");
   assert.strictEqual(readyBroker.rows[0].canAct, true, "ready broker row should be actionable");
   assert.strictEqual(readyBroker.rows[0].directToolAccess, false, "brokered recommendations should not grant direct tool access");
   assert.strictEqual(readyBroker.counts.ready, 1, "broker should count ready recommendations");
+  const selectFixtureBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "temp-fixture-cleanup",
+          title: "Select seeded fixture cleanup",
+          reason: "The fixture is the safest first real cleanup proof.",
+          priority: "high",
+          actionType: "select-action",
+          targetId: "temp-fixture-cleanup",
+          route: "known-temp-delete"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-select-fixture", selectedIds: [] },
+      topFindings: [
+        {
+          id: "temp-fixture-cleanup",
+          title: "Seeded temp fixture",
+          risk: "safe",
+          gate: "auto",
+          route: "known-temp-delete",
+          bytes: 8 * 1024 * 1024
+        }
+      ]
+    }
+  });
+  assert.strictEqual(selectFixtureBroker.rows[0].kind, "selection", "select-action recommendations should stay UI selection rows");
+  assert.strictEqual(selectFixtureBroker.rows[0].status, "ready", "broker should allow selecting a known selectable cleanup action");
+  assert.strictEqual(selectFixtureBroker.rows[0].canAct, true, "select-action broker row should be actionable through UI selection only");
+  assert.strictEqual(selectFixtureBroker.rows[0].buttonLabel, "Select action", "broker should label select-action recommendations");
+  assert.strictEqual(selectFixtureBroker.rows[0].targetPanel, "cleanup-actions-panel", "select-action should route to the cleanup action list");
+  assert.strictEqual(selectFixtureBroker.rows[0].directToolAccess, false, "select-action must not grant direct filesystem access");
+  assert(selectFixtureBroker.rows[0].checks.some((check) => check.id === "target-selectable" && check.passed), "broker should prove selected target is selectable");
+  const blockedSelectBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "installed-app-footprints",
+          title: "Select app uninstall",
+          reason: "The model should not turn manual app review into plan selection authority.",
+          priority: "medium",
+          actionType: "select-action",
+          targetId: "installed-app-footprints",
+          route: "manual-app-uninstall"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-select-blocked", selectedIds: [] },
+      topFindings: [
+        {
+          id: "installed-app-footprints",
+          title: "Large installed app footprints",
+          risk: "advisory",
+          gate: "review",
+          route: "manual-app-uninstall",
+          bytes: 12 * 1024 * 1024 * 1024
+        }
+      ]
+    }
+  });
+  assert.strictEqual(blockedSelectBroker.rows[0].status, "blocked", "broker should block select-action for advisory/manual targets");
+  assert.strictEqual(blockedSelectBroker.rows[0].canAct, false, "advisory select-action rows must not mutate plan selection");
+  assert(blockedSelectBroker.rows[0].checks.some((check) => check.id === "target-selectable" && !check.passed), "broker should expose target-selectable failure");
   const mismatchedRouteBroker = openai.buildOpenAIAgentRecommendationBroker({
     advice: {
       recommendedActions: [
