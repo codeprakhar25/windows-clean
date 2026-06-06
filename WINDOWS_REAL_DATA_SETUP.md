@@ -38,9 +38,12 @@ Optional OpenAI advisor:
 Copy-Item .env.example .env
 # edit .env and set OPENAI_API_KEY
 # optional: set OPENAI_MODEL=gpt-5.2 and OPENAI_REASONING_EFFORT=low
+npm run setup:doctor
 npm run openai:smoke
 npm run native:dev
 ```
+
+`npm run setup:doctor` is read-only. It checks `.env`, OpenAI key presence, model/reasoning defaults, and scoped executor flags without calling OpenAI, scanning folders, or running cleanup.
 
 `npm run openai:smoke` validates the OpenAI key and strict advice schema against fixture data only. It does not scan local folders, run cleanup, or use real disk findings.
 

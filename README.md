@@ -26,6 +26,7 @@ Checks:
 
 ```bash
 npm run check
+npm run setup:doctor
 npm test
 npm run demo:rehearsal
 npm run native:rehearsal
@@ -49,9 +50,12 @@ Configure the OpenAI advisor:
 cp .env.example .env
 # set OPENAI_API_KEY in .env
 # optional: set OPENAI_MODEL or OPENAI_REASONING_EFFORT
+npm run setup:doctor
 npm run openai:smoke
 npm run native:dev
 ```
+
+`npm run setup:doctor` is a read-only local setup diagnostic. It reports whether `.env` exists, whether `OPENAI_API_KEY` is configured, which model/reasoning defaults will be used, and which scoped executor flags are enabled. It does not call OpenAI, scan folders, or run cleanup.
 
 `npm run openai:smoke` sends only a fixture context to the OpenAI advisor. It does not scan local folders or run cleanup; use it to validate the `.env` key, model, strict JSON schema, and recommendation broker before opening the desktop app.
 

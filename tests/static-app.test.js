@@ -20,6 +20,8 @@ const fixtureScript = fs.readFileSync(path.join(root, "scripts", "seed-spaceguar
 const fixtureInspectScript = fs.readFileSync(path.join(root, "scripts", "inspect-spaceguard-fixtures.ps1"), "utf8");
 const openAiSmokeScriptPath = path.join(root, "scripts", "run-openai-advisor-smoke.mjs");
 const openAiSmokeScript = fs.existsSync(openAiSmokeScriptPath) ? fs.readFileSync(openAiSmokeScriptPath, "utf8") : "";
+const setupDoctorScriptPath = path.join(root, "scripts", "run-setup-doctor.mjs");
+const setupDoctorScript = fs.existsSync(setupDoctorScriptPath) ? fs.readFileSync(setupDoctorScriptPath, "utf8") : "";
 
 function rustFunctionBlock(name) {
   const start = rustScanner.indexOf(`fn ${name}(`);
@@ -399,6 +401,10 @@ assert(openAiSmokeScript.includes("run-openai-advisor-smoke"), "OpenAI fixture s
 assert(openAiSmokeScript.includes("No local filesystem scan was performed"), "OpenAI smoke script should be fixture-only");
 assert(openAiSmokeScript.includes("OPENAI_API_KEY"), "OpenAI smoke script should read the key from .env or process env");
 assert(packageJson.includes("\"openai:smoke\""), "package scripts should expose the OpenAI fixture smoke command");
+assert(packageJson.includes("\"setup:doctor\""), "package scripts should expose the setup doctor command");
+assert(setupDoctorScript.includes("OPENAI_API_KEY"), "setup doctor should check OpenAI key configuration");
+assert(setupDoctorScript.includes("SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR"), "setup doctor should check scoped executor flags");
+assert(setupDoctorScript.includes("spaceguard-setup-doctor/v1"), "setup doctor should emit a stable schema");
 assert(openAiAgent.includes("forbiddenActions"), "OpenAI context should expose forbidden actions");
 assert(app.includes("Open manual review"), "OpenAI manual-only recommendations should expose a review action");
 assert(app.includes("manualReviewTargets"), "OpenAI manual-only recommendations should be visible in the panel");
