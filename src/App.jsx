@@ -2238,11 +2238,11 @@ export default function App() {
       : actionType.startsWith("run-")
         ? row.route
         : "";
-    if (deterministicRoute) setSelectedScopedExecutorRoute(deterministicRoute);
     if (brokerRow && !brokerRow.canAct) {
       if (brokerRow.targetPanel) focusWorkflowPanel(brokerRow.targetPanel);
       return;
     }
+    if (deterministicRoute) setSelectedScopedExecutorRoute(deterministicRoute);
     if (actionType === "rescan") {
       if (nativeCapability.available) {
         await runRealReadonlyScan();

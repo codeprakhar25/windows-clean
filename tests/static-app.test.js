@@ -312,6 +312,16 @@ assert(app.includes("buildOpenAIAgentRecommendationBroker"), "OpenAI recommendat
 assert(app.includes("getOpenAIAgentRecommendationKey"), "OpenAI recommendation broker rows should be keyed consistently");
 assert(app.includes("OpenAIRecommendationCard"), "OpenAI recommendation cards should show broker state");
 assert(app.includes("Open gate"), "blocked OpenAI recommendations should route users to the relevant gate");
+const openAiHandlerStart = app.indexOf("async function handleOpenAIAgentRecommendation");
+const blockedOpenAiRecommendationIndex = app.indexOf("if (brokerRow && !brokerRow.canAct)", openAiHandlerStart);
+const openAiRouteArmIndex = app.indexOf("setSelectedScopedExecutorRoute(deterministicRoute)", openAiHandlerStart);
+assert(openAiHandlerStart >= 0, "OpenAI recommendation handler should exist");
+assert(blockedOpenAiRecommendationIndex > openAiHandlerStart, "OpenAI handler should check blocked broker rows");
+assert(openAiRouteArmIndex > openAiHandlerStart, "OpenAI handler should arm deterministic executor routes");
+assert(
+  blockedOpenAiRecommendationIndex < openAiRouteArmIndex,
+  "blocked OpenAI recommendations must return before arming a scoped executor route"
+);
 assert(app.includes("Run npm cleanup"), "OpenAI recommendations should include npm executor action labels");
 assert(app.includes("Move Downloads items"), "OpenAI recommendations should include reviewed Downloads executor action labels");
 assert(app.includes("onAction={handleOpenAIAgentRecommendation}"), "OpenAI panel should receive the guarded recommendation action handler");
