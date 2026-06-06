@@ -4774,6 +4774,8 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
   const hasAgentAdvice = Boolean(result);
   const setupCommands = flow.setupCommands || null;
   const agentPrompt = buildScopedExecutorAgentPrompt(flow);
+  const launchPacket = flow.launchPacket || null;
+  const launchChecks = (launchPacket?.checks || []).slice(0, 6);
   const setupCommandRows = setupCommands
     ? [
         { label: ".env", command: setupCommands.enableEnv, detail: "Selected route flag" },
@@ -4872,6 +4874,37 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
                 </div>
               ))}
             </div>
+          </div>
+        ) : null}
+
+        {launchPacket ? (
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium">Selected route launch packet</span>
+              <Badge variant={launchPacket.ready ? "safe" : "restricted"}>{launchPacket.status}</Badge>
+              {launchPacket.routeInput ? <Badge variant="outline">{launchPacket.routeInput}</Badge> : null}
+              {launchPacket.panelId ? <Badge variant="outline">{launchPacket.panelId}</Badge> : null}
+            </div>
+            <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-4">
+              <span>Route: {launchPacket.route || "none"}</span>
+              <span>Active: {launchPacket.activeRoute || "none"}</span>
+              <span>Action: {launchPacket.nextAction?.label || launchPacket.actionLabel || "none"}</span>
+              <span>Proof: {launchPacket.proofStatus || "unknown"}</span>
+            </div>
+            {launchPacket.blockedReason ? <p className="mt-2 text-xs text-muted-foreground">{launchPacket.blockedReason}</p> : null}
+            {launchChecks.length ? (
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                {launchChecks.map((check) => (
+                  <div key={check.id} className="rounded-md border bg-card p-2">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium">{check.label}</span>
+                      <Badge variant={check.passed ? "safe" : "review"}>{check.passed ? "pass" : "wait"}</Badge>
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">{check.detail}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
 

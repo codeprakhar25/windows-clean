@@ -8411,13 +8411,20 @@ export function buildScopedExecutorCommandFlow({
       ? "proof-complete"
       : proofRequiresAction
         ? "proof-required"
-        : primaryRow.status === "ready"
-          ? "ready-to-execute"
-          : nextAction.type === "run-real-scan"
-            ? "scan-needed"
-            : nextAction.type === "arm-consent"
-              ? "consent-needed"
-              : "route-blocked";
+      : primaryRow.status === "ready"
+        ? "ready-to-execute"
+        : nextAction.type === "run-real-scan"
+          ? "scan-needed"
+          : nextAction.type === "arm-consent"
+            ? "consent-needed"
+            : "route-blocked";
+  const launchGate = buildScopedExecutorRunGate({
+    route: primaryRow?.route || "",
+    smokeRunPacket: packet,
+    executionProofHandoff,
+    generatedAt
+  });
+  const setupCommands = buildScopedExecutorSetupCommands(primaryRow);
 
   return {
     schemaVersion: "spaceguard-scoped-executor-command-flow/v1",
@@ -8431,7 +8438,16 @@ export function buildScopedExecutorCommandFlow({
     panelId: primaryRow?.panelId || "executor-smoke-run-packet-panel",
     actionLabel: primaryRow?.actionLabel || "Select route",
     primaryRow,
-    setupCommands: buildScopedExecutorSetupCommands(primaryRow),
+    setupCommands,
+    launchPacket: buildSelectedRouteLaunchPacket({
+      flowStatus: status,
+      primaryRow,
+      setupCommands,
+      nextAction,
+      launchGate,
+      proofStatus,
+      generatedAt
+    }),
     nextAction,
     steps,
     counts: {
@@ -8444,6 +8460,49 @@ export function buildScopedExecutorCommandFlow({
     primary: getScopedExecutorCommandPrimary(status, primaryRow, nextAction, scanning),
     nativeAvailable: Boolean(nativeCapability?.available || packet.nativeAvailable),
     scanning: Boolean(scanning)
+  };
+}
+
+function buildSelectedRouteLaunchPacket({
+  flowStatus = "select-route",
+  primaryRow = null,
+  setupCommands = null,
+  nextAction = {},
+  launchGate = null,
+  proofStatus = "waiting-for-execution",
+  generatedAt = "set-on-export"
+} = {}) {
+  const checks = Array.isArray(primaryRow?.checks)
+    ? primaryRow.checks.map((check) => ({
+        id: check.id,
+        label: check.label,
+        passed: Boolean(check.passed),
+        detail: check.detail
+      }))
+    : [];
+  return {
+    schemaVersion: "spaceguard-selected-route-launch-packet/v1",
+    generatedAt,
+    status: launchGate?.status || flowStatus,
+    flowStatus,
+    ready: Boolean(launchGate?.ready),
+    route: primaryRow?.route || "",
+    routeInput: setupCommands?.routeInput || "",
+    title: primaryRow?.title || "No scoped executor selected",
+    activeRoute: launchGate?.activeRoute || "",
+    requestedRoute: launchGate?.requestedRoute || primaryRow?.route || "",
+    panelId: launchGate?.panelId || primaryRow?.panelId || "executor-smoke-run-packet-panel",
+    actionLabel: launchGate?.actionLabel || primaryRow?.actionLabel || "Run scoped executor",
+    proofStatus,
+    proofAllowsExecution: Boolean(launchGate?.proofAllowsExecution),
+    targetEvidence: primaryRow?.targetEvidence || "",
+    targetCount: Number(primaryRow?.targetCount || 0),
+    expectedBytes: Number(primaryRow?.bytes || 0),
+    setupCommands: setupCommands || {},
+    nextAction,
+    checks,
+    blockedReason: launchGate?.blockedReason || primaryRow?.blockedReason || "",
+    primary: launchGate?.primary || primaryRow?.blockedReason || "Select one scoped executor route before running cleanup."
   };
 }
 

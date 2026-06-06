@@ -3689,6 +3689,14 @@ const assert = require("assert");
   assert(scopedCommandAgentPrompt.includes("bounded-npm-cache-delete"), "command flow agent prompt should name the selected route");
   assert(scopedCommandAgentPrompt.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "command flow agent prompt should name the selected route flag");
   assert(scopedCommandAgentPrompt.includes("context.agentTaskQueue.rows"), "command flow agent prompt should tell OpenAI to use brokerable task rows");
+  assert.strictEqual(scopedCommandFlow.launchPacket.schemaVersion, "spaceguard-selected-route-launch-packet/v1", "command flow should expose a selected-route launch packet");
+  assert.strictEqual(scopedCommandFlow.launchPacket.status, "ready-to-run", "ready command flow should expose a ready launch packet");
+  assert.strictEqual(scopedCommandFlow.launchPacket.ready, true, "ready launch packet should allow the selected route");
+  assert.strictEqual(scopedCommandFlow.launchPacket.route, "bounded-npm-cache-delete", "launch packet should bind to the selected route");
+  assert.strictEqual(scopedCommandFlow.launchPacket.nextAction.type, "execute-route", "launch packet should expose the exact next execution action");
+  assert(scopedCommandFlow.launchPacket.setupCommands.openAiSmoke.includes("--route npm-cache"), "launch packet should carry selected-route OpenAI smoke command");
+  assert(scopedCommandFlow.launchPacket.checks.some((check) => check.id === "scan-fingerprint" && check.passed), "launch packet should include current scan evidence");
+  assert(scopedCommandFlow.launchPacket.checks.some((check) => check.id === "consent" && check.passed), "launch packet should include current consent evidence");
   assert(scopedCommandFlow.steps.some((step) => step.id === "scan" && step.targetPanel === "real-data-readiness-panel"), "command flow should route scan work to the real data panel");
   assert(scopedCommandFlow.steps.some((step) => step.id === "proof" && step.actionType === "run-post-run-rescan"), "command flow should include post-run proof as the final step");
   const multiRouteSmokePacket = guard.buildExecutorSmokeRunPacket({
@@ -3826,6 +3834,8 @@ const assert = require("assert");
   });
   assert.strictEqual(proofRequiredCommandFlow.status, "proof-required", "command flow should block fresh execution while proof is pending");
   assert.strictEqual(proofRequiredCommandFlow.nextAction.type, "run-post-run-rescan", "proof-required command flow should send the user to post-run rescan");
+  assert.strictEqual(proofRequiredCommandFlow.launchPacket.status, "proof-required", "proof-required command flow should expose a blocked launch packet");
+  assert.strictEqual(proofRequiredCommandFlow.launchPacket.ready, false, "proof-required launch packet must not allow execution");
   const proofCompleteCommandFlow = guard.buildScopedExecutorCommandFlow({
     smokeRunPacket: npmSmokePacket,
     executionProofHandoff: { status: "proof-complete" },

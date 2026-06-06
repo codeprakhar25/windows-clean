@@ -534,8 +534,11 @@ assert(app.includes("OpenAI fixture"), "scoped executor command flow should rend
 assert(app.includes("OpenAI live"), "scoped executor command flow should render route-specific live OpenAI smoke commands");
 assert(app.includes("buildScopedExecutorAgentPrompt"), "scoped executor command flow should build a selected-route OpenAI prompt");
 assert(app.includes("onAskAgent(agentPrompt)"), "scoped executor command flow should ask OpenAI with the selected-route prompt");
+assert(app.includes("Selected route launch packet"), "scoped executor command flow should render a selected-route launch packet");
+assert(app.includes("flow.launchPacket"), "scoped executor command flow should render launch packet data");
 assert(model.includes("buildScopedExecutorSetupCommands"), "model should build route setup commands for the command flow");
 assert(model.includes("buildScopedExecutorAgentPrompt"), "model should expose a selected-route OpenAI prompt builder");
+assert(model.includes("spaceguard-selected-route-launch-packet/v1"), "model should expose selected-route launch packet schema");
 assert(model.includes("npm run validate:route -- --route"), "model should expose validation packet commands in the command flow");
 assert(model.includes("$env:${envVar}"), "model should expose PowerShell flag commands in the command flow");
 assert(app.includes("onSelectRoute"), "scoped executor command flow should accept route selection actions");
