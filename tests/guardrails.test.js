@@ -4181,9 +4181,11 @@ const assert = require("assert");
   });
   assert.strictEqual(currentBuildExecutorCapsule.schemaVersion, "spaceguard-real-executor-capsule/v1", "real executor capsule should have a schema version");
   assert.strictEqual(currentBuildExecutorCapsule.destructiveActionAvailable, false, "executor capsule must not expose destructive execution");
-  assert.strictEqual(currentBuildExecutorCapsule.codePath.status, "rejecting-stub", "capsule should detect the native rejecting write stub");
+  assert.strictEqual(currentBuildExecutorCapsule.codePath.status, "scoped-route-executor", "capsule should detect the native scoped route executor branch");
+  assert.strictEqual(currentBuildExecutorCapsule.codePath.requestMode, "execute-first-safe", "capsule should expose the route-specific native request mode");
   assert.strictEqual(currentBuildExecutorCapsule.route.id, "known-temp-delete", "capsule should select the first-safe temp route from the selected plan");
-  assert(currentBuildExecutorCapsule.blockers.some((blocker) => blocker.id === "implementation-missing"), "capsule should block on missing write implementation");
+  assert(!currentBuildExecutorCapsule.blockers.some((blocker) => blocker.id === "implementation-missing"), "implemented scoped branches should not be reported as missing implementation");
+  assert(currentBuildExecutorCapsule.blockers.some((blocker) => blocker.id === "feature-flag-disabled"), "capsule should still block mutation when the route feature flag is off");
   const firstSafeContract = guard.buildFirstSafeExecutorContract({
     realExecutorCapsule: currentBuildExecutorCapsule,
     executorPlan,
@@ -4197,7 +4199,9 @@ const assert = require("assert");
   assert.strictEqual(firstSafeContract.status, "disabled-contract-ready", "first-safe contract should be ready only for rejecting-boundary validation");
   assert.strictEqual(firstSafeContract.route.id, "known-temp-delete", "first-safe contract should use the capsule route");
   assert.strictEqual(firstSafeContract.requestPreview.command, "execute_cleanup_plan", "first-safe contract should name the native write boundary command");
-  assert.strictEqual(firstSafeContract.requestPreview.mode, "reject-only-preview", "first-safe request should be reject-only in the current build");
+  assert.strictEqual(firstSafeContract.requestPreview.mode, "execute-first-safe", "first-safe request should use the actual native route branch in non-mutating probe mode");
+  assert.strictEqual(firstSafeContract.requestPreview.dryRunOnly, true, "first-safe probe request should remain non-mutating");
+  assert.strictEqual(firstSafeContract.requestPreview.mutationAttempted, false, "first-safe probe request must not set mutation confirmation");
   assert.strictEqual(firstSafeContract.requestPreview.planId, cleanRunSnapshot.id, "first-safe request should include the current plan id");
   assert(firstSafeContract.requestPreview.actions[0].targetPath.includes("Temp"), "first-safe request should include selected target path evidence");
   assert.strictEqual(firstSafeContract.realRunEnabled, false, "first-safe contract must not enable real execution");

@@ -485,7 +485,7 @@ The write-readiness panel is the final real-execution gate. It combines real exe
 
 The real executor capsule names the selected first-safe route that could become a write-capable executor. It lists the route implementation boundary, required fixtures, missing validation, code-path status, and blockers. It reports destructive action availability separately from route selection, so disabled and enabled scoped executors are visible without implying broader cleanup authority.
 
-The first-safe executor contract turns that capsule into a concrete request-shape preview for `execute_cleanup_plan`: selected route, plan id, scan fingerprint, action ids, target paths, expected bytes, allowed targets, forbidden targets, target-scope audit, and feature flag. The contract is currently `reject-only-preview`; it is useful for validating the native boundary, not for cleanup.
+The first-safe executor contract turns that capsule into a concrete request-shape preview for `execute_cleanup_plan`: selected route, plan id, scan fingerprint, action ids, target paths, expected bytes, allowed targets, forbidden targets, target-scope audit, feature flag, and the route-specific native request mode such as `execute-first-safe`. The probe variant keeps `dryRunOnly=true` and `mutationAttempted=false`, so it validates the native route branch without cleanup. Real execution still happens only from the matching executor panel after the route flag, consent, target validation, and proof gates pass.
 
 The first-safe validation gate converts that route contract plus Windows validation evidence into an implementation-planning decision. It shows each route-required check, fixture coverage, unsafe runtime signals, and blockers while keeping `realRunAllowed=false` even when every route check passes.
 
@@ -495,7 +495,7 @@ The temp executor activation gate is the route-level decision after the work ord
 
 The temp activation rehearsal exists for the no-real-data demo path. It builds a synthetic rejected probe with the current contract echo, disabled scaffold, zero bytes, and per-action preflight checks. The expected rehearsal status is `rehearsal-ready` with its nested activation gate at `feature-flag-disabled`; this is presentation and workflow proof only, not native validation evidence.
 
-The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` rejecting stub in the desktop shell, but success means rejection, not cleanup: `accepted=false`, all entries rejected with native reject codes, zero reclaimed bytes, and a native echo that matches the current first-safe executor contract. Target-scope reject codes are diagnostic only and do not count as passing rejection evidence. Probe entries are never ledger recovery.
+The write boundary probe is separate from write readiness. It may call the native `execute_cleanup_plan` route branch in non-mutating probe mode, but success means rejection, not cleanup: `accepted=false`, all entries rejected with native reject codes, zero reclaimed bytes, and a native echo that matches the current first-safe executor contract. Target-scope reject codes are diagnostic only and do not count as passing rejection evidence. Probe entries are never ledger recovery.
 
 When the selected route is known temp cleanup, the probe also reports the disabled `tempCleanupExecutor` scaffold. That scaffold is the first native implementation boundary to finish next; it remains feature-flag disabled until fixture, rollback/rescan, release, and support evidence pass.
 
@@ -579,6 +579,6 @@ For real-data setup today:
 3. Use **Run real scan** to collect read-only known-root measurements and C: volume totals.
 4. Review protected paths, item review, executor policy, release gate, write readiness, and real executor capsule.
 5. Arm consent and run the dry-run or scoped executor route, then use **Run post-run rescan** in verification to collect after-ledger read-only proof without clearing the ledger.
-6. Use **Probe write boundary** only to capture rejection evidence from the native stub.
+6. Use **Probe write boundary** only to capture rejection evidence from the native non-mutating route probe.
 7. Export the dry-run report and validation pack.
 8. Validate fixtures in disposable Windows VMs before implementing any write-capable executor.

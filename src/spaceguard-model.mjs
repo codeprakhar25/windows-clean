@@ -1272,32 +1272,35 @@ export const firstSafeExecutorContracts = {
     title: "Known temp roots",
     featureFlag: "tempCleanupExecutor",
     command: "execute_cleanup_plan",
+    requestMode: "execute-first-safe",
     allowedTargets: ["Windows\\Temp", "%TEMP%", "%LOCALAPPDATA%\\Temp"],
     forbiddenTargets: ["User profile root", "Downloads", "Documents", "Desktop", "Project source directories", "Reparse point targets"],
     requiredReceipt: "Current plan dry-run consent",
-    mutationBoundary: "disabled-contract",
-    disabledReason: "Temp cleanup executor is not implemented or write-enabled in this build."
+    mutationBoundary: "scoped-feature-flag",
+    disabledReason: "Temp cleanup executor is implemented as a scoped route branch and remains feature-flag controlled."
   },
   "shell-recycle-bin": {
     route: "shell-recycle-bin",
     title: "Recycle Bin boundary",
     featureFlag: "recycleBinExecutor",
     command: "execute_cleanup_plan",
+    requestMode: "execute-recycle-bin",
     allowedTargets: ["Shell Recycle Bin inventory only"],
     forbiddenTargets: ["Arbitrary user folders", "Downloads by path", "Recycle Bin bypass delete"],
     requiredReceipt: "Permanent-removal confirmation plus current plan dry-run consent",
-    mutationBoundary: "disabled-contract",
-    disabledReason: "Recycle Bin executor is not implemented or write-enabled in this build."
+    mutationBoundary: "scoped-feature-flag",
+    disabledReason: "Recycle Bin executor is implemented as a scoped route branch and remains feature-flag controlled."
   },
   "browser-cache-only": {
     route: "browser-cache-only",
     title: "Browser cache only",
     featureFlag: "browserCacheExecutor",
     command: "execute_cleanup_plan",
+    requestMode: "execute-browser-cache",
     allowedTargets: ["Browser cache folders"],
     forbiddenTargets: ["Cookies", "Sessions", "Saved logins", "Extensions", "Profile databases"],
     requiredReceipt: "Current plan dry-run consent",
-    mutationBoundary: "disabled-contract",
+    mutationBoundary: "scoped-feature-flag",
     disabledReason: "Browser cache executor is implemented only for scanned cache roots and remains feature-flag controlled."
   }
 };
@@ -8851,7 +8854,10 @@ export function buildRealExecutorCapsule({
   const selectedRows = route ? (executorPlan?.rows || []).filter((row) => row.route === route.route) : [];
   const releaseMissingIds = route?.missingCheckIds || [];
   const writeBlockedItems = writeReadiness?.blockedItems || [];
-  const implementationBlocked = !route || !executorPlan?.realRunEnabled || selectedRows.every((row) => !row.canRealRun);
+  const routeSpec = getExecutorSmokeRouteSpec(route?.route || "");
+  const routeExecutorImplemented = Boolean(route && runtimeCapabilities?.executeCleanupPlan && routeSpec);
+  const routeFeatureFlagEnabled = Boolean(route && isScopedExecutorRouteEnabled(route.route, runtimeCapabilities));
+  const implementationBlocked = !route || !routeExecutorImplemented;
   const destructiveActionAvailable = false;
   const blockers = [
     !route
@@ -8865,7 +8871,14 @@ export function buildRealExecutorCapsule({
       ? {
           id: "implementation-missing",
           label: "Implementation missing",
-          detail: "No write-capable Tauri command is implemented or enabled for this route."
+          detail: "No route-specific Tauri executor branch is available for this route."
+        }
+      : null,
+    route && routeExecutorImplemented && !routeFeatureFlagEnabled
+      ? {
+          id: "feature-flag-disabled",
+          label: "Feature flag disabled",
+          detail: `${routeSpec.envVar} is off, so the implemented scoped route cannot mutate.`
         }
       : null,
     ...releaseMissingIds.map((id) => ({
@@ -8952,12 +8965,20 @@ export function buildRealExecutorCapsule({
     })),
     codePath: {
       command: "execute_cleanup_plan",
-      status: runtimeCapabilities?.executeCleanupPlan ? "rejecting-stub" : "not-implemented",
-      destructiveCommands: false,
-      featureFlag: "realExecutors",
+      status: runtimeCapabilities?.executeCleanupPlan
+        ? routeSpec
+          ? "scoped-route-executor"
+          : "boundary-command-present"
+        : "not-implemented",
+      requestMode: routeSpec?.requestMode || "",
+      destructiveCommands: Boolean(routeFeatureFlagEnabled && runtimeCapabilities?.destructiveCommands),
+      featureFlag: routeSpec?.flag || "realExecutors",
+      envVar: routeSpec?.envVar || "",
       nativeBoundary: runtimeCapabilities?.executeCleanupPlan
-        ? "Tauri command is present but rejects every request while real execution is disabled."
-        : "Tauri command must reject every route except the selected first-safe capsule."
+        ? routeSpec
+          ? `Tauri command has a scoped branch for ${routeSpec.requestMode}; feature flag, consent, target validation, and post-run proof still gate mutation.`
+          : "Tauri command is present, but this route has no scoped executor branch."
+        : "Tauri command is unavailable for route execution."
     },
     blockers: uniqueBlockers,
     counts: {
@@ -8986,10 +9007,11 @@ export function buildFirstSafeExecutorContract({
   const selectedRows = realExecutorCapsule?.selectedRows || [];
   const expectedBytes = selectedRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
   const targetAudit = buildFirstSafeTargetAudit(contract, selectedRows);
+  const routeSpec = getExecutorSmokeRouteSpec(routeId);
   const requestPreview = contract
     ? {
         command: contract.command,
-        mode: "reject-only-preview",
+        mode: contract.requestMode || routeSpec?.requestMode || "capsule-probe",
         planId: planSnapshot?.id || consentReceipt?.planId || "",
         route: contract.route,
         actionIds: selectedRows.map((row) => row.id),
@@ -9012,7 +9034,7 @@ export function buildFirstSafeExecutorContract({
     {
       id: "contract-defined",
       label: "First-safe contract defined",
-      detail: contract ? `${contract.title} has an explicit disabled request contract.` : "No first-safe route is selected.",
+      detail: contract ? `${contract.title} has an explicit scoped route request contract.` : "No first-safe route is selected.",
       passed: Boolean(contract)
     },
     {
@@ -9043,10 +9065,10 @@ export function buildFirstSafeExecutorContract({
     },
     {
       id: "runtime-disabled",
-      label: "Runtime writes disabled",
+      label: "Probe mutation disabled",
       detail: runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands
-        ? "Runtime exposes write capability; disabled-contract assumptions must be re-reviewed."
-        : "Runtime reports no real execution or destructive command capability.",
+        ? "Runtime exposes write capability; non-mutating probe assumptions must be re-reviewed."
+        : "Probe request keeps dryRunOnly=true and mutationAttempted=false.",
       passed: !runtimeCapabilities?.realRunEnabled && !runtimeCapabilities?.destructiveCommands
     },
     {
@@ -9072,7 +9094,7 @@ export function buildFirstSafeExecutorContract({
   const status = !contract
     ? "no-first-safe-route"
     : runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands || realExecutorCapsule?.destructiveActionAvailable
-      ? "disabled-contract-violated"
+        ? "disabled-contract-violated"
       : blockedItems.length
         ? "contract-incomplete"
         : "disabled-contract-ready";
@@ -10109,12 +10131,12 @@ export function buildRealDataLaunchRoadmap({
       lane: "executor",
       status: nativePreflightReady ? "ready" : activationRehearsed ? "partial" : nativeAvailable ? "waiting" : "locked",
       detail: nativePreflightReady
-        ? "Native rejecting write boundary returned preflight checks, zero bytes, and rejected entries."
+        ? "Native non-mutating route-branch probe returned preflight checks, zero bytes, and rejected entries."
         : activationRehearsed
           ? "Demo rehearsal has synthetic rejection evidence; desktop preflight proof remains separate."
-          : "Probe the rejecting native write boundary only after a first-safe route contract exists.",
+          : "Probe the native route branch in non-mutating mode only after a first-safe route contract exists.",
       evidence: nativePreflightReady ? tempExecutorActivationGate.preflight.status : tempExecutorActivationRehearsal?.status || writeBoundaryProbe?.status || "not-run",
-      nextStep: nativePreflightReady ? "Attach validation evidence to the route gate." : "Run or rehearse the rejecting write-boundary path.",
+      nextStep: nativePreflightReady ? "Attach validation evidence to the route gate." : "Run or rehearse the non-mutating route-branch probe.",
       estimate: nativePreflightReady ? "ready now" : activationRehearsed ? "same day on Windows VM" : "1 week"
     }),
     buildRealDataLaunchRoadmapRow({
@@ -14015,7 +14037,7 @@ function buildReleaseReviewRows({
         : firstSafeExecutorContract?.status === "disabled-contract-violated"
           ? "unsafe"
           : "waiting",
-      detail: firstSafeExecutorContract?.primary || "Select a first-safe route and build its rejecting request contract.",
+      detail: firstSafeExecutorContract?.primary || "Select a first-safe route and build its non-mutating request contract.",
       evidence: firstSafeExecutorContract?.requestPreview?.route || firstSafeExecutorContract?.status || ""
     },
     {
@@ -14031,7 +14053,7 @@ function buildReleaseReviewRows({
             : "waiting",
       detail: writeBoundaryProbe
         ? `${writeBoundaryProbe.primary} Contract match: ${writeBoundaryProbe.contractMatch ? "yes" : "no"}. Bytes: ${formatBytes(writeBoundaryProbe.counts?.bytes || 0)}.`
-        : "Probe the native rejecting write boundary.",
+        : "Probe the native route branch in non-mutating mode.",
       evidence: writeBoundaryProbe?.status || ""
     },
     {
@@ -17116,20 +17138,20 @@ function getFirstSafeValidationGatePrimary(status, requirement, blockers = []) {
 function buildFirstSafeValidationGateSteps(status, requirement, blockers = []) {
   if (status === "implementation-planning-ready") {
     return [
-      `Draft the ${requirement?.title || "first-safe"} executor behind a disabled feature flag.`,
-      "Keep execute_cleanup_plan rejecting until Windows fixture validation is repeated.",
+      `Review the ${requirement?.title || "first-safe"} scoped executor branch behind its route feature flag.`,
+      "Keep non-mutating probe requests rejected until Windows fixture validation is repeated.",
       "Do not expose a destructive action until release, rollback, and rescan proof pass."
     ];
   }
   if (status === "unsafe-runtime") {
     return [
       "Disable realRunEnabled, safeExecutorsEnabled, and destructive command signals.",
-      "Rerun the rejecting write-boundary probe.",
+      "Rerun the non-mutating route-branch probe.",
       "Restart validation only after the runtime is dry-run locked."
     ];
   }
   if (status === "route-missing" || status === "route-not-first-safe") {
-    return ["Select a first-safe route.", "Build its disabled executor contract.", "Attach route-specific Windows validation evidence."];
+    return ["Select a first-safe route.", "Build its non-mutating executor contract.", "Attach route-specific Windows validation evidence."];
   }
   const blockerSteps = blockers.slice(0, 4).map((blocker) => `${blocker.label}: ${blocker.detail}`);
   return blockerSteps.length
@@ -17325,9 +17347,9 @@ function getFirstSafeImplementationWorkOrderPrimary(status, requirement, firstSa
 function buildFirstSafeImplementationWorkOrderSteps(status, requirement, workItems = []) {
   if (status === "implementation-work-order-ready") {
     return [
-      `Implement ${requirement?.title || "the first-safe route"} behind the disabled route feature flag.`,
+      `Review ${requirement?.title || "the first-safe route"} behind the route feature flag.`,
       "Add native fixture tests for allowlist, forbidden targets, locked files, and no reparse traversal.",
-      "Repeat the rejecting write-boundary probe and keep real cleanup hidden until final release review."
+      "Repeat the non-mutating route-branch probe and keep broader cleanup hidden until final release review."
     ];
   }
   if (status === "unsafe-runtime") {
@@ -17402,7 +17424,7 @@ function buildTempExecutorActivationGateSteps(status, { blockers = [], contract 
 function buildTempActivationContractEcho(requestPreview = {}) {
   return {
     schemaVersion: requestPreview.schemaVersion || "spaceguard-first-safe-executor-contract/v1",
-    requestMode: requestPreview.mode || "reject-only-preview",
+    requestMode: requestPreview.mode || "execute-first-safe",
     planId: requestPreview.planId || "",
     route: requestPreview.route || "known-temp-delete",
     scanFingerprint: requestPreview.scanFingerprint || "",
@@ -17665,7 +17687,7 @@ export function isScopedExecutorRouteEnabled(route = "", runtimeCapabilities = {
 function getRealExecutorCapsulePrimary(status, route, blockers = []) {
   if (status === "execution-available") return "A write-capable executor is available for the selected capsule.";
   if (!route) return "No first-safe executor capsule is selected yet.";
-  if (status === "implementation-capsule") return `${route.title} is the next implementation capsule, but no write-capable command exists.`;
+  if (status === "implementation-capsule") return `${route.title} is the next implementation capsule, but no scoped route executor branch is available.`;
   if (status === "implementation-ready") return `${route.title} has evidence ready for implementation work, but destructive execution is still hidden.`;
   const first = blockers[0];
   return first ? `${route.title}: ${first.detail}` : `${route.title} is waiting for implementation evidence.`;
@@ -17677,7 +17699,7 @@ function buildRealExecutorCapsuleSteps(status, route, blockers = []) {
   }
   if (status === "implementation-ready") {
     return [
-      `Implement ${route.title} in a dedicated Tauri command.`,
+      `Review ${route.title} through its scoped Tauri executor branch.`,
       "Reject every route outside this capsule at runtime.",
       "Run disposable Windows fixture validation before exposing the feature flag."
     ];
@@ -17692,15 +17714,15 @@ function buildRealExecutorCapsuleSteps(status, route, blockers = []) {
 }
 
 function getFirstSafeExecutorContractPrimary(status, contract, blockedItems = []) {
-  if (status === "disabled-contract-ready") return `${contract.title} request contract is ready for rejecting-boundary validation only.`;
-  if (status === "disabled-contract-violated") return "Disabled executor contract assumptions were violated; keep real cleanup blocked.";
+  if (status === "disabled-contract-ready") return `${contract.title} request contract is ready for non-mutating route-branch validation.`;
+  if (status === "disabled-contract-violated") return "Non-mutating executor contract assumptions were violated; keep real cleanup blocked.";
   if (status === "contract-incomplete") return blockedItems[0]?.detail || "First-safe executor contract is waiting on current evidence.";
   return "Select a first-safe route before building an executor contract.";
 }
 
 function buildFirstSafeExecutorContractSteps(status, contract, blockedItems = []) {
   if (status === "disabled-contract-ready") {
-    return ["Probe the rejecting write boundary with this request shape.", "Keep bytes at zero and every entry rejected.", "Use validation evidence before any implementation flag is considered."];
+    return ["Probe the scoped route branch with dryRunOnly=true and mutationAttempted=false.", "Keep bytes at zero and every entry rejected.", "Use validation evidence before enabling the route feature flag."];
   }
   if (status === "disabled-contract-violated") {
     return ["Stop implementation review.", "Confirm runtime realRunEnabled and destructiveCommands are false.", "Keep write readiness locked."];
@@ -17881,7 +17903,7 @@ function getWriteBoundaryProbeReason(status) {
 
 function getWriteBoundaryProbePrimary(status, { selectedRows = [], entries = [], rejected = 0, bytes = 0 } = {}) {
   if (status === "rejected") return `Rejection evidence recorded for ${rejected} write-boundary entr${rejected === 1 ? "y" : "ies"} with zero bytes reclaimed.`;
-  if (status === "native-unavailable") return "Run the Tauri desktop shell to probe the rejecting native write boundary.";
+  if (status === "native-unavailable") return "Run the Tauri desktop shell to probe the native route branch in non-mutating mode.";
   if (status === "target-scope-rejected") return "Native boundary rejected the target scope; this is not passing rejection evidence.";
   if (status === "unsafe-signal") return `Write boundary returned accepted/destructive/non-zero signals; bytes=${formatBytes(bytes)}.`;
   if (status === "contract-mismatch") return "Rejected write-boundary response did not match the current first-safe contract.";
@@ -17930,7 +17952,7 @@ function buildWriteBoundaryProbeSteps(status) {
   }
   return [
     "Select a first-safe executor capsule.",
-    "Run the native rejecting write-boundary probe.",
+    "Run the native non-mutating route-branch probe.",
     "Verify accepted=false, destructiveCommands=false, and zero bytes."
   ];
 }
