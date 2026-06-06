@@ -92,6 +92,25 @@ const assert = require("assert");
         status: "measured"
       },
       {
+        recipeId: "windows-temp",
+        title: "Windows temporary files",
+        path: "C:\\Users\\real\\AppData\\Local\\Temp",
+        bytes: 5 * guard.MB,
+        status: "measured",
+        items: [
+          {
+            id: "known-temp-fixture-file",
+            name: "known-temp.tmp",
+            path: "C:\\Users\\real\\AppData\\Local\\Temp\\spaceguard-fixture\\known-temp.tmp",
+            bytes: 5 * guard.MB,
+            age_days: 3,
+            kind: "fixture temp file",
+            recommendation: "review",
+            reason: "Disposable SpaceGuard fixture file"
+          }
+        ]
+      },
+      {
         recipeId: "docker-build-cache",
         title: "Docker build cache",
         path: "Docker Desktop",
@@ -209,7 +228,9 @@ const assert = require("assert");
   assert.strictEqual(scan.driveInventory[0].classification, "user-data-review", "drive inventory classification should normalize");
   assert.strictEqual(scan.driveInventory[0].canCreateExecutor, false, "drive inventory must not create executor routes");
   const merged = native.mergeNativeScanIntoActions(actionList, scan);
+  const broadTemp = merged.find((action) => action.id === "windows-temp");
   const gradle = merged.find((action) => action.id === "gradle-cache");
+  const tempFixture = merged.find((action) => action.id === "temp-fixture-cleanup");
   const docker = merged.find((action) => action.id === "docker-build-cache");
   const largeFiles = merged.find((action) => action.id === "large-user-files");
   const appFootprints = merged.find((action) => action.id === "installed-app-footprints");
@@ -217,6 +238,12 @@ const assert = require("assert");
   assert.strictEqual(gradle.bytes, 42 * guard.GB, "real scan bytes should replace demo bytes");
   assert.strictEqual(gradle.scanStatus, "measured", "measured findings should be marked");
   assert(gradle.path.includes("C:\\Users\\real"), "real scan path should replace demo path");
+  assert.strictEqual(broadTemp.selectedByDefault, false, "fixture validation should not auto-select broad temp cleanup");
+  assert(tempFixture, "native fixture evidence should create a scoped fixture cleanup action");
+  assert.strictEqual(tempFixture.path, "%TEMP%\\spaceguard-fixture", "fixture cleanup action should target only the seeded fixture root");
+  assert.strictEqual(tempFixture.bytes, 5 * guard.MB, "fixture cleanup should use measured fixture bytes");
+  assert.strictEqual(tempFixture.selectedByDefault, false, "fixture cleanup must not be auto-selected");
+  assert.strictEqual(guard.getExecutorPolicy(tempFixture).route, "known-temp-delete", "fixture cleanup should reuse the native temp executor route");
   assert.strictEqual(docker.bytes, 0, "unsupported native findings should not keep demo bytes");
   assert.strictEqual(docker.scanStatus, "unsupported", "unsupported native findings should be explicit");
   assert.strictEqual(largeFiles.bytes, 3 * guard.GB, "native large-file discovery should replace demo bytes");

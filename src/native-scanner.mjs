@@ -1,4 +1,6 @@
 const NATIVE_SCAN_MODE = "native-readonly";
+const TEMP_FIXTURE_ACTION_ID = "temp-fixture-cleanup";
+const TEMP_FIXTURE_TARGET_PATH = "%TEMP%\\spaceguard-fixture";
 
 export function getNativeScannerCapability(host = globalThis) {
   const invoke = host?.__TAURI__?.core?.invoke;
@@ -899,8 +901,9 @@ export function mergeNativeScanIntoActions(actionList, scanResult) {
     map.set(finding.recipeId, rows);
     return map;
   }, new Map());
+  const tempFixtureAction = buildNativeTempFixtureAction(findingsByRecipe.get("windows-temp") || []);
 
-  return actionList.map((action) => {
+  const mergedActions = actionList.map((action) => {
     const findings = findingsByRecipe.get(action.id);
     if (!findings) return action;
 
@@ -921,12 +924,69 @@ export function mergeNativeScanIntoActions(actionList, scanResult) {
       ...action,
       bytes,
       path: summarizePaths(paths, action.path),
+      selectedByDefault: tempFixtureAction && action.id === "windows-temp" ? false : action.selectedByDefault,
+      recommendation: tempFixtureAction && action.id === "windows-temp"
+        ? "Use the seeded temp fixture cleanup first; broad temp cleanup remains manually selectable."
+        : action.recommendation,
       scanSource: NATIVE_SCAN_MODE,
       scanStatus: status,
       scanFindingCount: findings.length,
       scanWarningCount: findings.reduce((sum, finding) => sum + Number(finding.errors || 0), 0)
     };
   });
+
+  if (tempFixtureAction && !mergedActions.some((action) => action.id === tempFixtureAction.id)) {
+    return [...mergedActions, tempFixtureAction];
+  }
+
+  return mergedActions;
+}
+
+function buildNativeTempFixtureAction(tempFindings = []) {
+  const fixtureItems = tempFindings.flatMap((finding) =>
+    Array.isArray(finding.items)
+      ? finding.items
+          .filter((item) => isTempFixturePath(item.path))
+          .map((item) => ({ ...item, sourceStatus: finding.status, sourceErrors: finding.errors }))
+      : []
+  );
+  const fixtureFindings = fixtureItems.length
+    ? []
+    : tempFindings.filter((finding) => isTempFixturePath(finding.path));
+  const fixtureRows = fixtureItems.length ? fixtureItems : fixtureFindings;
+  if (!fixtureRows.length) return null;
+
+  const bytes = fixtureRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+  const limited = fixtureRows.some((row) => row.sourceStatus === "limited" || row.status === "limited");
+
+  return {
+    id: TEMP_FIXTURE_ACTION_ID,
+    title: "Seeded temp fixture",
+    family: "Windows",
+    path: TEMP_FIXTURE_TARGET_PATH,
+    bytes,
+    risk: "safe",
+    gate: "auto",
+    method: "Delete only the seeded SpaceGuard temp fixture root.",
+    consequence: "Disposable validation fixture files are removed; normal temp files stay untouched.",
+    recommendation: "Run this before broad temp cleanup to prove the real executor path.",
+    selectedByDefault: false,
+    executableInDemo: true,
+    scanSource: NATIVE_SCAN_MODE,
+    scanStatus: limited ? "limited" : "measured",
+    scanFindingCount: fixtureRows.length,
+    scanWarningCount: fixtureRows.reduce((sum, row) => sum + Number(row.sourceErrors || row.errors || 0), 0)
+  };
+}
+
+function isTempFixturePath(value = "") {
+  const path = String(value || "").toLowerCase();
+  return (
+    path.includes("\\temp\\spaceguard-fixture") ||
+    path.includes("/temp/spaceguard-fixture") ||
+    path.includes("%temp%\\spaceguard-fixture") ||
+    path.includes("%tmp%\\spaceguard-fixture")
+  );
 }
 
 export function normalizeNativeScan(scanResult = {}) {

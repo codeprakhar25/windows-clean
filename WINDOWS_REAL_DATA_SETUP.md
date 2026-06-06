@@ -52,6 +52,8 @@ $env:SPACEGUARD_ENABLE_TEMP_EXECUTOR="1"
 npm run native:dev
 ```
 
+For the first real cleanup proof, seed the disposable fixture and select **Seeded temp fixture** after the native scan. That action targets only `%TEMP%\spaceguard-fixture` through `known-temp-delete`; when it appears, the broad **Windows temporary files** action is not auto-selected.
+
 Optional reviewed project dependency executor:
 
 ```powershell
@@ -192,7 +194,7 @@ In the app:
 35. Mark completed validation checks in **Validation evidence** only after the matching Windows VM evidence exists, then fill reviewer and evidence path or artifact id.
 36. If resuming from an exported `spaceguard-validation-pack/v1` file, paste the JSON or markdown export into **Validation pack import**. Imported rows still need reviewer and artifact detail before they can pass release gates.
 37. Use **Probe write boundary** only when the desktop runtime exposes `execute_cleanup_plan`; rejection-mode evidence must show rejection, zero bytes, matching first-safe contract echo, and no mutation.
-38. Use **Real temp cleanup** only for the `known-temp-delete` route after a current plan, scan fingerprint, and consent receipt are present. After execution, run a fresh native scan to verify free space.
+38. Use **Real temp cleanup** first with **Seeded temp fixture** selected. The first-safe request should show one target, `%TEMP%\spaceguard-fixture`; broad `%TEMP%` and `C:\Windows\Temp` cleanup should remain manually selectable but not part of the fixture proof. After execution, run a fresh native scan to verify free space.
 39. Use **Reviewed Downloads cleanup** only after native scan item review shows exact old installer/archive file targets in the current user's Downloads folder and the user has marked those items **Remove**. The native executor moves accepted files through Recycle Bin semantics; it rejects directories, recent files, and arbitrary personal folders.
 40. Use **Reviewed large-file archive** only after native scan item review shows exact old 1GB+ personal file targets, the user has marked those items **Move** or **Archive**, and an existing archive destination on another drive is entered. The native executor copies into a plan-specific `SpaceGuard Archive` folder, verifies copied size, then removes the source file; it rejects folders, recent/small files, system/app destinations, and same-drive destinations.
 41. Use **Reviewed project dependencies** only after native scan item review shows exact `node_modules` targets, structured package metadata, package manager or lockfile evidence, framework/script hints, and the user has marked those items **Remove**. Expo and React Native hints are advisory context; they do not auto-select a target.
@@ -222,7 +224,10 @@ After seeding:
 
 1. Run `npm run native:dev`.
 2. Click **Run real scan**.
-3. Inspect the seeded fixture metadata:
+3. Confirm the action list contains **Seeded temp fixture** and that **Windows temporary files** is not selected by default for this fixture run.
+4. With `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1`, select only **Seeded temp fixture**, arm consent, use **Real cleanup command flow** for `known-temp-delete`, and run **Real temp cleanup**.
+5. Run a fresh native scan and confirm `%TEMP%\spaceguard-fixture` no longer contributes bytes before trying any broader temp cleanup.
+6. Inspect the seeded fixture metadata:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.ps1
@@ -236,12 +241,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.p
 
 The exported file uses `spaceguard-native-dry-run-scope/v1`. It contains `entries` with `id`, `route`, `targetPath`, `targetScopeStatus`, `rejectCode`, and `candidateCount`, while excluding raw candidate filename samples. The fixture manifest expects at least one allowed first-safe target and at least one rejected target with `candidateCount: 0`.
 
-4. Confirm fixture-backed findings appear as measured or limited.
-5. Confirm large personal files appear in item review only, not as bulk cleanup.
-6. Attach the fixture evidence JSON path to the validation pack notes.
-7. Import the fixture evidence JSON in the app to create the scanner-fixture validation record. If `dryRunScopeCheck.passed=true`, the same import can also create the dry-run target-scope validation record.
-8. Export the validation pack.
-9. Restore the VM snapshot before the next validation pass.
+7. Confirm fixture-backed findings appear as measured or limited.
+8. Confirm large personal files appear in item review only, not as bulk cleanup.
+9. Attach the fixture evidence JSON path to the validation pack notes.
+10. Import the fixture evidence JSON in the app to create the scanner-fixture validation record. If `dryRunScopeCheck.passed=true`, the same import can also create the dry-run target-scope validation record.
+11. Export the validation pack.
+12. Restore the VM snapshot before the next validation pass.
 
 ## Evidence To Capture
 

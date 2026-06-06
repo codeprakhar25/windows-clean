@@ -299,6 +299,16 @@ export const executorPolicies = {
     verification: "Rescan temp roots and compare skipped locked files.",
     guardrails: ["Only known temp roots", "Skip locked files", "Never expand wildcards outside allowed roots"]
   },
+  "temp-fixture-cleanup": {
+    route: "known-temp-delete",
+    lane: "safe",
+    label: "Fixture-only temp cleanup",
+    realRunEnabled: false,
+    dryRunSupported: true,
+    requiresNativeValidation: true,
+    verification: "Rescan %TEMP%\\spaceguard-fixture and compare the native ledger.",
+    guardrails: ["Only %TEMP%\\spaceguard-fixture", "No broad temp roots", "Skip locked files", "Never expand wildcards outside the fixture root"]
+  },
   "recycle-bin": {
     route: "shell-recycle-bin",
     lane: "safe",

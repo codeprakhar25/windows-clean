@@ -3893,6 +3893,67 @@ const assert = require("assert");
   assert.strictEqual(firstSafeContract.targetAudit.ready, true, "temp first-safe contract should audit selected target paths");
   assert.strictEqual(firstSafeContract.targetAudit.rows[0].status, "allowed", "windows temp row should match the temp allowlist");
   assert(firstSafeContract.targetAudit.rows[0].allowedRule.includes("Temp"), "target audit should name the matching temp rule");
+  const fixtureOnlyAction = {
+    id: "temp-fixture-cleanup",
+    title: "Seeded temp fixture",
+    family: "Windows",
+    path: "%TEMP%\\spaceguard-fixture",
+    bytes: 8 * guard.MB,
+    risk: "safe",
+    gate: "auto",
+    method: "Delete only the seeded SpaceGuard temp fixture root.",
+    consequence: "Disposable validation fixture files are removed; normal temp files stay untouched.",
+    recommendation: "Run this before broad temp cleanup to prove the real executor path.",
+    selectedByDefault: false,
+    executableInDemo: true,
+    scanSource: "native-readonly",
+    scanStatus: "measured"
+  };
+  const fixtureOnlyPlan = guard.buildExecutorPlan({
+    selectedIds: new Set(["temp-fixture-cleanup"]),
+    actionList: [...developerActions, fixtureOnlyAction],
+    approvals: { groupConfirm: true, permanentConfirm: true, reviewed: {}, typed: {} },
+    protectedPaths,
+    scanMode: "native-readonly"
+  });
+  const fixtureOnlyRow = fixtureOnlyPlan.rows.find((row) => row.id === "temp-fixture-cleanup");
+  assert.strictEqual(fixtureOnlyRow.route, "known-temp-delete", "fixture-only action should reuse the temp executor route");
+  assert.strictEqual(fixtureOnlyRow.path, "%TEMP%\\spaceguard-fixture", "fixture-only action should keep the seeded target");
+  assert.strictEqual(fixtureOnlyRow.canSimulate, true, "fixture-only action should be dry-run simulatable before real execution");
+  const fixtureOnlyManifest = guard.buildExecutorManifest({
+    actionList: [...developerActions, fixtureOnlyAction],
+    executorPlan: fixtureOnlyPlan,
+    releaseGate: enabledGate
+  });
+  const fixtureOnlyCapsule = guard.buildRealExecutorCapsule({
+    executorManifest: fixtureOnlyManifest,
+    executorPlan: fixtureOnlyPlan,
+    releaseGate: enabledGate,
+    writeReadiness: currentBuildWriteReadiness,
+    rollbackPlan: tempRollbackPlan,
+    rescanComparison: matchedComparison,
+    privilegeBoundary: guard.buildPrivilegeBoundary({
+      runtimeCapabilities: { available: true, elevated: true, realRunEnabled: true },
+      executorPlan: fixtureOnlyPlan
+    }),
+    privacyBoundary: guard.buildPrivacyBoundary({
+      scanMode: "native-readonly",
+      runtimeCapabilities: { realRunEnabled: true, destructiveCommands: true }
+    }),
+    runtimeCapabilities: { executeCleanupPlan: true }
+  });
+  const fixtureOnlyContract = guard.buildFirstSafeExecutorContract({
+    realExecutorCapsule: fixtureOnlyCapsule,
+    executorPlan: fixtureOnlyPlan,
+    planSnapshot: cleanRunSnapshot,
+    scanSession: currentScanSession,
+    consentReceipt: armedConsent,
+    releaseGate: enabledGate,
+    runtimeCapabilities: { realRunEnabled: false, destructiveCommands: false }
+  });
+  assert.strictEqual(fixtureOnlyContract.requestPreview.actionCount, 1, "fixture-only contract should submit one scoped action");
+  assert.strictEqual(fixtureOnlyContract.requestPreview.actions[0].targetPath, "%TEMP%\\spaceguard-fixture", "fixture-only contract must not submit broad temp roots");
+  assert.strictEqual(fixtureOnlyContract.targetAudit.ready, true, "fixture-only target should pass the temp allowlist audit");
   const blockedFirstSafeValidationGate = guard.buildFirstSafeValidationGate({
     executorManifest,
     validationPack,
