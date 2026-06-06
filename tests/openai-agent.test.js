@@ -644,6 +644,34 @@ const assert = require("assert");
     }
   });
   assert.strictEqual(downloadsReviewedTargetBroker.rows[0].canAct, true, "broker should allow Downloads executor when the exact reviewed file target is present");
+  const missingExecutorTargetBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "npm-cache",
+          title: "Clean npm cache",
+          reason: "The model forgot to name the deterministic target id.",
+          priority: "high",
+          actionType: "run-npm-cache-executor",
+          targetId: "",
+          route: "bounded-npm-cache-delete"
+        }
+      ]
+    },
+    context: {
+      plan: { id: "plan-npm" },
+      runtime: { nativeAvailable: true, realRunEnabled: true, npmCacheExecutor: true },
+      npmCacheTargets: [{ id: "npm-cache", route: "bounded-npm-cache-delete", bytes: 1024 }]
+    },
+    executionState: {
+      planId: "plan-npm",
+      scanFingerprint: "scan-npm",
+      consentPlanId: "plan-npm"
+    }
+  });
+  assert.strictEqual(missingExecutorTargetBroker.rows[0].status, "blocked", "broker should block executor recommendations that omit targetId");
+  assert.strictEqual(missingExecutorTargetBroker.rows[0].canAct, false, "executor recommendations must name a deterministic target");
+  assert(missingExecutorTargetBroker.rows[0].checks.some((check) => check.id === "target-id-match" && !check.passed), "missing target id should fail the target-id-match check");
   const mismatchedTempTargetBroker = openai.buildOpenAIAgentRecommendationBroker({
     advice: {
       recommendedActions: [

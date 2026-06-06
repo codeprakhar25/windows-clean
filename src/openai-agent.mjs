@@ -809,7 +809,7 @@ function buildExecutorRecommendationBrokerRow({ row, actionType, key, policy, co
   const targets = getExecutorRecommendationTargets(policy, context);
   const targetCount = targets.length;
   const targetId = String(row.targetId || row.target_id || "").trim();
-  const targetIdMatches = !targetId || targets.some((target) => targetMatchesRecommendationId(target, targetId));
+  const targetIdMatches = Boolean(targetId) && targets.some((target) => targetMatchesRecommendationId(target, targetId));
   const checks = [
     buildBrokerCheck("native-runtime", "Native runtime", Boolean(runtime.nativeAvailable), runtime.nativeAvailable ? "Tauri native runtime is available." : "Use the desktop shell before running scoped executors."),
     buildBrokerCheck("real-run-flag", "Scoped real-run flag", Boolean(runtime.realRunEnabled), runtime.realRunEnabled ? "Runtime exposes scoped real execution." : "Scoped real execution is disabled."),
