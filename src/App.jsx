@@ -2264,7 +2264,7 @@ export default function App() {
       return;
     }
     if (actionType === "review-target") {
-      const actionId = row.targetId || row.id;
+      const actionId = brokerRow?.focusActionId || row.targetId || row.id;
       if (actionId) setFocusedReviewId(actionId);
       focusWorkflowPanel("item-review-panel");
       return;

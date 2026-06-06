@@ -312,6 +312,7 @@ assert(app.includes("buildOpenAIAgentRecommendationBroker"), "OpenAI recommendat
 assert(app.includes("getOpenAIAgentRecommendationKey"), "OpenAI recommendation broker rows should be keyed consistently");
 assert(app.includes("OpenAIRecommendationCard"), "OpenAI recommendation cards should show broker state");
 assert(app.includes("Open gate"), "blocked OpenAI recommendations should route users to the relevant gate");
+assert(app.includes("brokerRow?.focusActionId || row.targetId || row.id"), "OpenAI review-target actions should focus the broker-resolved parent action id");
 const openAiHandlerStart = app.indexOf("async function handleOpenAIAgentRecommendation");
 const blockedOpenAiRecommendationIndex = app.indexOf("if (brokerRow && !brokerRow.canAct)", openAiHandlerStart);
 const openAiRouteArmIndex = app.indexOf("selectScopedExecutorRoute(deterministicRoute)", openAiHandlerStart);

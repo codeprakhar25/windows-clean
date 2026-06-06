@@ -705,8 +705,16 @@ function buildOpenAIAgentRecommendationBrokerRow(row = {}, context = null, execu
   }
   if (actionType === "review-target") {
     const targetId = String(row.targetId || row.target_id || row.id || "").trim();
+    const recommendedRoute = String(row.route || row.route_id || "").trim();
+    const reviewTarget = getReviewRecommendationTarget(context, targetId, recommendedRoute);
+    const focusActionId = reviewTarget?.focusActionId || targetId;
     return buildBrokerRow({
-      row,
+      row: {
+        ...row,
+        targetId,
+        recommendedRoute,
+        focusActionId
+      },
       actionType,
       key,
       kind: "review",
@@ -717,7 +725,8 @@ function buildOpenAIAgentRecommendationBrokerRow(row = {}, context = null, execu
       targetPanel: "item-review-panel",
       blockedReason: targetId ? "" : "OpenAI did not name a review target; opening item review instead.",
       checks: [
-        buildBrokerCheck("target", "Review target", Boolean(targetId), targetId || "missing target id")
+        buildBrokerCheck("target", "Review target", Boolean(targetId), targetId || "missing target id"),
+        buildBrokerCheck("focus-action", "Review action focus", Boolean(focusActionId), focusActionId || "open generic item review")
       ]
     });
   }
@@ -928,6 +937,23 @@ function isOpenAISelectableActionTarget(target = null) {
   if (gate === "blocked" || gate === "advisory") return false;
   if (risk === "restricted" || risk === "advisory" || risk === "advanced") return false;
   return true;
+}
+
+function getReviewRecommendationTarget(context = null, targetId = "", route = "") {
+  const cleanRoute = String(route || "").trim();
+  const groups = [
+    { actionId: "node-modules-old", route: "item-review-project-cache", rows: context?.projectDependencyReviewTargets },
+    { actionId: "node-modules-old", route: "item-review-project-cache", rows: context?.reviewedProjectTargets },
+    { actionId: "downloads-installers", route: "item-review-recycle-bin", rows: context?.reviewedDownloadsTargets },
+    { actionId: "large-user-files", route: "item-review-large-files", rows: context?.largeFileArchiveTargets },
+    { actionId: "installed-app-footprints", route: "manual-app-uninstall", rows: context?.manualReviewTargets }
+  ];
+  for (const group of groups) {
+    if (cleanRoute && group.route !== cleanRoute) continue;
+    const match = (Array.isArray(group.rows) ? group.rows : []).find((target) => targetMatchesRecommendationId(target, targetId));
+    if (match) return { ...match, focusActionId: group.actionId };
+  }
+  return null;
 }
 
 function getExecutorRecommendationButtonLabel(actionType) {

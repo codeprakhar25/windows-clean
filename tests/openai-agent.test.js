@@ -783,6 +783,27 @@ const assert = require("assert");
   assert.strictEqual(manualAppBroker.rows[0].targetPanel, "app-uninstall-work-order-panel", "broker should route manual app recommendations to the app uninstall work-order panel");
   assert.strictEqual(manualAppBroker.rows[0].canAct, true, "manual app recommendations should be actionable as UI focus only");
   assert.strictEqual(manualAppBroker.rows[0].directToolAccess, false, "manual app recommendations must not grant tool access");
+  const projectReviewBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "expo-shop-node-modules",
+          title: "Review stale Expo dependencies",
+          reason: "The candidate is a rebuildable stale Expo node_modules folder.",
+          priority: "high",
+          actionType: "review-target",
+          targetId: "expo-shop-node-modules",
+          route: "item-review-project-cache"
+        }
+      ]
+    },
+    context: manualContext
+  });
+  assert.strictEqual(projectReviewBroker.rows[0].kind, "review", "project dependency review recommendations should stay review rows");
+  assert.strictEqual(projectReviewBroker.rows[0].targetPanel, "item-review-panel", "project dependency review should open the item review panel");
+  assert.strictEqual(projectReviewBroker.rows[0].focusActionId, "node-modules-old", "item-level project dependency targets should focus their parent review action");
+  assert.strictEqual(projectReviewBroker.rows[0].canAct, true, "project dependency review recommendations should be actionable as UI focus only");
+  assert.strictEqual(projectReviewBroker.rows[0].directToolAccess, false, "project dependency review recommendations must not grant tool access");
   const manualWslBroker = openai.buildOpenAIAgentRecommendationBroker({
     advice: {
       recommendedActions: [
