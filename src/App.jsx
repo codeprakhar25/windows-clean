@@ -7733,6 +7733,10 @@ function ItemReviewPanel({ itemReview, selected, onSelectAction, onDecision, onA
 
 function InstalledAppReviewDossierPanel({ dossier, onFocusReview }) {
   const rows = dossier.rows || [];
+  const evidenceSummary = dossier.evidenceSummary || {};
+  const metadataSources = evidenceSummary.metadataSources || {};
+  const uninstallRegistrySource = metadataSources.uninstallRegistry || "unknown";
+  const userAssistSource = metadataSources.userAssist || "unknown";
   return (
     <Card id="installed-app-review-dossier">
       <CardHeader className="pb-3">
@@ -7766,6 +7770,41 @@ function InstalledAppReviewDossierPanel({ dossier, onFocusReview }) {
               <Eye className="h-4 w-4" />
               Review apps
             </Button>
+          </div>
+        </div>
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="text-sm font-medium">Installed app evidence summary</div>
+            <Badge variant="restricted">manual-only evidence</Badge>
+            <Badge variant={evidenceSummary.canCreateExecutor ? "restricted" : "safe"}>
+              {evidenceSummary.canCreateExecutor ? "executor risk" : "no executor authority"}
+            </Badge>
+          </div>
+          <div className="grid gap-2 md:grid-cols-4">
+            <EvidenceMetric
+              label="Uninstall registry source"
+              value={uninstallRegistrySource}
+              detail={`${metadataSources.uninstallRegistryRows || 0} row(s)`}
+              tone={uninstallRegistrySource === "scanned" ? "safe" : "review"}
+            />
+            <EvidenceMetric
+              label="UserAssist source"
+              value={userAssistSource}
+              detail={`${metadataSources.userAssistRows || 0} row(s)`}
+              tone={userAssistSource === "scanned" ? "safe" : "review"}
+            />
+            <EvidenceMetric
+              label="Registry matches"
+              value={String(evidenceSummary.registryMatched || 0)}
+              detail={`${evidenceSummary.candidateCount || rows.length || 0} candidate(s)`}
+              tone={evidenceSummary.registryMatched ? "safe" : "review"}
+            />
+            <EvidenceMetric
+              label="Usage proof missing"
+              value={String(evidenceSummary.usageProofMissing || 0)}
+              detail={`${evidenceSummary.userAssistMatched || 0} UserAssist match(es)`}
+              tone={evidenceSummary.usageProofMissing ? "review" : "safe"}
+            />
           </div>
         </div>
         <div className="space-y-2">
@@ -7983,6 +8022,19 @@ function ReviewStat({ label, value }) {
     <div className="rounded-md border bg-muted/30 p-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="mt-1 text-lg font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function EvidenceMetric({ label, value, detail, tone }) {
+  return (
+    <div className="min-w-0 rounded-md border bg-card p-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
+        <span className="min-w-0 break-words text-sm font-semibold">{value}</span>
+        <Badge variant={tone}>{tone}</Badge>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">{detail}</p>
     </div>
   );
 }
