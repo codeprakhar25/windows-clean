@@ -8427,6 +8427,7 @@ export function buildScopedExecutorCommandFlow({
     panelId: primaryRow?.panelId || "executor-smoke-run-packet-panel",
     actionLabel: primaryRow?.actionLabel || "Select route",
     primaryRow,
+    setupCommands: buildScopedExecutorSetupCommands(primaryRow),
     nextAction,
     steps,
     counts: {
@@ -16159,8 +16160,64 @@ const executorSmokeRouteSpecs = {
   }
 };
 
+const executorCliRouteAliases = {
+  "known-temp-delete": "temp",
+  "item-review-recycle-bin": "downloads",
+  "item-review-large-files": "large-files",
+  "item-review-project-cache": "project-deps",
+  "browser-cache-only": "browser-cache",
+  "bounded-cache-delete": "gradle",
+  "bounded-user-cache-delete": "user-cache",
+  "bounded-android-cache-delete": "android-cache",
+  "launcher-cache-cleanup": "shader-cache",
+  "bounded-pip-cache-delete": "pip-cache",
+  "tool-native-docker-build-cache-prune": "docker-build-cache",
+  "bounded-npm-cache-delete": "npm-cache",
+  "bounded-pnpm-store-delete": "pnpm-store",
+  "shell-recycle-bin": "recycle-bin"
+};
+
 function getExecutorSmokeRouteSpec(route) {
   return executorSmokeRouteSpecs[route] || null;
+}
+
+function buildScopedExecutorSetupCommands(primaryRow = null) {
+  if (!primaryRow?.route) {
+    return {
+      routeInput: "",
+      envVar: "",
+      enableEnv: "",
+      disableEnv: "",
+      enablePowerShell: "",
+      disablePowerShell: "",
+      setupDoctor: "npm run setup:doctor",
+      setupRoute: "npm run setup:route -- --route npm-cache",
+      validateRoute: "npm run validate:route -- --route npm-cache",
+      openAiFixtureSmoke: "npm run openai:smoke:fixture",
+      openAiSmoke: "npm run openai:smoke",
+      nativeDev: "npm run native:dev",
+      panelId: "",
+      requestMode: ""
+    };
+  }
+  const routeInput = executorCliRouteAliases[primaryRow.route] || primaryRow.route;
+  const envVar = primaryRow.envVar || "";
+  return {
+    routeInput,
+    envVar,
+    enableEnv: envVar ? `${envVar}=1` : "",
+    disableEnv: envVar ? `${envVar}=0` : "",
+    enablePowerShell: envVar ? `$env:${envVar}="1"` : "",
+    disablePowerShell: envVar ? `$env:${envVar}="0"` : "",
+    setupDoctor: "npm run setup:doctor",
+    setupRoute: `npm run setup:route -- --route ${routeInput}`,
+    validateRoute: `npm run validate:route -- --route ${routeInput}`,
+    openAiFixtureSmoke: "npm run openai:smoke:fixture",
+    openAiSmoke: "npm run openai:smoke",
+    nativeDev: "npm run native:dev",
+    panelId: primaryRow.panelId || "",
+    requestMode: primaryRow.requestMode || ""
+  };
 }
 
 function buildExecutorSmokeRunRow({

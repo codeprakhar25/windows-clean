@@ -4770,6 +4770,15 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
   const brokerByKey = new Map(brokerRows.map((row) => [row.key, row]));
   const recommendedRows = (result?.recommendedActions || []).slice(0, 3);
   const hasAgentAdvice = Boolean(result);
+  const setupCommands = flow.setupCommands || null;
+  const setupCommandRows = setupCommands
+    ? [
+        { label: ".env", command: setupCommands.enableEnv, detail: "Selected route flag" },
+        { label: "PowerShell", command: setupCommands.enablePowerShell, detail: "Session flag" },
+        { label: "Setup", command: setupCommands.setupRoute, detail: "Route setup packet" },
+        { label: "Validate", command: setupCommands.validateRoute, detail: "Windows validation packet" }
+      ].filter((row) => row.command)
+    : [];
 
   return (
     <Card id="scoped-executor-command-flow-panel">
@@ -4839,6 +4848,27 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
           <Progress value={flow.progress} indicatorClassName={flow.status === "ready-to-execute" ? "bg-emerald-600" : "bg-blue-600"} />
           {flow.primaryRow?.blockedReason ? <p className="mt-2 text-xs text-muted-foreground">{flow.primaryRow.blockedReason}</p> : null}
         </div>
+
+        {setupCommandRows.length ? (
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium">Route setup</span>
+              {setupCommands.routeInput ? <Badge variant="outline">{setupCommands.routeInput}</Badge> : null}
+              {setupCommands.envVar ? <Badge variant={flow.primaryRow?.flagEnabled ? "safe" : "review"}>{setupCommands.envVar}</Badge> : null}
+            </div>
+            <div className="grid gap-2 md:grid-cols-2">
+              {setupCommandRows.map((row) => (
+                <div key={row.label} className="rounded-md border bg-card p-2">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium">{row.label}</span>
+                    <span className="text-xs text-muted-foreground">{row.detail}</span>
+                  </div>
+                  <div className="truncate font-mono text-xs text-muted-foreground">{row.command}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="grid gap-2 md:grid-cols-4">
           {flow.steps.map((step) => {

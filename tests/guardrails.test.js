@@ -3678,6 +3678,11 @@ const assert = require("assert");
   assert.strictEqual(scopedCommandFlow.route, "bounded-npm-cache-delete", "command flow should select the enabled scoped route");
   assert.strictEqual(scopedCommandFlow.nextAction.type, "execute-route", "ready command flow should route to the existing executor handler");
   assert.strictEqual(scopedCommandFlow.nextAction.targetPanel, "npm-cache-executor-panel", "ready command flow should focus the scoped executor panel");
+  assert.strictEqual(scopedCommandFlow.setupCommands.envVar, "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "command flow should expose the selected route env flag");
+  assert.strictEqual(scopedCommandFlow.setupCommands.enableEnv, "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1", "command flow should expose the .env enable line");
+  assert(scopedCommandFlow.setupCommands.enablePowerShell.includes("$env:SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "command flow should expose the PowerShell enable command");
+  assert(scopedCommandFlow.setupCommands.setupRoute.includes("npm run setup:route -- --route npm-cache"), "command flow should expose the route setup packet command");
+  assert(scopedCommandFlow.setupCommands.validateRoute.includes("npm run validate:route -- --route npm-cache"), "command flow should expose the route validation packet command");
   assert(scopedCommandFlow.steps.some((step) => step.id === "scan" && step.targetPanel === "real-data-readiness-panel"), "command flow should route scan work to the real data panel");
   assert(scopedCommandFlow.steps.some((step) => step.id === "proof" && step.actionType === "run-post-run-rescan"), "command flow should include post-run proof as the final step");
   const multiRouteSmokePacket = guard.buildExecutorSmokeRunPacket({

@@ -514,6 +514,11 @@ assert(app.includes("executeScopedExecutorRoute"), "scoped executor command flow
 assert(app.includes("selectedScopedExecutorRoute"), "scoped executor command flow should keep user-selected route state");
 assert(app.includes("Choose scoped route"), "scoped executor command flow should expose route selection");
 assert(app.includes("one route at a time"), "scoped executor command flow should explain one-route execution");
+assert(app.includes("Route setup"), "scoped executor command flow should expose selected-route setup commands");
+assert(app.includes("flow.setupCommands"), "scoped executor command flow should render setup command data");
+assert(model.includes("buildScopedExecutorSetupCommands"), "model should build route setup commands for the command flow");
+assert(model.includes("npm run validate:route -- --route"), "model should expose validation packet commands in the command flow");
+assert(model.includes("$env:${envVar}"), "model should expose PowerShell flag commands in the command flow");
 assert(app.includes("onSelectRoute"), "scoped executor command flow should accept route selection actions");
 assert(app.includes("ExecutorSmokeRunPacketPanel"), "executor smoke-run packet panel should be rendered");
 assert(app.includes("executor-smoke-run-packet-panel"), "executor smoke-run packet should be focusable");
