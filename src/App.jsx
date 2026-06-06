@@ -2189,7 +2189,7 @@ export default function App() {
           entries: [],
           warnings: ["Native write boundary is unavailable in this runtime."]
         },
-        error: "Native rejecting write command is not available."
+        error: "Native route executor command is not available."
       });
       return;
     }
@@ -9055,7 +9055,7 @@ function ReleaseGatePanel({ releaseGate, runtimeCapabilities }) {
             <span>Elevated: {runtimeCapabilities.result.elevated ? "yes" : "no"}</span>
             <span>Scan command: {runtimeCapabilities.result.scanKnownRoots ? "yes" : "no"}</span>
             <span>Dry-run command: {runtimeCapabilities.result.simulateCleanupPlan ? "yes" : "no"}</span>
-            <span>Write command: {runtimeCapabilities.result.executeCleanupPlan ? "rejecting stub" : "no"}</span>
+            <span>Write command: {runtimeCapabilities.result.executeCleanupPlan ? "route executor available" : "no"}</span>
           </div>
         </div>
 

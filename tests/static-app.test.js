@@ -158,7 +158,7 @@ const requiredAppMarkers = [
   "destructive hidden",
   "Runtime capability",
   "Write command",
-  "rejecting stub",
+  "route executor available",
   "Contract echo",
   "Disposable VM matrix",
   "Validation evidence",
@@ -933,7 +933,7 @@ assert(app.includes("buildNativeDryRunScopeEvidence"), "native dry-run scope evi
 assert(app.includes("Export scope evidence"), "native dry-run scope evidence export action should be visible");
 assert(app.includes("runNativeWriteBoundary"), "native write boundary probe should be wired");
 assert(app.includes("getNativeRuntimeCapabilities"), "native runtime capability should be wired");
-assert(app.includes("executeCleanupPlan"), "runtime UI should expose rejecting write command capability");
+assert(app.includes("executeCleanupPlan"), "runtime UI should expose route executor command capability");
 assert(app.includes("Write boundary probe"), "write boundary probe panel should be rendered");
 assert(app.includes("Release review packet"), "release review packet panel should be rendered");
 assert(app.includes("Export review packet"), "release review packet export action should be visible");
@@ -1087,7 +1087,7 @@ assert(nativeAdapter.includes("browser-identity-forbidden"), "native adapter sco
 assert(nativeAdapter.includes("candidateCount"), "native adapter should normalize dry-run candidate counts");
 assert(nativeAdapter.includes("skippedCount"), "native adapter should normalize dry-run skipped counts");
 assert(nativeAdapter.includes("targetScopeStatus"), "native adapter should normalize dry-run target-scope status");
-assert(nativeAdapter.includes("execute_cleanup_plan"), "native adapter should invoke the rejecting write boundary command");
+assert(nativeAdapter.includes("execute_cleanup_plan"), "native adapter should invoke the route executor command");
 assert(nativeAdapter.includes("TEMP_FIXTURE_ACTION_ID"), "native adapter should define the temp fixture action id");
 assert(nativeAdapter.includes("%TEMP%\\\\spaceguard-fixture"), "native adapter should keep the fixture target scoped to the temp fixture root");
 assert(nativeAdapter.includes("rejectCode"), "native adapter should normalize write-boundary reject codes");
@@ -1115,7 +1115,7 @@ assert(rustScanner.includes("candidate_count"), "Rust native dry-run should repo
 assert(rustScanner.includes("skipped_count"), "Rust native dry-run should report skipped counts");
 assert(rustScanner.includes("target_scope_status"), "Rust native dry-run should report target-scope status");
 assert(rustScanner.includes("write_action_target_reject_code(&action.route, &action.target_path)"), "Rust native dry-run should reuse target-scope rejection before candidate enumeration");
-assert(rustScanner.includes("execute_cleanup_plan"), "Rust rejecting write boundary command should exist");
+assert(rustScanner.includes("execute_cleanup_plan"), "Rust route executor command should exist");
 assert(rustScanner.includes("fn temp_fixture_items"), "Rust scanner should emit temp fixture item evidence");
 assert(rustScanner.includes("is_current_user_temp_root"), "Rust temp fixture scanner should stay scoped to the current user temp root");
 assert(rustScanner.includes("spaceguard-fixture"), "Rust temp fixture scanner should look for the named fixture root");
