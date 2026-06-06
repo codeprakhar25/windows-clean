@@ -3683,6 +3683,8 @@ const assert = require("assert");
   assert(scopedCommandFlow.setupCommands.enablePowerShell.includes("$env:SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "command flow should expose the PowerShell enable command");
   assert(scopedCommandFlow.setupCommands.setupRoute.includes("npm run setup:route -- --route npm-cache"), "command flow should expose the route setup packet command");
   assert(scopedCommandFlow.setupCommands.validateRoute.includes("npm run validate:route -- --route npm-cache"), "command flow should expose the route validation packet command");
+  assert(scopedCommandFlow.setupCommands.openAiFixtureSmoke.includes("npm run openai:smoke:fixture -- --route npm-cache"), "command flow should expose the route fixture OpenAI smoke command");
+  assert(scopedCommandFlow.setupCommands.openAiSmoke.includes("npm run openai:smoke -- --route npm-cache"), "command flow should expose the route live OpenAI smoke command");
   assert(scopedCommandFlow.steps.some((step) => step.id === "scan" && step.targetPanel === "real-data-readiness-panel"), "command flow should route scan work to the real data panel");
   assert(scopedCommandFlow.steps.some((step) => step.id === "proof" && step.actionType === "run-post-run-rescan"), "command flow should include post-run proof as the final step");
   const multiRouteSmokePacket = guard.buildExecutorSmokeRunPacket({
@@ -3778,6 +3780,8 @@ const assert = require("assert");
   });
   assert.strictEqual(selectedPnpmCommandFlow.route, "bounded-pnpm-store-delete", "command flow should honor the user-selected scoped route");
   assert.strictEqual(selectedPnpmCommandFlow.nextAction.targetPanel, "pnpm-store-executor-panel", "selected route should focus the matching executor panel");
+  assert(selectedPnpmCommandFlow.setupCommands.openAiFixtureSmoke.includes("--route pnpm-store"), "selected route command flow should expose pnpm fixture smoke command");
+  assert(selectedPnpmCommandFlow.setupCommands.openAiSmoke.includes("--route pnpm-store"), "selected route command flow should expose pnpm OpenAI smoke command");
   assert.strictEqual(selectedPnpmCommandFlow.routeOptions.length, 2, "command flow should expose route selector options");
   assert.strictEqual(selectedPnpmCommandFlow.routeOptions.filter((row) => row.selected).length, 1, "command flow should select exactly one route option");
   assert.strictEqual(

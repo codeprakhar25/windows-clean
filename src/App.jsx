@@ -4775,6 +4775,8 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
     ? [
         { label: ".env", command: setupCommands.enableEnv, detail: "Selected route flag" },
         { label: "PowerShell", command: setupCommands.enablePowerShell, detail: "Session flag" },
+        { label: "OpenAI fixture", command: setupCommands.openAiFixtureSmoke, detail: "No-network broker smoke" },
+        { label: "OpenAI live", command: setupCommands.openAiSmoke, detail: "API-key route smoke" },
         { label: "Setup", command: setupCommands.setupRoute, detail: "Route setup packet" },
         { label: "Validate", command: setupCommands.validateRoute, detail: "Windows validation packet" }
       ].filter((row) => row.command)

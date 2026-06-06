@@ -530,6 +530,8 @@ assert(app.includes("Choose scoped route"), "scoped executor command flow should
 assert(app.includes("one route at a time"), "scoped executor command flow should explain one-route execution");
 assert(app.includes("Route setup"), "scoped executor command flow should expose selected-route setup commands");
 assert(app.includes("flow.setupCommands"), "scoped executor command flow should render setup command data");
+assert(app.includes("OpenAI fixture"), "scoped executor command flow should render route-specific fixture OpenAI smoke commands");
+assert(app.includes("OpenAI live"), "scoped executor command flow should render route-specific live OpenAI smoke commands");
 assert(model.includes("buildScopedExecutorSetupCommands"), "model should build route setup commands for the command flow");
 assert(model.includes("npm run validate:route -- --route"), "model should expose validation packet commands in the command flow");
 assert(model.includes("$env:${envVar}"), "model should expose PowerShell flag commands in the command flow");
