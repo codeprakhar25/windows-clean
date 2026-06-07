@@ -70,7 +70,7 @@ In `npm run start` / Vite dev, **Ask OpenAI** uses the same-origin `/api/openai-
 
 `npm run setup:route -- --route npm-cache` prints a read-only route setup packet for one real cleanup path: the required scoped executor flag, native request mode, UI panel id, conflicting flags, route-specific OpenAI smoke commands, and next commands. Run it for the route you plan to validate before launching the desktop shell.
 
-`npm run validate:route -- --route npm-cache` prints the one-route Windows validation packet. It does not scan, call OpenAI, or run cleanup; it lists the exact pre-run checks, forbidden actions, artifacts to capture, native volume proof expectation, selected-route proof packet export, and post-run rescan proof required for that route.
+`npm run validate:route -- --route npm-cache` prints the one-route Windows validation packet. It does not scan, call OpenAI, or run cleanup; it lists the exact pre-run checks, forbidden actions, artifacts to capture, native volume proof expectation, selected-route proof packet export/import, and post-run rescan proof required for that route.
 
 The same `.env` file can hold named scoped executor flags, for example `SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR=1`, when you are validating real cleanup on Windows. Validate and run one selected route at a time, then complete post-run rescan proof before running another executor.
 

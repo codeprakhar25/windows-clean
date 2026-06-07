@@ -37,6 +37,7 @@ function cleanEnv(extra = {}) {
   assert(blocked.captureArtifacts.includes("before-native-scan-report"), "validation packet should require before-scan evidence");
   assert(blocked.captureArtifacts.includes("post-run-rescan-comparison"), "validation packet should require post-run rescan proof");
   assert(blocked.captureArtifacts.includes("selected-route-proof-packet"), "validation packet should require selected-route proof packet export");
+  assert(blocked.captureArtifacts.includes("selected-route-proof-import"), "validation packet should require selected-route proof import evidence");
   assert(blocked.captureArtifacts.includes("native-write-volume-proof"), "validation packet should require native volume proof evidence");
   assert(blocked.forbiddenActions.includes("enable-second-executor-flag"), "validation packet should forbid multi-route validation");
 
@@ -49,9 +50,11 @@ function cleanEnv(extra = {}) {
   assert(ready.preRunChecklist.every((row) => row.status !== "blocked"), "ready validation should not contain blocked preflight rows");
   assert(ready.postRunProofChecklist.every((row) => row.status !== "blocked"), "ready validation should not contain blocked post-run proof rows");
   assert(ready.postRunProofChecklist.some((row) => row.id === "selected-route-proof-packet"), "ready validation should require selected-route proof packet export");
+  assert(ready.postRunProofChecklist.some((row) => row.id === "selected-route-proof-import"), "ready validation should require selected-route proof import");
   assert(ready.operatorSteps.some((step) => step.includes("Run real scan")), "ready validation should include native scan workflow");
   assert(ready.operatorSteps.some((step) => step.includes("post-run rescan")), "ready validation should include post-run proof workflow");
   assert(ready.operatorSteps.some((step) => step.includes("native volume proof")), "ready validation should include native volume proof capture");
+  assert(ready.operatorSteps.some((step) => step.includes("import it into Validation evidence")), "ready validation should include route proof import workflow");
 
   const multiple = validation.buildWindowsValidationPacket({
     routeInput: "npm-cache",

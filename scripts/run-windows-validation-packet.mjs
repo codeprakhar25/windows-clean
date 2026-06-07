@@ -169,6 +169,12 @@ function buildPostRunProofChecklist(routePacket) {
       detail: "Export the selected-route proof packet after post-run rescan; it should include ledger rows, rescan parity, and volume proof delta."
     },
     {
+      id: "selected-route-proof-import",
+      label: "Selected route proof import",
+      status: ready ? "pending" : "blocked",
+      detail: "Paste the proof packet into Validation evidence > Selected route proof import with reviewer and artifact path; it must map only to ledger-rescan-parity."
+    },
+    {
       id: "post-run-rescan-parity",
       label: "Post-run rescan parity",
       status: ready ? "pending" : "blocked",
@@ -198,6 +204,7 @@ function buildCaptureArtifacts(selected) {
     "native-write-volume-proof",
     "post-run-rescan-comparison",
     "selected-route-proof-packet",
+    "selected-route-proof-import",
     "openai-handoff-if-used",
     "support-bundle-if-any-warning"
   ];
@@ -227,7 +234,7 @@ function buildOperatorSteps(selected, status) {
     `Open ${selected.panelId} and verify route ${selected.route} with requestMode ${selected.requestMode}.`,
     `Run ${selected.actionLabel} only if the app preflight is ready.`,
     "Capture execution ledger and native volume proof, then run post-run rescan.",
-    "Export selected-route proof packet and post-run rescan comparison before enabling another executor."
+    "Export selected-route proof packet, import it into Validation evidence, and keep the post-run rescan comparison before enabling another executor."
   ];
   if (status !== "ready") {
     return [`Fix validation status ${status} before Windows execution.`, ...steps.slice(0, 4)];
@@ -239,7 +246,7 @@ function buildNextSteps(routePacket, selected) {
   if (routePacket.status === "ready") {
     return [
       `Validate route ${selected.route} on Windows with exactly one scoped flag.`,
-      "Capture before scan, consent, execution ledger, native volume proof, selected-route proof packet, and post-run rescan comparison.",
+      "Capture before scan, consent, execution ledger, native volume proof, selected-route proof packet, selected route proof import, and post-run rescan comparison.",
       "Turn off the route flag before validating another executor."
     ];
   }

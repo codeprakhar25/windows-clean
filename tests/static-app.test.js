@@ -465,6 +465,7 @@ assert(validationRouteScript.includes("post-run-rescan-comparison"), "validation
 assert(validationRouteScript.includes("postRunProofChecklist"), "validation packet should expose a post-run proof checklist");
 assert(validationRouteScript.includes("native-write-volume-proof"), "validation packet should require native write volume proof");
 assert(validationRouteScript.includes("selected-route-proof-packet"), "validation packet should require selected-route proof packet export");
+assert(validationRouteScript.includes("selected-route-proof-import"), "validation packet should require selected-route proof import");
 assert(validationRouteScript.includes("enable-second-executor-flag"), "validation packet should forbid multi-route validation");
 assert(validationRouteScript.includes("npm run validate:route -- --route npm-cache"), "validation packet script should document route usage");
 assert(validationRouteScript.includes("openai:smoke:fixture -- --route"), "validation packet should expose route-specific fixture smoke commands");
