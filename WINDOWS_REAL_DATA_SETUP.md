@@ -63,7 +63,7 @@ In `npm run start`, the OpenAI button uses Vite's same-origin `/api/openai-agent
 
 `npm run validate:route -- --route npm-cache` emits a read-only Windows validation packet for the selected real cleanup route. It records the pre-run checklist, one-flag requirement, forbidden actions, evidence artifacts, native volume proof expectation, selected-route proof packet export/import, and post-run rescan proof checklist. It does not scan folders, call OpenAI, or execute cleanup.
 
-`npm run proof:first-route` emits a read-only first-route proof packet for the seeded temp fixture. Use it on a disposable Windows VM before the first real cleanup proof; it gives the fixture seed command, the one temp executor flag, route-contract coverage, app steps, forbidden broad-temp actions, and the final positive recovered-byte workflow proof acceptance rule.
+`npm run proof:first-route` emits a read-only first-route proof packet for the seeded temp fixture. Use it on a disposable Windows VM before the first real cleanup proof; it gives the fixture seed command, before/after fixture inspection commands, the one temp executor flag, route-contract coverage, app steps, forbidden broad-temp actions, and the final positive recovered-byte workflow proof acceptance rule.
 
 After the app exports `spaceguard-real-workflow-proof.md`, validate the final route handoff:
 
@@ -255,12 +255,18 @@ After seeding:
 1. Run `npm run native:dev`.
 2. Click **Run real scan**.
 3. Confirm the action list contains **Seeded temp fixture** and that **Windows temporary files** is not selected by default for this fixture run.
-4. With `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1`, select only **Seeded temp fixture**, arm consent, use **Real cleanup command flow** for `known-temp-delete`, and run **Real temp cleanup**.
-5. Run a fresh native scan and confirm `%TEMP%\spaceguard-fixture` no longer contributes bytes before trying any broader temp cleanup.
-6. Inspect the seeded fixture metadata:
+4. Inspect the seeded fixture metadata before cleanup:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.ps1 -EvidencePath .\evidence\fixture-before-cleanup.json
+```
+
+5. With `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1`, select only **Seeded temp fixture**, arm consent, use **Real cleanup command flow** for `known-temp-delete`, and run **Real temp cleanup**.
+6. Run a fresh native scan and confirm `%TEMP%\spaceguard-fixture` no longer contributes bytes before trying any broader temp cleanup.
+7. Inspect the after-cleanup fixture state:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.ps1 -AfterCleanupRoute known-temp-delete -EvidencePath .\evidence\fixture-after-cleanup.json
 ```
 
 After the desktop runtime exposes native dry-run support, use **Export scope evidence** in the Executor policy panel. The app runs a metadata-only scope probe with one allowed temp target and rejected Downloads/browser-identity targets, then exports the result for fixture inspection:
@@ -271,12 +277,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.p
 
 The exported file uses `spaceguard-native-dry-run-scope/v1`. It contains `entries` with `id`, `route`, `targetPath`, `targetScopeStatus`, `rejectCode`, and `candidateCount`, while excluding raw candidate filename samples. The fixture manifest expects at least one allowed first-safe target and at least one rejected target with `candidateCount: 0`.
 
-7. Confirm fixture-backed findings appear as measured or limited.
-8. Confirm large personal files appear in item review only, not as bulk cleanup.
-9. Attach the fixture evidence JSON path to the validation pack notes.
-10. Import the fixture evidence JSON in the app to create the scanner-fixture validation record. If `dryRunScopeCheck.passed=true`, the same import can also create the dry-run target-scope validation record.
-11. Export the validation pack.
-12. Restore the VM snapshot before the next validation pass.
+8. Confirm fixture-backed findings appear as measured or limited.
+9. Confirm large personal files appear in item review only, not as bulk cleanup.
+10. Attach both fixture evidence JSON paths to the validation pack notes.
+11. Import the fixture evidence JSON in the app to create the scanner-fixture validation record. If `dryRunScopeCheck.passed=true`, the same import can also create the dry-run target-scope validation record.
+12. Export the validation pack.
+13. Restore the VM snapshot before the next validation pass.
 
 ## Evidence To Capture
 

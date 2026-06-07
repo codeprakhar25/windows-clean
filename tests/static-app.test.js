@@ -1262,6 +1262,8 @@ assert(!/Command::new\("cmd"|Command::new\("powershell"|powercfg|reg\.exe/i.test
 assert(!/\bremove_dir_all\b/i.test(rustScanner), "native executors should not use recursive directory removal");
 assert(rustScanner.includes("fs::remove_dir(&dir)"), "project dependency executor may remove only traversed empty directories");
 assert(rustScanner.includes("delete_single_temp_file"), "temp deletion should be isolated to the temp file executor");
+assert(fixtureInspectScript.includes("AfterCleanupRoute"), "fixture inspector should support after-cleanup route validation");
+assert(fixtureInspectScript.includes("expectedMissingAfterCleanup"), "fixture inspector should distinguish expected post-cleanup missing records");
 assert(packageJson.includes("vite"), "package should use Vite");
 assert(packageJson.includes("@radix-ui/react-slot"), "package should include shadcn primitive dependency");
 assert(packageJson.includes("@tauri-apps/cli"), "package should include Tauri CLI for native setup");
@@ -1269,6 +1271,7 @@ assert(packageJson.includes("tests/openai-agent.test.js"), "package test script 
 assert(realDataGuide.includes("Run real scan"), "real-data guide should include native scan UI steps");
 assert(realDataGuide.includes("Disposable Fixture Run"), "real-data guide should include fixture validation setup");
 assert(realDataGuide.includes("inspect-spaceguard-fixtures.ps1"), "real-data guide should include fixture evidence inspection");
+assert(realDataGuide.includes("-AfterCleanupRoute known-temp-delete"), "real-data guide should include after-cleanup fixture inspection");
 assert(realDataGuide.includes("DryRunScopeEvidencePath"), "real-data guide should explain dry-run scope evidence inspection");
 assert(realDataGuide.includes("Validation pack import"), "real-data guide should explain validation pack import resume flow");
 assert(realDataGuide.includes("selected route proof import"), "real-data guide should include selected route proof import in proof checklist");

@@ -42,6 +42,8 @@ function scopedRouteEnv(spec, env = {}) {
 function buildCommands(spec, routeInput, fixtureRoute = false) {
   return {
     seedFixtures: fixtureRoute ? "powershell -ExecutionPolicy Bypass -File .\\scripts\\seed-spaceguard-fixtures.ps1" : "",
+    inspectFixtures: fixtureRoute ? "powershell -ExecutionPolicy Bypass -File .\\scripts\\inspect-spaceguard-fixtures.ps1 -EvidencePath .\\evidence\\fixture-before-cleanup.json" : "",
+    inspectAfterCleanup: fixtureRoute ? "powershell -ExecutionPolicy Bypass -File .\\scripts\\inspect-spaceguard-fixtures.ps1 -AfterCleanupRoute known-temp-delete -EvidencePath .\\evidence\\fixture-after-cleanup.json" : "",
     enablePowerShell: `$env:${spec.envVar}="1"`,
     disablePowerShell: `$env:${spec.envVar}="0"`,
     setupDoctor: "npm run setup:doctor",

@@ -24,6 +24,8 @@ const script = path.join(root, "scripts", "run-first-route-proof.mjs");
   assert(packet.checks.some((check) => check.id === "single-scoped-flag" && check.passed), "first proof packet should synthesize exactly one scoped flag");
   assert(packet.checks.some((check) => check.id === "positive-recovered-bytes-invariant" && check.passed), "first proof packet should name the positive-byte proof invariant");
   assert(packet.commands.seedFixtures.includes("seed-spaceguard-fixtures.ps1"), "first proof packet should include the fixture seed command");
+  assert(packet.commands.inspectFixtures.includes("inspect-spaceguard-fixtures.ps1"), "first proof packet should include pre-cleanup fixture inspection");
+  assert(packet.commands.inspectAfterCleanup.includes("-AfterCleanupRoute known-temp-delete"), "first proof packet should include post-cleanup fixture inspection");
   assert(packet.commands.enablePowerShell.includes("SPACEGUARD_ENABLE_TEMP_EXECUTOR"), "first proof packet should include the temp executor flag command");
   assert(packet.commands.validateWorkflowProof.includes("validate:workflow-proof"), "first proof packet should include final workflow proof validation");
   assert(packet.appSteps.some((step) => step.includes("Seeded temp fixture")), "first proof packet should tell the operator to select the seeded fixture");
@@ -41,6 +43,8 @@ const script = path.join(root, "scripts", "run-first-route-proof.mjs");
   assert.strictEqual(npmPacket.status, "manual-route-selected", "non-fixture routes should be marked manual-route-selected");
   assert(npmPacket.checks.some((check) => check.id === "fixture-seed" && !check.passed), "non-fixture routes should not claim seeded fixture support");
   assert.strictEqual(npmPacket.commands.seedFixtures, "", "non-fixture routes should not print the temp fixture seed command");
+  assert.strictEqual(npmPacket.commands.inspectFixtures, "", "non-fixture routes should not print fixture inspection");
+  assert.strictEqual(npmPacket.commands.inspectAfterCleanup, "", "non-fixture routes should not print fixture cleanup inspection");
 
   console.log("first route proof ok");
 })().catch((error) => {
