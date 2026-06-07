@@ -27,6 +27,8 @@ const setupRouteScriptPath = path.join(root, "scripts", "run-setup-route.mjs");
 const setupRouteScript = fs.existsSync(setupRouteScriptPath) ? fs.readFileSync(setupRouteScriptPath, "utf8") : "";
 const validationRouteScriptPath = path.join(root, "scripts", "run-windows-validation-packet.mjs");
 const validationRouteScript = fs.existsSync(validationRouteScriptPath) ? fs.readFileSync(validationRouteScriptPath, "utf8") : "";
+const workflowProofScriptPath = path.join(root, "scripts", "run-workflow-proof-check.mjs");
+const workflowProofScript = fs.existsSync(workflowProofScriptPath) ? fs.readFileSync(workflowProofScriptPath, "utf8") : "";
 
 function rustFunctionBlock(name) {
   const start = rustScanner.indexOf(`fn ${name}(`);
@@ -471,6 +473,7 @@ assert(packageJson.includes("\"openai:smoke:fixture\""), "package scripts should
 assert(packageJson.includes("\"setup:doctor\""), "package scripts should expose the setup doctor command");
 assert(packageJson.includes("\"setup:route\""), "package scripts should expose the route setup packet command");
 assert(packageJson.includes("\"validate:route\""), "package scripts should expose the Windows route validation packet command");
+assert(packageJson.includes("\"validate:workflow-proof\""), "package scripts should expose the workflow proof verifier command");
 assert(setupDoctorScript.includes("OPENAI_API_KEY"), "setup doctor should check OpenAI key configuration");
 assert(setupDoctorScript.includes("openai:smoke:fixture"), "setup doctor should expose the local fixture smoke command");
 assert(setupDoctorScript.includes("openai:smoke:fixture -- --route"), "setup doctor should expose route-specific fixture smoke commands");
@@ -500,6 +503,10 @@ assert(validationRouteScript.includes("selected-route-proof-import"), "validatio
 assert(validationRouteScript.includes("enable-second-executor-flag"), "validation packet should forbid multi-route validation");
 assert(validationRouteScript.includes("npm run validate:route -- --route npm-cache"), "validation packet script should document route usage");
 assert(validationRouteScript.includes("openai:smoke:fixture -- --route"), "validation packet should expose route-specific fixture smoke commands");
+assert(workflowProofScript.includes("spaceguard-workflow-proof-check/v1"), "workflow proof verifier should emit a stable schema");
+assert(workflowProofScript.includes("spaceguard-real-workflow-proof/v1"), "workflow proof verifier should require real workflow proof packets");
+assert(workflowProofScript.includes("readyForNextRoute"), "workflow proof verifier should require next-route clearance");
+assert(workflowProofScript.includes("--file"), "workflow proof verifier should accept exported proof files");
 assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");
 assert(readme.includes("npm run validate:route -- --route npm-cache"), "README should document route validation packet usage");
 assert(readme.includes("selected-route proof packet export"), "README should document selected-route proof packet validation");
@@ -507,6 +514,7 @@ assert(readme.includes("Selected route proof import"), "README should document s
 assert(readme.includes("native volume proof expectation"), "README should document native volume proof validation");
 assert(readme.includes("multi-flag-blocked"), "README should document multi-flag setup blocking");
 assert(readme.includes("realWorkflow"), "README should document setup doctor's compact real workflow");
+assert(readme.includes("npm run validate:workflow-proof -- --file"), "README should document workflow proof verifier usage");
 assert(readme.includes("--route pnpm-store"), "README should document selected-route setup doctor commands");
 assert(realDataGuide.includes("npm run setup:route -- --route npm-cache"), "Windows setup guide should document route setup packet usage");
 assert(realDataGuide.includes("npm run validate:route -- --route npm-cache"), "Windows setup guide should document route validation packet usage");
@@ -514,6 +522,7 @@ assert(realDataGuide.includes("Windows validation packet post-run proof checklis
 assert(realDataGuide.includes("Selected route proof import"), "Windows setup guide should document selected route proof import");
 assert(realDataGuide.includes("multi-flag-blocked"), "Windows setup guide should document multi-flag setup blocking");
 assert(realDataGuide.includes("realWorkflow"), "Windows setup guide should document setup doctor's compact real workflow");
+assert(realDataGuide.includes("npm run validate:workflow-proof -- --file"), "Windows setup guide should document workflow proof verifier usage");
 assert(realDataGuide.includes("--route pnpm-store"), "Windows setup guide should document selected-route setup doctor commands");
 assert(openAiAgent.includes("forbiddenActions"), "OpenAI context should expose forbidden actions");
 assert(openAiAgent.includes("task-post-run-rescan"), "OpenAI task queue should expose a deterministic post-run rescan task");
