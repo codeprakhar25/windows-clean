@@ -4057,7 +4057,27 @@ const assert = require("assert");
   assert.strictEqual(completeWorkflowProof.status, "workflow-proven", "imported selected-route proof should complete the real workflow proof");
   assert.strictEqual(completeWorkflowProof.readyForNextRoute, true, "complete workflow proof should unlock another route");
   assert.strictEqual(completeWorkflowProof.route, "known-temp-delete", "workflow proof should retain the selected route");
+  assert(completeWorkflowProof.rows.some((row) => row.id === "reclaimed-bytes" && row.passed), "complete workflow proof should include positive recovered-byte evidence");
   assert(guard.buildRealWorkflowProofPacketMarkdown(completeWorkflowProof).includes("Status: workflow-proven"), "workflow proof markdown should include final status");
+  const zeroByteWorkflowProof = guard.buildRealWorkflowProofPacket({
+    windowsSetupAssistant: completeWorkflowSetupAssistant,
+    scopedExecutorCommandFlow: {
+      ...importedRouteProofFlow,
+      proofPacket: {
+        ...importedRouteProofFlow.proofPacket,
+        counts: {
+          ...importedRouteProofFlow.proofPacket.counts,
+          reclaimedBytes: 0
+        }
+      }
+    },
+    executionProofHandoff: { status: "proof-complete" },
+    scanSession: currentScanSession,
+    generatedAt: "2026-06-05T02:25:00.000Z"
+  });
+  assert.strictEqual(zeroByteWorkflowProof.status, "recovered-bytes-required", "zero-byte workflow proof should not be marked workflow-proven");
+  assert.strictEqual(zeroByteWorkflowProof.readyForNextRoute, false, "zero-byte workflow proof should keep next route blocked");
+  assert(zeroByteWorkflowProof.rows.some((row) => row.id === "reclaimed-bytes" && !row.passed), "zero-byte workflow proof should expose the recovered-byte blocker row");
   const routeProofGate = guard.buildReleaseGate({
     validationEvidence: importedRouteProof.validationEvidence,
     scanMode: "native-readonly",

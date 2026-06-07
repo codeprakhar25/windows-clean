@@ -8770,7 +8770,9 @@ export function buildRealWorkflowProofPacket({
   const nativeScanCurrent = Boolean(scanSession?.readyForPlanning && scanSession?.nativeEvidence);
   const proofComplete = Boolean(proofPacket.status === "proof-complete" || executionProofHandoff?.status === "proof-complete");
   const importComplete = Boolean(validationImport.complete);
-  const readyForNextRoute = Boolean(proofPacket.readyForNextRoute && importComplete);
+  const reclaimedBytes = Number(proofPacket.counts?.reclaimedBytes || 0);
+  const positiveRecoveredBytes = reclaimedBytes > 0;
+  const readyForNextRoute = Boolean(proofPacket.readyForNextRoute && importComplete && positiveRecoveredBytes);
   const unsafeRuntime = Boolean(windowsSetupAssistant?.destructiveCommands || windowsSetupAssistant?.status === "unsafe-runtime");
   const rows = [
     buildRealWorkflowProofRow({
@@ -8798,6 +8800,14 @@ export function buildRealWorkflowProofPacket({
         : validationImport.detail || "Import selected-route proof into validation evidence with reviewer and artifact path."
     }),
     buildRealWorkflowProofRow({
+      id: "reclaimed-bytes",
+      label: "Positive recovered bytes",
+      passed: positiveRecoveredBytes,
+      detail: positiveRecoveredBytes
+        ? `${formatBytes(reclaimedBytes)} recovered bytes are recorded in selected-route proof.`
+        : "Selected-route proof must record positive recovered bytes before workflow proof is accepted."
+    }),
+    buildRealWorkflowProofRow({
       id: "next-route-clearance",
       label: "Next route clearance",
       passed: readyForNextRoute,
@@ -8811,13 +8821,15 @@ export function buildRealWorkflowProofPacket({
     ? "unsafe-runtime"
     : !nativeScanCurrent
       ? "native-scan-required"
-      : !proofComplete
-        ? "post-run-proof-required"
-        : !importComplete
-          ? "proof-import-required"
-          : !readyForNextRoute
-            ? "next-route-blocked"
-            : "workflow-proven";
+    : !proofComplete
+      ? "post-run-proof-required"
+      : !importComplete
+        ? "proof-import-required"
+        : !positiveRecoveredBytes
+          ? "recovered-bytes-required"
+        : !readyForNextRoute
+          ? "next-route-blocked"
+          : "workflow-proven";
 
   return {
     schemaVersion: "spaceguard-real-workflow-proof/v1",
@@ -8841,7 +8853,7 @@ export function buildRealWorkflowProofPacket({
       blocked: blockedRows.length,
       ledgerEntries: Number(proofPacket.counts?.ledgerEntries || 0),
       matchedRows: Number(proofPacket.counts?.matchedRows || 0),
-      reclaimedBytes: Number(proofPacket.counts?.reclaimedBytes || 0)
+      reclaimedBytes
     },
     primary: getRealWorkflowProofPrimary(status, { routeInput, blockedRows, proofPacket })
   };
@@ -8866,6 +8878,7 @@ function getRealWorkflowProofPrimary(status, { routeInput = "unknown", blockedRo
   if (status === "native-scan-required") return "A current native read-only scan is required before workflow proof.";
   if (status === "post-run-proof-required") return "Run post-run native rescan and build selected-route proof.";
   if (status === "proof-import-required") return "Import selected-route proof into validation evidence before accepting workflow proof.";
+  if (status === "recovered-bytes-required") return "Selected-route proof is imported, but no positive recovered bytes are recorded.";
   if (status === "next-route-blocked") return "Selected-route proof exists, but next-route clearance is still blocked.";
   return blockedRows[0]?.detail || "Real workflow proof is incomplete.";
 }
