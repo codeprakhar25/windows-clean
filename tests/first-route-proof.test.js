@@ -27,12 +27,17 @@ const script = path.join(root, "scripts", "run-first-route-proof.mjs");
   assert(packet.commands.inspectFixtures.includes("inspect-spaceguard-fixtures.ps1"), "first proof packet should include pre-cleanup fixture inspection");
   assert(packet.commands.inspectAfterCleanup.includes("-AfterCleanupRoute known-temp-delete"), "first proof packet should include post-cleanup fixture inspection");
   assert(packet.commands.enablePowerShell.includes("SPACEGUARD_ENABLE_TEMP_EXECUTOR"), "first proof packet should include the temp executor flag command");
+  assert(packet.commands.windowsProofRunner.includes("proof:first-route:windows"), "first proof packet should point to the Windows proof runner");
   assert(packet.commands.validateWorkflowProof.includes("validate:workflow-proof"), "first proof packet should include final workflow proof validation");
+  assert.strictEqual(packet.appCloseContract.schemaVersion, "spaceguard-first-route-app-close-contract/v1", "first proof packet should include the app-close contract schema");
+  assert.strictEqual(packet.appCloseContract.minimumReclaimedBytes, 1, "first proof packet should require positive recovered bytes before closing the app");
+  assert(packet.appCloseContract.requiredBeforeClosingApp.includes("selected-route-proof-import-complete"), "first proof packet should require selected-route proof import before app close");
   assert(packet.appSteps.some((step) => step.includes("Seeded temp fixture")), "first proof packet should tell the operator to select the seeded fixture");
   assert(packet.appSteps.some((step) => step.includes("post-run rescan")), "first proof packet should require the post-run rescan");
   assert(packet.appSteps.some((step) => step.includes("Selected route proof import")), "first proof packet should require selected route proof import");
   assert(packet.forbiddenActions.includes("select-broad-temp-cleanup-for-fixture-proof"), "fixture proof should forbid broad temp cleanup");
   assert(packet.acceptanceCriteria.some((criterion) => criterion.includes("positive recovered bytes")), "acceptance criteria should require positive recovered bytes");
+  assert(packet.nextSteps.some((step) => step.includes("npm run proof:first-route:windows")), "next steps should prefer the Windows proof runner");
 
   const npmPacket = proof.buildFirstRouteProofRunPacket({
     routeInput: "npm-cache",

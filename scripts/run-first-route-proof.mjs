@@ -11,6 +11,7 @@ const SCRIPT_ID = "spaceguard-first-route-proof-run";
 const scriptPath = fileURLToPath(import.meta.url);
 const DEFAULT_ROUTE_INPUT = "temp-fixture";
 const FIRST_FIXTURE_ROUTE = "known-temp-delete";
+const APP_CLOSE_CONTRACT_SCHEMA = "spaceguard-first-route-app-close-contract/v1";
 
 function parseArgs(argv = []) {
   const args = { route: DEFAULT_ROUTE_INPUT };
@@ -41,6 +42,7 @@ function scopedRouteEnv(spec, env = {}) {
 
 function buildCommands(spec, routeInput, fixtureRoute = false) {
   return {
+    windowsProofRunner: fixtureRoute ? "npm run proof:first-route:windows" : "",
     seedFixtures: fixtureRoute ? "powershell -ExecutionPolicy Bypass -File .\\scripts\\seed-spaceguard-fixtures.ps1" : "",
     inspectFixtures: fixtureRoute ? "powershell -ExecutionPolicy Bypass -File .\\scripts\\inspect-spaceguard-fixtures.ps1 -EvidencePath .\\evidence\\fixture-before-cleanup.json" : "",
     inspectAfterCleanup: fixtureRoute ? "powershell -ExecutionPolicy Bypass -File .\\scripts\\inspect-spaceguard-fixtures.ps1 -AfterCleanupRoute known-temp-delete -EvidencePath .\\evidence\\fixture-after-cleanup.json" : "",
@@ -53,6 +55,23 @@ function buildCommands(spec, routeInput, fixtureRoute = false) {
     validateRoute: `npm run validate:route -- --route ${routeInput}`,
     nativeDev: "npm run native:dev",
     validateWorkflowProof: "npm run validate:workflow-proof -- --file .\\spaceguard-real-workflow-proof.md"
+  };
+}
+
+function buildAppCloseContract(fixtureRoute) {
+  if (!fixtureRoute) return null;
+  return {
+    schemaVersion: APP_CLOSE_CONTRACT_SCHEMA,
+    workflowProofPath: ".\\spaceguard-real-workflow-proof.md",
+    expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
+    minimumReclaimedBytes: 1,
+    nextRouteBlockedUntil: "validate:first-route-completion accepted",
+    requiredBeforeClosingApp: [
+      "post-run-rescan-matched",
+      "selected-route-proof-packet-exported",
+      "selected-route-proof-import-complete",
+      "spaceguard-real-workflow-proof-exported"
+    ]
   };
 }
 
@@ -172,6 +191,7 @@ export function buildFirstRouteProofRunPacket({
       buildCheck("positive-recovered-bytes-invariant", "Positive recovered bytes required", true, "Workflow proof verifier rejects zero-byte recovered-space proof.")
     ],
     commands: buildCommands(selected, routeInput || selected.aliases?.[0] || selected.route, fixtureRoute),
+    appCloseContract: buildAppCloseContract(fixtureRoute),
     appSteps: buildAppSteps(selected, routeInput, fixtureRoute),
     forbiddenActions: buildForbiddenActions(fixtureRoute),
     acceptanceCriteria: buildAcceptanceCriteria(fixtureRoute),
@@ -183,9 +203,9 @@ export function buildFirstRouteProofRunPacket({
     },
     nextSteps: fixtureRoute
       ? [
-          "Run the seed command on a disposable Windows VM.",
-          "Enable only the temp executor flag in the same PowerShell session.",
-          "Run the smoke/setup/validation commands, launch native dev, then follow appSteps exactly."
+          "Run npm run proof:first-route:windows on a disposable Windows VM.",
+          "Use the desktop app to delete only the seeded temp fixture and complete the app-close proof contract before closing.",
+          "Keep the accepted first-route completion check before starting another route."
         ]
       : [
           `Enable only ${selected.envVar}=1 and collect real target evidence for ${selected.route}.`,
