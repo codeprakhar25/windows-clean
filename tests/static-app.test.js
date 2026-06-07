@@ -13,6 +13,7 @@ const viteConfig = fs.readFileSync(path.join(root, "vite.config.mjs"), "utf8");
 const tauriConfig = fs.readFileSync(path.join(root, "src-tauri", "tauri.conf.json"), "utf8");
 const rustScanner = fs.readFileSync(path.join(root, "src-tauri", "src", "main.rs"), "utf8");
 const packageJson = fs.readFileSync(path.join(root, "package.json"), "utf8");
+const gitignore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
 const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const realDataGuide = fs.readFileSync(path.join(root, "WINDOWS_REAL_DATA_SETUP.md"), "utf8");
 const agentDesign = fs.readFileSync(path.join(root, "AGENT_DESIGN.md"), "utf8");
@@ -478,6 +479,10 @@ assert(packageJson.includes("\"setup:doctor\""), "package scripts should expose 
 assert(packageJson.includes("\"setup:route\""), "package scripts should expose the route setup packet command");
 assert(packageJson.includes("\"validate:route\""), "package scripts should expose the Windows route validation packet command");
 assert(packageJson.includes("\"validate:workflow-proof\""), "package scripts should expose the workflow proof verifier command");
+assert(gitignore.includes("evidence/"), ".gitignore should exclude generated Windows proof evidence folders");
+assert(gitignore.includes("spaceguard-real-workflow-proof.md"), ".gitignore should exclude exported workflow proof artifacts");
+assert(gitignore.includes("spaceguard-selected-route-proof-packet.md"), ".gitignore should exclude selected-route proof packet exports");
+assert(gitignore.includes("spaceguard-support-bundle.md"), ".gitignore should exclude exported support bundles by default");
 assert(setupDoctorScript.includes("OPENAI_API_KEY"), "setup doctor should check OpenAI key configuration");
 assert(setupDoctorScript.includes("openai:smoke:fixture"), "setup doctor should expose the local fixture smoke command");
 assert(setupDoctorScript.includes("openai:smoke:fixture -- --route"), "setup doctor should expose route-specific fixture smoke commands");

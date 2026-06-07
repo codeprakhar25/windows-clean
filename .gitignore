@@ -8,6 +8,18 @@ coverage/
 src-tauri/target/
 src-tauri/bundle/
 
+# Generated local proof and support artifacts
+evidence/
+spaceguard-real-workflow-proof.md
+spaceguard-selected-route-proof-packet.md
+spaceguard-selected-route-launch-packet.md
+spaceguard-executor-smoke-run-packet.md
+spaceguard-support-bundle.md
+spaceguard-workflow-handoff.md
+spaceguard-validation-pack.md
+spaceguard-release-review-packet.md
+spaceguard-native-beta-evidence.md
+
 # Local environment and secrets
 .env
 .env.*
