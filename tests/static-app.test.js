@@ -900,6 +900,8 @@ assert(openAiAgent.includes("post-run-proof"), "OpenAI broker should check pendi
 assert(app.includes("runPostRunReadonlyScan"), "post-run verification should have a ledger-preserving native rescan action");
 assert(app.includes("executionProofContext"), "post-run verification should freeze the execution plan context");
 assert(app.includes("commitExecutionLedger"), "execution ledger writes should go through one proof-context helper");
+assert(app.includes("formatNativeWriteVolumeProof"), "execution ledger should format native drive free-space proof");
+assert(app.includes("Volume proof"), "execution ledger should make native volume proof visible");
 assert(app.includes("verificationPlanSnapshot"), "post-run verification should compare against the frozen execution plan");
 assert(app.includes("verificationExecutorPlan"), "post-run verification should compare against the frozen executor plan");
 assert(app.includes("Post-run native rescan complete"), "post-run rescan should report completion without starting a new plan scan");
@@ -1111,6 +1113,8 @@ assert(nativeAdapter.includes("rejectCode"), "native adapter should normalize wr
 assert(nativeAdapter.includes("targetPath"), "native adapter should pass selected target paths to the write boundary");
 assert(nativeAdapter.includes("executorScaffold"), "native adapter should normalize write executor scaffold metadata");
 assert(nativeAdapter.includes("preflightChecks"), "native adapter should normalize write preflight checks");
+assert(nativeAdapter.includes("volumeProof"), "native adapter should normalize native write volume proof");
+assert(nativeAdapter.includes("freeBytesDelta"), "native adapter should expose native write free-byte deltas");
 assert(nativeAdapter.includes("runtime_capabilities"), "native adapter should invoke runtime capability command");
 assert(nativeAdapter.includes("openAiAgentAdvice"), "native adapter should normalize OpenAI advisor command availability");
 assert(nativeAdapter.includes("openAiAdvisorConfigured"), "native adapter should normalize OpenAI key configuration");
@@ -1151,6 +1155,9 @@ assert(rustScanner.includes("contract_echo"), "Rust route boundary should echo t
 assert(rustScanner.includes("WriteExecutorScaffold"), "Rust write boundary should expose disabled executor scaffold metadata");
 assert(rustScanner.includes("WritePreflightCheck"), "Rust write boundary should expose per-action preflight checks");
 assert(rustScanner.includes("write_action_preflight"), "Rust write boundary should build per-action preflight evidence");
+assert(rustScanner.includes("WriteVolumeProof"), "Rust write boundary should expose before/after volume proof");
+assert(rustScanner.includes("finalize_write_volume_proof"), "Rust write boundary should attach volume proof after executor dispatch");
+assert(rustScanner.includes("write_volume_free_bytes_delta"), "Rust write boundary should compute drive free-byte deltas");
 assert(rustScanner.includes("tempCleanupExecutor"), "Rust write boundary should name the temp executor feature flag");
 assert(rustScanner.includes("temp-executor-feature-flag-disabled"), "Rust write boundary should reject the temp scaffold while disabled");
 assert(rustScanner.includes("write_boundary_rejections"), "Rust write boundary should validate request shape before rejection");

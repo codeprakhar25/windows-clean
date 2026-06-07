@@ -61,7 +61,7 @@ struct ScanResponse {
     destructive_commands: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct VolumeInfo {
     drive: String,
@@ -241,7 +241,26 @@ struct WriteExecutionResponse {
     contract_echo: WriteContractEcho,
     executor_scaffold: Option<WriteExecutorScaffold>,
     entries: Vec<WriteExecutionEntry>,
+    volume_proof: WriteVolumeProof,
     warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WriteVolumeProof {
+    status: String,
+    drive: String,
+    before: Option<VolumeInfo>,
+    after: Option<VolumeInfo>,
+    free_bytes_delta: i64,
+    source: String,
+    note: String,
+}
+
+struct WriteVolumeProbe {
+    attempted: bool,
+    drive: String,
+    before: Option<VolumeInfo>,
 }
 
 #[derive(Debug, Serialize)]
@@ -708,47 +727,60 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
             return reject_multiple_scoped_executor_flags(&request, &enabled_flags);
         }
     }
+    let volume_probe = start_write_volume_probe(&request);
     if request.request_mode.as_deref() == Some("execute-first-safe") {
-        return execute_first_safe_temp_cleanup(request);
+        return finalize_write_volume_proof(execute_first_safe_temp_cleanup(request), volume_probe);
     }
     if request.request_mode.as_deref() == Some("execute-project-deps") {
-        return execute_project_dependency_cleanup(request);
+        return finalize_write_volume_proof(
+            execute_project_dependency_cleanup(request),
+            volume_probe,
+        );
     }
     if request.request_mode.as_deref() == Some("execute-downloads-recycle-bin") {
-        return execute_downloads_review_cleanup(request);
+        return finalize_write_volume_proof(
+            execute_downloads_review_cleanup(request),
+            volume_probe,
+        );
     }
     if request.request_mode.as_deref() == Some("execute-large-file-archive") {
-        return execute_large_file_archive_cleanup(request);
+        return finalize_write_volume_proof(
+            execute_large_file_archive_cleanup(request),
+            volume_probe,
+        );
     }
     if request.request_mode.as_deref() == Some("execute-browser-cache") {
-        return execute_browser_cache_cleanup(request);
+        return finalize_write_volume_proof(execute_browser_cache_cleanup(request), volume_probe);
     }
     if request.request_mode.as_deref() == Some("execute-gradle-cache") {
-        return execute_gradle_cache_cleanup(request);
+        return finalize_write_volume_proof(execute_gradle_cache_cleanup(request), volume_probe);
     }
     if request.request_mode.as_deref() == Some("execute-user-cache") {
-        return execute_user_cache_cleanup(request);
+        return finalize_write_volume_proof(execute_user_cache_cleanup(request), volume_probe);
     }
     if request.request_mode.as_deref() == Some("execute-android-cache") {
-        return execute_android_cache_cleanup(request);
+        return finalize_write_volume_proof(execute_android_cache_cleanup(request), volume_probe);
     }
     if request.request_mode.as_deref() == Some("execute-shader-cache") {
-        return execute_shader_cache_cleanup(request);
+        return finalize_write_volume_proof(execute_shader_cache_cleanup(request), volume_probe);
     }
     if request.request_mode.as_deref() == Some("execute-pip-cache") {
-        return execute_pip_cache_cleanup(request);
+        return finalize_write_volume_proof(execute_pip_cache_cleanup(request), volume_probe);
     }
     if request.request_mode.as_deref() == Some("execute-docker-build-cache") {
-        return execute_docker_build_cache_cleanup(request);
+        return finalize_write_volume_proof(
+            execute_docker_build_cache_cleanup(request),
+            volume_probe,
+        );
     }
     if request.request_mode.as_deref() == Some("execute-npm-cache") {
-        return execute_npm_cache_cleanup(request);
+        return finalize_write_volume_proof(execute_npm_cache_cleanup(request), volume_probe);
     }
     if request.request_mode.as_deref() == Some("execute-pnpm-store") {
-        return execute_pnpm_store_cleanup(request);
+        return finalize_write_volume_proof(execute_pnpm_store_cleanup(request), volume_probe);
     }
     if request.request_mode.as_deref() == Some("execute-recycle-bin") {
-        return execute_recycle_bin_cleanup(request);
+        return finalize_write_volume_proof(execute_recycle_bin_cleanup(request), volume_probe);
     }
     let route = request.route.clone();
     let plan_id = request.plan_id.clone();
@@ -810,7 +842,7 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
         ));
     }
 
-    WriteExecutionResponse {
+    let response = WriteExecutionResponse {
         mode: "native-write-rejected",
         real_run_enabled: false,
         destructive_commands: false,
@@ -824,12 +856,126 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
         contract_echo,
         executor_scaffold,
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof is collected only around scoped real executor dispatch.",
+        ),
         warnings,
-    }
+    };
+    finalize_write_volume_proof(response, volume_probe)
 }
 
 fn real_write_request_attempted(request: &WriteExecutionRequest) -> bool {
     request.dry_run_only == Some(false) || request.mutation_attempted == Some(true)
+}
+
+fn start_write_volume_probe(request: &WriteExecutionRequest) -> WriteVolumeProbe {
+    let attempted = real_write_request_attempted(request);
+    let drive = write_request_volume_drive(request);
+    let before = if attempted {
+        primary_volume_info(&drive)
+    } else {
+        None
+    };
+    WriteVolumeProbe {
+        attempted,
+        drive,
+        before,
+    }
+}
+
+fn finalize_write_volume_proof(
+    mut response: WriteExecutionResponse,
+    probe: WriteVolumeProbe,
+) -> WriteExecutionResponse {
+    response.volume_proof = if !probe.attempted {
+        write_volume_proof_not_collected(
+            "not-collected-dry-run",
+            &probe.drive,
+            "Volume proof is collected only for mutating native executor requests.",
+        )
+    } else if !response.accepted {
+        write_volume_proof_not_collected(
+            "not-collected-rejected",
+            &probe.drive,
+            "The native executor rejected the request before accepted mutation, so no before/after free-space proof was claimed.",
+        )
+    } else if let Some(before) = probe.before {
+        let drive = before.drive.clone();
+        if let Some(after) = primary_volume_info(&drive) {
+            let delta = write_volume_free_bytes_delta(before.free_bytes, after.free_bytes);
+            WriteVolumeProof {
+                status: "measured".to_string(),
+                drive,
+                before: Some(before),
+                after: Some(after),
+                free_bytes_delta: delta,
+                source: "GetDiskFreeSpaceExW".to_string(),
+                note: "Drive free bytes were measured before and after the accepted scoped executor run. A post-run native rescan is still required for route-level proof.".to_string(),
+            }
+        } else {
+            write_volume_proof_not_collected(
+                "after-unavailable",
+                &drive,
+                "The scoped executor accepted, but the post-run drive free-space probe was unavailable.",
+            )
+        }
+    } else {
+        write_volume_proof_not_collected(
+            "before-unavailable",
+            &probe.drive,
+            "The scoped executor accepted, but the pre-run drive free-space probe was unavailable.",
+        )
+    };
+    response
+}
+
+fn write_volume_proof_not_collected(status: &str, drive: &str, note: &str) -> WriteVolumeProof {
+    WriteVolumeProof {
+        status: status.to_string(),
+        drive: drive.to_string(),
+        before: None,
+        after: None,
+        free_bytes_delta: 0,
+        source: "not-collected".to_string(),
+        note: note.to_string(),
+    }
+}
+
+fn write_volume_free_bytes_delta(before_free: u64, after_free: u64) -> i64 {
+    let delta = after_free as i128 - before_free as i128;
+    if delta > i64::MAX as i128 {
+        i64::MAX
+    } else if delta < i64::MIN as i128 {
+        i64::MIN
+    } else {
+        delta as i64
+    }
+}
+
+fn write_request_volume_drive(request: &WriteExecutionRequest) -> String {
+    request
+        .actions
+        .iter()
+        .filter_map(|action| action.target_path.as_deref())
+        .find_map(drive_from_path_string)
+        .or_else(|| {
+            request
+                .archive_destination
+                .as_deref()
+                .and_then(drive_from_path_string)
+        })
+        .unwrap_or_else(system_drive_fallback)
+}
+
+fn drive_from_path_string(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.len() < 2 {
+        return None;
+    }
+    let prefix = trimmed.get(0..2)?;
+    normalize_drive_value(prefix)
 }
 
 fn enabled_scoped_executor_flags_on_windows() -> Vec<&'static str> {
@@ -975,6 +1121,11 @@ fn reject_multiple_scoped_executor_flags(
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected-rejected",
+            "",
+            "Volume proof was not collected because native executor dispatch was blocked before route selection.",
+        ),
         warnings: vec![
             format!(
                 "Only one scoped executor flag may be enabled for a real run. Turn off all but one before launching Tauri: {enabled_flags_label}."
@@ -1144,6 +1295,11 @@ fn execute_first_safe_temp_cleanup(request: WriteExecutionRequest) -> WriteExecu
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof has not been finalized for this response.",
+        ),
         warnings,
     }
 }
@@ -1309,6 +1465,11 @@ fn execute_project_dependency_cleanup(request: WriteExecutionRequest) -> WriteEx
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof has not been finalized for this response.",
+        ),
         warnings,
     }
 }
@@ -1506,6 +1667,11 @@ fn execute_downloads_review_cleanup(request: WriteExecutionRequest) -> WriteExec
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof has not been finalized for this response.",
+        ),
         warnings,
     }
 }
@@ -1722,6 +1888,11 @@ fn execute_large_file_archive_cleanup(request: WriteExecutionRequest) -> WriteEx
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof has not been finalized for this response.",
+        ),
         warnings,
     }
 }
@@ -1887,6 +2058,11 @@ fn execute_browser_cache_cleanup(request: WriteExecutionRequest) -> WriteExecuti
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof has not been finalized for this response.",
+        ),
         warnings,
     }
 }
@@ -2055,6 +2231,11 @@ fn execute_gradle_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutio
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof has not been finalized for this response.",
+        ),
         warnings,
     }
 }
@@ -2223,6 +2404,11 @@ fn execute_npm_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionRe
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof has not been finalized for this response.",
+        ),
         warnings,
     }
 }
@@ -2391,6 +2577,11 @@ fn execute_user_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionR
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof has not been finalized for this response.",
+        ),
         warnings,
     }
 }
@@ -2559,6 +2750,11 @@ fn execute_android_cache_cleanup(request: WriteExecutionRequest) -> WriteExecuti
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof has not been finalized for this response.",
+        ),
         warnings,
     }
 }
@@ -2727,6 +2923,11 @@ fn execute_shader_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutio
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof has not been finalized for this response.",
+        ),
         warnings,
     }
 }
@@ -2895,6 +3096,11 @@ fn execute_pip_cache_cleanup(request: WriteExecutionRequest) -> WriteExecutionRe
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof has not been finalized for this response.",
+        ),
         warnings,
     }
 }
@@ -3106,6 +3312,11 @@ fn execute_docker_build_cache_cleanup(request: WriteExecutionRequest) -> WriteEx
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof has not been finalized for this response.",
+        ),
         warnings,
     }
 }
@@ -3274,6 +3485,11 @@ fn execute_pnpm_store_cleanup(request: WriteExecutionRequest) -> WriteExecutionR
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof has not been finalized for this response.",
+        ),
         warnings,
     }
 }
@@ -3470,6 +3686,11 @@ fn execute_recycle_bin_cleanup(request: WriteExecutionRequest) -> WriteExecution
         contract_echo,
         executor_scaffold: write_executor_scaffold(&route),
         entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected",
+            "",
+            "Volume proof has not been finalized for this response.",
+        ),
         warnings,
     }
 }

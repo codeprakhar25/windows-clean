@@ -1176,7 +1176,31 @@ export function normalizeNativeWriteBoundary(result = {}) {
       : [],
     contractEcho: normalizeWriteContractEcho(result.contractEcho || result.contract_echo),
     executorScaffold: normalizeWriteExecutorScaffold(result.executorScaffold || result.executor_scaffold),
+    volumeProof: normalizeWriteVolumeProof(result.volumeProof || result.volume_proof),
     warnings: Array.isArray(result.warnings) ? result.warnings : []
+  };
+}
+
+function normalizeWriteVolumeProof(value = null) {
+  if (!value || typeof value !== "object") {
+    return {
+      status: "not-collected",
+      drive: "",
+      before: null,
+      after: null,
+      freeBytesDelta: 0,
+      source: "not-collected",
+      note: ""
+    };
+  }
+  return {
+    status: value.status || "not-collected",
+    drive: value.drive || "",
+    before: normalizeNativeVolume(value.before),
+    after: normalizeNativeVolume(value.after),
+    freeBytesDelta: Number(value.freeBytesDelta ?? value.free_bytes_delta ?? 0),
+    source: value.source || "native-write-volume-proof",
+    note: value.note || ""
   };
 }
 

@@ -527,6 +527,29 @@ const assert = require("assert");
   assert.strictEqual(rejectedWrite.entries[0].result, "rejected", "native write boundary should normalize rejected entries");
   assert.strictEqual(rejectedWrite.entries[0].rejectCode, "real-executor-disabled", "native write boundary should normalize reject codes");
   assert.strictEqual(rejectedWrite.entries[0].bytes, 0, "native write boundary should reclaim zero bytes");
+  assert.strictEqual(rejectedWrite.volumeProof.status, "not-collected", "native write boundary should expose a default volume proof state");
+  const acceptedWrite = native.normalizeNativeWriteBoundary({
+    mode: "native-npm-cache-executor",
+    real_run_enabled: true,
+    destructive_commands: true,
+    accepted: true,
+    reason: "accepted",
+    volume_proof: {
+      status: "measured",
+      drive: "C:",
+      before: { drive: "C:", total_bytes: 1000, free_bytes: 200, used_bytes: 800, source: "GetDiskFreeSpaceExW" },
+      after: { drive: "C:", total_bytes: 1000, free_bytes: 350, used_bytes: 650, source: "GetDiskFreeSpaceExW" },
+      free_bytes_delta: 150,
+      source: "GetDiskFreeSpaceExW",
+      note: "measured"
+    },
+    entries: [{ id: "npm-cache", title: "npm cache", route: "bounded-npm-cache-delete", result: "executed", reject_code: "", bytes: 150, note: "deleted" }]
+  });
+  assert.strictEqual(acceptedWrite.volumeProof.status, "measured", "accepted native writes should preserve measured volume proof status");
+  assert.strictEqual(acceptedWrite.volumeProof.drive, "C:", "accepted native writes should preserve the probed drive");
+  assert.strictEqual(acceptedWrite.volumeProof.before.freeBytes, 200, "accepted native writes should normalize pre-run free bytes");
+  assert.strictEqual(acceptedWrite.volumeProof.after.freeBytes, 350, "accepted native writes should normalize post-run free bytes");
+  assert.strictEqual(acceptedWrite.volumeProof.freeBytesDelta, 150, "accepted native writes should normalize free-byte delta");
   let browserExecutionInvocation = null;
   const browserExecution = await native.runNativeBrowserCacheExecutor(
     {

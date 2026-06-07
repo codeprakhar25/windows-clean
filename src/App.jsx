@@ -222,6 +222,15 @@ function getEnabledScopedExecutorFlagRows(flags = {}) {
   return scopedExecutorFlagSpecs.filter((row) => Boolean(flags?.[row.flag]));
 }
 
+function formatNativeWriteVolumeProof(proof = null) {
+  if (!proof || proof.status !== "measured") return "";
+  const delta = Number(proof.freeBytesDelta || 0);
+  const direction = delta >= 0 ? "+" : "-";
+  const before = proof.before ? formatBytes(proof.before.freeBytes || 0) : "unknown";
+  const after = proof.after ? formatBytes(proof.after.freeBytes || 0) : "unknown";
+  return `Volume proof ${proof.drive || "drive"}: free ${direction}${formatBytes(Math.abs(delta))} (${before} -> ${after})`;
+}
+
 const nativeBetaEvidenceSpecs = [
   {
     id: "publicReleaseResearch",
@@ -2128,6 +2137,7 @@ export default function App() {
   }
 
   function buildNativeExecutionLedger(result, executedAt) {
+    const volumeProofNote = formatNativeWriteVolumeProof(result?.volumeProof);
     return (result.entries || []).map((entry, index) => ({
       id: entry.id,
       planId: planSnapshot.id,
@@ -2136,7 +2146,7 @@ export default function App() {
       title: entry.title,
       result: entry.result,
       bytes: entry.bytes,
-      method: `${entry.route}: ${entry.note}`
+      method: `${entry.route}: ${entry.note}${volumeProofNote ? ` | ${volumeProofNote}` : ""}`
     }));
   }
 
