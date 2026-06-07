@@ -240,6 +240,9 @@ assert(app.includes("runNativeReadonlyScan"), "real read-only scan workflow shou
 assert(app.includes("buildWindowsSetupAssistant"), "Windows setup assistant should be wired");
 assert(app.includes("WindowsSetupAssistantPanel"), "Windows setup assistant panel should be rendered");
 assert(app.includes("assistant.realWorkflow"), "Windows setup assistant should render the compact real workflow");
+assert(app.includes("onWorkflowStep"), "Windows setup assistant should expose workflow step actions");
+assert(app.includes("handleWindowsSetupWorkflowStep"), "App should route setup workflow steps through existing handlers");
+assert(app.includes("step.actionType"), "Windows setup assistant workflow should read model action types");
 assert(app.includes("post-run-rescan"), "Windows setup assistant UI should expose post-run rescan workflow step");
 assert(app.includes("proof-import"), "Windows setup assistant UI should expose proof import workflow step");
 assert(app.includes("buildRealDataLaunchRoadmap"), "real data launch roadmap should be wired");

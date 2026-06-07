@@ -3395,6 +3395,15 @@ export default function App() {
     focusWorkflowPanel(action.targetPanel || "executor-smoke-run-packet-panel");
   }
 
+  async function handleWindowsSetupWorkflowStep(step = {}) {
+    if (!step?.actionType || step.status === "blocked") return;
+    await handleScopedExecutorCommand({
+      type: step.actionType,
+      targetPanel: step.targetPanel || step.panel || "windows-setup-assistant-panel",
+      route: step.route || windowsSetupAssistant.realWorkflow?.route || scopedExecutorCommandFlow.route
+    });
+  }
+
   function setValidationCheckEvidence(checkId, checked) {
     setValidationEvidence((current) => {
       const next = { ...current };
@@ -4267,7 +4276,7 @@ export default function App() {
           <div className="space-y-3">
             <NativeScannerPanel capability={nativeCapability} nativeScan={nativeScan} />
 
-            <WindowsSetupAssistantPanel assistant={windowsSetupAssistant} />
+            <WindowsSetupAssistantPanel assistant={windowsSetupAssistant} onWorkflowStep={handleWindowsSetupWorkflowStep} />
 
             <RealDataLaunchRoadmapPanel roadmap={realDataLaunchRoadmap} />
 
@@ -4953,7 +4962,7 @@ function NativeScannerPanel({ capability, nativeScan }) {
   );
 }
 
-function WindowsSetupAssistantPanel({ assistant }) {
+function WindowsSetupAssistantPanel({ assistant, onWorkflowStep }) {
   const realWorkflow = assistant.realWorkflow || null;
   const workflowSteps = realWorkflow?.steps || [];
   return (
@@ -5023,15 +5032,22 @@ function WindowsSetupAssistantPanel({ assistant }) {
             <div className="grid gap-2 md:grid-cols-2">
               {workflowSteps.map((step) => {
                 const proofStep = step.id === "post-run-rescan" || step.id === "proof-import";
+                const stepDisabled = !step.actionType || step.status === "blocked";
                 return (
-                  <div key={step.id} className={`rounded-md border bg-card p-2 ${proofStep ? "border-amber-200" : ""}`}>
+                  <button
+                    key={step.id}
+                    type="button"
+                    className={`rounded-md border bg-card p-2 text-left transition hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-60 ${proofStep ? "border-amber-200" : ""}`}
+                    disabled={stepDisabled}
+                    onClick={() => onWorkflowStep?.(step)}
+                  >
                     <div className="mb-1 flex items-center justify-between gap-2">
                       <span className="text-xs font-medium">{step.label}</span>
                       <Badge variant={step.tone}>{step.status}</Badge>
                     </div>
                     <div className="truncate font-mono text-xs text-muted-foreground">{step.command}</div>
                     <p className="mt-1 text-xs text-muted-foreground">{step.detail}</p>
-                  </div>
+                  </button>
                 );
               })}
             </div>

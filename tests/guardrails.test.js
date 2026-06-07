@@ -791,6 +791,11 @@ const assert = require("assert");
     ["setup-doctor", "route-validation", "native-scan", "arm-consent", "execute-route", "post-run-rescan", "proof-import", "next-route"],
     "setup assistant should expose the compact in-app workflow order"
   );
+  assert.strictEqual(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "native-scan").actionType, "run-real-scan", "setup assistant workflow should route scan steps through the app");
+  assert.strictEqual(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "arm-consent").actionType, "arm-consent", "setup assistant workflow should route consent steps through the app");
+  assert.strictEqual(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "execute-route").actionType, "execute-route", "setup assistant workflow should route executor steps through the app");
+  assert.strictEqual(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "post-run-rescan").actionType, "run-post-run-rescan", "setup assistant workflow should route proof rescan steps through the app");
+  assert.strictEqual(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "proof-import").actionType, "prepare-validation-import", "setup assistant workflow should route proof import steps through the app");
   assert(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "proof-import").detail.includes("Selected route proof import"), "setup assistant workflow should require proof import before next route");
   const unsafeSetupAssistant = guard.buildWindowsSetupAssistant({
     nativeCapability: { available: true },

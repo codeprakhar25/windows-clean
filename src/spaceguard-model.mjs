@@ -16119,6 +16119,9 @@ function buildInAppRealWorkflow({
       label: "Setup doctor",
       status: unsafeRuntime ? "blocked" : "ready",
       command: "npm run setup:doctor",
+      actionType: "focus-panel",
+      targetPanel: "windows-setup-assistant-panel",
+      route,
       detail: "Confirm .env, OpenAI config, and exactly one scoped executor flag before route validation."
     }),
     buildInAppRealWorkflowStep({
@@ -16126,6 +16129,9 @@ function buildInAppRealWorkflow({
       label: "Route validation",
       status: unsafeRuntime ? "blocked" : "ready",
       command: `npm run validate:route -- --route ${routeInput}`,
+      actionType: "focus-panel",
+      targetPanel: "scoped-executor-command-flow-panel",
+      route,
       detail: `Capture the Windows validation packet for ${routeInput} before opening write mode.`
     }),
     buildInAppRealWorkflowStep({
@@ -16133,6 +16139,9 @@ function buildInAppRealWorkflow({
       label: "Native scan",
       status: unsafeRuntime ? "blocked" : nativeScanCurrent ? "complete" : nativeAvailable ? "active" : "waiting",
       command: "Run real scan",
+      actionType: "run-real-scan",
+      targetPanel: "real-data-readiness-panel",
+      route,
       panel: "real-data-readiness-panel",
       detail: nativeScanCurrent ? "Current native scan fingerprint is ready for route planning." : "Run a native read-only scan before consent or execution."
     }),
@@ -16141,6 +16150,9 @@ function buildInAppRealWorkflow({
       label: "Consent",
       status: unsafeRuntime ? "blocked" : nativeScanCurrent ? "active" : "waiting",
       command: "Arm consent",
+      actionType: "arm-consent",
+      targetPanel: "execution-consent-panel",
+      route,
       panel: "execution-consent-panel",
       detail: "Bind consent to the current plan id and native scan fingerprint."
     }),
@@ -16149,6 +16161,9 @@ function buildInAppRealWorkflow({
       label: "Execute selected route",
       status: unsafeRuntime ? "blocked" : ready ? "active" : "waiting",
       command: spec?.actionLabel || "Run scoped executor",
+      actionType: "execute-route",
+      targetPanel: spec?.panelId || "scoped-executor-command-flow-panel",
+      route,
       panel: spec?.panelId || "scoped-executor-command-flow-panel",
       detail: `Run only ${title} with ${spec?.envVar || "one scoped executor flag"} enabled and every other scoped flag off.`
     }),
@@ -16157,6 +16172,9 @@ function buildInAppRealWorkflow({
       label: "Post-run rescan",
       status: unsafeRuntime ? "blocked" : proofComplete ? "complete" : ready && proofStatus !== "waiting-for-execution" ? "active" : "waiting",
       command: "Run post-run native rescan",
+      actionType: "run-post-run-rescan",
+      targetPanel: "execution-proof-handoff-panel",
+      route,
       panel: "execution-proof-handoff-panel",
       detail: "Capture the execution ledger, native volume proof, and matched post-run rescan comparison."
     }),
@@ -16165,6 +16183,9 @@ function buildInAppRealWorkflow({
       label: "Proof import",
       status: unsafeRuntime ? "blocked" : proofImportComplete ? "complete" : proofComplete ? "active" : "waiting",
       command: "Selected route proof import",
+      actionType: "prepare-validation-import",
+      targetPanel: "validation-evidence-panel",
+      route,
       panel: "validation-evidence-panel",
       detail: "Export Selected route proof packet, then paste it into Selected route proof import with reviewer and artifact path."
     }),
@@ -16173,6 +16194,9 @@ function buildInAppRealWorkflow({
       label: "Next route",
       status: unsafeRuntime ? "blocked" : proofImportComplete ? "ready" : "waiting",
       command: "Re-run setup doctor",
+      actionType: "focus-panel",
+      targetPanel: "scoped-executor-command-flow-panel",
+      route,
       detail: "Only after proof import is complete should another scoped executor route be considered."
     })
   ];
@@ -16205,7 +16229,7 @@ function buildInAppRealWorkflow({
   };
 }
 
-function buildInAppRealWorkflowStep({ id, label, status, command, detail, panel = "" }) {
+function buildInAppRealWorkflowStep({ id, label, status, command, detail, panel = "", actionType = "", targetPanel = "", route = "" }) {
   return {
     id,
     label,
@@ -16213,7 +16237,10 @@ function buildInAppRealWorkflowStep({ id, label, status, command, detail, panel 
     tone: status === "complete" || status === "ready" ? "safe" : status === "blocked" ? "restricted" : status === "active" ? "review" : "outline",
     command,
     detail,
-    panel
+    panel: panel || targetPanel,
+    actionType,
+    targetPanel: targetPanel || panel,
+    route
   };
 }
 
