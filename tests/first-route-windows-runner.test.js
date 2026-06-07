@@ -25,6 +25,7 @@ assert(
 assert(runner.includes("spaceguard-first-route-windows-operator/v1"), "runner should write a stable operator evidence schema");
 assert(runner.includes("[System.PlatformID]::Win32NT"), "runner should refuse non-Windows execution");
 assert(runner.includes("Unsupported first-route proof route"), "runner should reject non-temp first-proof routes");
+assert(runner.includes("SkipPostAppValidation"), "runner should allow explicit skip of post-app proof validation");
 assert(runner.includes("SPACEGUARD_ROUTE_SETUP_IGNORE_DOTENV"), "runner should force scoped env over .env executor flags");
 assert(runner.includes("SPACEGUARD_ENABLE_TEMP_EXECUTOR"), "runner should enable only the temp executor flag");
 assert(runner.includes("run-first-route-proof.mjs"), "runner should capture the first-route proof packet");
@@ -44,6 +45,11 @@ assert(runner.includes("operator-preflight-check.json"), "runner should write a 
 assert(runner.includes("run-first-route-preflight-check.mjs"), "runner should validate preflight evidence before app launch");
 assert(runner.includes("commands.ndjson"), "runner should write command evidence records");
 assert(runner.includes("validate:first-route-completion"), "runner should print the final first-route completion verifier command");
+assert(runner.includes("workflow-proof-check.json"), "runner should write workflow proof check output after app exit");
+assert(runner.includes("first-route-completion-check.json"), "runner should write first-route completion check output after app exit");
+assert(runner.includes("post-app-finalization.json"), "runner should write post-app finalization summary");
+assert(runner.includes("finalize-after-app"), "runner should log post-app finalization");
+assert(runner.includes("inspect-fixtures-after"), "runner should inspect fixtures after app cleanup");
 
 assert(!/\bRemove-Item\b/i.test(runner), "runner must not delete files directly");
 assert(!/\bClear-RecycleBin\b/i.test(runner), "runner must not empty Recycle Bin");

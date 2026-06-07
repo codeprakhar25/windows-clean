@@ -2,7 +2,8 @@ param(
   [string]$Route = "temp-fixture",
   [string]$EvidenceRoot = "",
   [switch]$SkipLiveOpenAI,
-  [switch]$SkipLaunch
+  [switch]$SkipLaunch,
+  [switch]$SkipPostAppValidation
 )
 
 Set-StrictMode -Version Latest
@@ -39,6 +40,10 @@ try {
   $CommandLogPath = Join-Path $EvidenceRoot "commands.ndjson"
   $PreflightPath = Join-Path $EvidenceRoot "operator-preflight.json"
   $PreflightCheckPath = Join-Path $EvidenceRoot "operator-preflight-check.json"
+  $WorkflowProofPath = Join-Path $RepoRoot "spaceguard-real-workflow-proof.md"
+  $WorkflowProofCheckPath = Join-Path $EvidenceRoot "workflow-proof-check.json"
+  $CompletionCheckPath = Join-Path $EvidenceRoot "first-route-completion-check.json"
+  $PostAppFinalizationPath = Join-Path $EvidenceRoot "post-app-finalization.json"
 
   New-Item -ItemType Directory -Path $EvidenceRoot -Force | Out-Null
 
@@ -168,6 +173,67 @@ try {
     return $record
   }
 
+  function Complete-PostAppValidation {
+    param(
+      [Parameter(Mandatory = $true)][string]$Reason
+    )
+
+    $startedAt = (Get-Date).ToUniversalTime().ToString("o")
+    $summary = [PSCustomObject]@{
+      schemaVersion = "spaceguard-first-route-post-app-finalization/v1"
+      generatedAt = $startedAt
+      reason = $Reason
+      evidenceRoot = $EvidenceRoot
+      preflightPath = $PreflightPath
+      afterFixturePath = $AfterFixturePath
+      workflowProofPath = $WorkflowProofPath
+      workflowProofExists = Test-Path -LiteralPath $WorkflowProofPath
+      skipped = $false
+      commands = [PSCustomObject]@{
+        inspectAfterCleanup = "powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.ps1 -ManifestPath `"$ManifestPath`" -AfterCleanupRoute known-temp-delete -EvidencePath `"$AfterFixturePath`""
+        validateWorkflowProof = "node scripts\run-workflow-proof-check.mjs --file `"$WorkflowProofPath`""
+        validateFirstRouteCompletion = "node scripts\run-first-route-completion-check.mjs --preflight `"$PreflightPath`" --after-fixture `"$AfterFixturePath`" --workflow-proof `"$WorkflowProofPath`""
+      }
+      artifacts = [PSCustomObject]@{
+        afterFixture = $AfterFixturePath
+        workflowProofCheck = $WorkflowProofCheckPath
+        firstRouteCompletionCheck = $CompletionCheckPath
+        finalization = $PostAppFinalizationPath
+      }
+    }
+
+    if ($SkipPostAppValidation -or $Reason -eq "launch-skipped") {
+      $summary.skipped = $true
+      $summary.reason = if ($Reason -eq "launch-skipped") { "launch-skipped" } else { "SkipPostAppValidation" }
+      Write-JsonFile -Value $summary -Path $PostAppFinalizationPath
+      Write-CommandRecord -Record ([PSCustomObject]@{
+          id = "finalize-after-app"
+          command = "post-app validation skipped"
+          outputPath = $PostAppFinalizationPath
+          exitCode = $null
+          startedAt = $startedAt
+          endedAt = (Get-Date).ToUniversalTime().ToString("o")
+          skipped = $true
+          reason = $summary.reason
+        })
+      return
+    }
+
+    Write-JsonFile -Value $summary -Path $PostAppFinalizationPath
+    Write-CommandRecord -Record ([PSCustomObject]@{
+        id = "finalize-after-app"
+        command = "inspect fixtures, validate workflow proof, validate first-route completion"
+        outputPath = $PostAppFinalizationPath
+        exitCode = $null
+        startedAt = $startedAt
+        userGated = $true
+      })
+
+    Invoke-LoggedCommand -Id "inspect-fixtures-after" -CommandLine $summary.commands.inspectAfterCleanup -OutputPath (Join-Path $EvidenceRoot "inspect-fixtures-after.txt") | Out-Null
+    Invoke-LoggedCommand -Id "workflow-proof-check" -CommandLine $summary.commands.validateWorkflowProof -OutputPath $WorkflowProofCheckPath | Out-Null
+    Invoke-LoggedCommand -Id "first-route-completion-check" -CommandLine $summary.commands.validateFirstRouteCompletion -OutputPath $CompletionCheckPath | Out-Null
+  }
+
   Import-SpaceGuardDotEnv -Path (Join-Path $RepoRoot ".env")
   Set-ScopedTempExecutorEnvironment
 
@@ -284,9 +350,11 @@ try {
         note = "Interactive Tauri desktop launch; cleanup still requires in-app target selection and consent."
       })
     npm run native:dev
+    Complete-PostAppValidation -Reason "native-dev-exited"
   } else {
     Write-Host ""
     Write-Host "Skipped launch. Start manually with: npm run native:dev"
+    Complete-PostAppValidation -Reason "launch-skipped"
   }
 } finally {
   Pop-Location
