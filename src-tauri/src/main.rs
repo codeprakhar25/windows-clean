@@ -4277,6 +4277,9 @@ fn write_action_target_reject_code(
     if route == "item-review-large-files" {
         return large_file_archive_target_reject_code(target_path.as_deref().unwrap_or(""), "");
     }
+    if route == "known-temp-delete" {
+        return temp_cleanup_target_reject_code(target_path.as_deref().unwrap_or(""));
+    }
     if write_target_forbidden(route, &target) {
         return Some("target-forbidden");
     }
@@ -5968,6 +5971,82 @@ fn project_dependency_target_reject_code(value: &str) -> Option<&'static str> {
         return Some("target-missing-package-json");
     }
     None
+}
+
+fn temp_cleanup_target_reject_code(value: &str) -> Option<&'static str> {
+    let targets = split_dry_run_targets(value);
+    if targets.is_empty() {
+        return Some("target-missing");
+    }
+
+    for target in targets {
+        if let Some(code) = single_temp_cleanup_target_reject_code(&target) {
+            return Some(code);
+        }
+    }
+    None
+}
+
+fn single_temp_cleanup_target_reject_code(value: &str) -> Option<&'static str> {
+    let path = resolve_dry_run_target(value);
+    if path.as_os_str().is_empty() {
+        return Some("target-missing");
+    }
+
+    let original = normalize_write_target(value);
+    let resolved = normalize_write_target(&path_to_string(&path));
+    if path_has_parent_component(&original) || path_has_parent_component(&resolved) {
+        return Some("target-forbidden");
+    }
+    if write_target_forbidden("known-temp-delete", &original)
+        || write_target_forbidden("known-temp-delete", &resolved)
+    {
+        return Some("target-forbidden");
+    }
+    if !temp_cleanup_target_allowed(&path, &original, &resolved) {
+        return Some("target-not-allowlisted");
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(&path) else {
+        return Some("target-missing");
+    };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Some("target-link-or-not-directory");
+    }
+    None
+}
+
+fn temp_cleanup_target_allowed(path: &Path, original: &str, resolved: &str) -> bool {
+    temp_env_target_allowed(path)
+        || normalized_windows_temp_root(original)
+        || normalized_windows_temp_root(resolved)
+}
+
+fn temp_env_target_allowed(path: &Path) -> bool {
+    [env_path("TEMP"), env_path("TMP")]
+        .into_iter()
+        .flatten()
+        .any(|root| path == root || path.starts_with(root))
+}
+
+fn normalized_windows_temp_root(value: &str) -> bool {
+    let clean = value.trim_end_matches('\\');
+    if clean.len() < 15 {
+        return false;
+    }
+    let bytes = clean.as_bytes();
+    bytes.get(1) == Some(&b':')
+        && clean
+            .get(2..)
+            .map(|suffix| suffix == "\\windows\\temp" || suffix.starts_with("\\windows\\temp\\"))
+            .unwrap_or(false)
+}
+
+fn path_has_parent_component(value: &str) -> bool {
+    value == ".."
+        || value.starts_with("..\\")
+        || value.ends_with("\\..")
+        || value.contains("\\..\\")
 }
 
 fn browser_cache_targets_reject_code(value: &str) -> Option<&'static str> {
@@ -11519,6 +11598,41 @@ mod tests {
         let _ = fs::remove_dir(local_app_data.join("projects").join("app"));
         let _ = fs::remove_dir(local_app_data.join("projects"));
         let _ = fs::remove_dir(local_app_data);
+    }
+
+    #[test]
+    fn temp_target_gate_rejects_parent_traversal_out_of_env_temp() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let root = unique_test_dir("temp-target-gate");
+        let temp_root = root.join("Temp");
+        let fixture_root = temp_root.join("spaceguard-fixture");
+        let outside_root = root.join("outside-temp");
+        fs::create_dir_all(&fixture_root).expect("create fixture temp root");
+        fs::create_dir_all(&outside_root).expect("create outside temp sibling");
+        let _temp_restore = EnvRestore::set("TEMP", &temp_root);
+        let _tmp_restore = EnvRestore::set("TMP", &temp_root);
+
+        assert_eq!(
+            write_action_target_reject_code(
+                "known-temp-delete",
+                &Some("%TEMP%\\spaceguard-fixture".to_string())
+            ),
+            None,
+            "scoped fixture target under TEMP should be allowed"
+        );
+        assert_eq!(
+            write_action_target_reject_code(
+                "known-temp-delete",
+                &Some("%TEMP%\\..\\outside-temp".to_string())
+            ),
+            Some("target-forbidden"),
+            "parent traversal must not escape the TEMP root"
+        );
+
+        let _ = fs::remove_dir(&fixture_root);
+        let _ = fs::remove_dir(&temp_root);
+        let _ = fs::remove_dir(&outside_root);
+        let _ = fs::remove_dir(root);
     }
 
     #[test]

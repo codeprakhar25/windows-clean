@@ -1244,6 +1244,8 @@ assert(rustScanner.includes("dry-run-only-required"), "Rust write boundary shoul
 assert(rustScanner.includes("route-not-first-safe"), "Rust write boundary should reject non-first-safe routes");
 assert(rustScanner.includes("target-not-allowlisted"), "Rust write boundary should reject targets outside route allowlists");
 assert(rustScanner.includes("target-forbidden"), "Rust write boundary should reject forbidden targets");
+assert(rustScanner.includes("temp_cleanup_target_reject_code"), "Rust temp executor should use a route-specific target gate");
+assert(rustScanner.includes("path_has_parent_component"), "Rust temp target gate should reject parent traversal before deletion");
 assert(rustScanner.includes("runtime_capabilities"), "Rust runtime capability command should exist");
 assert(rustScanner.includes("ExecutorFeatureFlags"), "Rust runtime capabilities should expose per-executor feature flags");
 assert(rustScanner.includes("GetDiskFreeSpaceExW"), "Rust native scanner should read Windows volume totals");
