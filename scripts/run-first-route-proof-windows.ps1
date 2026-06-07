@@ -281,6 +281,10 @@ try {
   Invoke-LoggedCommand -Id "setup-route" -CommandLine "npm run setup:route -- --route $Route" -OutputPath $SetupRoutePath | Out-Null
   Invoke-LoggedCommand -Id "validate-route" -CommandLine "npm run validate:route -- --route $Route" -OutputPath $ValidateRoutePath | Out-Null
 
+  $InspectAfterCleanupCommand = "powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.ps1 -ManifestPath `"$ManifestPath`" -AfterCleanupRoute known-temp-delete -EvidencePath `"$AfterFixturePath`""
+  $ValidateWorkflowProofCommand = "npm run validate:workflow-proof -- --file .\spaceguard-real-workflow-proof.md"
+  $ValidateFirstRouteCompletionCommand = "npm run validate:first-route-completion -- --preflight `"$PreflightPath`" --after-fixture `"$AfterFixturePath`" --native-exit `"$NativeDevExitPath`" --workflow-proof .\spaceguard-real-workflow-proof.md"
+
   $preflight = [PSCustomObject]@{
     schemaVersion = "spaceguard-first-route-windows-operator/v1"
     generatedAt = (Get-Date).ToUniversalTime().ToString("o")
@@ -312,6 +316,19 @@ try {
       openAiLiveSmoke = $LiveSmokePath
       nativeDevExit = $NativeDevExitPath
     }
+    appCloseContract = [PSCustomObject]@{
+      schemaVersion = "spaceguard-first-route-app-close-contract/v1"
+      workflowProofPath = $WorkflowProofPath
+      expectedWorkflowProofSchema = "spaceguard-real-workflow-proof/v1"
+      minimumReclaimedBytes = 1
+      nextRouteBlockedUntil = "validate:first-route-completion accepted"
+      requiredBeforeClosingApp = @(
+        "post-run-rescan-matched",
+        "selected-route-proof-packet-exported",
+        "selected-route-proof-import-complete",
+        "spaceguard-real-workflow-proof-exported"
+      )
+    }
     userGatedAppSteps = @(
       "Run real scan in the Tauri desktop app.",
       "Select only Seeded temp fixture.",
@@ -322,9 +339,9 @@ try {
       "Export spaceguard-real-workflow-proof.md."
     )
     afterAppCommands = [PSCustomObject]@{
-      inspectAfterCleanup = "powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.ps1 -ManifestPath `"$ManifestPath`" -AfterCleanupRoute known-temp-delete -EvidencePath `"$AfterFixturePath`""
-      validateWorkflowProof = "npm run validate:workflow-proof -- --file .\spaceguard-real-workflow-proof.md"
-      validateFirstRouteCompletion = "npm run validate:first-route-completion -- --preflight `"$PreflightPath`" --after-fixture `"$AfterFixturePath`" --native-exit `"$NativeDevExitPath`" --workflow-proof .\spaceguard-real-workflow-proof.md"
+      inspectAfterCleanup = $InspectAfterCleanupCommand
+      validateWorkflowProof = $ValidateWorkflowProofCommand
+      validateFirstRouteCompletion = $ValidateFirstRouteCompletionCommand
     }
   }
 
@@ -341,6 +358,13 @@ try {
   foreach ($step in $preflight.userGatedAppSteps) {
     Write-Host " - $step"
   }
+  Write-Host ""
+  Write-Host "Before closing the app, satisfy app-close proof contract:"
+  foreach ($step in $preflight.appCloseContract.requiredBeforeClosingApp) {
+    Write-Host " - $step"
+  }
+  Write-Host " - workflow proof path: $($preflight.appCloseContract.workflowProofPath)"
+  Write-Host " - next route remains blocked until: $($preflight.appCloseContract.nextRouteBlockedUntil)"
   Write-Host ""
   Write-Host "After the app run:"
   Write-Host " - $($preflight.afterAppCommands.inspectAfterCleanup)"

@@ -23,6 +23,9 @@ assert(
   "package.json should expose the first-route completion verifier"
 );
 assert(runner.includes("spaceguard-first-route-windows-operator/v1"), "runner should write a stable operator evidence schema");
+assert(runner.includes("spaceguard-first-route-app-close-contract/v1"), "runner should write the app-close proof contract");
+assert(runner.includes("selected-route-proof-import-complete"), "runner should require selected-route proof import before app close");
+assert(runner.includes("validate:first-route-completion accepted"), "runner should block next-route work until completion verifier accepts");
 assert(runner.includes("[System.PlatformID]::Win32NT"), "runner should refuse non-Windows execution");
 assert(runner.includes("Unsupported first-route proof route"), "runner should reject non-temp first-proof routes");
 assert(runner.includes("SkipPostAppValidation"), "runner should allow explicit skip of post-app proof validation");

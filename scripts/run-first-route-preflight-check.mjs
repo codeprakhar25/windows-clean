@@ -8,9 +8,17 @@ const PREFLIGHT_SCHEMA = "spaceguard-first-route-windows-operator/v1";
 const CHECK_SCHEMA = "spaceguard-first-route-preflight-check/v1";
 const FIRST_ROUTE_SCHEMA = "spaceguard-first-route-proof-run/v1";
 const FIXTURE_EVIDENCE_SCHEMA = "spaceguard-fixture-evidence/v1";
+const APP_CLOSE_CONTRACT_SCHEMA = "spaceguard-first-route-app-close-contract/v1";
+const WORKFLOW_PROOF_SCHEMA = "spaceguard-real-workflow-proof/v1";
 const TEMP_ROUTE = "known-temp-delete";
 const TEMP_ROUTE_INPUT = "temp-fixture";
 const TEMP_EXECUTOR_FLAG = "SPACEGUARD_ENABLE_TEMP_EXECUTOR";
+const REQUIRED_APP_CLOSE_REQUIREMENTS = [
+  "post-run-rescan-matched",
+  "selected-route-proof-packet-exported",
+  "selected-route-proof-import-complete",
+  "spaceguard-real-workflow-proof-exported"
+];
 const REQUIRED_COMMANDS = [
   "first-route-proof-packet",
   "seed-fixtures",
@@ -80,6 +88,7 @@ export function buildFirstRoutePreflightCheck({
   if (String(scoped.dotenvExecutorFlagsIgnored || "") !== "1" || scoped.siblingFlagsForcedOff !== true) {
     add("sibling-flags", "Sibling flags not locked", "Preflight must ignore dotenv executor flags and force sibling executor flags off.");
   }
+  const appCloseContract = validateAppCloseContract(preflight?.appCloseContract, baseDir, add);
 
   const commandRecords = readCommandRecords(artifactPaths.commandLog, add);
   const commandSummary = validateCommandRecords(commandRecords, add);
@@ -119,6 +128,7 @@ export function buildFirstRoutePreflightCheck({
     routeInput: String(preflight?.routeInput || ""),
     evidenceRoot: String(preflight?.evidenceRoot || ""),
     preflightPath: resolvedPreflightPath || "",
+    appCloseContract,
     blockers,
     counts: {
       blockers: blockers.length,
@@ -126,7 +136,8 @@ export function buildFirstRoutePreflightCheck({
       requiredCommandsPassed: commandSummary.requiredPassed,
       commandRecords: commandRecords.length,
       requiredArtifactsPresent: requiredArtifactCount,
-      fixtureRecords: Array.isArray(fixtureBefore?.records) ? fixtureBefore.records.length : 0
+      fixtureRecords: Array.isArray(fixtureBefore?.records) ? fixtureBefore.records.length : 0,
+      appCloseRequirements: appCloseContract.requiredBeforeClosingApp.length
     },
     primary: canLaunchApp
       ? "First-route preflight is accepted for the user-gated desktop app launch."
@@ -277,6 +288,63 @@ function validateCommandRecords(records = [], add) {
   }
 
   return { requiredPassed };
+}
+
+function validateAppCloseContract(contract, baseDir, add) {
+  const empty = {
+    schemaVersion: "",
+    workflowProofPath: "",
+    expectedWorkflowProofSchema: "",
+    minimumReclaimedBytes: 0,
+    nextRouteBlockedUntil: "",
+    requiredBeforeClosingApp: []
+  };
+
+  if (!contract || typeof contract !== "object" || Array.isArray(contract)) {
+    add("app-close-contract", "App-close contract missing", "Preflight must publish the app-close proof export contract before launching the desktop app.");
+    return empty;
+  }
+
+  const requirements = Array.isArray(contract.requiredBeforeClosingApp)
+    ? contract.requiredBeforeClosingApp.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  const normalized = {
+    schemaVersion: String(contract.schemaVersion || ""),
+    workflowProofPath: normalizeArtifactPath(contract.workflowProofPath || "", baseDir),
+    expectedWorkflowProofSchema: String(contract.expectedWorkflowProofSchema || ""),
+    minimumReclaimedBytes: Number(contract.minimumReclaimedBytes || 0),
+    nextRouteBlockedUntil: String(contract.nextRouteBlockedUntil || ""),
+    requiredBeforeClosingApp: requirements
+  };
+
+  if (normalized.schemaVersion !== APP_CLOSE_CONTRACT_SCHEMA) {
+    add("app-close-contract", "App-close contract schema mismatch", `Expected ${APP_CLOSE_CONTRACT_SCHEMA}.`);
+  }
+  if (!normalized.workflowProofPath || path.basename(normalized.workflowProofPath) !== "spaceguard-real-workflow-proof.md") {
+    add("app-close-contract", "Workflow proof export path missing", "App-close contract must point to spaceguard-real-workflow-proof.md.");
+  }
+  if (normalized.expectedWorkflowProofSchema !== WORKFLOW_PROOF_SCHEMA) {
+    add("app-close-contract", "Workflow proof schema missing", `App-close contract must require ${WORKFLOW_PROOF_SCHEMA}.`);
+  }
+  if (!Number.isFinite(normalized.minimumReclaimedBytes) || normalized.minimumReclaimedBytes < 1) {
+    add("app-close-contract", "Positive recovered bytes not required", "App-close contract must require at least one reclaimed byte.");
+  }
+  if (normalized.nextRouteBlockedUntil !== "validate:first-route-completion accepted") {
+    add("app-close-contract", "Next-route unblock condition missing", "App-close contract must block next-route work until validate:first-route-completion is accepted.");
+  }
+
+  const missing = REQUIRED_APP_CLOSE_REQUIREMENTS.filter((item) => !requirements.includes(item));
+  if (missing.length) {
+    add("app-close-contract", "App-close requirements incomplete", `Missing app-close requirement(s): ${missing.join(", ")}.`);
+  }
+
+  return normalized;
+}
+
+function normalizeArtifactPath(value = "", baseDir = process.cwd()) {
+  const clean = String(value || "");
+  if (!clean) return "";
+  return path.isAbsolute(clean) ? clean : path.resolve(baseDir, clean);
 }
 
 function isExitCodeZero(value) {

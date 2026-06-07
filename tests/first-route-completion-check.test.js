@@ -57,6 +57,19 @@ function createFirstRouteEvidence(patch = {}) {
     },
     artifacts
   };
+  preflight.appCloseContract = {
+    schemaVersion: "spaceguard-first-route-app-close-contract/v1",
+    workflowProofPath: path.join(dir, "spaceguard-real-workflow-proof.md"),
+    expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
+    minimumReclaimedBytes: 1,
+    nextRouteBlockedUntil: "validate:first-route-completion accepted",
+    requiredBeforeClosingApp: [
+      "post-run-rescan-matched",
+      "selected-route-proof-packet-exported",
+      "selected-route-proof-import-complete",
+      "spaceguard-real-workflow-proof-exported"
+    ]
+  };
   const firstRouteProof = {
     schemaVersion: "spaceguard-first-route-proof-run/v1",
     status: "ready-for-windows-proof",

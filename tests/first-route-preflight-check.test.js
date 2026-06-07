@@ -56,6 +56,19 @@ function createEvidenceFolder(patch = {}) {
       liveSmokeSkipped: true
     },
     artifacts,
+    appCloseContract: {
+      schemaVersion: "spaceguard-first-route-app-close-contract/v1",
+      workflowProofPath: path.join(dir, "spaceguard-real-workflow-proof.md"),
+      expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
+      minimumReclaimedBytes: 1,
+      nextRouteBlockedUntil: "validate:first-route-completion accepted",
+      requiredBeforeClosingApp: [
+        "post-run-rescan-matched",
+        "selected-route-proof-packet-exported",
+        "selected-route-proof-import-complete",
+        "spaceguard-real-workflow-proof-exported"
+      ]
+    },
     userGatedAppSteps: ["Run real scan in the Tauri desktop app.", "Select only Seeded temp fixture."],
     afterAppCommands: {
       inspectAfterCleanup: "powershell -ExecutionPolicy Bypass -File .\\scripts\\inspect-spaceguard-fixtures.ps1 -AfterCleanupRoute known-temp-delete",
@@ -160,6 +173,10 @@ function createEvidenceFolder(patch = {}) {
   assert.strictEqual(accepted.canLaunchApp, true, "accepted preflight should clear the app launch");
   assert.strictEqual(accepted.route, "known-temp-delete", "accepted preflight should preserve selected route");
   assert.strictEqual(accepted.counts.requiredCommandsPassed, 7, "accepted preflight should count required command records");
+  assert.strictEqual(accepted.counts.appCloseRequirements, 4, "accepted preflight should count app-close requirements");
+  assert(accepted.appCloseContract.workflowProofPath.endsWith("spaceguard-real-workflow-proof.md"), "preflight should expose the workflow proof export path");
+  assert.strictEqual(accepted.appCloseContract.minimumReclaimedBytes, 1, "preflight should require positive recovered bytes");
+  assert(accepted.appCloseContract.requiredBeforeClosingApp.includes("selected-route-proof-import-complete"), "preflight should require selected-route proof import before closing");
 
   const failedCommandFolder = createEvidenceFolder({
     commands: [
@@ -202,6 +219,13 @@ function createEvidenceFolder(patch = {}) {
   assert.strictEqual(unsafe.status, "blocked", "unsafe preflight should block");
   assert(unsafe.blockers.some((blocker) => blocker.id === "route"), "unsafe preflight should block non-temp route");
   assert(unsafe.blockers.some((blocker) => blocker.id === "direct-cleanup"), "unsafe preflight should block direct cleanup authority");
+
+  const missingAppCloseContractFolder = createEvidenceFolder({
+    preflight: { appCloseContract: null }
+  });
+  const missingAppCloseContract = verifier.buildFirstRoutePreflightCheck({ preflightPath: missingAppCloseContractFolder.preflightPath });
+  assert.strictEqual(missingAppCloseContract.status, "blocked", "missing app-close contract should block preflight");
+  assert(missingAppCloseContract.blockers.some((blocker) => blocker.id === "app-close-contract"), "missing app-close contract blocker should name the app-close contract");
 
   const missingFixtureFolder = createEvidenceFolder({
     fixtureEvidence: {
