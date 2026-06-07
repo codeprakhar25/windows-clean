@@ -345,6 +345,36 @@ const assert = require("assert");
   assert(manualContext.agentTaskQueue.rows.some((row) => row.actionType === "run-user-cache-executor" && row.targetId === "user-cache" && row.status === "ready"), "OpenAI task queue should expose ready scoped executor rows");
   assert(manualContext.agentTaskQueue.rows.some((row) => row.actionType === "review-target" && row.targetId === "expo-shop-node-modules" && row.status === "needs-user-review"), "OpenAI task queue should expose review-only project dependency rows");
   assert(manualContext.agentTaskQueue.rows.some((row) => row.actionType === "manual-only" && row.targetId === "app-old-ide" && row.manualOnly), "OpenAI task queue should keep app uninstall follow-up manual-only");
+  const proofCompleteContext = openai.buildOpenAIAgentContext({
+    scanSession: { status: "current", currentFingerprint: "scan-proof-complete" },
+    planSnapshot: { id: "plan-proof-complete", scanMode: "native-readonly" },
+    runtimeCapabilities: { available: true, windows: true },
+    executionProofHandoff: { status: "proof-complete" },
+    rescanComparison: { status: "matched", postRunScanEvidence: true }
+  });
+  const proofImportTask = proofCompleteContext.agentTaskQueue.rows.find((row) => row.targetId === "selected-route-proof-import");
+  assert(proofImportTask, "OpenAI task queue should expose selected-route proof import after completed proof");
+  assert.strictEqual(proofImportTask.actionType, "manual-only", "proof import task should stay manual-only");
+  assert.strictEqual(proofImportTask.route, "validation-evidence", "proof import task should route to validation evidence");
+  assert.strictEqual(proofImportTask.status, "needs-user-review", "proof import task should require reviewer and artifact detail");
+  const proofImportBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "selected-route-proof-import",
+          title: "Import selected route proof",
+          reason: "Proof is complete and needs validation evidence signoff.",
+          priority: "high",
+          actionType: "manual-only",
+          targetId: "selected-route-proof-import",
+          route: "validation-evidence"
+        }
+      ]
+    },
+    context: proofCompleteContext
+  });
+  assert.strictEqual(proofImportBroker.rows[0].targetPanel, "validation-evidence-panel", "proof import recommendations should route to validation evidence");
+  assert.strictEqual(proofImportBroker.rows[0].directToolAccess, false, "proof import recommendations must not grant tool access");
 
   let nativeInvocation = null;
   const nativeResult = await openai.requestOpenAIAgentAdvice({

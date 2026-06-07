@@ -485,7 +485,10 @@ assert(realDataGuide.includes("Selected route proof import"), "Windows setup gui
 assert(realDataGuide.includes("multi-flag-blocked"), "Windows setup guide should document multi-flag setup blocking");
 assert(realDataGuide.includes("--route pnpm-store"), "Windows setup guide should document selected-route setup doctor commands");
 assert(openAiAgent.includes("forbiddenActions"), "OpenAI context should expose forbidden actions");
+assert(openAiAgent.includes("selected-route-proof-import"), "OpenAI task queue should expose selected-route proof import tasks");
+assert(openAiAgent.includes("validation-evidence-panel"), "OpenAI broker should route proof import recommendations to validation evidence");
 assert(app.includes("Open manual review"), "OpenAI manual-only recommendations should expose a review action");
+assert(app.includes("validation-evidence-panel"), "app should route proof import recommendations to validation evidence");
 assert(model.includes("openai:smoke:fixture -- --route"), "model setup commands should expose route-specific fixture smoke commands");
 assert(app.includes("manualReviewTargets"), "OpenAI manual-only recommendations should be visible in the panel");
 assert(app.includes("Project targets"), "OpenAI panel should show reviewed project target count");

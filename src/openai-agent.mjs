@@ -720,6 +720,7 @@ function buildOpenAIAgentTaskQueue({
   customRootRows = []
 } = {}) {
   const rows = [
+    ...buildOpenAIProofImportTaskRows(execution),
     ...buildOpenAIExecutorTaskRows("run-temp-executor", executableRows.filter((row) => row.route === "known-temp-delete"), runtime, execution),
     ...buildOpenAIExecutorTaskRows("run-downloads-cleanup-executor", reviewedDownloadsTargets, runtime, execution),
     ...buildOpenAIExecutorTaskRows("run-large-file-archive-executor", largeFileArchiveTargets, runtime, execution),
@@ -796,6 +797,37 @@ function buildOpenAIAgentTaskQueue({
     },
     rows: dedupedRows
   };
+}
+
+function buildOpenAIProofImportTaskRows(execution = {}) {
+  const proofComplete = execution.proofStatus === "proof-complete";
+  const rescanMatched = execution.rescanComparisonStatus === "matched";
+  const postRunScanEvidence = Boolean(execution.postRunScanEvidence);
+  if (!proofComplete || !rescanMatched || !postRunScanEvidence) return [];
+  return [
+    {
+      id: "task-selected-route-proof-import",
+      source: "selected-route-proof-import",
+      actionType: "manual-only",
+      targetId: "selected-route-proof-import",
+      route: "validation-evidence",
+      title: "Import selected route proof into validation evidence",
+      bytes: 0,
+      priority: "high",
+      status: "needs-user-review",
+      canExecuteNow: false,
+      manualOnly: true,
+      executorFlag: "",
+      buttonLabel: "Open validation evidence",
+      reason: "Post-run proof is complete; attach the selected-route proof packet to ledger-rescan-parity with reviewer and artifact detail.",
+      blocker: "reviewer-artifact-required",
+      checks: [
+        buildBrokerCheck("proof-complete", "Proof complete", proofComplete, `proof=${execution.proofStatus || "unknown"}`),
+        buildBrokerCheck("rescan-matched", "Rescan matched", rescanMatched, `rescan=${execution.rescanComparisonStatus || "unknown"}`),
+        buildBrokerCheck("post-run-scan", "Post-run scan evidence", postRunScanEvidence, postRunScanEvidence ? "post-run native scan captured" : "missing post-run native scan")
+      ]
+    }
+  ];
 }
 
 function buildOpenAIExecutorTaskRows(actionType, targets = [], runtime = {}, execution = {}) {
@@ -1342,6 +1374,7 @@ function getManualRecommendationPanel(row = {}) {
   const route = String(row.route || "").toLowerCase();
   if (targetId.startsWith("custom-root") || route.includes("custom-root")) return "custom-root-triage-panel";
   if (targetId.startsWith("drive-") || route.includes("drive-inventory")) return "drive-inventory-panel";
+  if (targetId.includes("selected-route-proof") || route.includes("validation-evidence")) return "validation-evidence-panel";
   if (targetId.includes("installed-app") || route.includes("manual-app-uninstall")) return "app-uninstall-work-order-panel";
   if (targetId.includes("wsl") || route.includes("advanced-checklist")) return "wsl-compaction-work-order-panel";
   return "item-review-panel";

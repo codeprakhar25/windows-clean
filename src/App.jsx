@@ -2491,6 +2491,10 @@ export default function App() {
         focusWorkflowPanel("drive-inventory-panel");
         return;
       }
+      if (targetId.includes("selected-route-proof") || route.includes("validation-evidence")) {
+        focusWorkflowPanel("validation-evidence-panel");
+        return;
+      }
       if (targetId.includes("installed-app") || route.includes("manual-app-uninstall")) {
         setFocusedReviewId("installed-app-footprints");
         focusWorkflowPanel("app-uninstall-work-order-panel");
