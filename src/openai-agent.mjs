@@ -720,6 +720,7 @@ function buildOpenAIAgentTaskQueue({
   customRootRows = []
 } = {}) {
   const rows = [
+    ...buildOpenAIProofRescanTaskRows(execution),
     ...buildOpenAIProofImportTaskRows(execution),
     ...buildOpenAIExecutorTaskRows("run-temp-executor", executableRows.filter((row) => row.route === "known-temp-delete"), runtime, execution),
     ...buildOpenAIExecutorTaskRows("run-downloads-cleanup-executor", reviewedDownloadsTargets, runtime, execution),
@@ -797,6 +798,36 @@ function buildOpenAIAgentTaskQueue({
     },
     rows: dedupedRows
   };
+}
+
+function buildOpenAIProofRescanTaskRows(execution = {}) {
+  const proofStatus = execution.proofStatus || "waiting-for-execution";
+  const proofPending = proofStatus !== "waiting-for-execution" && proofStatus !== "proof-complete";
+  if (!proofPending) return [];
+  const canRunPostRunRescan = Boolean(execution.canRunPostRunRescan);
+  return [
+    {
+      id: "task-post-run-rescan",
+      source: "post-run-proof",
+      actionType: "rescan",
+      targetId: "post-run-rescan",
+      route: "post-run-proof",
+      title: "Run post-run rescan before another executor",
+      bytes: 0,
+      priority: "high",
+      status: canRunPostRunRescan ? "ready" : "blocked",
+      canExecuteNow: canRunPostRunRescan,
+      manualOnly: false,
+      executorFlag: "",
+      buttonLabel: "Run post-run rescan",
+      reason: "A scoped executor has ledger evidence, but another executor is blocked until post-run native rescan proof is captured.",
+      blocker: canRunPostRunRescan ? "" : "post-run-rescan-unavailable",
+      checks: [
+        buildBrokerCheck("proof-pending", "Proof pending", true, `proof=${proofStatus}`),
+        buildBrokerCheck("post-run-rescan", "Post-run rescan available", canRunPostRunRescan, canRunPostRunRescan ? "ledger-preserving rescan can run" : "desktop native rescan is not available")
+      ]
+    }
+  ];
 }
 
 function buildOpenAIProofImportTaskRows(execution = {}) {
@@ -1026,19 +1057,31 @@ function buildOpenAIAgentRecommendationBrokerRow(row = {}, context = null, execu
     return buildSelectionRecommendationBrokerRow({ row, actionType, key, context });
   }
   if (actionType === "rescan") {
+    const targetId = String(row.targetId || row.target_id || row.id || "").trim();
+    const route = String(row.route || row.route_id || "").trim();
+    const postRunRescan = targetId === "post-run-rescan" || route === "post-run-proof" || Boolean(context?.execution?.canRunPostRunRescan && !context?.execution?.proofAllowsNextExecutor);
+    const canRunPostRunRescan = Boolean(context?.execution?.canRunPostRunRescan);
+    const canAct = !postRunRescan || canRunPostRunRescan;
     return buildBrokerRow({
-      row,
+      row: {
+        ...row,
+        targetId,
+        route
+      },
       actionType,
       key,
       kind: "scan",
-      status: "ready",
-      tone: "safe",
-      canAct: true,
-      buttonLabel: context?.runtime?.nativeAvailable ? "Run real scan" : "Run demo scan",
-      targetPanel: "real-data-readiness-panel",
-      blockedReason: "",
+      status: canAct ? "ready" : "blocked",
+      tone: canAct ? "safe" : "restricted",
+      canAct,
+      buttonLabel: postRunRescan ? "Run post-run rescan" : context?.runtime?.nativeAvailable ? "Run real scan" : "Run demo scan",
+      targetPanel: postRunRescan ? "execution-proof-handoff-panel" : "real-data-readiness-panel",
+      blockedReason: canAct ? "" : "Post-run rescan is not available in the current runtime.",
       checks: [
-        buildBrokerCheck("advisory-only", "Advisory boundary", true, "OpenAI can request a scan action, but the app owns the scanner call.")
+        buildBrokerCheck("advisory-only", "Advisory boundary", true, "OpenAI can request a scan action, but the app owns the scanner call."),
+        ...(postRunRescan
+          ? [buildBrokerCheck("post-run-rescan", "Post-run rescan available", canRunPostRunRescan, canRunPostRunRescan ? "ledger-preserving rescan can run" : "desktop native rescan is not available")]
+          : [])
       ]
     });
   }

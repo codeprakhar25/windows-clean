@@ -375,6 +375,37 @@ const assert = require("assert");
   });
   assert.strictEqual(proofImportBroker.rows[0].targetPanel, "validation-evidence-panel", "proof import recommendations should route to validation evidence");
   assert.strictEqual(proofImportBroker.rows[0].directToolAccess, false, "proof import recommendations must not grant tool access");
+  const proofRequiredContext = openai.buildOpenAIAgentContext({
+    scanSession: { status: "current", currentFingerprint: "scan-proof-required" },
+    planSnapshot: { id: "plan-proof-required", scanMode: "native-readonly" },
+    runtimeCapabilities: { available: true, windows: true },
+    executionProofHandoff: { status: "proof-required", canRunRescan: true },
+    rescanComparison: { status: "needs-post-run-native-rescan", postRunScanEvidence: false }
+  });
+  const proofRescanTask = proofRequiredContext.agentTaskQueue.rows.find((row) => row.targetId === "post-run-rescan");
+  assert(proofRescanTask, "OpenAI task queue should expose post-run rescan while proof is pending");
+  assert.strictEqual(proofRescanTask.actionType, "rescan", "post-run proof task should use the brokered rescan action");
+  assert.strictEqual(proofRescanTask.route, "post-run-proof", "post-run proof task should route to proof review");
+  assert.strictEqual(proofRescanTask.status, "ready", "post-run rescan task should be ready when native proof rescan can run");
+  const proofRescanBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: {
+      recommendedActions: [
+        {
+          id: "post-run-rescan",
+          title: "Run post-run rescan",
+          reason: "Proof is pending after scoped execution.",
+          priority: "high",
+          actionType: "rescan",
+          targetId: "post-run-rescan",
+          route: "post-run-proof"
+        }
+      ]
+    },
+    context: proofRequiredContext
+  });
+  assert.strictEqual(proofRescanBroker.rows[0].buttonLabel, "Run post-run rescan", "post-run rescan recommendations should not look like a normal discovery scan");
+  assert.strictEqual(proofRescanBroker.rows[0].targetPanel, "execution-proof-handoff-panel", "post-run rescan recommendations should route to proof handoff");
+  assert.strictEqual(proofRescanBroker.rows[0].canAct, true, "post-run rescan recommendations should be actionable when the handoff can rescan");
 
   let nativeInvocation = null;
   const nativeResult = await openai.requestOpenAIAgentAdvice({
