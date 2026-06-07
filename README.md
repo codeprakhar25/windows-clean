@@ -97,7 +97,7 @@ The verifier accepts only `spaceguard-real-workflow-proof/v1` packets that are `
 For the seeded first route, also validate the whole preflight plus after-cleanup fixture plus workflow proof chain:
 
 ```bash
-npm run validate:first-route-completion -- --preflight evidence/first-route-proof-YYYYMMDD-HHMMSS/operator-preflight.json --after-fixture evidence/first-route-proof-YYYYMMDD-HHMMSS/fixture-after-cleanup.json --workflow-proof spaceguard-real-workflow-proof.md
+npm run validate:first-route-completion -- --preflight evidence/first-route-proof-YYYYMMDD-HHMMSS/operator-preflight.json --after-fixture evidence/first-route-proof-YYYYMMDD-HHMMSS/fixture-after-cleanup.json --native-exit evidence/first-route-proof-YYYYMMDD-HHMMSS/native-dev-exit.json --workflow-proof spaceguard-real-workflow-proof.md
 ```
 
 The same `.env` file can hold named scoped executor flags, for example `SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR=1`, when you are validating real cleanup on Windows. Validate and run one selected route at a time, then complete post-run rescan proof before running another executor.

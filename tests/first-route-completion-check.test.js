@@ -39,7 +39,8 @@ function createFirstRouteEvidence(patch = {}) {
     setupRoute: path.join(dir, "setup-route.json"),
     validateRoute: path.join(dir, "validate-route.json"),
     openAiFixtureSmoke: path.join(dir, "openai-fixture-smoke.txt"),
-    openAiLiveSmoke: path.join(dir, "openai-live-smoke.txt")
+    openAiLiveSmoke: path.join(dir, "openai-live-smoke.txt"),
+    nativeDevExit: path.join(dir, "native-dev-exit.json")
   };
   const preflight = {
     schemaVersion: "spaceguard-first-route-windows-operator/v1",
@@ -155,6 +156,13 @@ function createFirstRouteEvidence(patch = {}) {
       { id: "next-route-clearance", passed: true }
     ]
   };
+  const nativeDevExit = {
+    schemaVersion: "spaceguard-native-dev-exit/v1",
+    command: "npm run native:dev",
+    exitCode: 0,
+    success: true,
+    evidenceRoot: dir
+  };
   const commands = [
     "first-route-proof-packet",
     "seed-fixtures",
@@ -175,6 +183,7 @@ function createFirstRouteEvidence(patch = {}) {
   writeJson(artifacts.validateRoute, { ...validateRoute, ...patch.validateRoute }, { npmWrapped: true });
   writeText(artifacts.openAiFixtureSmoke, "routeInput=temp route=known-temp-delete title=Known temp cleanup\nvalidation=broker-ready\n");
   writeText(artifacts.openAiLiveSmoke, "");
+  writeJson(artifacts.nativeDevExit, { ...nativeDevExit, ...patch.nativeDevExit });
   writeNdjson(artifacts.commandLog, patch.commands || commands);
 
   const workflowProofPath = path.join(dir, "spaceguard-real-workflow-proof.md");
@@ -183,7 +192,8 @@ function createFirstRouteEvidence(patch = {}) {
     dir,
     preflightPath: path.join(dir, "operator-preflight.json"),
     afterFixturePath: artifacts.fixtureAfterCleanup,
-    workflowProofPath
+    workflowProofPath,
+    nativeExitPath: artifacts.nativeDevExit
   };
 }
 
@@ -201,6 +211,8 @@ function createFirstRouteEvidence(patch = {}) {
   assert.strictEqual(accepted.status, "accepted", "complete first-route evidence should be accepted");
   assert.strictEqual(accepted.canStartNextRoute, true, "accepted first-route completion should clear next route");
   assert.strictEqual(accepted.route, "known-temp-delete", "completion check should preserve the temp route");
+  assert.strictEqual(accepted.nativeExitPath, acceptedEvidence.nativeExitPath, "completion check should expose native app exit evidence");
+  assert.strictEqual(accepted.counts.nativeExitCode, 0, "completion check should preserve successful native app exit code");
   assert.strictEqual(accepted.counts.reclaimedBytes, 8388608, "completion check should preserve recovered bytes");
 
   const stillPresentEvidence = createFirstRouteEvidence({
@@ -243,6 +255,17 @@ function createFirstRouteEvidence(patch = {}) {
   });
   assert.strictEqual(zeroByte.status, "blocked", "completion should block zero-byte workflow proof");
   assert(zeroByte.blockers.some((blocker) => blocker.id === "workflow-proof"), "workflow proof blocker should be surfaced");
+
+  const failedNativeEvidence = createFirstRouteEvidence({
+    nativeDevExit: { exitCode: 1, success: false }
+  });
+  const failedNative = verifier.buildFirstRouteCompletionCheck({
+    preflightPath: failedNativeEvidence.preflightPath,
+    afterFixturePath: failedNativeEvidence.afterFixturePath,
+    workflowProofPath: failedNativeEvidence.workflowProofPath
+  });
+  assert.strictEqual(failedNative.status, "blocked", "completion should block a failed native desktop session");
+  assert(failedNative.blockers.some((blocker) => blocker.id === "native-exit"), "native exit blocker should be surfaced");
 
   const missingPreflight = verifier.buildFirstRouteCompletionCheck({
     preflightPath: path.join(os.tmpdir(), "missing-operator-preflight.json"),

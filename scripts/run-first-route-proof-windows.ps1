@@ -193,7 +193,7 @@ try {
       commands = [PSCustomObject]@{
         inspectAfterCleanup = "powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.ps1 -ManifestPath `"$ManifestPath`" -AfterCleanupRoute known-temp-delete -EvidencePath `"$AfterFixturePath`""
         validateWorkflowProof = "node scripts\run-workflow-proof-check.mjs --file `"$WorkflowProofPath`""
-        validateFirstRouteCompletion = "node scripts\run-first-route-completion-check.mjs --preflight `"$PreflightPath`" --after-fixture `"$AfterFixturePath`" --workflow-proof `"$WorkflowProofPath`""
+        validateFirstRouteCompletion = "node scripts\run-first-route-completion-check.mjs --preflight `"$PreflightPath`" --after-fixture `"$AfterFixturePath`" --native-exit `"$NativeDevExitPath`" --workflow-proof `"$WorkflowProofPath`""
       }
       artifacts = [PSCustomObject]@{
         afterFixture = $AfterFixturePath
@@ -324,7 +324,7 @@ try {
     afterAppCommands = [PSCustomObject]@{
       inspectAfterCleanup = "powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.ps1 -ManifestPath `"$ManifestPath`" -AfterCleanupRoute known-temp-delete -EvidencePath `"$AfterFixturePath`""
       validateWorkflowProof = "npm run validate:workflow-proof -- --file .\spaceguard-real-workflow-proof.md"
-      validateFirstRouteCompletion = "npm run validate:first-route-completion -- --preflight `"$PreflightPath`" --after-fixture `"$AfterFixturePath`" --workflow-proof .\spaceguard-real-workflow-proof.md"
+      validateFirstRouteCompletion = "npm run validate:first-route-completion -- --preflight `"$PreflightPath`" --after-fixture `"$AfterFixturePath`" --native-exit `"$NativeDevExitPath`" --workflow-proof .\spaceguard-real-workflow-proof.md"
     }
   }
 

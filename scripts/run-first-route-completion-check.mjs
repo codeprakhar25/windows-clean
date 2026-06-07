@@ -9,10 +9,11 @@ import { buildWorkflowProofCheck } from "./run-workflow-proof-check.mjs";
 const SCRIPT_ID = "spaceguard-first-route-completion-check";
 const CHECK_SCHEMA = "spaceguard-first-route-completion-check/v1";
 const FIXTURE_EVIDENCE_SCHEMA = "spaceguard-fixture-evidence/v1";
+const NATIVE_DEV_EXIT_SCHEMA = "spaceguard-native-dev-exit/v1";
 const TEMP_ROUTE = "known-temp-delete";
 
 function parseArgs(argv = []) {
-  const args = { preflight: "", afterFixture: "", workflowProof: "", allowIncomplete: false };
+  const args = { preflight: "", afterFixture: "", workflowProof: "", nativeExit: "", allowIncomplete: false };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === "--preflight") args.preflight = argv[index + 1] || "";
@@ -21,6 +22,8 @@ function parseArgs(argv = []) {
     if (value.startsWith("--after-fixture=")) args.afterFixture = value.slice("--after-fixture=".length);
     if (value === "--workflow-proof") args.workflowProof = argv[index + 1] || "";
     if (value.startsWith("--workflow-proof=")) args.workflowProof = value.slice("--workflow-proof=".length);
+    if (value === "--native-exit") args.nativeExit = argv[index + 1] || "";
+    if (value.startsWith("--native-exit=")) args.nativeExit = value.slice("--native-exit=".length);
     if (value === "--allow-incomplete") args.allowIncomplete = true;
   }
   return args;
@@ -30,6 +33,7 @@ export function buildFirstRouteCompletionCheck({
   preflightPath = "",
   afterFixturePath = "",
   workflowProofPath = "",
+  nativeExitPath = "",
   checkedAt = new Date().toISOString()
 } = {}) {
   const blockers = [];
@@ -48,18 +52,25 @@ export function buildFirstRouteCompletionCheck({
     afterFixturePath || preflightObject?.artifacts?.fixtureAfterCleanup || "",
     resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
   );
+  const artifactNativeExitPath = normalizeArtifactPath(
+    nativeExitPath || preflightObject?.artifacts?.nativeDevExit || "",
+    resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
+  );
   const resolvedWorkflowProofPath = workflowProofPath ? path.resolve(workflowProofPath) : path.resolve(process.cwd(), "spaceguard-real-workflow-proof.md");
 
   const afterFixture = readOptionalJsonArtifact("after-fixture", artifactAfterFixturePath, add);
+  const nativeExit = readOptionalJsonArtifact("native-exit", artifactNativeExitPath, add);
   const workflowProofText = readOptionalTextArtifact("workflow-proof", resolvedWorkflowProofPath, add);
   const workflowProof = workflowProofText
     ? buildWorkflowProofCheck({ evidenceText: workflowProofText, checkedAt })
     : buildWorkflowProofCheck({ evidenceObject: { schemaVersion: "" }, checkedAt });
 
   validateAfterFixtureEvidence(afterFixture, add);
+  validateNativeExitEvidence(nativeExit, add);
   validateWorkflowProof(workflowProof, add);
 
   const reclaimedBytes = Number(workflowProof.counts?.reclaimedBytes || 0);
+  const nativeExitCode = Number.isFinite(Number(nativeExit?.exitCode)) ? Number(nativeExit.exitCode) : null;
   const canStartNextRoute = blockers.length === 0;
   return {
     schemaVersion: CHECK_SCHEMA,
@@ -71,11 +82,13 @@ export function buildFirstRouteCompletionCheck({
     routeInput: preflight.routeInput || "temp-fixture",
     preflightPath: resolvedPreflightPath,
     afterFixturePath: artifactAfterFixturePath,
+    nativeExitPath: artifactNativeExitPath,
     workflowProofPath: resolvedWorkflowProofPath,
     blockers,
     counts: {
       blockers: blockers.length,
       reclaimedBytes,
+      nativeExitCode,
       preflightBlockers: Number(preflight.counts?.blockers || 0),
       workflowProofBlockers: Number(workflowProof.counts?.blockers || 0),
       afterFixtureRecords: Array.isArray(afterFixture?.records) ? afterFixture.records.length : 0,
@@ -203,6 +216,25 @@ function validateAfterFixtureEvidence(evidence, add) {
   }
 }
 
+function validateNativeExitEvidence(evidence, add) {
+  if (!evidence) return;
+  if (evidence.schemaVersion !== NATIVE_DEV_EXIT_SCHEMA) {
+    add("native-exit", "Native app exit schema mismatch", `Expected ${NATIVE_DEV_EXIT_SCHEMA}.`);
+  }
+  if (String(evidence.command || "") !== "npm run native:dev") {
+    add("native-exit", "Native app command mismatch", "Native app exit evidence must come from npm run native:dev.");
+  }
+
+  const exitCode = Number(evidence.exitCode);
+  if (evidence.success !== true || !Number.isFinite(exitCode) || exitCode !== 0) {
+    add(
+      "native-exit",
+      "Native app exit blocked",
+      `Native desktop workflow must exit successfully before completion; observed exit code ${Number.isFinite(exitCode) ? exitCode : "missing"}.`
+    );
+  }
+}
+
 function validateWorkflowProof(proofCheck, add) {
   if (!proofCheck?.canAccept) {
     add("workflow-proof", "Workflow proof not accepted", proofCheck?.primary || "Workflow proof verifier did not accept the proof.");
@@ -224,7 +256,8 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "
   const result = buildFirstRouteCompletionCheck({
     preflightPath: args.preflight,
     afterFixturePath: args.afterFixture,
-    workflowProofPath: args.workflowProof
+    workflowProofPath: args.workflowProof,
+    nativeExitPath: args.nativeExit
   });
   console.log(JSON.stringify(result, null, 2));
   if (!result.canStartNextRoute && !args.allowIncomplete) process.exitCode = 1;

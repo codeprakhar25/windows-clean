@@ -84,7 +84,7 @@ The verifier exits successfully only for `spaceguard-real-workflow-proof/v1` pac
 For the seeded first route, validate the whole first-delete chain after `fixture-after-cleanup.json` exists:
 
 ```powershell
-npm run validate:first-route-completion -- --preflight .\evidence\first-route-proof-YYYYMMDD-HHMMSS\operator-preflight.json --after-fixture .\evidence\first-route-proof-YYYYMMDD-HHMMSS\fixture-after-cleanup.json --workflow-proof .\spaceguard-real-workflow-proof.md
+npm run validate:first-route-completion -- --preflight .\evidence\first-route-proof-YYYYMMDD-HHMMSS\operator-preflight.json --after-fixture .\evidence\first-route-proof-YYYYMMDD-HHMMSS\fixture-after-cleanup.json --native-exit .\evidence\first-route-proof-YYYYMMDD-HHMMSS\native-dev-exit.json --workflow-proof .\spaceguard-real-workflow-proof.md
 ```
 
 Optional first-safe temp executor:
