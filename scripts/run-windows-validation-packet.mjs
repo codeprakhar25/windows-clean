@@ -80,6 +80,7 @@ export function buildWindowsValidationPacket({ routeInput = "", env = {} } = {})
     postRunProofChecklist: buildPostRunProofChecklist(routePacket),
     captureArtifacts: buildCaptureArtifacts(selected),
     forbiddenActions: buildForbiddenActions(),
+    liveValidationManifest: buildLiveValidationManifest(selected, routePacket.status),
     operatorSteps: buildOperatorSteps(selected, routePacket.status),
     nextSteps: buildNextSteps(routePacket, selected)
   };
@@ -150,12 +151,13 @@ function buildPreRunChecklist(routePacket) {
 function buildPostRunProofChecklist(routePacket) {
   const ready = routePacket.status === "ready";
   const selected = routePacket.selected || {};
+  const executedAction = actionNounPhrase(selected.actionLabel || "the scoped executor");
   return [
     {
       id: "execution-ledger-recorded",
       label: "Execution ledger recorded",
       status: ready ? "pending" : "blocked",
-      detail: `After ${selected.actionLabel || "the scoped executor"} runs, capture the execution ledger for route ${selected.route || "unknown"}.`
+      detail: `After ${executedAction} runs, capture the execution ledger for route ${selected.route || "unknown"}.`
     },
     {
       id: "native-volume-proof",
@@ -214,10 +216,124 @@ function buildCaptureArtifacts(selected) {
     "selected-route-proof-import",
     "real-workflow-proof",
     "workflow-proof-check-output",
+    "live-validation-manifest",
     "openai-handoff-if-used",
     "support-bundle-if-any-warning"
   ];
 }
+
+function buildLiveValidationManifest(selected, status) {
+  const routeInput = selected.aliases?.[0] || selected.route;
+  const routeFlagReady = status === "ready";
+  return {
+    schemaVersion: "spaceguard-live-route-validation/v1",
+    route: selected.route,
+    routeInput,
+    title: selected.title,
+    status,
+    contract: {
+      envVar: selected.envVar,
+      requestMode: selected.requestMode,
+      panelId: selected.panelId,
+      actionLabel: selected.actionLabel,
+      setupCommand: `npm run setup:route -- --route ${routeInput}`,
+      validationCommand: `npm run validate:route -- --route ${routeInput}`,
+      workflowProofCommand: "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md",
+      nativeDevCommand: "npm run native:dev"
+    },
+    runtime: {
+      routeFlagReady,
+      canAttemptWindowsValidation: routeFlagReady,
+      canExecuteWithoutAppEvidence: false,
+      singleScopedFlagRequired: true,
+      requiredEnabledFlag: selected.envVar,
+      disabledReason: routeFlagReady
+        ? ""
+        : status === "multiple-flags"
+          ? "Multiple scoped executor flags are enabled; Windows validation must narrow to one route."
+          : `${selected.envVar}=1 must be enabled before Windows route validation.`
+    },
+    requiredAppEvidence: [
+      "current-native-scan-fingerprint",
+      "current-plan-consent-receipt",
+      "native-scanned-target",
+      "selected-action-row",
+      "single-scoped-executor-flag"
+    ],
+    requiredPostRunProof: [
+      "execution-ledger",
+      "native-write-volume-proof",
+      "post-run-rescan-comparison",
+      "selected-route-proof-packet",
+      "selected-route-proof-import",
+      "real-workflow-proof",
+      "workflow-proof-check-output"
+    ],
+    nativeBoundary: buildNativeBoundary(selected)
+  };
+}
+
+function buildNativeBoundary(selected) {
+  const boundary = nativeBoundaryByRoute[selected.route] || {};
+  return {
+    tauriCommand: boundary.tauriCommand || "execute_cleanup_plan",
+    adapterFunction: boundary.adapterFunction || "",
+    rustFunction: boundary.rustFunction || "",
+    requestShape: boundary.requestShape || [
+      `requestMode=${selected.requestMode}`,
+      "dryRunOnly=false",
+      "mutationAttempted=true",
+      "planId, scanFingerprint, and consentPlanId required"
+    ],
+    targetAllowlist: boundary.targetAllowlist || ["Use only the native-scanned target for the selected route."],
+    targetRejects: boundary.targetRejects || ["custom roots", "system folders", "personal folders outside the selected route"],
+    deletePolicy: boundary.deletePolicy || ["Mutation is scoped to the selected route-specific native executor only."],
+    postRunProof: boundary.postRunProof || ["execution ledger", "native volume proof", "post-run native rescan"]
+  };
+}
+
+const nativeBoundaryByRoute = {
+  "bounded-npm-cache-delete": {
+    tauriCommand: "execute_cleanup_plan",
+    adapterFunction: "runNativeNpmCacheExecutor",
+    rustFunction: "execute_npm_cache_cleanup",
+    requestShape: [
+      "schemaVersion=spaceguard-npm-cache-request/v1",
+      "requestMode=execute-npm-cache",
+      "route=bounded-npm-cache-delete",
+      "dryRunOnly=false",
+      "mutationAttempted=true",
+      "planId, scanFingerprint, consentPlanId, expectedBytes, and one action required"
+    ],
+    targetAllowlist: [
+      "current user %LocalAppData%\\npm-cache\\_cacache only",
+      "target must come from the latest native-scanned npm-cache finding",
+      "target must be a real directory, not a symlink"
+    ],
+    targetRejects: [
+      "node_modules",
+      "global npm packages",
+      "AppData\\Roaming\\npm",
+      "Program Files",
+      "ProgramData",
+      "Windows",
+      "Downloads, Documents, Desktop"
+    ],
+    deletePolicy: [
+      "Deletes only age-gated files under _cacache\\content-v2 and _cacache\\tmp.",
+      "Skips npm index metadata outside content-v2/tmp.",
+      "Skips lock files.",
+      "Skips symlinks and unreadable entries.",
+      "Removes only empty cache subdirectories below _cacache."
+    ],
+    postRunProof: [
+      "execution ledger entry for bounded-npm-cache-delete",
+      "native GetDiskFreeSpaceExW before/after volume proof",
+      "post-run native rescan comparison",
+      "accepted spaceguard-real-workflow-proof/v1 check"
+    ]
+  }
+};
 
 function buildForbiddenActions() {
   return [
@@ -233,6 +349,7 @@ function buildForbiddenActions() {
 }
 
 function buildOperatorSteps(selected, status) {
+  const actionLabel = selected.actionLabel || "Run scoped executor";
   const steps = [
     "Run npm run setup:doctor and keep the JSON output.",
     `Run npm run setup:route -- --route ${selected.aliases?.[0] || selected.route}.`,
@@ -241,7 +358,7 @@ function buildOperatorSteps(selected, status) {
     "Launch npm run native:dev.",
     "Run real scan and export before-scan evidence.",
     `Open ${selected.panelId} and verify route ${selected.route} with requestMode ${selected.requestMode}.`,
-    `Run ${selected.actionLabel} only if the app preflight is ready.`,
+    `${actionLabel} only if the app preflight is ready.`,
     "Capture execution ledger and native volume proof, then run post-run rescan.",
     "Export selected-route proof packet, import it into Validation evidence, export spaceguard-real-workflow-proof.md, and run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md before enabling another executor."
   ];
@@ -249,6 +366,11 @@ function buildOperatorSteps(selected, status) {
     return [`Fix validation status ${status} before Windows execution.`, ...steps.slice(0, 4)];
   }
   return steps;
+}
+
+function actionNounPhrase(actionLabel) {
+  const clean = String(actionLabel || "").trim().replace(/^run\s+/i, "");
+  return clean || "the scoped executor";
 }
 
 function buildNextSteps(routePacket, selected) {
