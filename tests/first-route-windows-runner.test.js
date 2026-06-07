@@ -15,6 +15,10 @@ assert(
   "package.json should expose the Windows first-route proof runner"
 );
 assert(
+  packageJson.scripts["proof:first-route:windows:finalize"]?.includes("-FinalizeOnly"),
+  "package.json should expose a finalize-only Windows first-route proof command"
+);
+assert(
   packageJson.scripts["validate:first-route-preflight"]?.includes("run-first-route-preflight-check.mjs"),
   "package.json should expose the first-route preflight verifier"
 );
@@ -29,6 +33,11 @@ assert(runner.includes("validate:first-route-completion accepted"), "runner shou
 assert(runner.includes("[System.PlatformID]::Win32NT"), "runner should refuse non-Windows execution");
 assert(runner.includes("Unsupported first-route proof route"), "runner should reject non-temp first-proof routes");
 assert(runner.includes("SkipPostAppValidation"), "runner should allow explicit skip of post-app proof validation");
+assert(runner.includes("[switch]$FinalizeOnly"), "runner should support finalizing an existing evidence root after app proof export");
+assert(runner.includes("FinalizeOnly requires -EvidenceRoot"), "finalize-only mode should require an existing evidence root");
+assert(runner.includes("FinalizeOnly evidence root does not exist"), "finalize-only mode should reject missing evidence roots");
+assert(runner.includes("Test-Path -LiteralPath $EvidenceRoot"), "finalize-only mode should check the evidence root before creating directories");
+assert(runner.includes("Complete-PostAppValidation -Reason \"finalize-only\""), "finalize-only mode should rerun post-app validation without reseeding fixtures");
 assert(runner.includes("SPACEGUARD_ROUTE_SETUP_IGNORE_DOTENV"), "runner should force scoped env over .env executor flags");
 assert(runner.includes("SPACEGUARD_ENABLE_TEMP_EXECUTOR"), "runner should enable only the temp executor flag");
 assert(runner.includes("run-first-route-proof.mjs"), "runner should capture the first-route proof packet");

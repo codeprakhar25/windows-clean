@@ -277,6 +277,65 @@ function createFirstRouteEvidence(patch = {}) {
   assert.strictEqual(accepted.counts.postAppCommandsPassed, 5, "completion check should count required post-app command records");
   assert.strictEqual(accepted.counts.reclaimedBytes, 8388608, "completion check should preserve recovered bytes");
 
+  const retriedPostAppEvidence = createFirstRouteEvidence({
+    commands: [
+      "first-route-proof-packet",
+      "seed-fixtures",
+      "inspect-fixtures-before",
+      "setup-doctor",
+      "openai-fixture-smoke",
+      "setup-route",
+      "validate-route"
+    ].map((id) => ({ id, command: id, outputPath: path.join(os.tmpdir(), `${id}.txt`), exitCode: 0 })).concat([
+      {
+        id: "native-dev-launch",
+        command: "npm run native:dev",
+        outputPath: "",
+        exitCode: null,
+        userGated: true
+      },
+      {
+        id: "native-dev-exit",
+        command: "npm run native:dev",
+        outputPath: path.join(os.tmpdir(), "native-dev-exit.json"),
+        exitCode: 0,
+        userGated: true
+      },
+      {
+        id: "finalize-after-app",
+        command: "inspect fixtures, validate workflow proof, validate first-route completion",
+        outputPath: path.join(os.tmpdir(), "post-app-finalization.json"),
+        exitCode: null,
+        userGated: true
+      },
+      {
+        id: "workflow-proof-check",
+        command: "workflow-proof-check",
+        outputPath: path.join(os.tmpdir(), "workflow-proof-check.json"),
+        exitCode: 1
+      },
+      {
+        id: "inspect-fixtures-after",
+        command: "inspect-fixtures-after",
+        outputPath: path.join(os.tmpdir(), "inspect-fixtures-after.txt"),
+        exitCode: 0
+      },
+      {
+        id: "workflow-proof-check",
+        command: "workflow-proof-check",
+        outputPath: path.join(os.tmpdir(), "workflow-proof-check-retry.json"),
+        exitCode: 0
+      }
+    ])
+  });
+  const retriedPostApp = verifier.buildFirstRouteCompletionCheck({
+    preflightPath: retriedPostAppEvidence.preflightPath,
+    afterFixturePath: retriedPostAppEvidence.afterFixturePath,
+    workflowProofPath: retriedPostAppEvidence.workflowProofPath
+  });
+  assert.strictEqual(retriedPostApp.status, "accepted", "completion should use the latest post-app command record after a proof retry");
+  assert.strictEqual(retriedPostApp.counts.postAppCommandsPassed, 5, "retried completion should count the latest successful post-app command records");
+
   const acceptedWithContractDefault = verifier.buildFirstRouteCompletionCheck({
     preflightPath: acceptedEvidence.preflightPath,
     afterFixturePath: acceptedEvidence.afterFixturePath,

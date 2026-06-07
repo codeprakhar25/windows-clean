@@ -43,6 +43,7 @@ function scopedRouteEnv(spec, env = {}) {
 function buildCommands(spec, routeInput, fixtureRoute = false) {
   return {
     windowsProofRunner: fixtureRoute ? "npm run proof:first-route:windows" : "",
+    finalizeWindowsProof: fixtureRoute ? "npm run proof:first-route:windows:finalize -- -EvidenceRoot .\\evidence\\first-route-proof-YYYYMMDD-HHMMSS" : "",
     seedFixtures: fixtureRoute ? "powershell -ExecutionPolicy Bypass -File .\\scripts\\seed-spaceguard-fixtures.ps1" : "",
     inspectFixtures: fixtureRoute ? "powershell -ExecutionPolicy Bypass -File .\\scripts\\inspect-spaceguard-fixtures.ps1 -EvidencePath .\\evidence\\fixture-before-cleanup.json" : "",
     inspectAfterCleanup: fixtureRoute ? "powershell -ExecutionPolicy Bypass -File .\\scripts\\inspect-spaceguard-fixtures.ps1 -AfterCleanupRoute known-temp-delete -EvidencePath .\\evidence\\fixture-after-cleanup.json" : "",

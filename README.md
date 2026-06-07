@@ -80,6 +80,12 @@ In `npm run start` / Vite dev, **Ask OpenAI** uses the same-origin `/api/openai-
 
 `npm run proof:first-route:windows` is the fastest disposable-VM path for the first real proof. Run it on Windows after setting `.env`; it creates an evidence folder, loads `.env`, forces every scoped executor flag off except `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1`, seeds and inspects the fixture, runs setup doctor, fixture OpenAI smoke, live OpenAI smoke when `OPENAI_API_KEY` is configured, route setup, route validation, writes `operator-preflight.json`, `operator-preflight-check.json`, and `commands.ndjson`, then launches `npm run native:dev`. It does not run cleanup itself; deletion still requires the desktop app's scan, target selection, consent, and executor button. After the app exits, the runner writes `native-dev-exit.json`; a nonzero desktop exit stops proof finalization as `native-dev-failed`. A clean app exit continues into after-cleanup fixture inspection, workflow proof validation, and the first-route completion verifier. Use `-SkipPostAppValidation` only for preflight/dev sessions where the app will not export proof yet.
 
+If the app proof export is fixed after the desktop session closes, rerun only the post-app finalization against the existing evidence root:
+
+```bash
+npm run proof:first-route:windows:finalize -- -EvidenceRoot evidence/first-route-proof-YYYYMMDD-HHMMSS
+```
+
 To re-check a captured preflight bundle manually:
 
 ```bash

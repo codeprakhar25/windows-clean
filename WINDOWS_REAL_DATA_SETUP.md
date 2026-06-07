@@ -67,6 +67,12 @@ In `npm run start`, the OpenAI button uses Vite's same-origin `/api/openai-agent
 
 `npm run proof:first-route:windows` runs the first-route operator preflight on Windows. It creates an evidence folder, loads `.env`, forces a one-route environment with only `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1`, captures the first-route packet, seeds and inspects fixtures, runs setup doctor, fixture OpenAI smoke, live OpenAI smoke when `OPENAI_API_KEY` is configured, route setup, and route validation, then launches the Tauri app. It writes `operator-preflight.json`, `operator-preflight-check.json`, and `commands.ndjson` before launch. It does not clean anything outside the desktop workflow; the actual fixture deletion still requires in-app scan, target selection, consent, and the **Real temp cleanup** button. After the app exits, the runner writes `native-dev-exit.json`; a nonzero desktop exit stops proof finalization as `native-dev-failed`. A clean app exit continues into after-cleanup fixture inspection, workflow proof validation, and the first-route completion verifier. Use `-SkipPostAppValidation` only for preflight/dev sessions where the app will not export proof yet.
 
+If proof export/import is corrected after the desktop session closes, resume only post-app finalization against the existing evidence folder:
+
+```powershell
+npm run proof:first-route:windows:finalize -- -EvidenceRoot .\evidence\first-route-proof-YYYYMMDD-HHMMSS
+```
+
 The preflight bundle also writes an app-close proof contract. Before closing the desktop app, complete the post-run rescan, export the selected-route proof packet, import that packet with reviewer/artifact detail, and export `spaceguard-real-workflow-proof.md` to the repo root. The runner and completion verifier keep the next route blocked until `validate:first-route-completion` accepts that proof with positive reclaimed bytes.
 
 To re-check a captured preflight bundle manually:

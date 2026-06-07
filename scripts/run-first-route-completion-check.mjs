@@ -282,7 +282,7 @@ function validateAfterFixtureEvidence(evidence, add) {
 function validatePostAppCommandRecords(records = [], add) {
   let requiredPassed = 0;
   for (const id of REQUIRED_POST_APP_COMMANDS) {
-    const record = records.find((item) => item?.id === id);
+    const record = findLatestCommandRecord(records, id);
     if (!record) {
       add(`command-${id}`, "Command missing", `${id} command record is missing.`);
       continue;
@@ -317,6 +317,13 @@ function validatePostAppCommandRecords(records = [], add) {
     requiredPassed += 1;
   }
   return { requiredPassed };
+}
+
+function findLatestCommandRecord(records = [], id = "") {
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    if (records[index]?.id === id) return records[index];
+  }
+  return null;
 }
 
 function isExitCodeZero(value) {

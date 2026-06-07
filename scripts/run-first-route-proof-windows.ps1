@@ -3,7 +3,8 @@ param(
   [string]$EvidenceRoot = "",
   [switch]$SkipLiveOpenAI,
   [switch]$SkipLaunch,
-  [switch]$SkipPostAppValidation
+  [switch]$SkipPostAppValidation,
+  [switch]$FinalizeOnly
 )
 
 Set-StrictMode -Version Latest
@@ -24,6 +25,13 @@ Push-Location $RepoRoot
 
 try {
   $RunStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
+  $EvidenceRootProvided = -not [string]::IsNullOrWhiteSpace($EvidenceRoot)
+  if ($FinalizeOnly -and -not $EvidenceRootProvided) {
+    throw "FinalizeOnly requires -EvidenceRoot pointing at an existing first-route evidence folder."
+  }
+  if ($FinalizeOnly -and -not (Test-Path -LiteralPath $EvidenceRoot)) {
+    throw "FinalizeOnly evidence root does not exist: $EvidenceRoot"
+  }
   if ([string]::IsNullOrWhiteSpace($EvidenceRoot)) {
     $EvidenceRoot = Join-Path $RepoRoot "evidence\first-route-proof-$RunStamp"
   }
@@ -243,6 +251,14 @@ try {
 
   Import-SpaceGuardDotEnv -Path (Join-Path $RepoRoot ".env")
   Set-ScopedTempExecutorEnvironment
+
+  if ($FinalizeOnly) {
+    Complete-PostAppValidation -Reason "finalize-only"
+    Write-Host ""
+    Write-Host "Finalized existing first-route evidence root: $EvidenceRoot"
+    Write-Host "Completion check: $CompletionCheckPath"
+    return
+  }
 
   $liveOpenAiConfigured = -not [string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable("OPENAI_API_KEY", "Process"))
 
