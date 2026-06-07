@@ -11436,3 +11436,111 @@ fn generated_at() -> String {
         .unwrap_or(0);
     format!("unix:{seconds}")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct EnvRestore {
+        name: &'static str,
+        value: Option<OsString>,
+    }
+
+    impl EnvRestore {
+        fn set(name: &'static str, value: &Path) -> Self {
+            let previous = env::var_os(name);
+            env::set_var(name, value);
+            Self {
+                name,
+                value: previous,
+            }
+        }
+    }
+
+    impl Drop for EnvRestore {
+        fn drop(&mut self) {
+            if let Some(value) = &self.value {
+                env::set_var(self.name, value);
+            } else {
+                env::remove_var(self.name);
+            }
+        }
+    }
+
+    fn unique_test_dir(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        env::temp_dir().join(format!("spaceguard-{label}-{}-{nanos}", std::process::id()))
+    }
+
+    #[test]
+    fn npm_cache_target_gate_accepts_only_current_user_cacache() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let local_app_data = unique_test_dir("npm-target-gate");
+        let cacache = local_app_data.join("npm-cache").join("_cacache");
+        let node_modules = local_app_data
+            .join("projects")
+            .join("app")
+            .join("node_modules");
+        fs::create_dir_all(&cacache).expect("create test npm _cacache");
+        fs::create_dir_all(&node_modules).expect("create test node_modules");
+        let _restore = EnvRestore::set("LOCALAPPDATA", &local_app_data);
+
+        assert_eq!(
+            npm_cache_target_reject_code(&path_to_string(&cacache)),
+            None,
+            "exact current-user npm-cache _cacache root should be allowed"
+        );
+        assert_eq!(
+            npm_cache_target_reject_code(&path_to_string(&local_app_data.join("npm-cache"))),
+            Some("target-not-npm-cache"),
+            "parent npm-cache directory should stay outside the executor target"
+        );
+        assert_eq!(
+            npm_cache_target_reject_code(&path_to_string(&node_modules)),
+            Some("target-forbidden"),
+            "project dependency folders must never pass through the npm cache executor"
+        );
+        assert_eq!(
+            npm_cache_target_reject_code(""),
+            Some("target-missing"),
+            "empty targets should be rejected before route execution"
+        );
+
+        let _ = fs::remove_dir(&cacache);
+        let _ = fs::remove_dir(local_app_data.join("npm-cache"));
+        let _ = fs::remove_dir(&node_modules);
+        let _ = fs::remove_dir(local_app_data.join("projects").join("app"));
+        let _ = fs::remove_dir(local_app_data.join("projects"));
+        let _ = fs::remove_dir(local_app_data);
+    }
+
+    #[test]
+    fn npm_cache_file_filter_limits_deletion_to_old_content_and_tmp_files() {
+        let root = unique_test_dir("npm-file-filter")
+            .join("npm-cache")
+            .join("_cacache");
+        assert!(
+            !npm_cache_file_forbidden(&root.join("content-v2").join("sha512").join("ab")),
+            "content-v2 cache blobs are eligible for age-gated deletion"
+        );
+        assert!(
+            !npm_cache_file_forbidden(&root.join("tmp").join("scratch-file")),
+            "tmp cache files are eligible for age-gated deletion"
+        );
+        assert!(
+            npm_cache_file_forbidden(&root.join("index-v5").join("bucket")),
+            "npm index metadata should stay outside the file deleter"
+        );
+        assert!(
+            npm_cache_file_forbidden(&root.join("tmp").join("cache.lock")),
+            "lock files should never be deleted by the npm cache executor"
+        );
+    }
+}
