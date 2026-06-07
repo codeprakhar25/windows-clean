@@ -58,7 +58,7 @@ In `npm run start`, the OpenAI button uses Vite's same-origin `/api/openai-agent
 
 `npm run setup:route -- --route npm-cache` emits a read-only setup packet for the selected real cleanup route. It shows the exact scoped executor flag, native request mode, app panel id, conflicting enabled flags, route-specific OpenAI smoke commands, and next commands before you launch the desktop shell.
 
-`npm run validate:route -- --route npm-cache` emits a read-only Windows validation packet for the selected real cleanup route. It records the pre-run checklist, one-flag requirement, forbidden actions, evidence artifacts, and post-run rescan proof checklist. It does not scan folders, call OpenAI, or execute cleanup.
+`npm run validate:route -- --route npm-cache` emits a read-only Windows validation packet for the selected real cleanup route. It records the pre-run checklist, one-flag requirement, forbidden actions, evidence artifacts, native volume proof expectation, selected-route proof packet export, and post-run rescan proof checklist. It does not scan folders, call OpenAI, or execute cleanup.
 
 Optional first-safe temp executor:
 
@@ -279,6 +279,7 @@ For each Windows validation run, capture:
 - Plan lock state, including lock id, plan id, scan fingerprint, risk status, consent lock id, preflight blockers, launch blockers, and real-run row count.
 - Task powers state, including active, waiting, locked, advisory, blocked, and real-run-disabled rows.
 - First-safe executor contract status, request mode, selected route, target-scope audit, allowed targets, forbidden targets, and write-disabled state.
+- Windows validation packet post-run proof checklist, including execution ledger, native volume proof, selected-route proof packet, post-run rescan parity, and route flag reset.
 - Power lease audit state, including current, waiting, stale, blocked, unsafe, plan, scan, consent, broker, and runtime-lock checks.
 - Safety interlock state, including unsafe rows, hold rows, dry-run blockers, dry-run allowance, real-run lock, and destructive-command visibility.
 - Dry-run launch guard state, including readiness, current consent, safety interlock pass/fail, real-run lock, and blocked checks.

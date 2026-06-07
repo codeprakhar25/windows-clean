@@ -65,6 +65,7 @@ export function buildWindowsValidationPacket({ routeInput = "", env = {} } = {})
         validateRoute: "npm run validate:route -- --route npm-cache"
       },
       preRunChecklist: [],
+      postRunProofChecklist: [],
       captureArtifacts: [],
       forbiddenActions: buildForbiddenActions(),
       operatorSteps: ["Choose one route alias, then rerun this packet."],
@@ -76,6 +77,7 @@ export function buildWindowsValidationPacket({ routeInput = "", env = {} } = {})
     ...basePacket,
     commands: buildCommands(selected),
     preRunChecklist: buildPreRunChecklist(routePacket),
+    postRunProofChecklist: buildPostRunProofChecklist(routePacket),
     captureArtifacts: buildCaptureArtifacts(selected),
     forbiddenActions: buildForbiddenActions(),
     operatorSteps: buildOperatorSteps(selected, routePacket.status),
@@ -144,6 +146,43 @@ function buildPreRunChecklist(routePacket) {
   ];
 }
 
+function buildPostRunProofChecklist(routePacket) {
+  const ready = routePacket.status === "ready";
+  const selected = routePacket.selected || {};
+  return [
+    {
+      id: "execution-ledger-recorded",
+      label: "Execution ledger recorded",
+      status: ready ? "pending" : "blocked",
+      detail: `After ${selected.actionLabel || "the scoped executor"} runs, capture the execution ledger for route ${selected.route || "unknown"}.`
+    },
+    {
+      id: "native-volume-proof",
+      label: "Native volume proof",
+      status: ready ? "pending" : "blocked",
+      detail: "Accepted native writes should expose measured before/after drive free bytes; keep the volume proof with the ledger evidence."
+    },
+    {
+      id: "selected-route-proof-packet",
+      label: "Selected route proof packet",
+      status: ready ? "pending" : "blocked",
+      detail: "Export the selected-route proof packet after post-run rescan; it should include ledger rows, rescan parity, and volume proof delta."
+    },
+    {
+      id: "post-run-rescan-parity",
+      label: "Post-run rescan parity",
+      status: ready ? "pending" : "blocked",
+      detail: "Run the ledger-preserving post-run native rescan and require matched parity before validating another route."
+    },
+    {
+      id: "flag-reset",
+      label: "Route flag reset",
+      status: ready ? "pending" : "blocked",
+      detail: `Turn off ${selected.envVar || "the route flag"} after proof is captured, before enabling any other scoped executor.`
+    }
+  ];
+}
+
 function buildCaptureArtifacts(selected) {
   return [
     "setup-doctor-report",
@@ -156,7 +195,10 @@ function buildCaptureArtifacts(selected) {
     "consent-receipt",
     "executor-manifest",
     "execution-ledger",
+    "native-write-volume-proof",
     "post-run-rescan-comparison",
+    "selected-route-proof-packet",
+    "openai-handoff-if-used",
     "support-bundle-if-any-warning"
   ];
 }
@@ -184,7 +226,8 @@ function buildOperatorSteps(selected, status) {
     "Run real scan and export before-scan evidence.",
     `Open ${selected.panelId} and verify route ${selected.route} with requestMode ${selected.requestMode}.`,
     `Run ${selected.actionLabel} only if the app preflight is ready.`,
-    "Capture execution ledger, then run post-run rescan and export post-run rescan comparison."
+    "Capture execution ledger and native volume proof, then run post-run rescan.",
+    "Export selected-route proof packet and post-run rescan comparison before enabling another executor."
   ];
   if (status !== "ready") {
     return [`Fix validation status ${status} before Windows execution.`, ...steps.slice(0, 4)];
@@ -196,7 +239,7 @@ function buildNextSteps(routePacket, selected) {
   if (routePacket.status === "ready") {
     return [
       `Validate route ${selected.route} on Windows with exactly one scoped flag.`,
-      "Capture before scan, consent, execution ledger, and post-run rescan comparison.",
+      "Capture before scan, consent, execution ledger, native volume proof, selected-route proof packet, and post-run rescan comparison.",
       "Turn off the route flag before validating another executor."
     ];
   }
