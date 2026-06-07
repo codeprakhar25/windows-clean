@@ -784,6 +784,14 @@ const assert = require("assert");
   assert.strictEqual(nativeSetupAssistant.status, "native-scan-ready", "setup assistant should recognize current native scan evidence");
   assert.strictEqual(nativeSetupAssistant.nativeScanCurrent, true, "setup assistant should expose current scan state");
   assert.strictEqual(nativeSetupAssistant.destructiveCommands, false, "native setup assistant should keep destructive commands disabled");
+  assert.strictEqual(nativeSetupAssistant.realWorkflow.schemaVersion, "spaceguard-in-app-real-workflow/v1", "setup assistant should expose the in-app real workflow schema");
+  assert.strictEqual(nativeSetupAssistant.realWorkflow.routeInput, "npm-cache", "setup assistant should default the workflow route alias");
+  assert.deepStrictEqual(
+    nativeSetupAssistant.realWorkflow.steps.map((step) => step.id),
+    ["setup-doctor", "route-validation", "native-scan", "arm-consent", "execute-route", "post-run-rescan", "proof-import", "next-route"],
+    "setup assistant should expose the compact in-app workflow order"
+  );
+  assert(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "proof-import").detail.includes("Selected route proof import"), "setup assistant workflow should require proof import before next route");
   const unsafeSetupAssistant = guard.buildWindowsSetupAssistant({
     nativeCapability: { available: true },
     runtimeCapabilities: { available: true, realRunEnabled: true, destructiveCommands: true },

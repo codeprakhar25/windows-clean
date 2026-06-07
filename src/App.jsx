@@ -1355,9 +1355,12 @@ export default function App() {
         publicBetaReadiness,
         validationPack,
         releaseGate,
-        supportBundle
+        supportBundle,
+        preferredRoute: selectedScopedExecutorRoute,
+        executionProofHandoff,
+        scopedExecutorCommandFlow
       }),
-    [nativeCapability, runtimeCapabilities.result, dataMode, scanSession, scanCoverage, privacyBoundary, publicBetaReadiness, validationPack, releaseGate, supportBundle]
+    [nativeCapability, runtimeCapabilities.result, dataMode, scanSession, scanCoverage, privacyBoundary, publicBetaReadiness, validationPack, releaseGate, supportBundle, selectedScopedExecutorRoute, executionProofHandoff, scopedExecutorCommandFlow]
   );
   const demoRehearsalRunbook = useMemo(
     () =>
@@ -4951,6 +4954,8 @@ function NativeScannerPanel({ capability, nativeScan }) {
 }
 
 function WindowsSetupAssistantPanel({ assistant }) {
+  const realWorkflow = assistant.realWorkflow || null;
+  const workflowSteps = realWorkflow?.steps || [];
   return (
     <Card id="windows-setup-assistant-panel">
       <CardHeader className="pb-3">
@@ -5005,6 +5010,33 @@ function WindowsSetupAssistantPanel({ assistant }) {
             </div>
           ))}
         </div>
+
+        {workflowSteps.length ? (
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium">Real workflow</span>
+              <Badge variant={realWorkflow.tone || "review"}>{realWorkflow.status}</Badge>
+              <Badge variant="outline">{realWorkflow.routeInput}</Badge>
+              {realWorkflow.envVar ? <Badge variant="outline">{realWorkflow.envVar}</Badge> : null}
+            </div>
+            <p className="mb-3 text-xs text-muted-foreground">{realWorkflow.primary}</p>
+            <div className="grid gap-2 md:grid-cols-2">
+              {workflowSteps.map((step) => {
+                const proofStep = step.id === "post-run-rescan" || step.id === "proof-import";
+                return (
+                  <div key={step.id} className={`rounded-md border bg-card p-2 ${proofStep ? "border-amber-200" : ""}`}>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium">{step.label}</span>
+                      <Badge variant={step.tone}>{step.status}</Badge>
+                    </div>
+                    <div className="truncate font-mono text-xs text-muted-foreground">{step.command}</div>
+                    <p className="mt-1 text-xs text-muted-foreground">{step.detail}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
 
         <div className="rounded-md border bg-muted/30 p-3">
           <div className="mb-2 text-sm font-medium">Safe setup commands</div>

@@ -6426,7 +6426,10 @@ export function buildWindowsSetupAssistant({
   publicBetaReadiness = null,
   validationPack = null,
   releaseGate = null,
-  supportBundle = null
+  supportBundle = null,
+  preferredRoute = "",
+  executionProofHandoff = null,
+  scopedExecutorCommandFlow = null
 } = {}) {
   const unsafeRuntime = Boolean(runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands);
   const nativeAvailable = Boolean(nativeCapability?.available || runtimeCapabilities?.available);
@@ -6496,6 +6499,15 @@ export function buildWindowsSetupAssistant({
   const blockedRows = rows.filter((row) => row.status === "blocked");
   const waitingRows = rows.filter((row) => row.status === "waiting");
   const readyRows = rows.filter((row) => row.status === "ready");
+  const realWorkflow = buildInAppRealWorkflow({
+    preferredRoute,
+    nativeAvailable,
+    nativeScanCurrent,
+    unsafeRuntime,
+    runtimeCapabilities,
+    executionProofHandoff,
+    scopedExecutorCommandFlow
+  });
   const status = unsafeRuntime
     ? "unsafe-runtime"
     : nativeBetaReady
@@ -6517,6 +6529,7 @@ export function buildWindowsSetupAssistant({
     realCleanupEnabled: false,
     destructiveCommands: Boolean(runtimeCapabilities?.destructiveCommands),
     supportBundleReady: Boolean(supportBundle?.schemaVersion),
+    realWorkflow,
     rows,
     readyRows,
     waitingRows,
@@ -16074,6 +16087,142 @@ function buildSetupAssistantRow({ id, label, lane, passed, detail, action }) {
     detail,
     action
   };
+}
+
+function buildInAppRealWorkflow({
+  preferredRoute = "",
+  nativeAvailable = false,
+  nativeScanCurrent = false,
+  unsafeRuntime = false,
+  runtimeCapabilities = {},
+  executionProofHandoff = null,
+  scopedExecutorCommandFlow = null
+} = {}) {
+  const enabledFlagRows = getEnabledExecutorFlagRows(runtimeCapabilities?.executorFlags || runtimeCapabilities?.executor_flags || {});
+  const selectedRoute =
+    String(preferredRoute || "").trim() ||
+    String(scopedExecutorCommandFlow?.route || scopedExecutorCommandFlow?.selectedRoute || "").trim() ||
+    (enabledFlagRows.length === 1 ? enabledFlagRows[0].route : "") ||
+    "bounded-npm-cache-delete";
+  const spec = getExecutorSmokeRouteSpec(selectedRoute) || getExecutorSmokeRouteSpec("bounded-npm-cache-delete");
+  const route = getExecutorSmokeRouteSpec(selectedRoute) ? selectedRoute : "bounded-npm-cache-delete";
+  const routeInput = executorCliRouteAliases[route] || route;
+  const title = getExecutorRouteRequirement(route).title || spec?.actionLabel || route;
+  const proofStatus = executionProofHandoff?.status || scopedExecutorCommandFlow?.proofPacket?.status || "waiting-for-execution";
+  const validationImport = scopedExecutorCommandFlow?.proofPacket?.validationImport || null;
+  const proofComplete = proofStatus === "proof-complete" || scopedExecutorCommandFlow?.proofPacket?.status === "proof-complete";
+  const proofImportComplete = Boolean(validationImport?.complete || scopedExecutorCommandFlow?.proofPacket?.readyForNextRoute);
+  const ready = Boolean(nativeAvailable && nativeScanCurrent && !unsafeRuntime);
+  const steps = [
+    buildInAppRealWorkflowStep({
+      id: "setup-doctor",
+      label: "Setup doctor",
+      status: unsafeRuntime ? "blocked" : "ready",
+      command: "npm run setup:doctor",
+      detail: "Confirm .env, OpenAI config, and exactly one scoped executor flag before route validation."
+    }),
+    buildInAppRealWorkflowStep({
+      id: "route-validation",
+      label: "Route validation",
+      status: unsafeRuntime ? "blocked" : "ready",
+      command: `npm run validate:route -- --route ${routeInput}`,
+      detail: `Capture the Windows validation packet for ${routeInput} before opening write mode.`
+    }),
+    buildInAppRealWorkflowStep({
+      id: "native-scan",
+      label: "Native scan",
+      status: unsafeRuntime ? "blocked" : nativeScanCurrent ? "complete" : nativeAvailable ? "active" : "waiting",
+      command: "Run real scan",
+      panel: "real-data-readiness-panel",
+      detail: nativeScanCurrent ? "Current native scan fingerprint is ready for route planning." : "Run a native read-only scan before consent or execution."
+    }),
+    buildInAppRealWorkflowStep({
+      id: "arm-consent",
+      label: "Consent",
+      status: unsafeRuntime ? "blocked" : nativeScanCurrent ? "active" : "waiting",
+      command: "Arm consent",
+      panel: "execution-consent-panel",
+      detail: "Bind consent to the current plan id and native scan fingerprint."
+    }),
+    buildInAppRealWorkflowStep({
+      id: "execute-route",
+      label: "Execute selected route",
+      status: unsafeRuntime ? "blocked" : ready ? "active" : "waiting",
+      command: spec?.actionLabel || "Run scoped executor",
+      panel: spec?.panelId || "scoped-executor-command-flow-panel",
+      detail: `Run only ${title} with ${spec?.envVar || "one scoped executor flag"} enabled and every other scoped flag off.`
+    }),
+    buildInAppRealWorkflowStep({
+      id: "post-run-rescan",
+      label: "Post-run rescan",
+      status: unsafeRuntime ? "blocked" : proofComplete ? "complete" : ready && proofStatus !== "waiting-for-execution" ? "active" : "waiting",
+      command: "Run post-run native rescan",
+      panel: "execution-proof-handoff-panel",
+      detail: "Capture the execution ledger, native volume proof, and matched post-run rescan comparison."
+    }),
+    buildInAppRealWorkflowStep({
+      id: "proof-import",
+      label: "Proof import",
+      status: unsafeRuntime ? "blocked" : proofImportComplete ? "complete" : proofComplete ? "active" : "waiting",
+      command: "Selected route proof import",
+      panel: "validation-evidence-panel",
+      detail: "Export Selected route proof packet, then paste it into Selected route proof import with reviewer and artifact path."
+    }),
+    buildInAppRealWorkflowStep({
+      id: "next-route",
+      label: "Next route",
+      status: unsafeRuntime ? "blocked" : proofImportComplete ? "ready" : "waiting",
+      command: "Re-run setup doctor",
+      detail: "Only after proof import is complete should another scoped executor route be considered."
+    })
+  ];
+  const waiting = steps.filter((step) => step.status === "waiting").length;
+  const active = steps.filter((step) => step.status === "active").length;
+  const blocked = steps.filter((step) => step.status === "blocked").length;
+  const complete = steps.filter((step) => step.status === "complete" || step.status === "ready").length;
+
+  return {
+    schemaVersion: "spaceguard-in-app-real-workflow/v1",
+    status: unsafeRuntime ? "unsafe-runtime" : proofImportComplete ? "next-route-ready" : nativeScanCurrent ? "operator-workflow-active" : nativeAvailable ? "native-scan-needed" : "desktop-needed",
+    tone: unsafeRuntime ? "restricted" : proofImportComplete ? "safe" : nativeScanCurrent ? "review" : "advisory",
+    ready,
+    route,
+    routeInput,
+    title,
+    envVar: spec?.envVar || "",
+    panelId: spec?.panelId || "",
+    proofStatus,
+    proofImportStatus: validationImport?.status || "not-imported",
+    steps,
+    counts: {
+      total: steps.length,
+      complete,
+      active,
+      waiting,
+      blocked
+    },
+    primary: getInAppRealWorkflowPrimary({ unsafeRuntime, proofImportComplete, nativeScanCurrent, nativeAvailable, routeInput })
+  };
+}
+
+function buildInAppRealWorkflowStep({ id, label, status, command, detail, panel = "" }) {
+  return {
+    id,
+    label,
+    status,
+    tone: status === "complete" || status === "ready" ? "safe" : status === "blocked" ? "restricted" : status === "active" ? "review" : "outline",
+    command,
+    detail,
+    panel
+  };
+}
+
+function getInAppRealWorkflowPrimary({ unsafeRuntime = false, proofImportComplete = false, nativeScanCurrent = false, nativeAvailable = false, routeInput = "npm-cache" } = {}) {
+  if (unsafeRuntime) return "Runtime write capability is visible; stop the real workflow.";
+  if (proofImportComplete) return "Selected-route proof is imported; another route can be considered.";
+  if (nativeScanCurrent) return `Real workflow is active for ${routeInput}; continue through consent, execution, rescan, and proof import.`;
+  if (nativeAvailable) return `Run a native read-only scan before executing ${routeInput}.`;
+  return "Start the Tauri desktop shell before using real local disk data.";
 }
 
 function getWindowsSetupCommands({ nativeAvailable = false, nativeScanCurrent = false, nativeBetaReady = false } = {}) {

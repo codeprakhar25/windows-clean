@@ -239,6 +239,9 @@ assert(app.includes("RestrictionPolicyMatrixPanel"), "restriction policy matrix 
 assert(app.includes("runNativeReadonlyScan"), "real read-only scan workflow should be wired");
 assert(app.includes("buildWindowsSetupAssistant"), "Windows setup assistant should be wired");
 assert(app.includes("WindowsSetupAssistantPanel"), "Windows setup assistant panel should be rendered");
+assert(app.includes("assistant.realWorkflow"), "Windows setup assistant should render the compact real workflow");
+assert(app.includes("post-run-rescan"), "Windows setup assistant UI should expose post-run rescan workflow step");
+assert(app.includes("proof-import"), "Windows setup assistant UI should expose proof import workflow step");
 assert(app.includes("buildRealDataLaunchRoadmap"), "real data launch roadmap should be wired");
 assert(app.includes("nativeEvidenceQuality"), "native evidence quality should feed downstream planning surfaces");
 assert(app.includes("RealDataLaunchRoadmapPanel"), "real data launch roadmap panel should be rendered");
