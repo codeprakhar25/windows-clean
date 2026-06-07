@@ -57,6 +57,18 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
   assert.strictEqual(blocked.canAccept, false, "incomplete workflow proof must not be accepted");
   assert(blocked.blockers.some((blocker) => blocker.id === "selected-route-proof-import"), "blocked workflow proof should name missing proof import");
 
+  const zeroBytePacket = {
+    ...provenPacket,
+    counts: {
+      ...provenPacket.counts,
+      reclaimedBytes: 0
+    }
+  };
+  const zeroByteCheck = verifier.buildWorkflowProofCheck({ evidenceObject: zeroBytePacket });
+  assert.strictEqual(zeroByteCheck.status, "blocked", "zero-byte workflow proof should block");
+  assert.strictEqual(zeroByteCheck.canAccept, false, "zero-byte workflow proof must not be accepted");
+  assert(zeroByteCheck.blockers.some((blocker) => blocker.id === "reclaimed-bytes"), "zero-byte workflow proof should name missing recovered bytes");
+
   const wrongSchema = verifier.buildWorkflowProofCheck({ evidenceObject: { schemaVersion: "wrong" } });
   assert.strictEqual(wrongSchema.status, "schema-mismatch", "wrong schema should be rejected");
 

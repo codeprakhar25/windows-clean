@@ -68,6 +68,7 @@ function cleanEnv(extra = {}) {
   assert(ready.postRunProofChecklist.some((row) => row.id === "selected-route-proof-packet"), "ready validation should require selected-route proof packet export");
   assert(ready.postRunProofChecklist.some((row) => row.id === "selected-route-proof-import"), "ready validation should require selected-route proof import");
   assert(ready.postRunProofChecklist.some((row) => row.id === "real-workflow-proof-check"), "ready validation should require workflow proof verifier output");
+  assert(ready.postRunProofChecklist.some((row) => row.id === "real-workflow-proof-check" && row.detail.includes("positive recovered bytes")), "workflow proof checklist should require positive recovered bytes");
   assert(ready.operatorSteps.some((step) => step.includes("Run real scan")), "ready validation should include native scan workflow");
   assert(ready.operatorSteps.some((step) => step.includes("post-run rescan")), "ready validation should include post-run proof workflow");
   assert(ready.operatorSteps.some((step) => step.includes("native volume proof")), "ready validation should include native volume proof capture");

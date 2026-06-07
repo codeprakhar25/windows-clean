@@ -182,7 +182,7 @@ function buildPostRunProofChecklist(routePacket) {
       id: "real-workflow-proof-check",
       label: "Real workflow proof check",
       status: ready ? "pending" : "blocked",
-      detail: "Export spaceguard-real-workflow-proof.md and run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md before any next-route handoff."
+      detail: "Export spaceguard-real-workflow-proof.md and run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md; acceptance requires positive recovered bytes before any next-route handoff."
     },
     {
       id: "post-run-rescan-parity",

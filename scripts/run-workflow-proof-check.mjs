@@ -126,6 +126,7 @@ function buildWorkflowProofBlockers(proof = {}) {
   if (proof.readyForNextRoute !== true) add("next-route-clearance", "Next route blocked", "Workflow proof must explicitly set readyForNextRoute=true.");
   if (Number(proof.counts?.ledgerEntries || 0) < 1) add("execution-ledger", "Ledger missing", "At least one selected-route execution ledger entry is required.");
   if (Number(proof.counts?.matchedRows || 0) < 1) add("post-run-rescan", "Matched rescan missing", "At least one matched post-run rescan row is required.");
+  if (Number(proof.counts?.reclaimedBytes || 0) <= 0) add("reclaimed-bytes", "Recovered bytes missing", "Workflow proof must report positive reclaimed bytes before next-route handoff is accepted.");
 
   for (const rowId of requiredRowIds) {
     const row = Array.isArray(proof.rows) ? proof.rows.find((item) => item?.id === rowId) : null;
