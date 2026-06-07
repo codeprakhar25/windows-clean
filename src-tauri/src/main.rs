@@ -13,6 +13,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const DEFAULT_OPENAI_MODEL: &str = "gpt-5.2";
 const DEFAULT_OPENAI_ENDPOINT: &str = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_REASONING_EFFORT: &str = "low";
+const FIRST_ROUTE_PROOF_ENV: &str = "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK";
+const FIRST_ROUTE_COMPLETION_SCHEMA: &str = "spaceguard-first-route-completion-check/v1";
+const FIRST_ROUTE_PROOF_ROUTE: &str = "known-temp-delete";
 
 #[cfg(target_os = "windows")]
 use std::ffi::OsStr;
@@ -329,12 +332,25 @@ struct RuntimeCapabilities {
     openai_agent_advice: bool,
     openai_advisor_configured: bool,
     openai_key_source: String,
+    first_route_proof: FirstRouteProofGate,
     safe_executors_enabled: bool,
     enabled_scoped_executor_flags: Vec<&'static str>,
     enabled_scoped_executor_flag_count: usize,
     executor_scope_status: &'static str,
     executor_flags: ExecutorFeatureFlags,
     reason: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FirstRouteProofGate {
+    required: bool,
+    status: String,
+    accepted: bool,
+    env_var: &'static str,
+    path: String,
+    route: String,
+    detail: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -725,6 +741,10 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
         let enabled_flags = enabled_scoped_executor_flags_on_windows();
         if enabled_flags.len() > 1 {
             return reject_multiple_scoped_executor_flags(&request, &enabled_flags);
+        }
+        let first_route_proof = first_route_proof_gate();
+        if request.route != FIRST_ROUTE_PROOF_ROUTE && !first_route_proof.accepted {
+            return reject_first_route_proof_required(&request, &first_route_proof);
         }
     }
     let volume_probe = start_write_volume_probe(&request);
@@ -1130,6 +1150,100 @@ fn reject_multiple_scoped_executor_flags(
             format!(
                 "Only one scoped executor flag may be enabled for a real run. Turn off all but one before launching Tauri: {enabled_flags_label}."
             ),
+            "No filesystem mutation was attempted because native executor dispatch was blocked before route selection.".to_string(),
+        ],
+    }
+}
+
+fn reject_first_route_proof_required(
+    request: &WriteExecutionRequest,
+    proof: &FirstRouteProofGate,
+) -> WriteExecutionResponse {
+    let route = request.route.clone();
+    let plan_id = request.plan_id.clone();
+    let expected_bytes = request
+        .expected_bytes
+        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
+    let proof_detail = if proof.detail.is_empty() {
+        "Accepted first-route completion proof is required before real-data route validation."
+            .to_string()
+    } else {
+        proof.detail.clone()
+    };
+    let contract_echo = WriteContractEcho {
+        schema_version: request
+            .schema_version
+            .clone()
+            .unwrap_or_else(|| "spaceguard-write-boundary-request/v1".to_string()),
+        request_mode: request
+            .request_mode
+            .clone()
+            .unwrap_or_else(|| "execute-cleanup".to_string()),
+        plan_id: plan_id.clone(),
+        route: route.clone(),
+        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
+        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
+        expected_bytes,
+        dry_run_only: request.dry_run_only.unwrap_or(true),
+        mutation_attempted: request.mutation_attempted.unwrap_or(false),
+        action_count: request.actions.len(),
+    };
+    let entries = request
+        .actions
+        .iter()
+        .map(|action| WriteExecutionEntry {
+            id: action.id.clone(),
+            title: action.title.clone(),
+            route: action.route.clone(),
+            result: "rejected".to_string(),
+            reject_code: "first-route-proof-required".to_string(),
+            bytes: 0,
+            preflight_status: "first-route-proof-blocked".to_string(),
+            preflight_checks: vec![
+                write_preflight_check(
+                    "first-route-proof",
+                    "First-route proof",
+                    "blocked",
+                    &proof_detail,
+                ),
+                write_preflight_check(
+                    "mutation-dispatch",
+                    "Mutation dispatch",
+                    "blocked",
+                    "Native executor dispatch was stopped before route selection.",
+                ),
+                write_preflight_check(
+                    "mutation-lock",
+                    "Mutation lock",
+                    "passed",
+                    "No filesystem mutation was attempted and all requested bytes remain untouched.",
+                ),
+            ],
+            note: format!(
+                "Real cleanup rejected before dispatch with code first-route-proof-required. Set {FIRST_ROUTE_PROOF_ENV} to an accepted {FIRST_ROUTE_COMPLETION_SCHEMA} proof for {FIRST_ROUTE_PROOF_ROUTE}. Plan {plan_id}; no bytes were removed or moved for this action."
+            ),
+        })
+        .collect::<Vec<_>>();
+
+    WriteExecutionResponse {
+        mode: "native-first-route-proof-rejected",
+        real_run_enabled: false,
+        destructive_commands: false,
+        accepted: false,
+        reason: "Native executor dispatch rejected the request because first-route completion proof is not accepted.".to_string(),
+        contract_echo,
+        executor_scaffold: write_executor_scaffold(&route),
+        entries,
+        volume_proof: write_volume_proof_not_collected(
+            "not-collected-rejected",
+            "",
+            "Volume proof was not collected because native executor dispatch was blocked before route selection.",
+        ),
+        warnings: vec![
+            format!(
+                "Set {FIRST_ROUTE_PROOF_ENV} to an accepted {FIRST_ROUTE_COMPLETION_SCHEMA} JSON before launching real-data routes."
+            ),
+            format!("Current first-route proof status: {}. {proof_detail}", proof.status),
             "No filesystem mutation was attempted because native executor dispatch was blocked before route selection.".to_string(),
         ],
     }
@@ -8432,6 +8546,130 @@ fn unquote_env_value(value: &str) -> String {
     }
 }
 
+fn first_route_proof_gate() -> FirstRouteProofGate {
+    let Some((path, _source)) = runtime_env_value(&[FIRST_ROUTE_PROOF_ENV]) else {
+        return first_route_proof_status(
+            "missing",
+            false,
+            "",
+            "",
+            "Accepted first-route completion proof is required before real-data route validation.",
+        );
+    };
+
+    let content = match fs::read_to_string(PathBuf::from(&path)) {
+        Ok(content) => content,
+        Err(error) => {
+            return first_route_proof_status(
+                "missing",
+                false,
+                &path,
+                "",
+                &format!("Configured first-route completion proof could not be read: {error}."),
+            );
+        }
+    };
+
+    let payload: Value = match serde_json::from_str(&content) {
+        Ok(payload) => payload,
+        Err(error) => {
+            return first_route_proof_status(
+                "invalid",
+                false,
+                &path,
+                "",
+                &format!("Configured first-route completion proof is not valid JSON: {error}."),
+            );
+        }
+    };
+
+    let schema = json_string_field(&payload, "schemaVersion", "schema_version");
+    let route = json_string_field(&payload, "route", "route");
+    let status = json_string_field(&payload, "status", "status");
+    let can_start_next_route =
+        json_bool_field(&payload, "canStartNextRoute", "can_start_next_route");
+    let reclaimed_bytes = payload
+        .get("counts")
+        .and_then(|counts| {
+            counts
+                .get("reclaimedBytes")
+                .or_else(|| counts.get("reclaimed_bytes"))
+        })
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+
+    if schema != FIRST_ROUTE_COMPLETION_SCHEMA {
+        return first_route_proof_status(
+            "invalid",
+            false,
+            &path,
+            &route,
+            &format!("Expected {FIRST_ROUTE_COMPLETION_SCHEMA} first-route completion proof."),
+        );
+    }
+    if route != FIRST_ROUTE_PROOF_ROUTE {
+        return first_route_proof_status(
+            "invalid",
+            false,
+            &path,
+            &route,
+            "First-route completion proof must be for known-temp-delete before real-data routes unlock.",
+        );
+    }
+    if status != "accepted" || !can_start_next_route || reclaimed_bytes == 0 {
+        return first_route_proof_status(
+            "blocked",
+            false,
+            &path,
+            &route,
+            "First-route completion proof is present but not accepted with positive reclaimed bytes.",
+        );
+    }
+
+    first_route_proof_status(
+        "accepted",
+        true,
+        &path,
+        &route,
+        "Accepted first-route completion proof clears real-data route validation.",
+    )
+}
+
+fn first_route_proof_status(
+    status: &str,
+    accepted: bool,
+    path: &str,
+    route: &str,
+    detail: &str,
+) -> FirstRouteProofGate {
+    FirstRouteProofGate {
+        required: true,
+        status: status.to_string(),
+        accepted,
+        env_var: FIRST_ROUTE_PROOF_ENV,
+        path: path.to_string(),
+        route: route.to_string(),
+        detail: detail.to_string(),
+    }
+}
+
+fn json_string_field(value: &Value, camel_case: &str, snake_case: &str) -> String {
+    value
+        .get(camel_case)
+        .or_else(|| value.get(snake_case))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
+}
+
+fn json_bool_field(value: &Value, camel_case: &str, snake_case: &str) -> bool {
+    value
+        .get(camel_case)
+        .or_else(|| value.get(snake_case))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 fn runtime_capabilities() -> RuntimeCapabilities {
     let temp_enabled = cfg!(target_os = "windows") && temp_executor_enabled();
@@ -8486,6 +8724,7 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         openai_agent_advice: true,
         openai_advisor_configured,
         openai_key_source,
+        first_route_proof: first_route_proof_gate(),
         safe_executors_enabled: real_execution_enabled,
         enabled_scoped_executor_flags,
         enabled_scoped_executor_flag_count,

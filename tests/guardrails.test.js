@@ -3527,6 +3527,22 @@ const assert = require("assert");
     approvals: { groupConfirm: true, permanentConfirm: false, reviewed: {}, reviewItems: {}, typed: {} },
     scanMode: "native-readonly"
   });
+  const acceptedFirstRouteProof = {
+    required: true,
+    status: "accepted",
+    accepted: true,
+    envVar: "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK",
+    route: "known-temp-delete",
+    detail: "Accepted first-route completion check clears real-data route validation."
+  };
+  const missingFirstRouteProof = {
+    required: true,
+    status: "missing",
+    accepted: false,
+    envVar: "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK",
+    route: "",
+    detail: "Accepted first-route completion proof is required before real-data route validation."
+  };
   const npmSmokePacket = guard.buildExecutorSmokeRunPacket({
     executorPlan: npmSmokeExecutorPlan,
     runtimeCapabilities: {
@@ -3535,7 +3551,8 @@ const assert = require("assert");
       platform: "windows",
       realRunEnabled: true,
       destructiveCommands: true,
-      executorFlags: { npmCacheExecutor: true }
+      executorFlags: { npmCacheExecutor: true },
+      firstRouteProof: acceptedFirstRouteProof
     },
     scanSession: { currentFingerprint: "scan-npm-smoke" },
     consentReceipt: { planId: "plan-npm-smoke" },
@@ -3560,9 +3577,49 @@ const assert = require("assert");
   assert.strictEqual(npmSmokePacket.rows[0].requestMode, "execute-npm-cache", "smoke packet should name the native request mode");
   assert.strictEqual(npmSmokePacket.rows[0].panelId, "npm-cache-executor-panel", "smoke packet should point to the executor panel");
   assert(npmSmokePacket.rows[0].checks.some((check) => check.id === "post-run-proof" && check.passed), "smoke packet should verify proof clearance");
+  assert(npmSmokePacket.rows[0].checks.some((check) => check.id === "first-route-proof" && check.passed), "smoke packet should verify accepted first-route proof for real-data routes");
   const smokeMarkdown = guard.buildExecutorSmokeRunPacketMarkdown(npmSmokePacket);
   assert(smokeMarkdown.includes("SpaceGuard Executor Smoke-Run Packet"), "smoke packet markdown should have a title");
   assert(smokeMarkdown.includes("Export rescan comparison"), "smoke packet markdown should include proof export steps");
+  const firstProofBlockedSmokePacket = guard.buildExecutorSmokeRunPacket({
+    executorPlan: npmSmokeExecutorPlan,
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      platform: "windows",
+      realRunEnabled: true,
+      destructiveCommands: true,
+      executorFlags: { npmCacheExecutor: true },
+      firstRouteProof: missingFirstRouteProof
+    },
+    scanSession: { currentFingerprint: "scan-npm-first-proof-blocked" },
+    consentReceipt: { planId: "plan-npm-first-proof-blocked" },
+    executionProofHandoff: { status: "waiting-for-execution" },
+    planSnapshot: { id: "plan-npm-first-proof-blocked" },
+    nativeScan: {
+      findings: [
+        {
+          recipeId: "npm-cache",
+          status: "measured",
+          path: "C:\\Users\\qa\\AppData\\Local\\npm-cache\\_cacache",
+          bytes: 1024 * 1024 * 512
+        }
+      ]
+    }
+  });
+  assert.strictEqual(firstProofBlockedSmokePacket.status, "blocked", "real-data smoke packet should block until first-route proof is accepted");
+  assert.strictEqual(firstProofBlockedSmokePacket.rows[0].status, "blocked", "real-data row should block on first-route proof");
+  assert.strictEqual(firstProofBlockedSmokePacket.rows[0].blockedReason.includes("first-route completion proof"), true, "blocked row should explain the first-route proof requirement");
+  assert(firstProofBlockedSmokePacket.rows[0].checks.some((check) => check.id === "first-route-proof" && !check.passed), "real-data row should expose first-route proof as a failed check");
+  const firstProofBlockedCommandFlow = guard.buildScopedExecutorCommandFlow({
+    smokeRunPacket: firstProofBlockedSmokePacket,
+    executionProofHandoff: { status: "waiting-for-execution" },
+    nativeCapability: { available: true },
+    scanning: false
+  });
+  assert.strictEqual(firstProofBlockedCommandFlow.status, "route-blocked", "command flow should not route to execution before first-route proof");
+  assert.strictEqual(firstProofBlockedCommandFlow.launchPacket.ready, false, "launch packet must stay blocked before first-route proof");
+  assert(firstProofBlockedCommandFlow.launchPacket.checks.some((check) => check.id === "first-route-proof" && !check.passed), "launch packet should carry first-route proof blocker");
   const userCacheSmokePacket = guard.buildExecutorSmokeRunPacket({
     executorPlan: guard.buildExecutorPlan({
       selectedIds: new Set(["user-cache"]),
@@ -3576,7 +3633,8 @@ const assert = require("assert");
       platform: "windows",
       realRunEnabled: true,
       destructiveCommands: true,
-      executorFlags: { userCacheExecutor: true }
+      executorFlags: { userCacheExecutor: true },
+      firstRouteProof: acceptedFirstRouteProof
     },
     scanSession: { currentFingerprint: "scan-user-cache-smoke" },
     consentReceipt: { planId: "plan-user-cache-smoke" },
@@ -3610,7 +3668,8 @@ const assert = require("assert");
       platform: "windows",
       realRunEnabled: true,
       destructiveCommands: true,
-      executorFlags: { androidCacheExecutor: true }
+      executorFlags: { androidCacheExecutor: true },
+      firstRouteProof: acceptedFirstRouteProof
     },
     scanSession: { currentFingerprint: "scan-android-cache-smoke" },
     consentReceipt: { planId: "plan-android-cache-smoke" },
@@ -3644,7 +3703,8 @@ const assert = require("assert");
       platform: "windows",
       realRunEnabled: true,
       destructiveCommands: true,
-      executorFlags: { shaderCacheExecutor: true }
+      executorFlags: { shaderCacheExecutor: true },
+      firstRouteProof: acceptedFirstRouteProof
     },
     scanSession: { currentFingerprint: "scan-shader-cache-smoke" },
     consentReceipt: { planId: "plan-shader-cache-smoke" },
@@ -3678,7 +3738,8 @@ const assert = require("assert");
       platform: "windows",
       realRunEnabled: true,
       destructiveCommands: true,
-      executorFlags: { pipCacheExecutor: true }
+      executorFlags: { pipCacheExecutor: true },
+      firstRouteProof: acceptedFirstRouteProof
     },
     scanSession: { currentFingerprint: "scan-pip-cache-smoke" },
     consentReceipt: { planId: "plan-pip-cache-smoke" },
@@ -3712,7 +3773,8 @@ const assert = require("assert");
       platform: "windows",
       realRunEnabled: true,
       destructiveCommands: true,
-      executorFlags: { toolNativePruneExecutors: true }
+      executorFlags: { toolNativePruneExecutors: true },
+      firstRouteProof: acceptedFirstRouteProof
     },
     scanSession: { currentFingerprint: "scan-docker-build-cache-smoke" },
     consentReceipt: { planId: "plan-docker-build-cache-smoke" },
@@ -3741,7 +3803,8 @@ const assert = require("assert");
       platform: "windows",
       realRunEnabled: true,
       destructiveCommands: true,
-      executorFlags: { npmCacheExecutor: true }
+      executorFlags: { npmCacheExecutor: true },
+      firstRouteProof: acceptedFirstRouteProof
     },
     scanSession: { currentFingerprint: "scan-npm-smoke" },
     consentReceipt: { planId: "plan-npm-smoke" },
@@ -3810,7 +3873,8 @@ const assert = require("assert");
       platform: "windows",
       realRunEnabled: true,
       destructiveCommands: true,
-      executorFlags: { npmCacheExecutor: true, pnpmStoreExecutor: true }
+      executorFlags: { npmCacheExecutor: true, pnpmStoreExecutor: true },
+      firstRouteProof: acceptedFirstRouteProof
     },
     scanSession: { currentFingerprint: "scan-package-cache-smoke" },
     consentReceipt: { planId: "plan-package-cache-smoke" },
@@ -3853,7 +3917,8 @@ const assert = require("assert");
       platform: "windows",
       realRunEnabled: true,
       destructiveCommands: true,
-      executorFlags: { pnpmStoreExecutor: true }
+      executorFlags: { pnpmStoreExecutor: true },
+      firstRouteProof: acceptedFirstRouteProof
     },
     scanSession: { currentFingerprint: "scan-package-cache-smoke" },
     consentReceipt: { planId: "plan-package-cache-smoke" },

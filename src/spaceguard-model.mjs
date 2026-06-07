@@ -8248,6 +8248,7 @@ export function buildExecutorSmokeRunPacket({
   const runtime = runtimeCapabilities || {};
   const flags = normalizeExecutorFeatureFlags(runtime.executorFlags || runtime.executor_flags || {});
   const enabledExecutorFlags = getEnabledExecutorFlagRows(flags);
+  const firstRouteProof = normalizeFirstRouteProofGate(runtime.firstRouteProof || runtime.first_route_proof);
   const planId = planSnapshot?.id || "";
   const scanFingerprint = scanSession?.currentFingerprint || "";
   const consentPlanId = consentReceipt?.planId || "";
@@ -8265,6 +8266,7 @@ export function buildExecutorSmokeRunPacket({
       proofStatus,
       proofAllowsNextExecutor,
       enabledExecutorFlags,
+      firstRouteProof,
       nativeScan,
       archiveDestination,
       permanentRemovalConfirmed
@@ -17669,6 +17671,7 @@ function buildExecutorSmokeRunRow({
   proofStatus = "waiting-for-execution",
   proofAllowsNextExecutor = true,
   enabledExecutorFlags = [],
+  firstRouteProof = null,
   nativeScan = null,
   archiveDestination = "",
   permanentRemovalConfirmed = false
@@ -17682,6 +17685,7 @@ function buildExecutorSmokeRunRow({
     buildExecutorSmokeCheck("real-run-flag", "Scoped real-run mode", Boolean(runtime.realRunEnabled), runtime.realRunEnabled ? "runtime exposes scoped real execution" : "enable one scoped executor flag before launch"),
     buildExecutorSmokeCheck("feature-flag", "Route feature flag", flagEnabled, flagEnabled ? `${spec.envVar}=1` : `set ${spec.envVar}=1 in .env or process env`),
     buildExecutorSmokeCheck("single-scoped-flag", "Exactly one scoped executor flag", enabledExecutorFlags.length <= 1, enabledExecutorFlags.length <= 1 ? `${enabledExecutorFlags.length} scoped executor flag(s) enabled` : `Turn off all but one scoped executor flag: ${enabledExecutorFlags.map((flag) => flag.envVar).join(", ")}`),
+    buildFirstRouteProofSmokeCheck(row.route, firstRouteProof),
     buildExecutorSmokeCheck("plan-id", "Current plan id", Boolean(planId), planId || "missing plan id"),
     buildExecutorSmokeCheck("scan-fingerprint", "Current native scan", Boolean(scanFingerprint), scanFingerprint || "missing native scan fingerprint"),
     buildExecutorSmokeCheck("consent", "Current consent receipt", Boolean(planId && consentPlanId && consentPlanId === planId), consentPlanId ? `consent=${consentPlanId}` : "missing consent receipt"),
@@ -17743,6 +17747,44 @@ function buildExecutorSmokeRunRow({
 
 function buildExecutorSmokeCheck(id, label, passed, detail) {
   return { id, label, passed: Boolean(passed), detail };
+}
+
+function normalizeFirstRouteProofGate(value = null) {
+  if (!value || typeof value !== "object") {
+    return {
+      required: true,
+      status: "missing",
+      accepted: false,
+      envVar: "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK",
+      route: "",
+      detail: "Accepted first-route completion proof is required before real-data route validation."
+    };
+  }
+  return {
+    required: value.required !== false,
+    status: String(value.status || (value.accepted ? "accepted" : "missing")),
+    accepted: Boolean(value.accepted),
+    envVar: String(value.envVar || "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"),
+    route: String(value.route || ""),
+    detail: String(value.detail || "")
+  };
+}
+
+function buildFirstRouteProofSmokeCheck(route = "", firstRouteProof = null) {
+  const routeId = String(route || "").trim();
+  if (!routeId || routeId === "known-temp-delete") {
+    return buildExecutorSmokeCheck("first-route-proof", "First-route proof", true, "Seeded temp fixture is the bootstrap route.");
+  }
+  const proof = normalizeFirstRouteProofGate(firstRouteProof);
+  const accepted = proof.required === false || proof.accepted === true;
+  return buildExecutorSmokeCheck(
+    "first-route-proof",
+    "First-route proof",
+    accepted,
+    accepted
+      ? (proof.detail || "Accepted first-route completion proof is attached.")
+      : (proof.detail || `Set ${proof.envVar} to the accepted first-route completion check JSON before running ${routeId}.`)
+  );
 }
 
 function getExecutorSmokeTargetSummary(row = {}, nativeScan = null) {

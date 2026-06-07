@@ -1249,6 +1249,15 @@ const assert = require("assert");
     openai_agent_advice: true,
     openai_advisor_configured: true,
     openai_key_source: ".env:OPENAI_API_KEY",
+    first_route_proof: {
+      required: true,
+      status: "accepted",
+      accepted: true,
+      env_var: "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK",
+      path: "C:\\spaceguard\\evidence\\first-route-completion-check.json",
+      route: "known-temp-delete",
+      detail: "Accepted first-route completion check clears real-data route validation."
+    },
     safe_executors_enabled: true,
     enabled_scoped_executor_flags: ["SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR"],
     enabled_scoped_executor_flag_count: 2,
@@ -1288,6 +1297,21 @@ const assert = require("assert");
   assert.strictEqual(capabilities.openAiAgentAdvice, true, "native capabilities should expose OpenAI advisor availability");
   assert.strictEqual(capabilities.openAiAdvisorConfigured, true, "native capabilities should expose OpenAI key configuration without the key");
   assert.strictEqual(capabilities.openAiKeySource, ".env:OPENAI_API_KEY", "native capabilities should expose only the OpenAI key source");
+  assert.strictEqual(capabilities.firstRouteProof.status, "accepted", "native capabilities should preserve first-route proof gate status");
+  assert.strictEqual(capabilities.firstRouteProof.accepted, true, "native capabilities should preserve accepted first-route proof state");
+  assert.strictEqual(capabilities.firstRouteProof.envVar, "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK", "native capabilities should expose the first-route proof env var");
+  assert.strictEqual(capabilities.firstRouteProof.path.includes("first-route-completion-check.json"), true, "native capabilities should expose the proof file path");
+  const missingFirstRouteCapability = native.normalizeNativeRuntimeCapabilities({
+    mode: "native-scoped-write",
+    platform: "windows",
+    windows: true,
+    real_run_enabled: true,
+    destructive_commands: true,
+    executor_flags: { npm_cache_executor: true }
+  });
+  assert.strictEqual(missingFirstRouteCapability.firstRouteProof.required, true, "missing native first-route proof should fail closed");
+  assert.strictEqual(missingFirstRouteCapability.firstRouteProof.accepted, false, "missing native first-route proof should not be accepted");
+  assert.strictEqual(missingFirstRouteCapability.firstRouteProof.status, "missing", "missing native first-route proof should expose missing status");
   assert.deepStrictEqual(
     capabilities.executorFlags,
     {

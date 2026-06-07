@@ -1219,9 +1219,15 @@ assert(nativeAdapter.includes("openAiKeySource"), "native adapter should normali
 assert(nativeAdapter.includes("executorFlags"), "native adapter should normalize per-executor feature flags");
 assert(nativeAdapter.includes("enabledScopedExecutorFlags"), "native adapter should normalize enabled scoped executor flag names");
 assert(nativeAdapter.includes("executorScopeStatus"), "native adapter should normalize executor scope status");
+assert(nativeAdapter.includes("firstRouteProof"), "native adapter should normalize first-route proof runtime capability");
 assert(nativeAdapter.includes("multiScopedFlagBlock"), "native adapter should suppress write authority when multiple scoped executor flags are enabled");
 assert(rustScanner.includes("enabled_scoped_executor_flags"), "Rust runtime capabilities should expose enabled scoped executor flag names");
 assert(rustScanner.includes("executor_scope_status"), "Rust runtime capabilities should expose executor scope status");
+assert(rustScanner.includes("first_route_proof"), "Rust runtime capabilities should expose first-route proof state");
+assert(rustScanner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"), "Rust runtime capabilities should read the first-route proof env var");
+assert(rustScanner.includes("spaceguard-first-route-completion-check/v1"), "Rust runtime capabilities should validate the first-route completion schema");
+assert(rustScanner.includes("reject_first_route_proof_required"), "Rust executor dispatch should reject real-data routes until first-route proof is accepted");
+assert(rustScanner.includes("first-route-proof-required"), "Rust executor dispatch should expose a first-route proof reject code");
 assert(rustScanner.includes("native-scope-invalid"), "Rust runtime capabilities should invalidate multi-flag scoped write mode");
 assert(nativeAdapter.includes("items.map"), "native adapter should preserve item-level review candidates");
 assert(tauriConfig.includes('"withGlobalTauri": true'), "Tauri config should expose the global bridge used by the adapter");

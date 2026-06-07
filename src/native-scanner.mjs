@@ -881,6 +881,7 @@ export async function getNativeRuntimeCapabilities(host = globalThis) {
       openAiAgentAdvice: false,
       openAiAdvisorConfigured: false,
       openAiKeySource: "missing",
+      firstRouteProof: normalizeRuntimeFirstRouteProof(),
       safeExecutorsEnabled: false,
       enabledScopedExecutorFlags: [],
       enabledScopedExecutorFlagCount: 0,
@@ -1275,12 +1276,36 @@ export function normalizeNativeRuntimeCapabilities(result = {}) {
     openAiAgentAdvice: Boolean(result.openAiAgentAdvice || result.openaiAgentAdvice || result.openai_agent_advice),
     openAiAdvisorConfigured: Boolean(result.openAiAdvisorConfigured || result.openaiAdvisorConfigured || result.openai_advisor_configured),
     openAiKeySource: result.openAiKeySource || result.openaiKeySource || result.openai_key_source || "missing",
+    firstRouteProof: normalizeRuntimeFirstRouteProof(result.firstRouteProof || result.first_route_proof),
     safeExecutorsEnabled: Boolean(result.safeExecutorsEnabled || result.safe_executors_enabled) && !multiScopedFlagBlock,
     enabledScopedExecutorFlags,
     enabledScopedExecutorFlagCount,
     executorScopeStatus,
     executorFlags,
     reason: result.reason || ""
+  };
+}
+
+function normalizeRuntimeFirstRouteProof(value = null) {
+  if (!value || typeof value !== "object") {
+    return {
+      required: true,
+      status: "missing",
+      accepted: false,
+      envVar: "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK",
+      path: "",
+      route: "",
+      detail: "Accepted first-route completion proof is required before real-data route validation."
+    };
+  }
+  return {
+    required: value.required !== false,
+    status: value.status || (value.accepted ? "accepted" : "missing"),
+    accepted: Boolean(value.accepted),
+    envVar: value.envVar || value.env_var || "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK",
+    path: value.path || "",
+    route: value.route || "",
+    detail: value.detail || ""
   };
 }
 
