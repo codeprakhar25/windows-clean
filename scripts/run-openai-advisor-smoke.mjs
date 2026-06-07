@@ -363,6 +363,81 @@ function buildFixtureFindings(route) {
   ];
 }
 
+function buildFixtureScopedExecutorCommandFlow(route) {
+  const panelId = route.spec.panelId || "";
+  const requestMode = route.spec.requestMode || "";
+  const envVar = route.spec.envVar || "";
+  const actionLabel = route.spec.actionLabel || "Run scoped executor";
+  const title = route.spec.title || route.title;
+  const targetEvidence = route.recipeId ? "1 scanned native target(s)" : route.targetPath;
+  return {
+    schemaVersion: "spaceguard-scoped-executor-command-flow/v1",
+    status: "ready-to-execute",
+    route: route.route,
+    selectedRoute: route.route,
+    title,
+    panelId,
+    actionLabel,
+    nativeAvailable: true,
+    setupCommands: {
+      routeInput: route.routeInput,
+      envVar,
+      enableEnv: `${envVar}=1`,
+      requestMode,
+      panelId
+    },
+    launchPacket: {
+      schemaVersion: "spaceguard-selected-route-launch-packet/v1",
+      status: "ready-to-run",
+      ready: true,
+      route: route.route,
+      routeInput: route.routeInput,
+      title,
+      panelId,
+      actionLabel,
+      proofStatus: "waiting-for-execution",
+      proofAllowsExecution: true,
+      targetEvidence,
+      targetCount: 1,
+      expectedBytes: Number(route.bytes || 0),
+      setupCommands: {
+        routeInput: route.routeInput,
+        envVar,
+        requestMode,
+        panelId
+      },
+      checks: [
+        { id: "native-runtime", label: "Native Windows runtime", passed: true, detail: "fixture Windows runtime" },
+        { id: "feature-flag", label: "Route feature flag", passed: true, detail: `${envVar}=1` },
+        { id: "scan-fingerprint", label: "Current native scan", passed: true, detail: `fixture-openai-smoke-scan:${route.route}` },
+        { id: "consent", label: "Current consent receipt", passed: true, detail: "consent=plan-openai-smoke" },
+        { id: "route-targets", label: "Route target evidence", passed: true, detail: targetEvidence }
+      ]
+    },
+    primaryRow: {
+      id: route.actionId || route.targetId,
+      title,
+      route: route.route,
+      status: "ready",
+      bytes: Number(route.bytes || 0),
+      envVar,
+      flagEnabled: true,
+      requestMode,
+      panelId,
+      actionLabel,
+      targetCount: 1,
+      targetEvidence,
+      checks: [
+        { id: "native-runtime", label: "Native Windows runtime", passed: true, detail: "fixture Windows runtime" },
+        { id: "feature-flag", label: "Route feature flag", passed: true, detail: `${envVar}=1` },
+        { id: "scan-fingerprint", label: "Current native scan", passed: true, detail: `fixture-openai-smoke-scan:${route.route}` },
+        { id: "consent", label: "Current consent receipt", passed: true, detail: "consent=plan-openai-smoke" },
+        { id: "route-targets", label: "Route target evidence", passed: true, detail: targetEvidence }
+      ]
+    }
+  };
+}
+
 export function buildFixtureContext({ routeInput = defaultRouteInput } = {}) {
   const route = resolveSmokeRoute(routeInput);
   const bytes = Math.round(Number(route.bytesGb || 1) * GB);
@@ -449,7 +524,8 @@ export function buildFixtureContext({ routeInput = defaultRouteInput } = {}) {
       selectedBytes: bytes,
       goalBytes: 5 * GB,
       selectedIds: [selectedActionId]
-    }
+    },
+    scopedExecutorCommandFlow: buildFixtureScopedExecutorCommandFlow(fixtureRoute)
   });
 }
 
@@ -509,7 +585,25 @@ function printAdvice(result, broker, validation, { requiredSmokeRecommendation, 
 export function validateSmokeAdvice({ context, advice, broker, requiredRecommendation = null } = {}) {
   const requiredSmokeRecommendation = requiredRecommendation || resolveSmokeRoute(defaultRouteInput).requiredRecommendation;
   const expectedTaskStatus = requiredSmokeRecommendation.expectedTaskStatus || "ready";
+  const requiredRoute = resolveSmokeRoute(requiredSmokeRecommendation.route || defaultRouteInput);
   const failures = [];
+  const liveRouteValidation = context?.liveRouteValidation || null;
+  if (!liveRouteValidation || liveRouteValidation.schemaVersion !== "spaceguard-openai-live-route-validation/v1") {
+    failures.push("live route contract is missing from fixture context");
+  } else {
+    if (liveRouteValidation.route !== requiredSmokeRecommendation.route) {
+      failures.push(`live route contract route=${liveRouteValidation.route || "missing"}, expected ${requiredSmokeRecommendation.route}`);
+    }
+    if (liveRouteValidation.requestMode !== requiredRoute.spec.requestMode) {
+      failures.push(`live route contract requestMode=${liveRouteValidation.requestMode || "missing"}, expected ${requiredRoute.spec.requestMode}`);
+    }
+    if (liveRouteValidation.panelId !== requiredRoute.spec.panelId) {
+      failures.push(`live route contract panelId=${liveRouteValidation.panelId || "missing"}, expected ${requiredRoute.spec.panelId}`);
+    }
+    if (liveRouteValidation.canExecuteWithoutAppEvidence !== false) {
+      failures.push("live route contract must require app evidence before execution");
+    }
+  }
   const task = (context.agentTaskQueue?.rows || []).find((row) =>
     row.actionType === requiredSmokeRecommendation.actionType &&
     row.targetId === requiredSmokeRecommendation.targetId &&

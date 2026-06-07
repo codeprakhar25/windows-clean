@@ -14,6 +14,11 @@ const script = path.join(root, "scripts", "run-openai-advisor-smoke.mjs");
   assert.strictEqual(pnpmRoute.requiredRecommendation.route, "bounded-pnpm-store-delete", "pnpm smoke should use the pnpm route");
 
   const context = smoke.buildFixtureContext({ routeInput: "pnpm-store" });
+  assert.strictEqual(context.liveRouteValidation.schemaVersion, "spaceguard-openai-live-route-validation/v1", "pnpm fixture smoke should expose live route validation");
+  assert.strictEqual(context.liveRouteValidation.route, "bounded-pnpm-store-delete", "pnpm fixture smoke should bind OpenAI to the selected live route");
+  assert.strictEqual(context.liveRouteValidation.requestMode, "execute-pnpm-store", "pnpm fixture smoke should expose the native request mode");
+  assert.strictEqual(context.liveRouteValidation.panelId, "pnpm-store-executor-panel", "pnpm fixture smoke should expose the target UI panel");
+  assert.strictEqual(context.liveRouteValidation.canExecuteWithoutAppEvidence, false, "pnpm fixture smoke should require app evidence before execution");
   const task = context.agentTaskQueue.rows.find((row) =>
     row.actionType === "run-pnpm-store-executor" &&
     row.targetId === "pnpm-store" &&
@@ -32,10 +37,28 @@ const script = path.join(root, "scripts", "run-openai-advisor-smoke.mjs");
   });
 
   assert.strictEqual(validation.passed, true, `pnpm fixture advice should validate: ${validation.failures.join(", ")}`);
+  const mismatchedLiveRouteValidation = smoke.validateSmokeAdvice({
+    context: {
+      ...context,
+      liveRouteValidation: {
+        ...context.liveRouteValidation,
+        route: "bounded-npm-cache-delete",
+        requestMode: "execute-npm-cache",
+        panelId: "npm-cache-executor-panel"
+      }
+    },
+    advice: result.advice,
+    broker,
+    requiredRecommendation: pnpmRoute.requiredRecommendation
+  });
+  assert.strictEqual(mismatchedLiveRouteValidation.passed, false, "smoke validation should fail when the live route contract differs from the required recommendation");
+  assert(mismatchedLiveRouteValidation.failures.some((failure) => failure.includes("live route contract")), "smoke validation should explain live route contract mismatches");
 
   for (const supportedRoute of smoke.listSupportedSmokeRoutes()) {
     const route = smoke.resolveSmokeRoute(supportedRoute.aliases[0]);
     const routeContext = smoke.buildFixtureContext({ routeInput: supportedRoute.aliases[0] });
+    assert.strictEqual(routeContext.liveRouteValidation.route, route.route, `${route.route} smoke should expose the selected live route contract`);
+    assert.strictEqual(routeContext.liveRouteValidation.requestMode, route.spec.requestMode, `${route.route} smoke should expose the selected request mode`);
     const routeResult = smoke.buildFixtureOnlyAdviceResult({ requiredRecommendation: route.requiredRecommendation });
     const routeBroker = smoke.buildFixtureRecommendationBroker({ context: routeContext, advice: routeResult.advice, route });
     const routeValidation = smoke.validateSmokeAdvice({
