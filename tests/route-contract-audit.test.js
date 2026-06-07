@@ -21,7 +21,8 @@ const script = path.join(root, "scripts", "run-route-contract-audit.mjs");
   assert(npmRow, "route contract audit should include npm cache route");
   assert.strictEqual(npmRow.status, "passed", "npm route contract should pass");
   assert.strictEqual(npmRow.adapterFunction, "runNativeNpmCacheExecutor", "npm route contract should expose the native adapter");
-  assert.strictEqual(npmRow.validationStatus, "ready", "npm route contract should prove exactly one scoped route flag is ready");
+  assert.strictEqual(npmRow.validationStatus, "first-route-proof-required", "npm route contract should preserve the first-route proof gate");
+  assert.strictEqual(npmRow.firstRouteProofRequired, true, "npm route contract should require first-route completion proof before live validation");
   assert.strictEqual(npmRow.openAiTaskStatus, "ready", "npm route contract should prove OpenAI fixture task readiness");
   assert.strictEqual(npmRow.validationRequestMode, "execute-npm-cache", "npm route contract should prove validation packet request mode");
 

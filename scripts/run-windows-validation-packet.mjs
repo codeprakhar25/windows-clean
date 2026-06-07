@@ -49,6 +49,7 @@ export function buildWindowsValidationPacket({ routeInput = "", env = {} } = {})
     route: routePacket.route || "",
     status: routePacket.status,
     selected,
+    firstRouteProof: routePacket.firstRouteProof || null,
     enabledFlags: routePacket.enabledFlags || [],
     conflictingFlags: routePacket.conflictingFlags || [],
     routeSetup: {
@@ -126,6 +127,8 @@ function buildPreRunChecklist(routePacket) {
         ? `${selected.envVar}=1 is the only enabled scoped executor flag.`
         : routePacket.status === "multiple-flags"
           ? `Turn off conflicting flag(s): ${(routePacket.conflictingFlags || []).join(", ")}.`
+          : routePacket.status === "first-route-proof-required"
+            ? routePacket.firstRouteProof?.detail || "Accepted first-route completion proof is required before this route."
           : `Enable ${selected.envVar}=1 for this route only.`
     },
     {
@@ -226,6 +229,7 @@ function buildCaptureArtifacts(selected) {
 function buildLiveValidationManifest(selected, status) {
   const routeInput = selected.aliases?.[0] || selected.route;
   const routeFlagReady = status === "ready";
+  const firstRouteProofRequired = status === "first-route-proof-required";
   return {
     schemaVersion: "spaceguard-live-route-validation/v1",
     route: selected.route,
@@ -252,6 +256,8 @@ function buildLiveValidationManifest(selected, status) {
         ? ""
         : status === "multiple-flags"
           ? "Multiple scoped executor flags are enabled; Windows validation must narrow to one route."
+          : firstRouteProofRequired
+            ? "Accepted first-route completion proof is required before this real-data route can be validated."
           : `${selected.envVar}=1 must be enabled before Windows route validation.`
     },
     requiredAppEvidence: [

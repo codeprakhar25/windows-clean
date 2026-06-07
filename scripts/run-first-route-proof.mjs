@@ -170,6 +170,16 @@ export function buildFirstRouteProofRunPacket({
     : routeReady
       ? "manual-route-selected"
       : "blocked";
+  const nonFixtureNextSteps = validation.status === "first-route-proof-required"
+    ? [
+        "Complete the seeded temp fixture proof on a disposable Windows VM first.",
+        "Set SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK to the accepted first-route completion check JSON path.",
+        `Then rerun npm run setup:route -- --route ${routeInput || selected.aliases?.[0] || selected.route} with only ${selected.envVar}=1.`
+      ]
+    : [
+        `Enable only ${selected.envVar}=1 and collect real target evidence for ${selected.route}.`,
+        "Use this packet as an operator spine, but do not treat the temp fixture as proof for this route."
+      ];
 
   return {
     ...base,
@@ -203,16 +213,14 @@ export function buildFirstRouteProofRunPacket({
       requiredAppEvidence: validation.liveValidationManifest?.requiredAppEvidence || [],
       requiredPostRunProof: validation.liveValidationManifest?.requiredPostRunProof || []
     },
+    firstRouteProof: validation.firstRouteProof || null,
     nextSteps: fixtureRoute
       ? [
           "Run npm run proof:first-route:windows on a disposable Windows VM.",
           "Use the desktop app to delete only the seeded temp fixture and complete the app-close proof contract before closing.",
           "Keep the accepted first-route completion check before starting another route."
         ]
-      : [
-          `Enable only ${selected.envVar}=1 and collect real target evidence for ${selected.route}.`,
-          "Use this packet as an operator spine, but do not treat the temp fixture as proof for this route."
-        ]
+      : nonFixtureNextSteps
   };
 }
 

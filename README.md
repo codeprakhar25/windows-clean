@@ -51,16 +51,18 @@ cp .env.example .env
 # set OPENAI_API_KEY in .env
 # optional: set OPENAI_MODEL or OPENAI_REASONING_EFFORT
 npm run setup:doctor
+npm run proof:first-route
+npm run proof:first-route:windows
+# after the Windows proof is accepted:
+# set SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK to the accepted completion check JSON path
 npm run openai:smoke:fixture -- --route npm-cache
 npm run openai:smoke -- --route npm-cache
 npm run setup:route -- --route npm-cache
 npm run validate:route -- --route npm-cache
-npm run proof:first-route
-npm run proof:first-route:windows
 npm run native:dev
 ```
 
-`npm run setup:doctor` is a read-only local setup diagnostic. It reports whether `.env` exists, whether `OPENAI_API_KEY` is configured, which model/reasoning defaults will be used, and which scoped executor flags are enabled. Its `status` is `readonly-ready`, `one-route-ready`, or `multi-flag-blocked`; write-mode validation is considered safe to launch only when exactly one scoped executor flag is enabled. It does not call OpenAI, scan folders, or run cleanup.
+`npm run setup:doctor` is a read-only local setup diagnostic. It reports whether `.env` exists, whether `OPENAI_API_KEY` is configured, which model/reasoning defaults will be used, which scoped executor flags are enabled, and whether the first-route completion proof is accepted. Its `status` is `readonly-ready`, `first-route-proof-required`, `one-route-ready`, or `multi-flag-blocked`; write-mode validation is considered safe to launch only when exactly one scoped executor flag is enabled and non-temp real-data routes have an accepted `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK`. It does not call OpenAI, scan folders, or run cleanup.
 
 The same JSON now includes `realWorkflow`, a compact route-specific sequence for the next real validation pass: fixture OpenAI smoke, live OpenAI smoke, route setup, route validation, native scan, consent, selected executor, post-run rescan, Selected route proof import, and only then next-route consideration.
 
@@ -74,11 +76,15 @@ In `npm run start` / Vite dev, **Ask OpenAI** uses the same-origin `/api/openai-
 
 `npm run setup:route -- --route npm-cache` prints a read-only route setup packet for one real cleanup path: the required scoped executor flag, native request mode, UI panel id, conflicting flags, route-specific OpenAI smoke commands, and next commands. Run it for the route you plan to validate before launching the desktop shell.
 
+For every route after the seeded temp fixture, `setup:route` stays at `first-route-proof-required` until `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` points to an accepted `spaceguard-first-route-completion-check/v1` JSON with positive reclaimed bytes for `known-temp-delete`.
+
 `npm run validate:route -- --route npm-cache` prints the one-route Windows validation packet. It does not scan, call OpenAI, or run cleanup; it lists the exact pre-run checks, forbidden actions, artifacts to capture, native volume proof expectation, selected-route proof packet export/import, and post-run rescan proof required for that route.
 
 `npm run proof:first-route` prints the compact first Windows proof packet for the seeded temp fixture. It combines route-contract audit status, one scoped temp executor flag, fixture seed command, before/after fixture inspection commands, OpenAI smoke/setup/validation commands, app steps, forbidden broad-temp actions, and the positive recovered-byte acceptance rule.
 
 `npm run proof:first-route:windows` is the fastest disposable-VM path for the first real proof. Run it on Windows after setting `.env`; it creates an evidence folder, loads `.env`, forces every scoped executor flag off except `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1`, seeds and inspects the fixture, runs setup doctor, fixture OpenAI smoke, live OpenAI smoke when `OPENAI_API_KEY` is configured, route setup, route validation, writes `operator-preflight.json`, `operator-preflight-check.json`, and `commands.ndjson`, then launches `npm run native:dev`. It does not run cleanup itself; deletion still requires the desktop app's scan, target selection, consent, and executor button. After the app exits, the runner writes `native-dev-exit.json`; a nonzero desktop exit stops proof finalization as `native-dev-failed`. A clean app exit continues into after-cleanup fixture inspection, workflow proof validation, and the first-route completion verifier. Use `-SkipPostAppValidation` only for preflight/dev sessions where the app will not export proof yet.
+
+When the completion verifier accepts that evidence, keep the generated first-route completion check JSON and set `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to that path before enabling `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR`, `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR`, or another non-temp route flag.
 
 If the app proof export is fixed after the desktop session closes, rerun only the post-app finalization against the existing evidence root:
 
@@ -109,6 +115,8 @@ npm run validate:first-route-completion -- --preflight evidence/first-route-proo
 This completion verifier also reads the preflight bundle's `commands.ndjson` and requires successful post-app records for `native-dev-launch`, `native-dev-exit`, `finalize-after-app`, `inspect-fixtures-after`, and `workflow-proof-check`.
 
 The same `.env` file can hold named scoped executor flags, for example `SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR=1`, when you are validating real cleanup on Windows. Validate and run one selected route at a time, then complete post-run rescan proof before running another executor.
+
+For any scoped route after `known-temp-delete`, the same `.env` must also set `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to the accepted first-route completion check JSON. Without that file, setup doctor, route setup, and route validation keep the route blocked even when exactly one executor flag is enabled.
 
 After a scoped native route finishes and the post-run rescan matches, export **Selected route proof packet** and paste the `spaceguard-selected-route-proof-packet/v1` markdown or JSON into **Selected route proof import** under Validation evidence. With reviewer and artifact path filled, it maps only to `ledger-rescan-parity`; demo or dry-run proof is rejected.
 

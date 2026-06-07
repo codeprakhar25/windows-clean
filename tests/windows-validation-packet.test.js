@@ -1,4 +1,6 @@
 const assert = require("assert");
+const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const { pathToFileURL } = require("url");
 
@@ -13,6 +15,21 @@ function cleanEnv(extra = {}) {
     SPACEGUARD_ROUTE_SETUP_IGNORE_DOTENV: "1",
     ...extra
   };
+}
+
+function writeAcceptedFirstRouteCompletion() {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "spaceguard-validation-first-route-")), "first-route-completion-check.json");
+  fs.writeFileSync(file, JSON.stringify({
+    schemaVersion: "spaceguard-first-route-completion-check/v1",
+    status: "accepted",
+    canStartNextRoute: true,
+    route: "known-temp-delete",
+    counts: {
+      reclaimedBytes: 1,
+      selectedRouteProofPacketReclaimedBytes: 1
+    }
+  }, null, 2));
+  return file;
 }
 
 (async () => {
@@ -57,9 +74,21 @@ function cleanEnv(extra = {}) {
   assert(blocked.liveValidationManifest.nativeBoundary.deletePolicy.some((row) => row.includes("content-v2")), "live manifest should describe npm content deletion scope");
   assert(blocked.liveValidationManifest.nativeBoundary.deletePolicy.some((row) => row.includes("lock")), "live manifest should describe lock-file skips");
 
-  const ready = validation.buildWindowsValidationPacket({
+  const proofPath = writeAcceptedFirstRouteCompletion();
+  const blockedWithoutFirstProof = validation.buildWindowsValidationPacket({
     routeInput: "npm-cache",
     env: cleanEnv({ SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1" })
+  });
+  assert.strictEqual(blockedWithoutFirstProof.status, "first-route-proof-required", "non-fixture route validation should block without accepted first-route proof");
+  assert.strictEqual(blockedWithoutFirstProof.liveValidationManifest.runtime.routeFlagReady, false, "missing first proof should keep live validation route flag blocked");
+  assert.strictEqual(blockedWithoutFirstProof.liveValidationManifest.runtime.disabledReason.includes("first-route completion"), true, "live manifest should explain first-route proof blocker");
+
+  const ready = validation.buildWindowsValidationPacket({
+    routeInput: "npm-cache",
+    env: cleanEnv({
+      SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1",
+      SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK: proofPath
+    })
   });
   assert.strictEqual(ready.status, "ready", "one enabled route should be ready for Windows validation");
   assert.strictEqual(ready.enabledFlags.length, 1, "ready validation should include one enabled flag");

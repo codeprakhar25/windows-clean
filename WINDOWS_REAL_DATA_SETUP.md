@@ -39,15 +39,18 @@ Copy-Item .env.example .env
 # edit .env and set OPENAI_API_KEY
 # optional: set OPENAI_MODEL=gpt-5.2 and OPENAI_REASONING_EFFORT=low
 npm run setup:doctor
+npm run proof:first-route
+npm run proof:first-route:windows
+# after the Windows proof is accepted:
+# set SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK to the accepted completion check JSON path
 npm run openai:smoke:fixture -- --route npm-cache
 npm run openai:smoke -- --route npm-cache
 npm run setup:route -- --route npm-cache
 npm run validate:route -- --route npm-cache
-npm run proof:first-route
 npm run native:dev
 ```
 
-`npm run setup:doctor` is read-only. It checks `.env`, OpenAI key presence, model/reasoning defaults, and scoped executor flags without calling OpenAI, scanning folders, or running cleanup. Its `status` is `readonly-ready`, `one-route-ready`, or `multi-flag-blocked`; write-mode validation is safe to launch only when exactly one scoped executor flag is enabled.
+`npm run setup:doctor` is read-only. It checks `.env`, OpenAI key presence, model/reasoning defaults, scoped executor flags, and the first-route completion proof without calling OpenAI, scanning folders, or running cleanup. Its `status` is `readonly-ready`, `first-route-proof-required`, `one-route-ready`, or `multi-flag-blocked`; write-mode validation is safe to launch only when exactly one scoped executor flag is enabled and non-temp real-data routes have an accepted `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK`.
 
 The `realWorkflow` field in the doctor JSON is the compact operator path for the selected route: fixture OpenAI smoke, live OpenAI smoke, route setup, route validation, native scan, consent, selected executor, post-run rescan, Selected route proof import, and only then next-route consideration.
 
@@ -61,11 +64,15 @@ In `npm run start`, the OpenAI button uses Vite's same-origin `/api/openai-agent
 
 `npm run setup:route -- --route npm-cache` emits a read-only setup packet for the selected real cleanup route. It shows the exact scoped executor flag, native request mode, app panel id, conflicting enabled flags, route-specific OpenAI smoke commands, and next commands before you launch the desktop shell.
 
+For every route after the seeded temp fixture, `setup:route` stays at `first-route-proof-required` until `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` points to an accepted `spaceguard-first-route-completion-check/v1` JSON with positive reclaimed bytes for `known-temp-delete`.
+
 `npm run validate:route -- --route npm-cache` emits a read-only Windows validation packet for the selected real cleanup route. It records the pre-run checklist, one-flag requirement, forbidden actions, evidence artifacts, native volume proof expectation, selected-route proof packet export/import, and post-run rescan proof checklist. It does not scan folders, call OpenAI, or execute cleanup.
 
 `npm run proof:first-route` emits a read-only first-route proof packet for the seeded temp fixture. Use it on a disposable Windows VM before the first real cleanup proof; it gives the fixture seed command, before/after fixture inspection commands, the one temp executor flag, route-contract coverage, app steps, forbidden broad-temp actions, and the final positive recovered-byte workflow proof acceptance rule.
 
 `npm run proof:first-route:windows` runs the first-route operator preflight on Windows. It creates an evidence folder, loads `.env`, forces a one-route environment with only `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1`, captures the first-route packet, seeds and inspects fixtures, runs setup doctor, fixture OpenAI smoke, live OpenAI smoke when `OPENAI_API_KEY` is configured, route setup, and route validation, then launches the Tauri app. It writes `operator-preflight.json`, `operator-preflight-check.json`, and `commands.ndjson` before launch. It does not clean anything outside the desktop workflow; the actual fixture deletion still requires in-app scan, target selection, consent, and the **Real temp cleanup** button. After the app exits, the runner writes `native-dev-exit.json`; a nonzero desktop exit stops proof finalization as `native-dev-failed`. A clean app exit continues into after-cleanup fixture inspection, workflow proof validation, and the first-route completion verifier. Use `-SkipPostAppValidation` only for preflight/dev sessions where the app will not export proof yet.
+
+When the completion verifier accepts that evidence, keep the generated first-route completion check JSON and set `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to that path before enabling `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR`, `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR`, or another non-temp route flag.
 
 If proof export/import is corrected after the desktop session closes, resume only post-app finalization against the existing evidence folder:
 
@@ -199,6 +206,8 @@ npm run native:dev
 ```
 
 Those flags can be set in `.env` or the PowerShell process before `npm run native:dev`. Those flags enable only their named routes: `known-temp-delete`, reviewed Downloads installer/archive moves through Recycle Bin semantics, reviewed large-file archive to an explicit other-drive destination, reviewed `node_modules` cleanup, current-user Gradle cache cleanup, current-user `.cache` cleanup, scanned Android cache cleanup, scanned current-user shader cache cleanup, current-user pip cache cleanup, Docker build-cache prune through `docker builder prune --force`, current-user npm `_cacache` cleanup, current-user pnpm store cleanup, Shell Recycle Bin emptying for the selected drive, and scanned browser cache roots. They do not enable Docker volume cleanup, broad `docker system prune`, Docker image prune, Docker data-root deletion, registry edits, partition changes, hibernation/pagefile changes, browser identity-store deletion, Android AVD/SDK deletion, game install or save-data deletion, Python install or virtualenv deletion, project source deletion, arbitrary Downloads folder deletion, arbitrary personal-folder deletion, or arbitrary project-folder deletion.
+
+For any scoped route after `known-temp-delete`, the same `.env` must also set `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to the accepted first-route completion check JSON. Without that file, setup doctor, route setup, and route validation keep the route blocked even when exactly one executor flag is enabled.
 
 ## Read-Only Real Scan
 

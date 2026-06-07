@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { routeSpecs } from "./run-setup-route.mjs";
+import { buildFirstRouteProofGate, routeSpecs } from "./run-setup-route.mjs";
 
 const SCRIPT_ID = "spaceguard-setup-doctor";
 export const EXECUTOR_FLAGS = [
@@ -78,8 +78,16 @@ export function buildSetupDoctorReport({
   const model = configValue(["OPENAI_MODEL", "VITE_OPENAI_MODEL"], "gpt-5.2", valueOptions);
   const reasoningEffort = configValue(["OPENAI_REASONING_EFFORT", "VITE_OPENAI_REASONING_EFFORT"], "low", valueOptions);
   const enabledFlags = EXECUTOR_FLAGS.filter((name) => flagEnabled(name, valueOptions));
-  const validationStatus = getScopedExecutorValidationStatus(enabledFlags);
   const selectedRoute = enabledFlags.length === 1 ? getRouteForExecutorFlag(enabledFlags[0]) : null;
+  const firstRouteProof = selectedRoute ? buildFirstRouteProofGate(selectedRoute, { ...dotenv, ...env }) : {
+    required: false,
+    status: "not-required",
+    accepted: true,
+    envVar: "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK",
+    path: "",
+    detail: "No scoped real-data route is selected."
+  };
+  const validationStatus = getScopedExecutorValidationStatus(enabledFlags, firstRouteProof);
   const routeInput = selectedRoute?.routeInput || "npm-cache";
   const routeSetupCommand = `npm run setup:route -- --route ${routeInput}`;
   const routeValidationCommand = `npm run validate:route -- --route ${routeInput}`;
@@ -118,14 +126,16 @@ export function buildSetupDoctorReport({
       selectedFlag: enabledFlags.length === 1 ? enabledFlags[0] : "",
       conflictingFlags: enabledFlags.length > 1 ? enabledFlags : [],
       selectedRoute,
+      firstRouteProof,
       validationStatus,
-      safeToLaunchWriteMode: enabledFlags.length === 1,
-      warning: getScopedExecutorWarning(enabledFlags)
+      safeToLaunchWriteMode: validationStatus === "one-route-ready",
+      warning: getScopedExecutorWarning(enabledFlags, firstRouteProof)
     },
     realWorkflow: buildRealWorkflow({
       routeInput,
       selectedRoute,
       enabledFlags,
+      validationStatus,
       openAiConfigured: openAiKey.source !== "missing",
       workflowProofValidationCommand
     }),
@@ -158,14 +168,16 @@ function getRouteForExecutorFlag(envVar) {
   };
 }
 
-function getScopedExecutorValidationStatus(enabledFlags) {
+function getScopedExecutorValidationStatus(enabledFlags, firstRouteProof = null) {
   if (enabledFlags.length > 1) return "multi-flag-blocked";
+  if (enabledFlags.length === 1 && firstRouteProof?.required && !firstRouteProof.accepted) return "first-route-proof-required";
   if (enabledFlags.length === 1) return "one-route-ready";
   return "readonly-ready";
 }
 
-function getScopedExecutorWarning(enabledFlags) {
+function getScopedExecutorWarning(enabledFlags, firstRouteProof = null) {
   if (enabledFlags.length > 1) return "Multiple scoped executor flags are enabled. Validate and run one selected route at a time.";
+  if (enabledFlags.length === 1 && firstRouteProof?.required && !firstRouteProof.accepted) return "Accepted first-route completion proof is required before real-data route validation.";
   if (enabledFlags.length === 1) return "One scoped executor flag is enabled.";
   return "No scoped executor flags are enabled; native mode remains read-only.";
 }
@@ -174,10 +186,11 @@ function buildRealWorkflow({
   routeInput = "npm-cache",
   selectedRoute = null,
   enabledFlags = [],
+  validationStatus = "",
   openAiConfigured = false,
   workflowProofValidationCommand = "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md"
 } = {}) {
-  const ready = Boolean(selectedRoute && enabledFlags.length === 1);
+  const ready = validationStatus === "one-route-ready";
   const route = selectedRoute?.route || "";
   const title = selectedRoute?.title || "selected route";
   const envVar = selectedRoute?.envVar || "";
@@ -187,7 +200,7 @@ function buildRealWorkflow({
   return {
     schemaVersion: "spaceguard-real-workflow/v1",
     ready,
-    status: ready ? "one-route-ready" : enabledFlags.length > 1 ? "multi-flag-blocked" : "readonly-ready",
+    status: ready ? "one-route-ready" : validationStatus || (enabledFlags.length > 1 ? "multi-flag-blocked" : "readonly-ready"),
     route,
     routeInput,
     title,
@@ -280,6 +293,7 @@ function buildNextSteps({ openAiConfigured, enabledFlags, routeInput = "npm-cach
   if (!enabledFlags.length) {
     steps.push("Run npm run native:dev for read-only scanning, or enable exactly one scoped executor flag for Windows fixture validation.");
   } else if (enabledFlags.length === 1) {
+    steps.push("If this is not the temp fixture route, set SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK to the accepted first-route completion check before real-data validation.");
     steps.push(`Launch npm run native:dev with ${enabledFlags[0]} enabled, export spaceguard-real-workflow-proof.md, then run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md before enabling another route.`);
   } else {
     steps.push("Turn off all but one scoped executor flag before real cleanup validation.");

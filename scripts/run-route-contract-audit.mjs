@@ -48,10 +48,11 @@ function buildRouteAuditRow(spec, { env = {} } = {}) {
   });
   const task = smokeValidation.task || null;
   const canExecuteWithoutAppEvidence = validationPacket.liveValidationManifest?.runtime?.canExecuteWithoutAppEvidence;
+  const validationContractPresent = ["ready", "first-route-proof-required"].includes(validationPacket.status);
   const checks = [
     buildCheck("setup-route", "Setup route present", Boolean(spec.route && spec.requestMode && spec.panelId), spec.route || "missing route"),
     buildCheck("native-boundary", "Native boundary present", Boolean(boundary.adapterFunction && boundary.rustFunction), `${boundary.adapterFunction || "missing adapter"} / ${boundary.rustFunction || "missing Rust branch"}`),
-    buildCheck("validation-packet", "Validation packet ready", validationPacket.status === "ready" && validationPacket.route === spec.route && validationPacket.selected?.requestMode === spec.requestMode, `${validationPacket.status || "missing"} ${validationPacket.route || "missing"} ${validationPacket.selected?.requestMode || "missing"}`),
+    buildCheck("validation-packet", "Validation packet contract present", validationContractPresent && validationPacket.route === spec.route && validationPacket.selected?.requestMode === spec.requestMode, `${validationPacket.status || "missing"} ${validationPacket.route || "missing"} ${validationPacket.selected?.requestMode || "missing"}`),
     buildCheck("openai-fixture", "OpenAI fixture brokered", Boolean(smokeValidation.passed), smokeValidation.failures.join("; ") || "broker-ready"),
     buildCheck("app-evidence-required", "App evidence required", openAiContext.liveRouteValidation?.canExecuteWithoutAppEvidence === false && canExecuteWithoutAppEvidence === false, "canExecuteWithoutAppEvidence=false")
   ];
@@ -70,6 +71,7 @@ function buildRouteAuditRow(spec, { env = {} } = {}) {
     adapterFunction: boundary.adapterFunction,
     rustFunction: boundary.rustFunction,
     validationStatus: validationPacket.status,
+    firstRouteProofRequired: Boolean(validationPacket.route !== "known-temp-delete" && validationPacket.firstRouteProof?.required),
     validationRoute: validationPacket.route,
     validationRequestMode: validationPacket.selected?.requestMode || "",
     openAiActionType: smokeRoute.requiredRecommendation.actionType,
