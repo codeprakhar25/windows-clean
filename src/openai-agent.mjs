@@ -1,3 +1,5 @@
+import { buildRouteNativeBoundary } from "./route-boundary-contracts.mjs";
+
 const DEFAULT_OPENAI_MODEL = "gpt-5.2";
 const DEFAULT_OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_PROXY_ENDPOINT = "/api/openai-agent/advice";
@@ -544,89 +546,6 @@ export function buildOpenAIAgentContext({
   };
 }
 
-const OPENAI_LIVE_ROUTE_NATIVE_BOUNDARIES = {
-  "bounded-npm-cache-delete": {
-    tauriCommand: "execute_cleanup_plan",
-    adapterFunction: "runNativeNpmCacheExecutor",
-    rustFunction: "execute_npm_cache_cleanup",
-    requestShape: [
-      "schemaVersion=spaceguard-npm-cache-request/v1",
-      "requestMode=execute-npm-cache",
-      "route=bounded-npm-cache-delete",
-      "dryRunOnly=false",
-      "mutationAttempted=true",
-      "planId, scanFingerprint, consentPlanId, expectedBytes, and one action required"
-    ],
-    targetAllowlist: [
-      "current user %LocalAppData%\\npm-cache\\_cacache only",
-      "target must come from the latest native-scanned npm-cache finding",
-      "target must be a real directory, not a symlink"
-    ],
-    targetRejects: [
-      "node_modules",
-      "global npm packages",
-      "AppData\\Roaming\\npm",
-      "Program Files",
-      "ProgramData",
-      "Windows",
-      "Downloads, Documents, Desktop"
-    ],
-    deletePolicy: [
-      "Deletes only age-gated files under _cacache\\content-v2 and _cacache\\tmp.",
-      "Skips npm index metadata outside content-v2/tmp.",
-      "Skips lock files.",
-      "Skips symlinks and unreadable entries.",
-      "Removes only empty cache subdirectories below _cacache."
-    ],
-    postRunProof: [
-      "execution ledger entry for bounded-npm-cache-delete",
-      "native GetDiskFreeSpaceExW before/after volume proof",
-      "post-run native rescan comparison",
-      "accepted spaceguard-real-workflow-proof/v1 check"
-    ]
-  },
-  "bounded-pnpm-store-delete": {
-    tauriCommand: "execute_cleanup_plan",
-    adapterFunction: "runNativePnpmStoreExecutor",
-    rustFunction: "execute_pnpm_store_cleanup",
-    requestShape: [
-      "schemaVersion=spaceguard-pnpm-store-request/v1",
-      "requestMode=execute-pnpm-store",
-      "route=bounded-pnpm-store-delete",
-      "dryRunOnly=false",
-      "mutationAttempted=true",
-      "planId, scanFingerprint, consentPlanId, expectedBytes, and one action required"
-    ],
-    targetAllowlist: [
-      "current user %LocalAppData%\\pnpm\\store only",
-      "target must come from the latest native-scanned pnpm-store finding",
-      "target must be a real directory, not a symlink"
-    ],
-    targetRejects: [
-      "project node_modules",
-      "global pnpm bins",
-      "AppData\\Roaming\\pnpm",
-      "pnpm\\global",
-      "Program Files",
-      "ProgramData",
-      "Windows",
-      "Downloads, Documents, Desktop"
-    ],
-    deletePolicy: [
-      "Deletes only age-gated files under versioned store files roots, store files, tmp, and temp.",
-      "Skips pnpm store metadata outside files/tmp/temp.",
-      "Skips symlinks and unreadable entries.",
-      "Removes only empty store subdirectories below the pnpm store root."
-    ],
-    postRunProof: [
-      "execution ledger entry for bounded-pnpm-store-delete",
-      "native GetDiskFreeSpaceExW before/after volume proof",
-      "post-run native rescan comparison",
-      "accepted spaceguard-real-workflow-proof/v1 check"
-    ]
-  }
-};
-
 function buildOpenAILiveRouteValidationContext({
   liveValidationManifest = null,
   scopedExecutorCommandFlow = null
@@ -641,7 +560,10 @@ function buildOpenAILiveRouteValidationContext({
   const runtime = source.runtime || {};
   const boundary = source.nativeBoundary || {};
   const route = String(source.route || "").trim();
-  const mappedBoundary = OPENAI_LIVE_ROUTE_NATIVE_BOUNDARIES[route] || {};
+  const mappedBoundary = buildRouteNativeBoundary({
+    route,
+    requestMode: source.contract?.requestMode || ""
+  });
   const nativeBoundary = {
     tauriCommand: String(boundary.tauriCommand || mappedBoundary.tauriCommand || "execute_cleanup_plan"),
     adapterFunction: String(boundary.adapterFunction || mappedBoundary.adapterFunction || ""),
@@ -686,10 +608,10 @@ function buildOpenAILiveRouteValidationManifestFromFlow(flow = null) {
   const setupCommands = flow.setupCommands || launchPacket.setupCommands || {};
   const route = String(row.route || flow.route || launchPacket.route || "").trim();
   if (!route) return null;
-  const mappedBoundary = OPENAI_LIVE_ROUTE_NATIVE_BOUNDARIES[route] || {};
   const envVar = row.envVar || setupCommands.envVar || "";
   const requestMode = row.requestMode || setupCommands.requestMode || "";
   const panelId = row.panelId || flow.panelId || launchPacket.panelId || "";
+  const nativeBoundary = buildRouteNativeBoundary({ route, requestMode });
 
   return {
     schemaVersion: "spaceguard-live-route-validation/v1",
@@ -728,19 +650,13 @@ function buildOpenAILiveRouteValidationManifestFromFlow(flow = null) {
       "workflow-proof-check-output"
     ],
     nativeBoundary: {
-      ...mappedBoundary,
-      requestShape: mappedBoundary.requestShape || [
-        `requestMode=${requestMode}`,
-        "dryRunOnly=false",
-        "mutationAttempted=true",
-        "planId, scanFingerprint, and consentPlanId required"
-      ],
-      targetAllowlist: mappedBoundary.targetAllowlist || [
+      ...nativeBoundary,
+      targetAllowlist: nativeBoundary.targetAllowlist.length ? nativeBoundary.targetAllowlist : [
         row.targetEvidence || launchPacket.targetEvidence || "Use only the native-scanned target for the selected route."
       ],
-      targetRejects: mappedBoundary.targetRejects || ["custom roots", "system folders", "personal folders outside the selected route"],
-      deletePolicy: mappedBoundary.deletePolicy || ["Mutation is scoped to the selected route-specific native executor only."],
-      postRunProof: mappedBoundary.postRunProof || ["execution ledger", "native volume proof", "post-run native rescan"]
+      targetRejects: nativeBoundary.targetRejects.length ? nativeBoundary.targetRejects : ["custom roots", "system folders", "personal folders outside the selected route"],
+      deletePolicy: nativeBoundary.deletePolicy.length ? nativeBoundary.deletePolicy : ["Mutation is scoped to the selected route-specific native executor only."],
+      postRunProof: nativeBoundary.postRunProof.length ? nativeBoundary.postRunProof : ["execution ledger", "native volume proof", "post-run native rescan"]
     }
   };
 }
