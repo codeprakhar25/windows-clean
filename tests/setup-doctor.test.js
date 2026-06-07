@@ -59,7 +59,10 @@ const script = path.join(root, "scripts", "run-setup-doctor.mjs");
   assert(pnpmFlag.commands.openAiFixtureSmoke.includes("npm run openai:smoke:fixture -- --route pnpm-store"), "setup doctor should expose selected pnpm fixture smoke command");
   assert(pnpmFlag.commands.openAiSmoke.includes("npm run openai:smoke -- --route pnpm-store"), "setup doctor should expose selected pnpm OpenAI smoke command");
   assert(pnpmFlag.openAi.fixtureSmokeCommand.includes("--route pnpm-store"), "setup doctor OpenAI summary should be route-specific");
+  assert(pnpmFlag.openAi.fixtureSmokeValidates.includes("live-route-contract"), "setup doctor should document live route contract validation in fixture smoke");
+  assert(pnpmFlag.realWorkflow.steps.find((step) => step.id === "fixture-openai-smoke").detail.includes("live route contract"), "real workflow should explain fixture smoke route-contract proof");
   assert(pnpmFlag.nextSteps.some((step) => step.includes("pnpm-store")), "setup doctor next steps should name the selected route alias");
+  assert(pnpmFlag.nextSteps.some((step) => step.includes("live route contract")), "setup doctor next steps should mention route contract validation");
 
   const noFlag = runDoctor();
   assert.strictEqual(noFlag.scopedExecutors.validationStatus, "readonly-ready", "no flags should remain read-only ready");

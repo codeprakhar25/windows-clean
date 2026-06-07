@@ -109,7 +109,8 @@ export function buildSetupDoctorReport({
       reasoningEffort: reasoningEffort.value,
       reasoningEffortSource: reasoningEffort.source,
       fixtureSmokeCommand: openAiFixtureSmokeCommand,
-      smokeCommand: openAiSmokeCommand
+      smokeCommand: openAiSmokeCommand,
+      fixtureSmokeValidates: ["task-queue", "recommendation-broker", "live-route-contract"]
     },
     scopedExecutors: {
       enabledCount: enabledFlags.length,
@@ -197,7 +198,7 @@ function buildRealWorkflow({
       {
         id: "fixture-openai-smoke",
         command: `npm run openai:smoke:fixture -- --route ${routeInput}`,
-        detail: "Validate the deterministic task queue and broker locally before any real disk workflow."
+        detail: "Validate the deterministic task queue, recommendation broker, and live route contract locally before any real disk workflow."
       },
       {
         id: "openai-smoke",
@@ -268,7 +269,7 @@ function buildNextSteps({ openAiConfigured, enabledFlags, routeInput = "npm-cach
   if (!fs.existsSync(dotenvPath)) {
     steps.push("Copy .env.example to .env before desktop setup.");
   }
-  steps.push(`Run npm run openai:smoke:fixture -- --route ${routeInput} to validate the local task queue and broker without an API key.`);
+  steps.push(`Run npm run openai:smoke:fixture -- --route ${routeInput} to validate the local task queue, broker, and live route contract without an API key.`);
   if (!openAiConfigured) {
     steps.push(`Set OPENAI_API_KEY in .env or the process environment before running npm run openai:smoke -- --route ${routeInput}.`);
   } else {
