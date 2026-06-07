@@ -3233,6 +3233,21 @@ const assert = require("assert");
   assert.deepStrictEqual(afterCleanupFixtureImport.mappedCheckIds, ["scanner-fixtures"], "after-cleanup fixture evidence should map scanner fixtures only without dry-run scope proof");
   assert.strictEqual(afterCleanupFixtureImport.counts.expectedMissingAfterCleanup, 1, "after-cleanup fixture import should retain expected missing count");
   assert.strictEqual(afterCleanupFixtureImport.validationEvidence["scanner-fixtures"].fixtureSummary.afterCleanupRoute, "known-temp-delete", "fixture summary should preserve after-cleanup route");
+  const chainedAfterCleanupFixtureImport = guard.buildFixtureEvidenceImport({
+    evidenceObject: afterCleanupFixtureEvidence,
+    reviewer: "qa-operator",
+    artifactId: "evidence/fixture-after-cleanup.json",
+    currentEvidence: fixtureImport.validationEvidence
+  });
+  const chainedScannerFixture = chainedAfterCleanupFixtureImport.validationEvidence["scanner-fixtures"];
+  assert.strictEqual(chainedScannerFixture.fixtureSummary.artifactChain.length, 2, "after-cleanup import should retain before and after fixture evidence artifacts");
+  assert.deepStrictEqual(
+    chainedScannerFixture.fixtureSummary.artifactChain.map((entry) => entry.evidencePath),
+    ["evidence/fixture-evidence.json", "evidence/fixture-after-cleanup.json"],
+    "fixture evidence chain should preserve import order"
+  );
+  assert(chainedScannerFixture.notes.includes("before-cleanup:evidence/fixture-evidence.json"), "fixture notes should retain before-cleanup artifact");
+  assert(chainedScannerFixture.notes.includes("after-cleanup:evidence/fixture-after-cleanup.json"), "fixture notes should retain after-cleanup artifact");
   const forgedAfterCleanupFixtureImport = guard.buildFixtureEvidenceImport({
     evidenceObject: {
       ...afterCleanupFixtureEvidence,

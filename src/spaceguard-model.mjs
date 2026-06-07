@@ -10891,11 +10891,22 @@ export function buildFixtureEvidenceImport({
     ...currentEvidence
   };
   for (const checkId of checkIds) {
+    const artifactChain = checkId === "scanner-fixtures"
+      ? buildFixtureEvidenceArtifactChain(currentEvidence?.[checkId], {
+          phase: afterCleanupRoute ? "after-cleanup" : "before-cleanup",
+          evidencePath,
+          generatedAt: evidence.generatedAt || importedAt,
+          afterCleanupRoute
+        })
+      : [];
+    const checkNotes = artifactChain.length
+      ? `${notes} | artifacts=${formatFixtureArtifactChain(artifactChain)}`
+      : notes;
     validationEvidence[checkId] = {
       status: "passed",
       evidencePath,
       reviewer: cleanReviewer,
-      notes,
+      notes: checkNotes,
       recordedAt: evidence.generatedAt || importedAt,
       updatedAt: importedAt,
       source: "fixture-evidence-import",
@@ -10903,6 +10914,7 @@ export function buildFixtureEvidenceImport({
         schemaVersion: evidence.schemaVersion,
         generatedAt: evidence.generatedAt || "",
         afterCleanupRoute,
+        artifactChain,
         counts: sanitizeFixtureCounts(evidence.counts),
         purposes,
         dryRunScope
@@ -11800,6 +11812,54 @@ function fixtureRecordPassed(record = {}, afterCleanupRoute = "") {
   }
 
   return exists && sizeMatches && oldEnough && !expectedMissingAfterCleanup;
+}
+
+function buildFixtureEvidenceArtifactChain(existingRecord = null, nextEntry = {}) {
+  const chain = [];
+  const existingChain = Array.isArray(existingRecord?.fixtureSummary?.artifactChain)
+    ? existingRecord.fixtureSummary.artifactChain
+    : [];
+
+  for (const entry of existingChain) {
+    const normalized = normalizeFixtureEvidenceArtifactEntry(entry);
+    if (normalized) chain.push(normalized);
+  }
+
+  if (!chain.length && existingRecord?.evidencePath) {
+    const existingRoute = cleanEvidenceText(existingRecord?.fixtureSummary?.afterCleanupRoute || "");
+    chain.push({
+      phase: existingRoute ? "after-cleanup" : "before-cleanup",
+      evidencePath: cleanEvidenceText(existingRecord.evidencePath),
+      generatedAt: cleanEvidenceText(existingRecord?.fixtureSummary?.generatedAt || existingRecord?.recordedAt || ""),
+      afterCleanupRoute: existingRoute
+    });
+  }
+
+  const normalizedNext = normalizeFixtureEvidenceArtifactEntry(nextEntry);
+  if (normalizedNext && !chain.some((entry) => entry.phase === normalizedNext.phase && entry.evidencePath === normalizedNext.evidencePath)) {
+    chain.push(normalizedNext);
+  }
+
+  return chain;
+}
+
+function normalizeFixtureEvidenceArtifactEntry(entry = {}) {
+  const evidencePath = cleanEvidenceText(entry.evidencePath || entry.evidence_path || entry.artifactId || entry.artifact_id);
+  if (!evidencePath) return null;
+  const afterCleanupRoute = cleanEvidenceText(entry.afterCleanupRoute || entry.after_cleanup_route || "");
+  const phase = cleanEvidenceText(entry.phase) || (afterCleanupRoute ? "after-cleanup" : "before-cleanup");
+  return {
+    phase,
+    evidencePath,
+    generatedAt: cleanEvidenceText(entry.generatedAt || entry.generated_at || ""),
+    afterCleanupRoute
+  };
+}
+
+function formatFixtureArtifactChain(chain = []) {
+  return chain
+    .map((entry) => `${entry.phase}:${entry.evidencePath}`)
+    .join(", ");
 }
 
 function buildFixtureImportWarnings(purposes, dryRunScope = null) {
