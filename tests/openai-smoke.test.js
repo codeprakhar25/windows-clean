@@ -19,6 +19,10 @@ const script = path.join(root, "scripts", "run-openai-advisor-smoke.mjs");
   assert.strictEqual(context.liveRouteValidation.requestMode, "execute-pnpm-store", "pnpm fixture smoke should expose the native request mode");
   assert.strictEqual(context.liveRouteValidation.panelId, "pnpm-store-executor-panel", "pnpm fixture smoke should expose the target UI panel");
   assert.strictEqual(context.liveRouteValidation.canExecuteWithoutAppEvidence, false, "pnpm fixture smoke should require app evidence before execution");
+  assert.strictEqual(context.liveRouteValidation.nativeBoundary.adapterFunction, "runNativePnpmStoreExecutor", "pnpm fixture smoke should expose the pnpm native adapter");
+  assert.strictEqual(context.liveRouteValidation.nativeBoundary.rustFunction, "execute_pnpm_store_cleanup", "pnpm fixture smoke should expose the pnpm Rust executor branch");
+  assert(context.liveRouteValidation.nativeBoundary.targetRejects.some((row) => row.includes("node_modules")), "pnpm fixture smoke should expose pnpm target rejects");
+  assert(context.liveRouteValidation.nativeBoundary.deletePolicy.some((row) => row.includes("versioned")), "pnpm fixture smoke should expose pnpm versioned store deletion scope");
   const task = context.agentTaskQueue.rows.find((row) =>
     row.actionType === "run-pnpm-store-executor" &&
     row.targetId === "pnpm-store" &&

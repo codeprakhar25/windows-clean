@@ -83,6 +83,19 @@ function cleanEnv(extra = {}) {
   assert(ready.liveValidationManifest.requiredAppEvidence.includes("native-scanned-target"), "ready manifest should require concrete target evidence");
   assert(ready.liveValidationManifest.requiredPostRunProof.includes("workflow-proof-check-output"), "ready manifest should require workflow proof verifier output after execution");
 
+  const pnpmBlocked = validation.buildWindowsValidationPacket({
+    routeInput: "pnpm-store",
+    env: cleanEnv()
+  });
+  assert.strictEqual(pnpmBlocked.route, "bounded-pnpm-store-delete", "pnpm-store alias should map to the native pnpm route");
+  assert.strictEqual(pnpmBlocked.selected.envVar, "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR", "pnpm validation packet should expose the route feature flag");
+  assert.strictEqual(pnpmBlocked.selected.requestMode, "execute-pnpm-store", "pnpm validation packet should expose the native request mode");
+  assert.strictEqual(pnpmBlocked.liveValidationManifest.nativeBoundary.adapterFunction, "runNativePnpmStoreExecutor", "pnpm live manifest should name the pnpm adapter");
+  assert.strictEqual(pnpmBlocked.liveValidationManifest.nativeBoundary.rustFunction, "execute_pnpm_store_cleanup", "pnpm live manifest should name the Rust executor branch");
+  assert(pnpmBlocked.liveValidationManifest.nativeBoundary.targetAllowlist.some((row) => row.includes("pnpm\\store")), "pnpm live manifest should describe the pnpm store allowlist");
+  assert(pnpmBlocked.liveValidationManifest.nativeBoundary.targetRejects.some((row) => row.includes("node_modules")), "pnpm live manifest should describe pnpm target rejects");
+  assert(pnpmBlocked.liveValidationManifest.nativeBoundary.deletePolicy.some((row) => row.includes("versioned")), "pnpm live manifest should describe versioned store deletion scope");
+
   const multiple = validation.buildWindowsValidationPacket({
     routeInput: "npm-cache",
     env: cleanEnv({

@@ -332,6 +332,46 @@ const nativeBoundaryByRoute = {
       "post-run native rescan comparison",
       "accepted spaceguard-real-workflow-proof/v1 check"
     ]
+  },
+  "bounded-pnpm-store-delete": {
+    tauriCommand: "execute_cleanup_plan",
+    adapterFunction: "runNativePnpmStoreExecutor",
+    rustFunction: "execute_pnpm_store_cleanup",
+    requestShape: [
+      "schemaVersion=spaceguard-pnpm-store-request/v1",
+      "requestMode=execute-pnpm-store",
+      "route=bounded-pnpm-store-delete",
+      "dryRunOnly=false",
+      "mutationAttempted=true",
+      "planId, scanFingerprint, consentPlanId, expectedBytes, and one action required"
+    ],
+    targetAllowlist: [
+      "current user %LocalAppData%\\pnpm\\store only",
+      "target must come from the latest native-scanned pnpm-store finding",
+      "target must be a real directory, not a symlink"
+    ],
+    targetRejects: [
+      "project node_modules",
+      "global pnpm bins",
+      "AppData\\Roaming\\pnpm",
+      "pnpm\\global",
+      "Program Files",
+      "ProgramData",
+      "Windows",
+      "Downloads, Documents, Desktop"
+    ],
+    deletePolicy: [
+      "Deletes only age-gated files under versioned store files roots, store files, tmp, and temp.",
+      "Skips pnpm store metadata outside files/tmp/temp.",
+      "Skips symlinks and unreadable entries.",
+      "Removes only empty store subdirectories below the pnpm store root."
+    ],
+    postRunProof: [
+      "execution ledger entry for bounded-pnpm-store-delete",
+      "native GetDiskFreeSpaceExW before/after volume proof",
+      "post-run native rescan comparison",
+      "accepted spaceguard-real-workflow-proof/v1 check"
+    ]
   }
 };
 
