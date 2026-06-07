@@ -3923,6 +3923,7 @@ const assert = require("assert");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.rescanStatus, "matched", "proof packet should retain rescan comparison status");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.readyForNextRoute, true, "matched proof should clear the next-route blocker");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.volumeProof.status, "measured", "proof packet should include native volume proof status");
+  assert.strictEqual(selectedRouteProofFlow.proofPacket.validationImport.status, "needs-import", "proof packet should expose missing validation import status");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.ledgerEntries[0].nativeVolumeProof.drive, "C:", "proof packet should keep compact ledger volume proof");
   const proofPacketMarkdown = guard.buildSelectedRouteProofPacketMarkdown(selectedRouteProofFlow.proofPacket);
   assert(proofPacketMarkdown.includes("# SpaceGuard Selected Route Proof Packet"), "proof packet markdown should have a stable title");
@@ -3989,6 +3990,22 @@ const assert = require("assert");
   assert.strictEqual(importedRouteProof.validationEvidence["ledger-rescan-parity"].source, "selected-route-proof-import", "route proof import should keep provenance");
   assert.strictEqual(importedRouteProof.validationEvidence["ledger-rescan-parity"].selectedRouteProofSummary.scopedNativeExecution, true, "route proof evidence should preserve scoped-native proof");
   assert.strictEqual(importedRouteProof.validationEvidence["ledger-rescan-parity"].selectedRouteProofSummary.volumeProof.status, "measured", "route proof evidence should preserve native volume proof");
+  const importedRouteProofFlow = guard.buildScopedExecutorCommandFlow({
+    smokeRunPacket: tempProofSmokePacket,
+    preferredRoute: "known-temp-delete",
+    executionProofHandoff: { status: "proof-complete" },
+    nativeCapability: { available: true },
+    ledger: scopedTempLedgerWithVolumeProof,
+    postRunVerification: scopedTempPostRunVerification,
+    rescanComparison: scopedMatchedComparison,
+    validationEvidence: importedRouteProof.validationEvidence,
+    scanning: false
+  });
+  assert.strictEqual(importedRouteProofFlow.proofPacket.validationImport.status, "import-complete", "proof packet should expose completed validation import");
+  assert.strictEqual(importedRouteProofFlow.proofPacket.validationImport.complete, true, "completed route proof import should be marked complete");
+  assert.strictEqual(importedRouteProofFlow.proofPacket.validationImport.route, "known-temp-delete", "completed route proof import should bind to the selected route");
+  assert(importedRouteProofFlow.proofPacket.primary.includes("validation import"), "proof packet primary should mention completed validation import");
+  assert(guard.buildSelectedRouteProofPacketMarkdown(importedRouteProofFlow.proofPacket).includes("Validation import: import-complete"), "proof packet markdown should include validation import status");
   const routeProofGate = guard.buildReleaseGate({
     validationEvidence: importedRouteProof.validationEvidence,
     scanMode: "native-readonly",

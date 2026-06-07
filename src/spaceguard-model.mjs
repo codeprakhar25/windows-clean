@@ -8375,6 +8375,7 @@ export function buildScopedExecutorCommandFlow({
   ledger = [],
   postRunVerification = null,
   rescanComparison = null,
+  validationEvidence = {},
   scanning = false,
   generatedAt = "set-on-export"
 } = {}) {
@@ -8445,6 +8446,7 @@ export function buildScopedExecutorCommandFlow({
     ledger,
     postRunVerification,
     rescanComparison,
+    validationEvidence,
     generatedAt
   });
 
@@ -8569,6 +8571,7 @@ export function buildSelectedRouteProofPacket({
   ledger = [],
   postRunVerification = null,
   rescanComparison = null,
+  validationEvidence = {},
   generatedAt = "set-on-export"
 } = {}) {
   const route = String(launchPacket?.route || "").trim();
@@ -8589,6 +8592,7 @@ export function buildSelectedRouteProofPacket({
     verificationStatus
   });
   const readyForNextRoute = status === "proof-complete";
+  const validationImport = buildSelectedRouteProofValidationImportStatus(route, validationEvidence);
 
   return {
     schemaVersion: "spaceguard-selected-route-proof-packet/v1",
@@ -8613,11 +8617,12 @@ export function buildSelectedRouteProofPacket({
     readyForNextRoute,
     counts,
     volumeProof,
+    validationImport,
     ledgerEntries: ledgerEntries.map(compactSelectedRouteProofLedgerEntry),
     checkpoints: checkpoints.map(compactSelectedRouteProofCheckpoint),
     rescanRows: rescanRows.map(compactSelectedRouteProofRescanRow),
-    primary: getSelectedRouteProofPrimary(status, counts, rescanStatus),
-    steps: getSelectedRouteProofSteps(status)
+    primary: getSelectedRouteProofPrimary(status, counts, rescanStatus, validationImport),
+    steps: getSelectedRouteProofSteps(status, validationImport)
   };
 }
 
@@ -8668,6 +8673,8 @@ export function buildSelectedRouteProofPacketMarkdown(packet = null) {
     `Reclaimed bytes: ${formatBytes(packet?.counts?.reclaimedBytes || 0)}`,
     `Volume proof: ${packet?.volumeProof?.status || "not-collected"}`,
     `Volume proof delta: ${formatSignedBytes(packet?.volumeProof?.freeBytesDelta || 0)}`,
+    `Validation import: ${packet?.validationImport?.status || "not-evaluated"}`,
+    `Validation artifact: ${packet?.validationImport?.evidencePath || "missing"}`,
     `Post-run scan evidence: ${packet?.postRunScanEvidence ? "yes" : "no"}`,
     `Ledger timestamp: ${packet?.latestExecutionAt || "missing"}`,
     `Scan timestamp: ${packet?.scanGeneratedAt || "missing"}`,
@@ -8727,6 +8734,112 @@ function buildSelectedRouteProofCounts({ ledgerEntries = [], checkpoints = [], r
     reclaimedBytes: ledgerEntries.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0),
     expectedBytes: rescanRows.reduce((sum, row) => sum + Number(row.expectedBytes || 0), 0),
     actualRemainingBytes: rescanRows.reduce((sum, row) => sum + Number(row.actualBytes || 0), 0)
+  };
+}
+
+function buildSelectedRouteProofValidationImportStatus(route = "", validationEvidence = {}) {
+  const recordValue = validationEvidence?.["ledger-rescan-parity"];
+  const record = normalizeValidationEvidenceRecord("ledger-rescan-parity", recordValue);
+  const summary = recordValue && typeof recordValue === "object" && !Array.isArray(recordValue)
+    ? recordValue.selectedRouteProofSummary || null
+    : null;
+  const summaryRoute = String(summary?.route || "").trim();
+  const routeMatches = Boolean(route && summaryRoute && summaryRoute === route);
+  const imported = Boolean(summary?.schemaVersion === "spaceguard-selected-route-proof-packet/v1" || summary?.status);
+
+  if (!route) {
+    return {
+      status: "route-missing",
+      imported: false,
+      complete: false,
+      route: "",
+      evidencePath: "",
+      reviewer: "",
+      detail: "Select a scoped executor route before checking validation import."
+    };
+  }
+
+  if (!record.marked) {
+    return {
+      status: "needs-import",
+      imported: false,
+      complete: false,
+      route,
+      evidencePath: "",
+      reviewer: "",
+      detail: "Import the selected-route proof packet into ledger-rescan-parity validation evidence."
+    };
+  }
+
+  if (record.status === "failed") {
+    return {
+      status: "failed",
+      imported,
+      complete: false,
+      route: summaryRoute || route,
+      evidencePath: record.evidencePath,
+      reviewer: record.reviewer,
+      detail: "ledger-rescan-parity evidence is marked failed."
+    };
+  }
+
+  if (!summary) {
+    return {
+      status: record.complete ? "parity-evidence-without-route-proof" : "needs-route-proof-import",
+      imported: false,
+      complete: false,
+      route,
+      evidencePath: record.evidencePath,
+      reviewer: record.reviewer,
+      detail: record.complete
+        ? "ledger-rescan-parity has evidence, but not selected-route proof provenance."
+        : "ledger-rescan-parity needs a selected-route proof import with reviewer and artifact detail."
+    };
+  }
+
+  if (!routeMatches) {
+    return {
+      status: "route-mismatch",
+      imported: true,
+      complete: false,
+      route: summaryRoute,
+      evidencePath: record.evidencePath,
+      reviewer: record.reviewer,
+      detail: `Imported proof route ${summaryRoute || "missing"} does not match selected route ${route}.`
+    };
+  }
+
+  const proofComplete = summary.status === "proof-complete" && summary.rescanStatus === "matched" && summary.scopedNativeExecution === true;
+  if (record.complete && proofComplete) {
+    return {
+      status: "import-complete",
+      imported: true,
+      complete: true,
+      route: summaryRoute,
+      evidencePath: record.evidencePath,
+      reviewer: record.reviewer,
+      recordedAt: record.recordedAt,
+      updatedAt: record.updatedAt,
+      volumeProof: summary.volumeProof || null,
+      counts: summary.counts || {},
+      detail: `Selected-route proof for ${summaryRoute} is attached to ledger-rescan-parity.`
+    };
+  }
+
+  return {
+    status: "needs-reviewer-artifact",
+    imported: true,
+    complete: false,
+    route: summaryRoute,
+    evidencePath: record.evidencePath,
+    reviewer: record.reviewer,
+    recordedAt: record.recordedAt,
+    updatedAt: record.updatedAt,
+    volumeProof: summary.volumeProof || null,
+    counts: summary.counts || {},
+    detail: proofComplete
+      ? "Selected-route proof is imported but still needs reviewer and artifact detail."
+      : "Selected-route proof import exists, but proof-complete/matched/scoped-native provenance is missing."
   };
 }
 
@@ -8804,10 +8917,11 @@ function compactSelectedRouteProofRescanRow(row = {}) {
   };
 }
 
-function getSelectedRouteProofPrimary(status, counts, rescanStatus) {
+function getSelectedRouteProofPrimary(status, counts, rescanStatus, validationImport = null) {
   if (status === "route-missing") return "Select one scoped executor route before building proof.";
   if (status === "awaiting-execution") return "No selected-route ledger entry exists yet. Run the scoped executor before proof review.";
-  if (status === "proof-complete") return `${counts.ledgerEntries} ledger entry(s) and matched post-run rescan evidence prove this route.`;
+  if (status === "proof-complete" && validationImport?.complete) return `${counts.ledgerEntries} ledger entry(s), matched post-run rescan evidence, and validation import prove this route.`;
+  if (status === "proof-complete") return `${counts.ledgerEntries} ledger entry(s) and matched post-run rescan evidence prove this route; import the proof into validation evidence before release review.`;
   if (status === "proof-mismatch") return "Post-run native evidence does not match the ledger. Review the affected root before another route.";
   if (status === "stale-ledger") return "The ledger is stale for the current plan. Do not use it to prove this route.";
   if (status === "needs-comparison") return "Post-run scan evidence exists; compare the selected route against the ledger.";
@@ -8815,10 +8929,11 @@ function getSelectedRouteProofPrimary(status, counts, rescanStatus) {
   return `Selected-route proof is waiting on post-run native rescan evidence (${rescanStatus || "not-run"}).`;
 }
 
-function getSelectedRouteProofSteps(status) {
+function getSelectedRouteProofSteps(status, validationImport = null) {
   if (status === "route-missing") return ["Select exactly one scoped executor route.", "Build the launch packet.", "Run proof review after execution."];
   if (status === "awaiting-execution") return ["Run the selected scoped executor.", "Save the ledger row.", "Run a native read-only scan after execution."];
-  if (status === "proof-complete") return ["Export the proof packet.", "Keep the ledger and rescan evidence together.", "Only then consider another scoped route."];
+  if (status === "proof-complete" && validationImport?.complete) return ["Keep the imported validation evidence attached.", "Keep the ledger and rescan evidence together.", "Only then consider another scoped route."];
+  if (status === "proof-complete") return ["Export or prepare the proof packet.", "Import it into Validation evidence with reviewer and artifact detail.", "Only then consider another scoped route."];
   if (status === "proof-mismatch") return ["Review the mismatch row.", "Repeat a post-run native rescan if needed.", "Do not run another scoped executor until parity is resolved."];
   if (status === "stale-ledger") return ["Rebuild consent for the current plan.", "Run the current plan again if needed.", "Ignore stale ledger rows for route proof."];
   if (status === "needs-comparison") return ["Compare the post-run scan against the ledger.", "Record matched or mismatch rows.", "Export the rescan comparison."];

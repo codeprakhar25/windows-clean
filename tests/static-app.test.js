@@ -364,9 +364,12 @@ assert(app.includes("buildSelectedRouteProofPacketMarkdown"), "app should wire s
 assert(app.includes("flow.proofPacket"), "command flow UI should receive the selected-route proof packet");
 assert(model.includes("compactNativeVolumeProof"), "selected-route proof packet should compact native volume proof");
 assert(model.includes("Volume proof delta"), "selected-route proof markdown should include volume proof deltas");
+assert(model.includes("Validation import:"), "selected-route proof markdown should include validation import status");
+assert(model.includes("buildSelectedRouteProofValidationImportStatus"), "model should derive selected-route proof validation import status");
 assert(app.includes("Export proof packet"), "command flow UI should export the selected-route proof packet");
 assert(app.includes("prepareSelectedRouteProofImport"), "command flow should prepare selected-route proof import");
 assert(app.includes("Prepare validation import"), "command flow UI should preload proof into validation import");
+assert(app.includes("proofPacket?.validationImport"), "command flow UI should display selected-route proof validation import status");
 assert(openAiAgent.includes("directDeleteAuthority"), "OpenAI context should deny direct delete authority");
 assert(openAiAgent.includes("text: {"), "OpenAI adapter should configure Responses API text output");
 assert(openAiAgent.includes("type: \"json_schema\""), "OpenAI adapter should request strict structured output");

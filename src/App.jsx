@@ -1117,9 +1117,10 @@ export default function App() {
         ledger: activeLedger,
         postRunVerification,
         rescanComparison,
+        validationEvidence,
         scanning
       }),
-    [executorSmokeRunPacket, selectedScopedExecutorRoute, executionProofHandoff, nativeCapability, activeLedger, postRunVerification, rescanComparison, scanning]
+    [executorSmokeRunPacket, selectedScopedExecutorRoute, executionProofHandoff, nativeCapability, activeLedger, postRunVerification, rescanComparison, validationEvidence, scanning]
   );
   const firstSafeValidationGate = useMemo(
     () =>
@@ -5094,6 +5095,7 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
   const proofRescanRows = (proofPacket?.rescanRows || []).slice(0, 3);
   const proofVolumeDelta = Number(proofPacket?.volumeProof?.freeBytesDelta || 0);
   const proofVolumeDeltaLabel = `${proofVolumeDelta >= 0 ? "+" : "-"}${formatBytes(Math.abs(proofVolumeDelta))}`;
+  const validationImport = proofPacket?.validationImport || null;
   const setupCommandRows = setupCommands
     ? [
         { label: ".env", command: setupCommands.enableEnv, detail: "Selected route flag" },
@@ -5232,6 +5234,7 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
               <span className="font-medium">Selected route proof packet</span>
               <Badge variant={proofPacket.tone || "review"}>{proofPacket.status}</Badge>
               <Badge variant={proofPacket.readyForNextRoute ? "safe" : "review"}>{proofPacket.readyForNextRoute ? "next route clear" : "next route blocked"}</Badge>
+              {validationImport ? <Badge variant={validationImport.complete ? "safe" : "review"}>{validationImport.status}</Badge> : null}
               {proofPacket.rescanStatus ? <Badge variant="outline">{proofPacket.rescanStatus}</Badge> : null}
               {proofPacket.runLabel ? <Badge variant="outline">{proofPacket.runLabel}</Badge> : null}
             </div>
@@ -5242,8 +5245,10 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
               <QueueStat label="Waiting" value={proofPacket.counts?.waitingRows || 0} tone={proofPacket.counts?.waitingRows ? "review" : "safe"} />
               <QueueStat label="Reclaimed" value={formatBytes(proofPacket.counts?.reclaimedBytes || 0)} tone={proofPacket.counts?.reclaimedBytes ? "safe" : "review"} />
               <QueueStat label="Volume proof" value={proofPacket.volumeProof?.measured ? proofVolumeDeltaLabel : "none"} tone={proofPacket.volumeProof?.measured ? "safe" : "review"} />
+              <QueueStat label="Validation" value={validationImport?.complete ? "done" : validationImport?.imported ? "draft" : "missing"} tone={validationImport?.complete ? "safe" : "review"} />
             </div>
             <p className="mt-2 text-xs text-muted-foreground">{proofPacket.primary}</p>
+            {validationImport ? <p className="mt-1 text-xs text-muted-foreground">{validationImport.detail}</p> : null}
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               <div className="rounded-md border bg-card p-2">
                 <div className="mb-2 flex items-center justify-between gap-2">
