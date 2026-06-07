@@ -67,7 +67,14 @@ export function buildFirstRouteCompletionCheck({
     nativeExitPath || preflightObject?.artifacts?.nativeDevExit || "",
     resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
   );
-  const resolvedWorkflowProofPath = workflowProofPath ? path.resolve(workflowProofPath) : path.resolve(process.cwd(), "spaceguard-real-workflow-proof.md");
+  const contractWorkflowProofPath = normalizeArtifactPath(
+    preflightObject?.appCloseContract?.workflowProofPath || "",
+    resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
+  );
+  const resolvedWorkflowProofPath = workflowProofPath
+    ? path.resolve(workflowProofPath)
+    : contractWorkflowProofPath || path.resolve(process.cwd(), "spaceguard-real-workflow-proof.md");
+  validateWorkflowProofPath(resolvedWorkflowProofPath, contractWorkflowProofPath, add);
 
   const commandRecords = readCommandRecords(artifactCommandLogPath, add);
   const commandSummary = validatePostAppCommandRecords(commandRecords, add);
@@ -122,6 +129,22 @@ function normalizeArtifactPath(value = "", baseDir = process.cwd()) {
   const clean = String(value || "");
   if (!clean) return "";
   return path.isAbsolute(clean) ? clean : path.resolve(baseDir, clean);
+}
+
+function validateWorkflowProofPath(actualPath, contractPath, add) {
+  if (!contractPath) return;
+  if (normalizeComparablePath(actualPath) !== normalizeComparablePath(contractPath)) {
+    add(
+      "workflow-proof-path",
+      "Workflow proof path mismatch",
+      `Workflow proof must match the app-close contract path: ${contractPath}`
+    );
+  }
+}
+
+function normalizeComparablePath(filePath = "") {
+  const normalized = path.normalize(path.resolve(String(filePath || "")));
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
 
 function readOptionalJsonArtifact(id, filePath, add) {

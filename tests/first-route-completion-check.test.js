@@ -264,6 +264,24 @@ function createFirstRouteEvidence(patch = {}) {
   assert.strictEqual(accepted.counts.postAppCommandsPassed, 5, "completion check should count required post-app command records");
   assert.strictEqual(accepted.counts.reclaimedBytes, 8388608, "completion check should preserve recovered bytes");
 
+  const acceptedWithContractDefault = verifier.buildFirstRouteCompletionCheck({
+    preflightPath: acceptedEvidence.preflightPath,
+    afterFixturePath: acceptedEvidence.afterFixturePath,
+    checkedAt: "2026-06-07T14:00:00.000Z"
+  });
+  assert.strictEqual(acceptedWithContractDefault.status, "accepted", "completion should default to the preflight app-close workflow proof path");
+  assert.strictEqual(acceptedWithContractDefault.workflowProofPath, acceptedEvidence.workflowProofPath, "completion should expose the contracted workflow proof path");
+
+  const wrongWorkflowProofPath = path.join(acceptedEvidence.dir, "wrong-workflow-proof.md");
+  fs.copyFileSync(acceptedEvidence.workflowProofPath, wrongWorkflowProofPath);
+  const mismatchedWorkflowPath = verifier.buildFirstRouteCompletionCheck({
+    preflightPath: acceptedEvidence.preflightPath,
+    afterFixturePath: acceptedEvidence.afterFixturePath,
+    workflowProofPath: wrongWorkflowProofPath
+  });
+  assert.strictEqual(mismatchedWorkflowPath.status, "blocked", "completion should block workflow proof files outside the app-close contract path");
+  assert(mismatchedWorkflowPath.blockers.some((blocker) => blocker.id === "workflow-proof-path"), "mismatched workflow proof path blocker should be surfaced");
+
   const stillPresentEvidence = createFirstRouteEvidence({
     fixtureAfter: {
       passed: false,
