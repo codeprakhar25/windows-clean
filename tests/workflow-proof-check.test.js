@@ -16,6 +16,7 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
     appCloseContract: {
       schemaVersion: "spaceguard-first-route-app-close-contract/v1",
       workflowProofPath: ".\\spaceguard-real-workflow-proof.md",
+      selectedRouteProofPacketPath: ".\\spaceguard-selected-route-proof-packet.md",
       expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
       minimumReclaimedBytes: 1,
       nextRouteBlockedUntil: "validate:first-route-completion accepted",
@@ -90,6 +91,18 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
   });
   assert.strictEqual(missingAppCloseContract.status, "blocked", "workflow proof without app-close contract should block");
   assert(missingAppCloseContract.blockers.some((blocker) => blocker.id === "app-close-contract"), "missing app-close contract blocker should be surfaced");
+
+  const missingSelectedRouteProofPacketPath = verifier.buildWorkflowProofCheck({
+    evidenceObject: {
+      ...provenPacket,
+      appCloseContract: {
+        ...provenPacket.appCloseContract,
+        selectedRouteProofPacketPath: ""
+      }
+    }
+  });
+  assert.strictEqual(missingSelectedRouteProofPacketPath.status, "blocked", "workflow proof without selected-route proof packet path should block");
+  assert(missingSelectedRouteProofPacketPath.blockers.some((blocker) => blocker.id === "app-close-contract"), "missing selected-route proof packet path should be an app-close contract blocker");
 
   const wrongSchema = verifier.buildWorkflowProofCheck({ evidenceObject: { schemaVersion: "wrong" } });
   assert.strictEqual(wrongSchema.status, "schema-mismatch", "wrong schema should be rejected");

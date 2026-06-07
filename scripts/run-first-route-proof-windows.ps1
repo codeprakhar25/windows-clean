@@ -49,6 +49,7 @@ try {
   $PreflightPath = Join-Path $EvidenceRoot "operator-preflight.json"
   $PreflightCheckPath = Join-Path $EvidenceRoot "operator-preflight-check.json"
   $OperatorAppHandoffPath = Join-Path $EvidenceRoot "operator-app-handoff.md"
+  $SelectedRouteProofPacketPath = Join-Path $RepoRoot "spaceguard-selected-route-proof-packet.md"
   $WorkflowProofPath = Join-Path $RepoRoot "spaceguard-real-workflow-proof.md"
   $WorkflowProofCheckPath = Join-Path $EvidenceRoot "workflow-proof-check.json"
   $CompletionCheckPath = Join-Path $EvidenceRoot "first-route-completion-check.json"
@@ -263,9 +264,10 @@ try {
       "3. Arm consent for the current plan and scan fingerprint.",
       "4. Run Real temp cleanup from the first-safe temp executor panel.",
       "5. Run post-run rescan.",
-      "6. Export spaceguard-selected-route-proof-packet.md.",
+      "6. Export spaceguard-selected-route-proof-packet.md to the repo root.",
       "7. Complete Selected route proof import with reviewer and artifact path.",
-      "8. Export spaceguard-real-workflow-proof.md to the repo root before closing the app.",
+      "8. Re-export spaceguard-selected-route-proof-packet.md to the repo root after import complete.",
+      "9. Export spaceguard-real-workflow-proof.md to the repo root before closing the app.",
       "",
       "## Resume validation",
       "npm run proof:first-route:windows:finalize -- -EvidenceRoot `"$EvidenceRoot`"",
@@ -360,10 +362,12 @@ try {
       openAiLiveSmoke = $LiveSmokePath
       nativeDevExit = $NativeDevExitPath
       operatorAppHandoff = $OperatorAppHandoffPath
+      selectedRouteProofPacket = $SelectedRouteProofPacketPath
     }
     appCloseContract = [PSCustomObject]@{
       schemaVersion = "spaceguard-first-route-app-close-contract/v1"
       workflowProofPath = $WorkflowProofPath
+      selectedRouteProofPacketPath = $SelectedRouteProofPacketPath
       expectedWorkflowProofSchema = "spaceguard-real-workflow-proof/v1"
       minimumReclaimedBytes = 1
       nextRouteBlockedUntil = "validate:first-route-completion accepted"
@@ -380,7 +384,7 @@ try {
       "Arm consent for the current plan and scan fingerprint.",
       "Run Real temp cleanup from the first-safe temp executor panel.",
       "Run post-run rescan.",
-      "Export and import the selected route proof packet.",
+      "Export, import, then re-export the selected route proof packet.",
       "Export spaceguard-real-workflow-proof.md."
     )
     afterAppCommands = [PSCustomObject]@{

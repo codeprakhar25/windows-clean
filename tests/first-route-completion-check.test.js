@@ -41,7 +41,8 @@ function createFirstRouteEvidence(patch = {}) {
     openAiFixtureSmoke: path.join(dir, "openai-fixture-smoke.txt"),
     openAiLiveSmoke: path.join(dir, "openai-live-smoke.txt"),
     nativeDevExit: path.join(dir, "native-dev-exit.json"),
-    operatorAppHandoff: path.join(dir, "operator-app-handoff.md")
+    operatorAppHandoff: path.join(dir, "operator-app-handoff.md"),
+    selectedRouteProofPacket: path.join(dir, "spaceguard-selected-route-proof-packet.md")
   };
   const preflight = {
     schemaVersion: "spaceguard-first-route-windows-operator/v1",
@@ -61,6 +62,7 @@ function createFirstRouteEvidence(patch = {}) {
   preflight.appCloseContract = {
     schemaVersion: "spaceguard-first-route-app-close-contract/v1",
     workflowProofPath: path.join(dir, "spaceguard-real-workflow-proof.md"),
+    selectedRouteProofPacketPath: artifacts.selectedRouteProofPacket,
     expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
     minimumReclaimedBytes: 1,
     nextRouteBlockedUntil: "validate:first-route-completion accepted",
@@ -161,6 +163,7 @@ function createFirstRouteEvidence(patch = {}) {
     appCloseContract: {
       schemaVersion: "spaceguard-first-route-app-close-contract/v1",
       workflowProofPath: ".\\spaceguard-real-workflow-proof.md",
+      selectedRouteProofPacketPath: ".\\spaceguard-selected-route-proof-packet.md",
       expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
       minimumReclaimedBytes: 1,
       nextRouteBlockedUntil: "validate:first-route-completion accepted",
@@ -182,6 +185,22 @@ function createFirstRouteEvidence(patch = {}) {
       { id: "selected-route-proof-import", passed: true },
       { id: "next-route-clearance", passed: true }
     ]
+  };
+  const selectedRouteProofPacket = {
+    schemaVersion: "spaceguard-selected-route-proof-packet/v1",
+    status: "proof-complete",
+    route: "known-temp-delete",
+    routeInput: "temp-fixture",
+    rescanStatus: "matched",
+    verificationStatus: "ready-for-rescan",
+    scopedNativeExecution: true,
+    postRunScanEvidence: true,
+    readyForNextRoute: true,
+    counts: { ledgerEntries: 1, matchedRows: 1, reclaimedBytes: 8388608 },
+    volumeProof: { status: "measured", drive: "C:", freeBytesDelta: 8388608, source: "GetDiskFreeSpaceExW" },
+    validationImport: { status: "import-complete", complete: true, route: "known-temp-delete", evidencePath: "evidence/selected-route-proof.md" },
+    ledgerEntries: [{ id: "temp-fixture-cleanup", route: "known-temp-delete", result: "executed", bytes: 8388608 }],
+    rescanRows: [{ id: "temp-fixture-cleanup", route: "known-temp-delete", state: "matched", actualBytes: 0, expectedBytes: 8388608 }]
   };
   const nativeDevExit = {
     schemaVersion: "spaceguard-native-dev-exit/v1",
@@ -257,6 +276,7 @@ function createFirstRouteEvidence(patch = {}) {
       "Resume with npm run proof:first-route:windows:finalize -- -EvidenceRoot evidence\\first-route-proof-YYYYMMDD-HHMMSS."
     ].join("\n")
   );
+  writeJson(artifacts.selectedRouteProofPacket, { ...selectedRouteProofPacket, ...patch.selectedRouteProofPacket }, { markdown: true });
   writeJson(artifacts.nativeDevExit, { ...nativeDevExit, ...patch.nativeDevExit });
   writeNdjson(artifacts.commandLog, patch.commands || commands);
 
@@ -289,6 +309,7 @@ function createFirstRouteEvidence(patch = {}) {
   assert.strictEqual(accepted.counts.nativeExitCode, 0, "completion check should preserve successful native app exit code");
   assert.strictEqual(accepted.counts.postAppCommandsPassed, 5, "completion check should count required post-app command records");
   assert.strictEqual(accepted.counts.reclaimedBytes, 8388608, "completion check should preserve recovered bytes");
+  assert.strictEqual(accepted.counts.selectedRouteProofPacketReclaimedBytes, 8388608, "completion check should preserve selected-route proof packet recovered bytes");
 
   const retriedPostAppEvidence = createFirstRouteEvidence({
     commands: [
@@ -396,6 +417,30 @@ function createFirstRouteEvidence(patch = {}) {
   });
   assert.strictEqual(stillPresent.status, "blocked", "completion should block if temp fixture still exists");
   assert(stillPresent.blockers.some((blocker) => blocker.id === "after-fixture"), "fixture blocker should name after-fixture evidence");
+
+  const missingSelectedRouteProofEvidence = createFirstRouteEvidence();
+  fs.unlinkSync(path.join(missingSelectedRouteProofEvidence.dir, "spaceguard-selected-route-proof-packet.md"));
+  const missingSelectedRouteProof = verifier.buildFirstRouteCompletionCheck({
+    preflightPath: missingSelectedRouteProofEvidence.preflightPath,
+    afterFixturePath: missingSelectedRouteProofEvidence.afterFixturePath,
+    workflowProofPath: missingSelectedRouteProofEvidence.workflowProofPath
+  });
+  assert.strictEqual(missingSelectedRouteProof.status, "blocked", "completion should block missing selected-route proof packet export");
+  assert(missingSelectedRouteProof.blockers.some((blocker) => blocker.id === "selected-route-proof-packet"), "missing selected-route proof packet blocker should be surfaced");
+
+  const staleSelectedRouteProofEvidence = createFirstRouteEvidence({
+    selectedRouteProofPacket: {
+      readyForNextRoute: false,
+      validationImport: { status: "needs-import", complete: false, route: "known-temp-delete" }
+    }
+  });
+  const staleSelectedRouteProof = verifier.buildFirstRouteCompletionCheck({
+    preflightPath: staleSelectedRouteProofEvidence.preflightPath,
+    afterFixturePath: staleSelectedRouteProofEvidence.afterFixturePath,
+    workflowProofPath: staleSelectedRouteProofEvidence.workflowProofPath
+  });
+  assert.strictEqual(staleSelectedRouteProof.status, "blocked", "completion should block stale proof packets exported before validation import");
+  assert(staleSelectedRouteProof.blockers.some((blocker) => blocker.id === "selected-route-proof-packet"), "stale selected-route proof packet blocker should be surfaced");
 
   const zeroByteEvidence = createFirstRouteEvidence({
     workflowProof: { counts: { ledgerEntries: 1, matchedRows: 1, reclaimedBytes: 0 } }

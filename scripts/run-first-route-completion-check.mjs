@@ -67,6 +67,21 @@ export function buildFirstRouteCompletionCheck({
     nativeExitPath || preflightObject?.artifacts?.nativeDevExit || "",
     resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
   );
+  const contractSelectedRouteProofPacketPath = normalizeArtifactPath(
+    preflightObject?.appCloseContract?.selectedRouteProofPacketPath || "",
+    resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
+  );
+  const artifactSelectedRouteProofPacketPath = normalizeArtifactPath(
+    preflightObject?.artifacts?.selectedRouteProofPacket || "",
+    resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
+  );
+  const resolvedSelectedRouteProofPacketPath =
+    artifactSelectedRouteProofPacketPath ||
+    contractSelectedRouteProofPacketPath ||
+    normalizeArtifactPath(
+      "spaceguard-selected-route-proof-packet.md",
+      resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
+    );
   const contractWorkflowProofPath = normalizeArtifactPath(
     preflightObject?.appCloseContract?.workflowProofPath || "",
     resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
@@ -80,6 +95,7 @@ export function buildFirstRouteCompletionCheck({
   const commandSummary = validatePostAppCommandRecords(commandRecords, add);
   const afterFixture = readOptionalJsonArtifact("after-fixture", artifactAfterFixturePath, add);
   const nativeExit = readOptionalJsonArtifact("native-exit", artifactNativeExitPath, add);
+  const selectedRouteProofPacket = readOptionalJsonArtifact("selected-route-proof-packet", resolvedSelectedRouteProofPacketPath, add);
   const workflowProofText = readOptionalTextArtifact("workflow-proof", resolvedWorkflowProofPath, add);
   const workflowProof = workflowProofText
     ? buildWorkflowProofCheck({ evidenceText: workflowProofText, checkedAt })
@@ -87,9 +103,11 @@ export function buildFirstRouteCompletionCheck({
 
   validateAfterFixtureEvidence(afterFixture, add);
   validateNativeExitEvidence(nativeExit, add);
+  validateSelectedRouteProofPacket(selectedRouteProofPacket, add);
   validateWorkflowProof(workflowProof, add);
 
   const reclaimedBytes = Number(workflowProof.counts?.reclaimedBytes || 0);
+  const selectedRouteProofPacketReclaimedBytes = Number(selectedRouteProofPacket?.counts?.reclaimedBytes || 0);
   const nativeExitCode = Number.isFinite(Number(nativeExit?.exitCode)) ? Number(nativeExit.exitCode) : null;
   const canStartNextRoute = blockers.length === 0;
   return {
@@ -104,11 +122,13 @@ export function buildFirstRouteCompletionCheck({
     commandLogPath: artifactCommandLogPath,
     afterFixturePath: artifactAfterFixturePath,
     nativeExitPath: artifactNativeExitPath,
+    selectedRouteProofPacketPath: resolvedSelectedRouteProofPacketPath,
     workflowProofPath: resolvedWorkflowProofPath,
     blockers,
     counts: {
       blockers: blockers.length,
       reclaimedBytes,
+      selectedRouteProofPacketReclaimedBytes,
       nativeExitCode,
       commandRecords: commandRecords.length,
       requiredPostAppCommands: REQUIRED_POST_APP_COMMANDS.length,
@@ -346,6 +366,38 @@ function validateNativeExitEvidence(evidence, add) {
       "Native app exit blocked",
       `Native desktop workflow must exit successfully before completion; observed exit code ${Number.isFinite(exitCode) ? exitCode : "missing"}.`
     );
+  }
+}
+
+function validateSelectedRouteProofPacket(packet, add) {
+  if (!packet) return;
+  if (packet.schemaVersion !== "spaceguard-selected-route-proof-packet/v1") {
+    add("selected-route-proof-packet", "Selected-route proof schema mismatch", "Expected spaceguard-selected-route-proof-packet/v1.");
+  }
+  if (packet.route !== TEMP_ROUTE) {
+    add("selected-route-proof-packet", "Selected-route proof route mismatch", "Selected-route proof packet must bind to known-temp-delete.");
+  }
+  if (packet.status !== "proof-complete") {
+    add("selected-route-proof-packet", "Selected-route proof incomplete", `Expected proof-complete, received ${packet.status || "missing"}.`);
+  }
+  if (packet.rescanStatus !== "matched" || packet.postRunScanEvidence !== true) {
+    add("selected-route-proof-packet", "Selected-route rescan proof missing", "Selected-route proof packet must include matched post-run native rescan evidence.");
+  }
+  if (packet.scopedNativeExecution !== true) {
+    add("selected-route-proof-packet", "Scoped native execution missing", "Selected-route proof packet must prove the scoped native executor produced the ledger row.");
+  }
+  if (packet.readyForNextRoute !== true || packet.validationImport?.status !== "import-complete" || packet.validationImport?.complete !== true) {
+    add("selected-route-proof-packet", "Selected-route proof import incomplete", "Selected-route proof packet must be re-exported after validation import is complete.");
+  }
+  if (
+    Number(packet.counts?.ledgerEntries || 0) < 1 ||
+    Number(packet.counts?.matchedRows || 0) < 1 ||
+    Number(packet.counts?.reclaimedBytes || 0) <= 0
+  ) {
+    add("selected-route-proof-packet", "Selected-route proof counts invalid", "Selected-route proof packet must include ledger, matched rescan, and positive recovered bytes.");
+  }
+  if (packet.volumeProof?.status !== "measured") {
+    add("selected-route-proof-packet", "Selected-route volume proof missing", "Selected-route proof packet must include measured native volume proof.");
   }
 }
 

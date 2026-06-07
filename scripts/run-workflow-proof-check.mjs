@@ -156,6 +156,9 @@ function validateAppCloseContract(contract, add) {
   if (String(contract.workflowProofPath || "") !== ".\\spaceguard-real-workflow-proof.md") {
     add("app-close-contract", "Workflow proof export path mismatch", "App-close contract must point to .\\spaceguard-real-workflow-proof.md.");
   }
+  if (String(contract.selectedRouteProofPacketPath || "") !== ".\\spaceguard-selected-route-proof-packet.md") {
+    add("app-close-contract", "Selected-route proof export path mismatch", "App-close contract must point to .\\spaceguard-selected-route-proof-packet.md.");
+  }
   if (String(contract.expectedWorkflowProofSchema || "") !== PROOF_SCHEMA) {
     add("app-close-contract", "Workflow proof schema mismatch", `App-close contract must require ${PROOF_SCHEMA}.`);
   }

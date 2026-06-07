@@ -64,6 +64,7 @@ function buildAppCloseContract(fixtureRoute) {
   return {
     schemaVersion: APP_CLOSE_CONTRACT_SCHEMA,
     workflowProofPath: ".\\spaceguard-real-workflow-proof.md",
+    selectedRouteProofPacketPath: ".\\spaceguard-selected-route-proof-packet.md",
     expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
     minimumReclaimedBytes: 1,
     nextRouteBlockedUntil: "validate:first-route-completion accepted",

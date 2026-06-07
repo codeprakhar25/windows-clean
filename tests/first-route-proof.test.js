@@ -32,6 +32,7 @@ const script = path.join(root, "scripts", "run-first-route-proof.mjs");
   assert(packet.commands.finalizeWindowsProof.includes("-EvidenceRoot"), "finalize command should require the existing evidence root");
   assert(packet.commands.validateWorkflowProof.includes("validate:workflow-proof"), "first proof packet should include final workflow proof validation");
   assert.strictEqual(packet.appCloseContract.schemaVersion, "spaceguard-first-route-app-close-contract/v1", "first proof packet should include the app-close contract schema");
+  assert.strictEqual(packet.appCloseContract.selectedRouteProofPacketPath, ".\\spaceguard-selected-route-proof-packet.md", "first proof packet should require a selected-route proof packet export path");
   assert.strictEqual(packet.appCloseContract.minimumReclaimedBytes, 1, "first proof packet should require positive recovered bytes before closing the app");
   assert(packet.appCloseContract.requiredBeforeClosingApp.includes("selected-route-proof-import-complete"), "first proof packet should require selected-route proof import before app close");
   assert(packet.appSteps.some((step) => step.includes("Seeded temp fixture")), "first proof packet should tell the operator to select the seeded fixture");

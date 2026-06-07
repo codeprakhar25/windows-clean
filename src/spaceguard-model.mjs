@@ -8865,6 +8865,7 @@ function buildRealWorkflowAppCloseContract() {
   return {
     schemaVersion: "spaceguard-first-route-app-close-contract/v1",
     workflowProofPath: ".\\spaceguard-real-workflow-proof.md",
+    selectedRouteProofPacketPath: ".\\spaceguard-selected-route-proof-packet.md",
     expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
     minimumReclaimedBytes: 1,
     nextRouteBlockedUntil: "validate:first-route-completion accepted",

@@ -4115,6 +4115,7 @@ const assert = require("assert");
   assert.strictEqual(completeWorkflowProof.readyForNextRoute, true, "complete workflow proof should unlock another route");
   assert.strictEqual(completeWorkflowProof.route, "known-temp-delete", "workflow proof should retain the selected route");
   assert.strictEqual(completeWorkflowProof.appCloseContract.schemaVersion, "spaceguard-first-route-app-close-contract/v1", "workflow proof should retain the app-close contract");
+  assert.strictEqual(completeWorkflowProof.appCloseContract.selectedRouteProofPacketPath, ".\\spaceguard-selected-route-proof-packet.md", "workflow proof app-close contract should name the selected-route proof packet export");
   assert.strictEqual(completeWorkflowProof.appCloseContract.minimumReclaimedBytes, 1, "workflow proof app-close contract should require positive recovered bytes");
   assert(completeWorkflowProof.appCloseContract.requiredBeforeClosingApp.includes("selected-route-proof-import-complete"), "workflow proof app-close contract should require selected-route proof import");
   assert(completeWorkflowProof.rows.some((row) => row.id === "reclaimed-bytes" && row.passed), "complete workflow proof should include positive recovered-byte evidence");
