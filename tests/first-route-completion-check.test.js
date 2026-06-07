@@ -157,6 +157,19 @@ function createFirstRouteEvidence(patch = {}) {
     status: "workflow-proven",
     route: "known-temp-delete",
     routeInput: "temp-fixture",
+    appCloseContract: {
+      schemaVersion: "spaceguard-first-route-app-close-contract/v1",
+      workflowProofPath: ".\\spaceguard-real-workflow-proof.md",
+      expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
+      minimumReclaimedBytes: 1,
+      nextRouteBlockedUntil: "validate:first-route-completion accepted",
+      requiredBeforeClosingApp: [
+        "post-run-rescan-matched",
+        "selected-route-proof-packet-exported",
+        "selected-route-proof-import-complete",
+        "spaceguard-real-workflow-proof-exported"
+      ]
+    },
     proofStatus: "proof-complete",
     proofImportStatus: "import-complete",
     readyForNextRoute: true,

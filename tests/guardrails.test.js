@@ -4109,8 +4109,12 @@ const assert = require("assert");
   assert.strictEqual(completeWorkflowProof.status, "workflow-proven", "imported selected-route proof should complete the real workflow proof");
   assert.strictEqual(completeWorkflowProof.readyForNextRoute, true, "complete workflow proof should unlock another route");
   assert.strictEqual(completeWorkflowProof.route, "known-temp-delete", "workflow proof should retain the selected route");
+  assert.strictEqual(completeWorkflowProof.appCloseContract.schemaVersion, "spaceguard-first-route-app-close-contract/v1", "workflow proof should retain the app-close contract");
+  assert.strictEqual(completeWorkflowProof.appCloseContract.minimumReclaimedBytes, 1, "workflow proof app-close contract should require positive recovered bytes");
+  assert(completeWorkflowProof.appCloseContract.requiredBeforeClosingApp.includes("selected-route-proof-import-complete"), "workflow proof app-close contract should require selected-route proof import");
   assert(completeWorkflowProof.rows.some((row) => row.id === "reclaimed-bytes" && row.passed), "complete workflow proof should include positive recovered-byte evidence");
   assert(guard.buildRealWorkflowProofPacketMarkdown(completeWorkflowProof).includes("Status: workflow-proven"), "workflow proof markdown should include final status");
+  assert(guard.buildRealWorkflowProofPacketMarkdown(completeWorkflowProof).includes("App-close contract: spaceguard-first-route-app-close-contract/v1"), "workflow proof markdown should include app-close contract status");
   const zeroByteWorkflowProof = guard.buildRealWorkflowProofPacket({
     windowsSetupAssistant: completeWorkflowSetupAssistant,
     scopedExecutorCommandFlow: {

@@ -13,6 +13,19 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
     status: "workflow-proven",
     route: "bounded-npm-cache-delete",
     routeInput: "npm-cache",
+    appCloseContract: {
+      schemaVersion: "spaceguard-first-route-app-close-contract/v1",
+      workflowProofPath: ".\\spaceguard-real-workflow-proof.md",
+      expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
+      minimumReclaimedBytes: 1,
+      nextRouteBlockedUntil: "validate:first-route-completion accepted",
+      requiredBeforeClosingApp: [
+        "post-run-rescan-matched",
+        "selected-route-proof-packet-exported",
+        "selected-route-proof-import-complete",
+        "spaceguard-real-workflow-proof-exported"
+      ]
+    },
     proofStatus: "proof-complete",
     proofImportStatus: "import-complete",
     readyForNextRoute: true,
@@ -68,6 +81,15 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
   assert.strictEqual(zeroByteCheck.status, "blocked", "zero-byte workflow proof should block");
   assert.strictEqual(zeroByteCheck.canAccept, false, "zero-byte workflow proof must not be accepted");
   assert(zeroByteCheck.blockers.some((blocker) => blocker.id === "reclaimed-bytes"), "zero-byte workflow proof should name missing recovered bytes");
+
+  const missingAppCloseContract = verifier.buildWorkflowProofCheck({
+    evidenceObject: {
+      ...provenPacket,
+      appCloseContract: null
+    }
+  });
+  assert.strictEqual(missingAppCloseContract.status, "blocked", "workflow proof without app-close contract should block");
+  assert(missingAppCloseContract.blockers.some((blocker) => blocker.id === "app-close-contract"), "missing app-close contract blocker should be surfaced");
 
   const wrongSchema = verifier.buildWorkflowProofCheck({ evidenceObject: { schemaVersion: "wrong" } });
   assert.strictEqual(wrongSchema.status, "schema-mismatch", "wrong schema should be rejected");

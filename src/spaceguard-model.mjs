@@ -8774,6 +8774,7 @@ export function buildRealWorkflowProofPacket({
   const positiveRecoveredBytes = reclaimedBytes > 0;
   const readyForNextRoute = Boolean(proofPacket.readyForNextRoute && importComplete && positiveRecoveredBytes);
   const unsafeRuntime = Boolean(windowsSetupAssistant?.destructiveCommands || windowsSetupAssistant?.status === "unsafe-runtime");
+  const appCloseContract = buildRealWorkflowAppCloseContract();
   const rows = [
     buildRealWorkflowProofRow({
       id: "native-scan-current",
@@ -8842,6 +8843,7 @@ export function buildRealWorkflowProofPacket({
     workflowStatus: workflow.status || "unknown",
     proofStatus: proofPacket.status || executionProofHandoff?.status || "unknown",
     proofImportStatus: validationImport.status || "not-imported",
+    appCloseContract,
     readyForNextRoute,
     nativeScanCurrent,
     unsafeRuntime,
@@ -8856,6 +8858,22 @@ export function buildRealWorkflowProofPacket({
       reclaimedBytes
     },
     primary: getRealWorkflowProofPrimary(status, { routeInput, blockedRows, proofPacket })
+  };
+}
+
+function buildRealWorkflowAppCloseContract() {
+  return {
+    schemaVersion: "spaceguard-first-route-app-close-contract/v1",
+    workflowProofPath: ".\\spaceguard-real-workflow-proof.md",
+    expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
+    minimumReclaimedBytes: 1,
+    nextRouteBlockedUntil: "validate:first-route-completion accepted",
+    requiredBeforeClosingApp: [
+      "post-run-rescan-matched",
+      "selected-route-proof-packet-exported",
+      "selected-route-proof-import-complete",
+      "spaceguard-real-workflow-proof-exported"
+    ]
   };
 }
 
@@ -8898,6 +8916,7 @@ export function buildRealWorkflowProofPacketMarkdown(packet = null) {
     `Workflow status: ${packet?.workflowStatus || "unknown"}`,
     `Proof status: ${packet?.proofStatus || "unknown"}`,
     `Proof import: ${packet?.proofImportStatus || "not-imported"}`,
+    `App-close contract: ${packet?.appCloseContract?.schemaVersion || "missing"}`,
     `Ready for next route: ${packet?.readyForNextRoute ? "yes" : "no"}`,
     `Ledger entries: ${packet?.counts?.ledgerEntries || 0}`,
     `Matched rows: ${packet?.counts?.matchedRows || 0}`,

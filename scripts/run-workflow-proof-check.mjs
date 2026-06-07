@@ -5,6 +5,13 @@ import process from "node:process";
 const SCRIPT_ID = "spaceguard-workflow-proof-check";
 const PROOF_SCHEMA = "spaceguard-real-workflow-proof/v1";
 const CHECK_SCHEMA = "spaceguard-workflow-proof-check/v1";
+const APP_CLOSE_CONTRACT_SCHEMA = "spaceguard-first-route-app-close-contract/v1";
+const REQUIRED_APP_CLOSE_REQUIREMENTS = [
+  "post-run-rescan-matched",
+  "selected-route-proof-packet-exported",
+  "selected-route-proof-import-complete",
+  "spaceguard-real-workflow-proof-exported"
+];
 const requiredRowIds = [
   "native-scan-current",
   "post-run-proof-complete",
@@ -127,6 +134,7 @@ function buildWorkflowProofBlockers(proof = {}) {
   if (Number(proof.counts?.ledgerEntries || 0) < 1) add("execution-ledger", "Ledger missing", "At least one selected-route execution ledger entry is required.");
   if (Number(proof.counts?.matchedRows || 0) < 1) add("post-run-rescan", "Matched rescan missing", "At least one matched post-run rescan row is required.");
   if (Number(proof.counts?.reclaimedBytes || 0) <= 0) add("reclaimed-bytes", "Recovered bytes missing", "Workflow proof must report positive reclaimed bytes before next-route handoff is accepted.");
+  validateAppCloseContract(proof.appCloseContract, add);
 
   for (const rowId of requiredRowIds) {
     const row = Array.isArray(proof.rows) ? proof.rows.find((item) => item?.id === rowId) : null;
@@ -134,6 +142,37 @@ function buildWorkflowProofBlockers(proof = {}) {
   }
 
   return blockers;
+}
+
+function validateAppCloseContract(contract, add) {
+  if (!contract || typeof contract !== "object" || Array.isArray(contract)) {
+    add("app-close-contract", "App-close contract missing", "Workflow proof must include the app-close proof contract exported by the desktop app.");
+    return;
+  }
+
+  if (contract.schemaVersion !== APP_CLOSE_CONTRACT_SCHEMA) {
+    add("app-close-contract", "App-close contract schema mismatch", `Expected ${APP_CLOSE_CONTRACT_SCHEMA}.`);
+  }
+  if (String(contract.workflowProofPath || "") !== ".\\spaceguard-real-workflow-proof.md") {
+    add("app-close-contract", "Workflow proof export path mismatch", "App-close contract must point to .\\spaceguard-real-workflow-proof.md.");
+  }
+  if (String(contract.expectedWorkflowProofSchema || "") !== PROOF_SCHEMA) {
+    add("app-close-contract", "Workflow proof schema mismatch", `App-close contract must require ${PROOF_SCHEMA}.`);
+  }
+  if (Number(contract.minimumReclaimedBytes || 0) < 1) {
+    add("app-close-contract", "Recovered-byte minimum missing", "App-close contract must require positive reclaimed bytes.");
+  }
+  if (String(contract.nextRouteBlockedUntil || "") !== "validate:first-route-completion accepted") {
+    add("app-close-contract", "Next-route gate missing", "App-close contract must keep next route blocked until first-route completion is accepted.");
+  }
+
+  const requirements = Array.isArray(contract.requiredBeforeClosingApp)
+    ? contract.requiredBeforeClosingApp.map((item) => String(item || ""))
+    : [];
+  const missing = REQUIRED_APP_CLOSE_REQUIREMENTS.filter((item) => !requirements.includes(item));
+  if (missing.length) {
+    add("app-close-contract", "Before-close requirements missing", `Missing app-close requirement(s): ${missing.join(", ")}.`);
+  }
 }
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"))) {
