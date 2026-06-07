@@ -48,6 +48,7 @@ try {
   $CommandLogPath = Join-Path $EvidenceRoot "commands.ndjson"
   $PreflightPath = Join-Path $EvidenceRoot "operator-preflight.json"
   $PreflightCheckPath = Join-Path $EvidenceRoot "operator-preflight-check.json"
+  $OperatorAppHandoffPath = Join-Path $EvidenceRoot "operator-app-handoff.md"
   $WorkflowProofPath = Join-Path $RepoRoot "spaceguard-real-workflow-proof.md"
   $WorkflowProofCheckPath = Join-Path $EvidenceRoot "workflow-proof-check.json"
   $CompletionCheckPath = Join-Path $EvidenceRoot "first-route-completion-check.json"
@@ -249,6 +250,33 @@ try {
     Invoke-LoggedCommand -Id "first-route-completion-check" -CommandLine $summary.commands.validateFirstRouteCompletion -OutputPath $CompletionCheckPath | Out-Null
   }
 
+  function Write-OperatorAppHandoff {
+    $lines = @(
+      "# SpaceGuard First-Route App Handoff",
+      "",
+      "Evidence root: $EvidenceRoot",
+      "Preflight bundle: $PreflightPath",
+      "",
+      "## In-app steps",
+      "1. Run real scan in the Tauri desktop app.",
+      "2. Select only Seeded temp fixture under %TEMP%\spaceguard-fixture.",
+      "3. Arm consent for the current plan and scan fingerprint.",
+      "4. Run Real temp cleanup from the first-safe temp executor panel.",
+      "5. Run post-run rescan.",
+      "6. Export spaceguard-selected-route-proof-packet.md.",
+      "7. Complete Selected route proof import with reviewer and artifact path.",
+      "8. Export spaceguard-real-workflow-proof.md to the repo root before closing the app.",
+      "",
+      "## Resume validation",
+      "npm run proof:first-route:windows:finalize -- -EvidenceRoot `"$EvidenceRoot`"",
+      "",
+      "## Expected final checks",
+      $ValidateWorkflowProofCommand,
+      $ValidateFirstRouteCompletionCommand
+    )
+    Set-Content -LiteralPath $OperatorAppHandoffPath -Value $lines -Encoding UTF8
+  }
+
   Import-SpaceGuardDotEnv -Path (Join-Path $RepoRoot ".env")
   Set-ScopedTempExecutorEnvironment
 
@@ -331,6 +359,7 @@ try {
       openAiFixtureSmoke = $FixtureSmokePath
       openAiLiveSmoke = $LiveSmokePath
       nativeDevExit = $NativeDevExitPath
+      operatorAppHandoff = $OperatorAppHandoffPath
     }
     appCloseContract = [PSCustomObject]@{
       schemaVersion = "spaceguard-first-route-app-close-contract/v1"
@@ -361,6 +390,7 @@ try {
     }
   }
 
+  Write-OperatorAppHandoff
   Write-JsonFile -Value $preflight -Path $PreflightPath
   Invoke-LoggedCommand -Id "validate-first-route-preflight" -CommandLine "node scripts\run-first-route-preflight-check.mjs --file `"$PreflightPath`"" -OutputPath $PreflightCheckPath | Out-Null
 

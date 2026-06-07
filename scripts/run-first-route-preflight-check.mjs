@@ -28,6 +28,14 @@ const REQUIRED_COMMANDS = [
   "setup-route",
   "validate-route"
 ];
+const REQUIRED_OPERATOR_APP_HANDOFF_MARKERS = [
+  "SpaceGuard First-Route App Handoff",
+  "%TEMP%\\spaceguard-fixture",
+  "spaceguard-selected-route-proof-packet.md",
+  "Selected route proof import",
+  "spaceguard-real-workflow-proof.md",
+  "proof:first-route:windows:finalize"
+];
 
 function parseArgs(argv = []) {
   const args = { file: "", allowIncomplete: false };
@@ -98,6 +106,7 @@ export function buildFirstRoutePreflightCheck({
   const setupRoute = readOptionalJsonArtifact("setup-route", artifactPaths.setupRoute, add);
   const validateRoute = readOptionalJsonArtifact("validate-route", artifactPaths.validateRoute, add);
   const openAiFixtureSmoke = readOptionalTextArtifact("openai-fixture-smoke", artifactPaths.openAiFixtureSmoke, add);
+  const operatorAppHandoff = readOptionalTextArtifact("operator-app-handoff", artifactPaths.operatorAppHandoff, add);
 
   validateFirstRouteProof(firstRouteProof, add);
   validateFixtureBeforeCleanup(fixtureBefore, add);
@@ -105,6 +114,7 @@ export function buildFirstRoutePreflightCheck({
   validateSetupRoute(setupRoute, add);
   validateRoutePacket(validateRoute, add);
   validateOpenAiFixtureSmoke(openAiFixtureSmoke, add);
+  validateOperatorAppHandoff(operatorAppHandoff, add);
 
   const requiredArtifactCount = [
     "commandLog",
@@ -114,7 +124,8 @@ export function buildFirstRoutePreflightCheck({
     "setupDoctor",
     "setupRoute",
     "validateRoute",
-    "openAiFixtureSmoke"
+    "openAiFixtureSmoke",
+    "operatorAppHandoff"
   ].filter((key) => artifactPaths[key] && fs.existsSync(artifactPaths[key])).length;
   const canLaunchApp = blockers.length === 0;
 
@@ -412,6 +423,22 @@ function validateRoutePacket(packet, add) {
 function validateOpenAiFixtureSmoke(text, add) {
   if (!String(text || "").includes("validation=broker-ready") || !String(text || "").includes(`route=${TEMP_ROUTE}`)) {
     add("openai-fixture-smoke", "OpenAI fixture smoke not broker-ready", "Fixture smoke must report validation=broker-ready for known-temp-delete.");
+  }
+}
+
+function validateOperatorAppHandoff(text, add) {
+  const clean = String(text || "");
+  if (!clean) {
+    add("operator-app-handoff", "Operator app handoff missing", "operator-app-handoff.md must be written before app launch.");
+    return;
+  }
+  const missing = REQUIRED_OPERATOR_APP_HANDOFF_MARKERS.filter((marker) => !clean.includes(marker));
+  if (missing.length) {
+    add(
+      "operator-app-handoff",
+      "Operator app handoff incomplete",
+      `Handoff is missing required marker(s): ${missing.join(", ")}.`
+    );
   }
 }
 

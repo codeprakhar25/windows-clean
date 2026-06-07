@@ -40,7 +40,8 @@ function createFirstRouteEvidence(patch = {}) {
     validateRoute: path.join(dir, "validate-route.json"),
     openAiFixtureSmoke: path.join(dir, "openai-fixture-smoke.txt"),
     openAiLiveSmoke: path.join(dir, "openai-live-smoke.txt"),
-    nativeDevExit: path.join(dir, "native-dev-exit.json")
+    nativeDevExit: path.join(dir, "native-dev-exit.json"),
+    operatorAppHandoff: path.join(dir, "operator-app-handoff.md")
   };
   const preflight = {
     schemaVersion: "spaceguard-first-route-windows-operator/v1",
@@ -244,6 +245,18 @@ function createFirstRouteEvidence(patch = {}) {
   writeJson(artifacts.validateRoute, { ...validateRoute, ...patch.validateRoute }, { npmWrapped: true });
   writeText(artifacts.openAiFixtureSmoke, "routeInput=temp route=known-temp-delete title=Known temp cleanup\nvalidation=broker-ready\n");
   writeText(artifacts.openAiLiveSmoke, "");
+  writeText(
+    artifacts.operatorAppHandoff,
+    [
+      "# SpaceGuard First-Route App Handoff",
+      "",
+      "Select only Seeded temp fixture under %TEMP%\\spaceguard-fixture.",
+      "Export spaceguard-selected-route-proof-packet.md.",
+      "Complete Selected route proof import with reviewer and artifact path.",
+      "Export spaceguard-real-workflow-proof.md to the repo root.",
+      "Resume with npm run proof:first-route:windows:finalize -- -EvidenceRoot evidence\\first-route-proof-YYYYMMDD-HHMMSS."
+    ].join("\n")
+  );
   writeJson(artifacts.nativeDevExit, { ...nativeDevExit, ...patch.nativeDevExit });
   writeNdjson(artifacts.commandLog, patch.commands || commands);
 

@@ -54,6 +54,11 @@ assert(runner.includes("npm run native:dev"), "runner should launch the user-gat
 assert(runner.includes("validate:workflow-proof"), "runner should print final workflow proof validation");
 assert(runner.includes("operator-preflight.json"), "runner should write a preflight evidence bundle");
 assert(runner.includes("operator-preflight-check.json"), "runner should write a preflight verifier artifact");
+assert(runner.includes("operator-app-handoff.md"), "runner should write an app handoff file before launch");
+assert(runner.includes("Write-OperatorAppHandoff"), "runner should generate the operator app handoff markdown");
+assert(runner.includes("spaceguard-selected-route-proof-packet.md"), "runner handoff should name the selected-route proof export");
+assert(runner.includes("spaceguard-real-workflow-proof.md"), "runner handoff should name the workflow proof export");
+assert(runner.includes("proof:first-route:windows:finalize"), "runner handoff should name the finalize-only command");
 assert(runner.includes("run-first-route-preflight-check.mjs"), "runner should validate preflight evidence before app launch");
 assert(runner.includes("commands.ndjson"), "runner should write command evidence records");
 assert(runner.includes("validate:first-route-completion"), "runner should print the final first-route completion verifier command");

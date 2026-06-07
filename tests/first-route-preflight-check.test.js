@@ -35,7 +35,8 @@ function createEvidenceFolder(patch = {}) {
     setupRoute: path.join(dir, "setup-route.json"),
     validateRoute: path.join(dir, "validate-route.json"),
     openAiFixtureSmoke: path.join(dir, "openai-fixture-smoke.txt"),
-    openAiLiveSmoke: path.join(dir, "openai-live-smoke.txt")
+    openAiLiveSmoke: path.join(dir, "openai-live-smoke.txt"),
+    operatorAppHandoff: path.join(dir, "operator-app-handoff.md")
   };
   const preflight = {
     schemaVersion: "spaceguard-first-route-windows-operator/v1",
@@ -156,6 +157,18 @@ function createEvidenceFolder(patch = {}) {
     patch.openAiFixtureSmoke || "routeInput=temp route=known-temp-delete title=Known temp cleanup\nvalidation=broker-ready\n"
   );
   writeText(artifacts.openAiLiveSmoke, "");
+  writeText(
+    artifacts.operatorAppHandoff,
+    patch.operatorAppHandoff || [
+      "# SpaceGuard First-Route App Handoff",
+      "",
+      "Select only Seeded temp fixture under %TEMP%\\spaceguard-fixture.",
+      "Export spaceguard-selected-route-proof-packet.md.",
+      "Complete Selected route proof import with reviewer and artifact path.",
+      "Export spaceguard-real-workflow-proof.md to the repo root.",
+      "Resume with npm run proof:first-route:windows:finalize -- -EvidenceRoot evidence\\first-route-proof-YYYYMMDD-HHMMSS."
+    ].join("\n")
+  );
   writeNdjson(artifacts.commandLog, patch.commands || commands);
   return { dir, preflightPath: path.join(dir, "operator-preflight.json"), artifacts };
 }
@@ -173,6 +186,7 @@ function createEvidenceFolder(patch = {}) {
   assert.strictEqual(accepted.canLaunchApp, true, "accepted preflight should clear the app launch");
   assert.strictEqual(accepted.route, "known-temp-delete", "accepted preflight should preserve selected route");
   assert.strictEqual(accepted.counts.requiredCommandsPassed, 7, "accepted preflight should count required command records");
+  assert.strictEqual(accepted.counts.requiredArtifactsPresent, 9, "accepted preflight should count the operator app handoff artifact");
   assert.strictEqual(accepted.counts.appCloseRequirements, 4, "accepted preflight should count app-close requirements");
   assert(accepted.appCloseContract.workflowProofPath.endsWith("spaceguard-real-workflow-proof.md"), "preflight should expose the workflow proof export path");
   assert.strictEqual(accepted.appCloseContract.minimumReclaimedBytes, 1, "preflight should require positive recovered bytes");
@@ -237,6 +251,19 @@ function createEvidenceFolder(patch = {}) {
   const missingFixture = verifier.buildFirstRoutePreflightCheck({ preflightPath: missingFixtureFolder.preflightPath });
   assert.strictEqual(missingFixture.status, "blocked", "missing temp fixture should block preflight");
   assert(missingFixture.blockers.some((blocker) => blocker.id === "fixture-before-cleanup"), "missing fixture blocker should name fixture evidence");
+
+  const missingHandoffFolder = createEvidenceFolder();
+  fs.unlinkSync(missingHandoffFolder.artifacts.operatorAppHandoff);
+  const missingHandoff = verifier.buildFirstRoutePreflightCheck({ preflightPath: missingHandoffFolder.preflightPath });
+  assert.strictEqual(missingHandoff.status, "blocked", "missing operator app handoff should block preflight");
+  assert(missingHandoff.blockers.some((blocker) => blocker.id === "operator-app-handoff"), "missing handoff blocker should name operator app handoff");
+
+  const invalidHandoffFolder = createEvidenceFolder({
+    operatorAppHandoff: "Select broad Windows temporary files and close the app."
+  });
+  const invalidHandoff = verifier.buildFirstRoutePreflightCheck({ preflightPath: invalidHandoffFolder.preflightPath });
+  assert.strictEqual(invalidHandoff.status, "blocked", "invalid operator app handoff should block preflight");
+  assert(invalidHandoff.blockers.some((blocker) => blocker.id === "operator-app-handoff"), "invalid handoff blocker should name operator app handoff");
 
   const missingFile = verifier.buildFirstRoutePreflightCheck({ preflightPath: path.join(os.tmpdir(), "missing-preflight.json") });
   assert.strictEqual(missingFile.status, "read-error", "missing preflight file should return read-error");
