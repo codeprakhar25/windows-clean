@@ -31,6 +31,7 @@ function cleanEnv(extra = {}) {
   assert(blocked.commands.setupRoute.includes("npm run setup:route -- --route npm-cache"), "validation packet should point to setup:route");
   assert(blocked.commands.openAiFixtureSmoke.includes("npm run openai:smoke:fixture -- --route npm-cache"), "validation packet should point to route-specific fixture smoke");
   assert(blocked.commands.openAiSmoke.includes("npm run openai:smoke -- --route npm-cache"), "validation packet should point to route-specific OpenAI smoke");
+  assert(blocked.commands.workflowProofValidation.includes("npm run validate:workflow-proof -- --file"), "validation packet should point to workflow proof verifier");
   assert(blocked.commands.enablePowerShell.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "validation packet should print the PowerShell flag command");
   assert(blocked.preRunChecklist.some((row) => row.id === "single-scoped-flag" && row.status === "blocked"), "disabled route should block the single-flag preflight");
   assert(blocked.postRunProofChecklist.some((row) => row.id === "native-volume-proof" && row.status === "blocked"), "disabled route should block native volume proof capture");
@@ -38,6 +39,8 @@ function cleanEnv(extra = {}) {
   assert(blocked.captureArtifacts.includes("post-run-rescan-comparison"), "validation packet should require post-run rescan proof");
   assert(blocked.captureArtifacts.includes("selected-route-proof-packet"), "validation packet should require selected-route proof packet export");
   assert(blocked.captureArtifacts.includes("selected-route-proof-import"), "validation packet should require selected-route proof import evidence");
+  assert(blocked.captureArtifacts.includes("real-workflow-proof"), "validation packet should require real workflow proof export");
+  assert(blocked.captureArtifacts.includes("workflow-proof-check-output"), "validation packet should require workflow proof verifier output");
   assert(blocked.captureArtifacts.includes("native-write-volume-proof"), "validation packet should require native volume proof evidence");
   assert(blocked.forbiddenActions.includes("enable-second-executor-flag"), "validation packet should forbid multi-route validation");
 
@@ -51,10 +54,12 @@ function cleanEnv(extra = {}) {
   assert(ready.postRunProofChecklist.every((row) => row.status !== "blocked"), "ready validation should not contain blocked post-run proof rows");
   assert(ready.postRunProofChecklist.some((row) => row.id === "selected-route-proof-packet"), "ready validation should require selected-route proof packet export");
   assert(ready.postRunProofChecklist.some((row) => row.id === "selected-route-proof-import"), "ready validation should require selected-route proof import");
+  assert(ready.postRunProofChecklist.some((row) => row.id === "real-workflow-proof-check"), "ready validation should require workflow proof verifier output");
   assert(ready.operatorSteps.some((step) => step.includes("Run real scan")), "ready validation should include native scan workflow");
   assert(ready.operatorSteps.some((step) => step.includes("post-run rescan")), "ready validation should include post-run proof workflow");
   assert(ready.operatorSteps.some((step) => step.includes("native volume proof")), "ready validation should include native volume proof capture");
   assert(ready.operatorSteps.some((step) => step.includes("import it into Validation evidence")), "ready validation should include route proof import workflow");
+  assert(ready.operatorSteps.some((step) => step.includes("validate:workflow-proof")), "ready validation should include workflow proof verifier workflow");
 
   const multiple = validation.buildWindowsValidationPacket({
     routeInput: "npm-cache",

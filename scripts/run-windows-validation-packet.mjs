@@ -91,6 +91,7 @@ function buildCommands(selected) {
     setupDoctor: "npm run setup:doctor",
     setupRoute: `npm run setup:route -- --route ${routeInput}`,
     validateRoute: `npm run validate:route -- --route ${routeInput}`,
+    workflowProofValidation: "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md",
     enablePowerShell: `$env:${selected.envVar}="1"`,
     disablePowerShell: `$env:${selected.envVar}="0"`,
     openAiFixtureSmoke: `npm run openai:smoke:fixture -- --route ${routeInput}`,
@@ -175,6 +176,12 @@ function buildPostRunProofChecklist(routePacket) {
       detail: "Paste the proof packet into Validation evidence > Selected route proof import with reviewer and artifact path; it must map only to ledger-rescan-parity."
     },
     {
+      id: "real-workflow-proof-check",
+      label: "Real workflow proof check",
+      status: ready ? "pending" : "blocked",
+      detail: "Export spaceguard-real-workflow-proof.md and run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md before any next-route handoff."
+    },
+    {
       id: "post-run-rescan-parity",
       label: "Post-run rescan parity",
       status: ready ? "pending" : "blocked",
@@ -205,6 +212,8 @@ function buildCaptureArtifacts(selected) {
     "post-run-rescan-comparison",
     "selected-route-proof-packet",
     "selected-route-proof-import",
+    "real-workflow-proof",
+    "workflow-proof-check-output",
     "openai-handoff-if-used",
     "support-bundle-if-any-warning"
   ];
@@ -234,7 +243,7 @@ function buildOperatorSteps(selected, status) {
     `Open ${selected.panelId} and verify route ${selected.route} with requestMode ${selected.requestMode}.`,
     `Run ${selected.actionLabel} only if the app preflight is ready.`,
     "Capture execution ledger and native volume proof, then run post-run rescan.",
-    "Export selected-route proof packet, import it into Validation evidence, and keep the post-run rescan comparison before enabling another executor."
+    "Export selected-route proof packet, import it into Validation evidence, export spaceguard-real-workflow-proof.md, and run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md before enabling another executor."
   ];
   if (status !== "ready") {
     return [`Fix validation status ${status} before Windows execution.`, ...steps.slice(0, 4)];
@@ -246,7 +255,8 @@ function buildNextSteps(routePacket, selected) {
   if (routePacket.status === "ready") {
     return [
       `Validate route ${selected.route} on Windows with exactly one scoped flag.`,
-      "Capture before scan, consent, execution ledger, native volume proof, selected-route proof packet, selected route proof import, and post-run rescan comparison.",
+      "Capture before scan, consent, execution ledger, native volume proof, selected-route proof packet, selected route proof import, real workflow proof, workflow proof verifier output, and post-run rescan comparison.",
+      "Run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md and keep the accepted output with the validation packet.",
       "Turn off the route flag before validating another executor."
     ];
   }

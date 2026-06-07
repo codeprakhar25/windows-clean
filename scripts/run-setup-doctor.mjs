@@ -83,6 +83,7 @@ export function buildSetupDoctorReport({
   const routeInput = selectedRoute?.routeInput || "npm-cache";
   const routeSetupCommand = `npm run setup:route -- --route ${routeInput}`;
   const routeValidationCommand = `npm run validate:route -- --route ${routeInput}`;
+  const workflowProofValidationCommand = "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md";
   const openAiFixtureSmokeCommand = `npm run openai:smoke:fixture -- --route ${routeInput}`;
   const openAiSmokeCommand = `npm run openai:smoke -- --route ${routeInput}`;
 
@@ -124,7 +125,8 @@ export function buildSetupDoctorReport({
       routeInput,
       selectedRoute,
       enabledFlags,
-      openAiConfigured: openAiKey.source !== "missing"
+      openAiConfigured: openAiKey.source !== "missing",
+      workflowProofValidationCommand
     }),
     commands: {
       install: "npm install",
@@ -134,6 +136,7 @@ export function buildSetupDoctorReport({
       openAiSmoke: openAiSmokeCommand,
       routeSetup: routeSetupCommand,
       routeValidation: routeValidationCommand,
+      workflowProofValidation: workflowProofValidationCommand,
       nativeDev: "npm run native:dev"
     },
     nextSteps: buildNextSteps({ openAiConfigured: openAiKey.source !== "missing", enabledFlags, routeInput })
@@ -166,7 +169,13 @@ function getScopedExecutorWarning(enabledFlags) {
   return "No scoped executor flags are enabled; native mode remains read-only.";
 }
 
-function buildRealWorkflow({ routeInput = "npm-cache", selectedRoute = null, enabledFlags = [], openAiConfigured = false } = {}) {
+function buildRealWorkflow({
+  routeInput = "npm-cache",
+  selectedRoute = null,
+  enabledFlags = [],
+  openAiConfigured = false,
+  workflowProofValidationCommand = "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md"
+} = {}) {
   const ready = Boolean(selectedRoute && enabledFlags.length === 1);
   const route = selectedRoute?.route || "";
   const title = selectedRoute?.title || "selected route";
@@ -240,9 +249,15 @@ function buildRealWorkflow({ routeInput = "npm-cache", selectedRoute = null, ena
         detail: "Export Selected route proof packet, then paste it into Selected route proof import with reviewer and artifact path."
       },
       {
+        id: "workflow-proof-check",
+        command: workflowProofValidationCommand,
+        panel: "real-cleanup-command-flow-panel",
+        detail: "Export spaceguard-real-workflow-proof.md and accept it with the workflow proof verifier before another route is considered."
+      },
+      {
         id: "next-route",
         command: "Return to setup:doctor",
-        detail: "Only after proof import is complete should another scoped executor flag or route be considered."
+        detail: "Only after proof import and workflow proof verification are complete should another scoped executor flag or route be considered."
       }
     ]
   };
@@ -264,7 +279,7 @@ function buildNextSteps({ openAiConfigured, enabledFlags, routeInput = "npm-cach
   if (!enabledFlags.length) {
     steps.push("Run npm run native:dev for read-only scanning, or enable exactly one scoped executor flag for Windows fixture validation.");
   } else if (enabledFlags.length === 1) {
-    steps.push(`Launch npm run native:dev with ${enabledFlags[0]} enabled, then complete post-run rescan proof before enabling another route.`);
+    steps.push(`Launch npm run native:dev with ${enabledFlags[0]} enabled, export spaceguard-real-workflow-proof.md, then run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md before enabling another route.`);
   } else {
     steps.push("Turn off all but one scoped executor flag before real cleanup validation.");
   }
