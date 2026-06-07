@@ -38,6 +38,7 @@ try {
   $ValidateRoutePath = Join-Path $EvidenceRoot "validate-route.json"
   $CommandLogPath = Join-Path $EvidenceRoot "commands.ndjson"
   $PreflightPath = Join-Path $EvidenceRoot "operator-preflight.json"
+  $PreflightCheckPath = Join-Path $EvidenceRoot "operator-preflight-check.json"
 
   New-Item -ItemType Directory -Path $EvidenceRoot -Force | Out-Null
 
@@ -253,11 +254,13 @@ try {
   }
 
   Write-JsonFile -Value $preflight -Path $PreflightPath
+  Invoke-LoggedCommand -Id "validate-first-route-preflight" -CommandLine "node scripts\run-first-route-preflight-check.mjs --file `"$PreflightPath`"" -OutputPath $PreflightCheckPath | Out-Null
 
   Write-Host ""
   Write-Host "SpaceGuard first-route preflight complete."
   Write-Host "Evidence root: $EvidenceRoot"
   Write-Host "Preflight bundle: $PreflightPath"
+  Write-Host "Preflight check: $PreflightCheckPath"
   Write-Host ""
   Write-Host "The runner has not performed cleanup. Continue in the desktop app:"
   foreach ($step in $preflight.userGatedAppSteps) {

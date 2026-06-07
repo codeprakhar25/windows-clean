@@ -14,6 +14,10 @@ assert(
   packageJson.scripts["proof:first-route:windows"]?.includes("run-first-route-proof-windows.ps1"),
   "package.json should expose the Windows first-route proof runner"
 );
+assert(
+  packageJson.scripts["validate:first-route-preflight"]?.includes("run-first-route-preflight-check.mjs"),
+  "package.json should expose the first-route preflight verifier"
+);
 assert(runner.includes("spaceguard-first-route-windows-operator/v1"), "runner should write a stable operator evidence schema");
 assert(runner.includes("[System.PlatformID]::Win32NT"), "runner should refuse non-Windows execution");
 assert(runner.includes("Unsupported first-route proof route"), "runner should reject non-temp first-proof routes");
@@ -32,6 +36,8 @@ assert(runner.includes("npm run validate:route -- --route $Route"), "runner shou
 assert(runner.includes("npm run native:dev"), "runner should launch the user-gated Tauri workflow");
 assert(runner.includes("validate:workflow-proof"), "runner should print final workflow proof validation");
 assert(runner.includes("operator-preflight.json"), "runner should write a preflight evidence bundle");
+assert(runner.includes("operator-preflight-check.json"), "runner should write a preflight verifier artifact");
+assert(runner.includes("run-first-route-preflight-check.mjs"), "runner should validate preflight evidence before app launch");
 assert(runner.includes("commands.ndjson"), "runner should write command evidence records");
 
 assert(!/\bRemove-Item\b/i.test(runner), "runner must not delete files directly");
