@@ -11,6 +11,13 @@ const CHECK_SCHEMA = "spaceguard-first-route-completion-check/v1";
 const FIXTURE_EVIDENCE_SCHEMA = "spaceguard-fixture-evidence/v1";
 const NATIVE_DEV_EXIT_SCHEMA = "spaceguard-native-dev-exit/v1";
 const TEMP_ROUTE = "known-temp-delete";
+const REQUIRED_POST_APP_COMMANDS = [
+  "native-dev-launch",
+  "native-dev-exit",
+  "finalize-after-app",
+  "inspect-fixtures-after",
+  "workflow-proof-check"
+];
 
 function parseArgs(argv = []) {
   const args = { preflight: "", afterFixture: "", workflowProof: "", nativeExit: "", allowIncomplete: false };
@@ -52,12 +59,18 @@ export function buildFirstRouteCompletionCheck({
     afterFixturePath || preflightObject?.artifacts?.fixtureAfterCleanup || "",
     resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
   );
+  const artifactCommandLogPath = normalizeArtifactPath(
+    preflightObject?.artifacts?.commandLog || "",
+    resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
+  );
   const artifactNativeExitPath = normalizeArtifactPath(
     nativeExitPath || preflightObject?.artifacts?.nativeDevExit || "",
     resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
   );
   const resolvedWorkflowProofPath = workflowProofPath ? path.resolve(workflowProofPath) : path.resolve(process.cwd(), "spaceguard-real-workflow-proof.md");
 
+  const commandRecords = readCommandRecords(artifactCommandLogPath, add);
+  const commandSummary = validatePostAppCommandRecords(commandRecords, add);
   const afterFixture = readOptionalJsonArtifact("after-fixture", artifactAfterFixturePath, add);
   const nativeExit = readOptionalJsonArtifact("native-exit", artifactNativeExitPath, add);
   const workflowProofText = readOptionalTextArtifact("workflow-proof", resolvedWorkflowProofPath, add);
@@ -81,6 +94,7 @@ export function buildFirstRouteCompletionCheck({
     route: TEMP_ROUTE,
     routeInput: preflight.routeInput || "temp-fixture",
     preflightPath: resolvedPreflightPath,
+    commandLogPath: artifactCommandLogPath,
     afterFixturePath: artifactAfterFixturePath,
     nativeExitPath: artifactNativeExitPath,
     workflowProofPath: resolvedWorkflowProofPath,
@@ -89,6 +103,9 @@ export function buildFirstRouteCompletionCheck({
       blockers: blockers.length,
       reclaimedBytes,
       nativeExitCode,
+      commandRecords: commandRecords.length,
+      requiredPostAppCommands: REQUIRED_POST_APP_COMMANDS.length,
+      postAppCommandsPassed: commandSummary.requiredPassed,
       preflightBlockers: Number(preflight.counts?.blockers || 0),
       workflowProofBlockers: Number(workflowProof.counts?.blockers || 0),
       afterFixtureRecords: Array.isArray(afterFixture?.records) ? afterFixture.records.length : 0,
@@ -134,6 +151,29 @@ function readOptionalTextArtifact(id, filePath, add) {
     return "";
   }
   return fs.readFileSync(filePath, "utf8");
+}
+
+function readCommandRecords(commandLogPath, add) {
+  if (!commandLogPath) {
+    add("artifact-command-log", "Command log missing", "Command log artifact path is missing.");
+    return [];
+  }
+  if (!fs.existsSync(commandLogPath)) {
+    add("artifact-command-log", "Command log missing", `Command log does not exist: ${commandLogPath}`);
+    return [];
+  }
+  const records = [];
+  for (const [index, line] of fs.readFileSync(commandLogPath, "utf8").split(/\r?\n/).entries()) {
+    const clean = line.trim();
+    if (!clean) continue;
+    try {
+      const parsed = JSON.parse(clean);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) records.push(parsed);
+    } catch {
+      add("command-log-parse", "Command log parse failed", `commands.ndjson line ${index + 1} is not JSON.`);
+    }
+  }
+  return records;
 }
 
 function parseJsonObject(text = "", label = "artifact") {
@@ -214,6 +254,50 @@ function validateAfterFixtureEvidence(evidence, add) {
   if (!retained.length || retained.some((record) => record.exists !== true || record.presenceMatches === false)) {
     add("after-fixture", "Non-temp fixture mismatch", "Non-temp seeded fixtures must remain present after temp cleanup.");
   }
+}
+
+function validatePostAppCommandRecords(records = [], add) {
+  let requiredPassed = 0;
+  for (const id of REQUIRED_POST_APP_COMMANDS) {
+    const record = records.find((item) => item?.id === id);
+    if (!record) {
+      add(`command-${id}`, "Command missing", `${id} command record is missing.`);
+      continue;
+    }
+
+    if (id === "native-dev-launch") {
+      if (record.userGated !== true) {
+        add(`command-${id}`, "Command not user-gated", "native-dev-launch must be recorded as userGated=true.");
+        continue;
+      }
+      requiredPassed += 1;
+      continue;
+    }
+
+    if (id === "finalize-after-app") {
+      if (record.skipped === true) {
+        add(`command-${id}`, "Command skipped", `finalize-after-app was skipped: ${record.reason || "missing reason"}.`);
+        continue;
+      }
+      if (record.userGated !== true) {
+        add(`command-${id}`, "Command not user-gated", "finalize-after-app must be recorded as userGated=true.");
+        continue;
+      }
+      requiredPassed += 1;
+      continue;
+    }
+
+    if (!isExitCodeZero(record.exitCode)) {
+      add(`command-${id}`, "Command failed", `${id} exited with ${record.exitCode ?? "missing"}.`);
+      continue;
+    }
+    requiredPassed += 1;
+  }
+  return { requiredPassed };
+}
+
+function isExitCodeZero(value) {
+  return value === 0 || value === "0";
 }
 
 function validateNativeExitEvidence(evidence, add) {

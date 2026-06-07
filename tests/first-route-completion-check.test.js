@@ -172,6 +172,41 @@ function createFirstRouteEvidence(patch = {}) {
     "setup-route",
     "validate-route"
   ].map((id) => ({ id, command: id, outputPath: path.join(dir, `${id}.txt`), exitCode: 0 }));
+  commands.push(
+    {
+      id: "native-dev-launch",
+      command: "npm run native:dev",
+      outputPath: "",
+      exitCode: null,
+      userGated: true
+    },
+    {
+      id: "native-dev-exit",
+      command: "npm run native:dev",
+      outputPath: artifacts.nativeDevExit,
+      exitCode: 0,
+      userGated: true
+    },
+    {
+      id: "finalize-after-app",
+      command: "inspect fixtures, validate workflow proof, validate first-route completion",
+      outputPath: path.join(dir, "post-app-finalization.json"),
+      exitCode: null,
+      userGated: true
+    },
+    {
+      id: "inspect-fixtures-after",
+      command: "inspect-fixtures-after",
+      outputPath: path.join(dir, "inspect-fixtures-after.txt"),
+      exitCode: 0
+    },
+    {
+      id: "workflow-proof-check",
+      command: "workflow-proof-check",
+      outputPath: path.join(dir, "workflow-proof-check.json"),
+      exitCode: 0
+    }
+  );
 
   writeJson(path.join(dir, "operator-preflight.json"), { ...preflight, ...patch.preflight });
   writeJson(artifacts.firstRouteProofPacket, { ...firstRouteProof, ...patch.firstRouteProof });
@@ -213,6 +248,7 @@ function createFirstRouteEvidence(patch = {}) {
   assert.strictEqual(accepted.route, "known-temp-delete", "completion check should preserve the temp route");
   assert.strictEqual(accepted.nativeExitPath, acceptedEvidence.nativeExitPath, "completion check should expose native app exit evidence");
   assert.strictEqual(accepted.counts.nativeExitCode, 0, "completion check should preserve successful native app exit code");
+  assert.strictEqual(accepted.counts.postAppCommandsPassed, 5, "completion check should count required post-app command records");
   assert.strictEqual(accepted.counts.reclaimedBytes, 8388608, "completion check should preserve recovered bytes");
 
   const stillPresentEvidence = createFirstRouteEvidence({
@@ -266,6 +302,25 @@ function createFirstRouteEvidence(patch = {}) {
   });
   assert.strictEqual(failedNative.status, "blocked", "completion should block a failed native desktop session");
   assert(failedNative.blockers.some((blocker) => blocker.id === "native-exit"), "native exit blocker should be surfaced");
+
+  const missingPostAppLedgerEvidence = createFirstRouteEvidence({
+    commands: [
+      "first-route-proof-packet",
+      "seed-fixtures",
+      "inspect-fixtures-before",
+      "setup-doctor",
+      "openai-fixture-smoke",
+      "setup-route",
+      "validate-route"
+    ].map((id) => ({ id, command: id, outputPath: path.join(os.tmpdir(), `${id}.txt`), exitCode: 0 }))
+  });
+  const missingPostAppLedger = verifier.buildFirstRouteCompletionCheck({
+    preflightPath: missingPostAppLedgerEvidence.preflightPath,
+    afterFixturePath: missingPostAppLedgerEvidence.afterFixturePath,
+    workflowProofPath: missingPostAppLedgerEvidence.workflowProofPath
+  });
+  assert.strictEqual(missingPostAppLedger.status, "blocked", "completion should block missing post-app command ledger records");
+  assert(missingPostAppLedger.blockers.some((blocker) => blocker.id === "command-finalize-after-app"), "missing post-app ledger blocker should name finalization");
 
   const missingPreflight = verifier.buildFirstRouteCompletionCheck({
     preflightPath: path.join(os.tmpdir(), "missing-operator-preflight.json"),

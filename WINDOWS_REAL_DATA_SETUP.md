@@ -87,6 +87,8 @@ For the seeded first route, validate the whole first-delete chain after `fixture
 npm run validate:first-route-completion -- --preflight .\evidence\first-route-proof-YYYYMMDD-HHMMSS\operator-preflight.json --after-fixture .\evidence\first-route-proof-YYYYMMDD-HHMMSS\fixture-after-cleanup.json --native-exit .\evidence\first-route-proof-YYYYMMDD-HHMMSS\native-dev-exit.json --workflow-proof .\spaceguard-real-workflow-proof.md
 ```
 
+This completion verifier also reads the preflight bundle's `commands.ndjson` and requires successful post-app records for `native-dev-launch`, `native-dev-exit`, `finalize-after-app`, `inspect-fixtures-after`, and `workflow-proof-check`.
+
 Optional first-safe temp executor:
 
 ```powershell
