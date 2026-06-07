@@ -422,6 +422,10 @@ assert(openAiAgent.includes("executorScopeStatus"), "OpenAI context should expos
 assert(openAiAgent.includes("agentTaskQueue"), "OpenAI context should include a deterministic task queue");
 assert(openAiAgent.includes("spaceguard-openai-agent-task-queue/v1"), "OpenAI task queue should expose a schema version");
 assert(app.includes("Agent task queue"), "OpenAI panel should show the deterministic agent task queue");
+assert(app.includes("Usage proof:"), "OpenAI task queue should show installed-app usage-proof evidence");
+assert(app.includes("Uninstall entry:"), "OpenAI task queue should show installed-app uninstall-entry evidence");
+assert(app.includes("Framework:"), "OpenAI task queue should show project framework evidence");
+assert(app.includes("Manual guardrails:"), "OpenAI task queue should show manual-only guardrails");
 assert(rustScanner.includes("agentTaskQueue"), "native OpenAI prompt should tell the model to use the deterministic task queue");
 assert(openAiAgent.includes("scanFingerprintPresent"), "OpenAI run records should retain only compact scan-fingerprint evidence");
 assert(app.includes("Rescan proof"), "OpenAI panel should show post-run proof state");

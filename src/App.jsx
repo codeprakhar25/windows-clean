@@ -7798,14 +7798,7 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, recomm
             </div>
             <div className="grid gap-2 md:grid-cols-2">
               {agentTasks.slice(0, 4).map((task) => (
-                <div key={task.id} className="rounded-md border bg-muted/30 p-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="mr-auto min-w-0 text-sm font-medium">{task.title}</span>
-                    <Badge variant={task.status === "ready" ? "safe" : task.manualOnly ? "outline" : task.status === "blocked" ? "restricted" : "review"}>{task.status}</Badge>
-                    <Badge variant="outline">{formatBytes(task.bytes)}</Badge>
-                  </div>
-                  <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{task.actionType} / {task.route || "manual"}</p>
-                </div>
+                <OpenAIAgentTaskCard key={task.id} task={task} />
               ))}
             </div>
           </div>
@@ -7869,6 +7862,40 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, recomm
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function OpenAIAgentTaskCard({ task }) {
+  const frameworkSignal = (task.signals || []).find((signal) => String(signal.label || "").toLowerCase().includes("framework"));
+  const manualGuardrails = Array.isArray(task.forbiddenActions) ? task.forbiddenActions.slice(0, 3) : [];
+  const evidenceRows = [
+    task.usageProof ? { label: "Usage proof:", value: task.usageProof } : null,
+    task.uninstallEntry ? { label: "Uninstall entry:", value: task.uninstallEntry } : null,
+    frameworkSignal?.value ? { label: "Framework:", value: frameworkSignal.value } : null,
+    task.executorRequiresUserRemoveDecision ? { label: "Review gate:", value: "user Remove decision required" } : null,
+    task.unusedReviewTier ? { label: "Unused tier:", value: task.unusedReviewTier } : null,
+    manualGuardrails.length ? { label: "Manual guardrails:", value: manualGuardrails.join(", ") } : null
+  ].filter(Boolean);
+
+  return (
+    <div className="rounded-md border bg-muted/30 p-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-auto min-w-0 text-sm font-medium">{task.title}</span>
+        <Badge variant={task.status === "ready" ? "safe" : task.manualOnly ? "outline" : task.status === "blocked" ? "restricted" : "review"}>{task.status}</Badge>
+        <Badge variant="outline">{formatBytes(task.bytes)}</Badge>
+      </div>
+      <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{task.actionType} / {task.route || "manual"}</p>
+      {task.reason ? <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{task.reason}</p> : null}
+      {evidenceRows.length ? (
+        <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
+          {evidenceRows.map((row) => (
+            <span key={row.label} className="min-w-0">
+              <span className="font-medium text-foreground">{row.label}</span> {row.value}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
