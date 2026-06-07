@@ -491,6 +491,12 @@ export default function App() {
     }
   }
 
+  function isSelectedRouteProofImportRecommendation(row = {}, brokerRow = null) {
+    const targetId = String(brokerRow?.targetId || row.targetId || row.id || "").toLowerCase();
+    const route = String(brokerRow?.route || row.route || "").toLowerCase();
+    return targetId.includes("selected-route-proof-import") || route.includes("validation-evidence");
+  }
+
   useEffect(() => {
     selectedScopedExecutorRouteRef.current = selectedScopedExecutorRoute;
   }, [selectedScopedExecutorRoute]);
@@ -2442,7 +2448,18 @@ export default function App() {
         ? row.route
         : "";
     if (brokerRow && !brokerRow.canAct) {
-      startOpenAIAgentHandoff(row, brokerRow, deterministicRoute, "blocked-by-broker");
+      const handoff = startOpenAIAgentHandoff(row, brokerRow, deterministicRoute, "blocked-by-broker");
+      if (isSelectedRouteProofImportRecommendation(row, brokerRow)) {
+        const prepared = prepareSelectedRouteProofImport();
+        finishOpenAIAgentHandoff(handoff, {
+          status: prepared ? "validation-import-prepared" : "ui-routed",
+          completedAt: new Date().toISOString(),
+          resultNote: prepared
+            ? "The selected-route proof packet was prepared in the validation evidence import form; reviewer and artifact signoff are still required."
+            : "The validation evidence panel was opened, but no completed selected-route proof packet was available to prepare."
+        });
+        return;
+      }
       if (brokerRow.targetPanel) focusWorkflowPanel(brokerRow.targetPanel);
       return;
     }
@@ -2493,7 +2510,7 @@ export default function App() {
         return;
       }
       if (targetId.includes("selected-route-proof") || route.includes("validation-evidence")) {
-        focusWorkflowPanel("validation-evidence-panel");
+        prepareSelectedRouteProofImport();
         return;
       }
       if (targetId.includes("installed-app") || route.includes("manual-app-uninstall")) {
@@ -3931,13 +3948,17 @@ export default function App() {
 
   function prepareSelectedRouteProofImport() {
     const proofPacket = scopedExecutorCommandFlow.proofPacket;
-    if (!proofPacket) return;
+    if (!proofPacket || proofPacket.status !== "proof-complete") {
+      focusWorkflowPanel("validation-evidence-panel");
+      return false;
+    }
     const generatedAt = new Date().toISOString();
     const exportedPacket = { ...proofPacket, generatedAt };
     setRouteProofImportText(JSON.stringify(exportedPacket, null, 2));
     setRouteProofImportArtifact(`selected-route-proof:${exportedPacket.route || "route"}:${generatedAt}`);
     setRouteProofImportResult(null);
     focusWorkflowPanel("validation-evidence-panel");
+    return true;
   }
 
   function exportSupportBundle() {

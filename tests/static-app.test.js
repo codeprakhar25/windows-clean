@@ -326,12 +326,17 @@ assert(app.includes("getOpenAIAgentRecommendationKey"), "OpenAI recommendation b
 assert(app.includes("OpenAIRecommendationCard"), "OpenAI recommendation cards should show broker state");
 assert(app.includes("Open gate"), "blocked OpenAI recommendations should route users to the relevant gate");
 assert(app.includes("brokerRow?.focusActionId || row.targetId || row.id"), "OpenAI review-target actions should focus the broker-resolved parent action id");
+assert(app.includes("isSelectedRouteProofImportRecommendation"), "OpenAI proof-import recommendations should be detected before generic manual routing");
+assert(app.includes("validation-import-prepared"), "OpenAI proof-import recommendations should record prepared import handoffs");
 const openAiHandlerStart = app.indexOf("async function handleOpenAIAgentRecommendation");
 const blockedOpenAiRecommendationIndex = app.indexOf("if (brokerRow && !brokerRow.canAct)", openAiHandlerStart);
 const openAiRouteArmIndex = app.indexOf("selectScopedExecutorRoute(deterministicRoute)", openAiHandlerStart);
+const proofImportPreparationIndex = app.indexOf("prepareSelectedRouteProofImport()", blockedOpenAiRecommendationIndex);
 assert(openAiHandlerStart >= 0, "OpenAI recommendation handler should exist");
 assert(blockedOpenAiRecommendationIndex > openAiHandlerStart, "OpenAI handler should check blocked broker rows");
 assert(openAiRouteArmIndex > openAiHandlerStart, "OpenAI handler should arm deterministic executor routes");
+assert(proofImportPreparationIndex > blockedOpenAiRecommendationIndex, "blocked proof-import recommendations should prepare the validation import");
+assert(proofImportPreparationIndex < openAiRouteArmIndex, "proof-import recommendations must prepare evidence before scoped route arming");
 assert(
   blockedOpenAiRecommendationIndex < openAiRouteArmIndex,
   "blocked OpenAI recommendations must return before arming a scoped executor route"
@@ -368,6 +373,7 @@ assert(model.includes("Validation import:"), "selected-route proof markdown shou
 assert(model.includes("buildSelectedRouteProofValidationImportStatus"), "model should derive selected-route proof validation import status");
 assert(app.includes("Export proof packet"), "command flow UI should export the selected-route proof packet");
 assert(app.includes("prepareSelectedRouteProofImport"), "command flow should prepare selected-route proof import");
+assert(app.includes('proofPacket.status !== "proof-complete"'), "selected-route proof import preparation should require a completed proof packet");
 assert(app.includes("Prepare validation import"), "command flow UI should preload proof into validation import");
 assert(app.includes("proofPacket?.validationImport"), "command flow UI should display selected-route proof validation import status");
 assert(openAiAgent.includes("directDeleteAuthority"), "OpenAI context should deny direct delete authority");
