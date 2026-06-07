@@ -3209,6 +3209,43 @@ const assert = require("assert");
   assert.deepStrictEqual(noDryRunScopeImport.mappedCheckIds, ["scanner-fixtures"], "fixture import without dry-run scope proof should map scanner fixtures only");
   assert.strictEqual(noDryRunScopeImport.validationEvidence["dry-run-target-scope"], undefined, "missing dry-run scope proof must not create target-scope validation evidence");
   assert(noDryRunScopeImport.warnings.some((warning) => warning.includes("Dry-run target-scope evidence was not present")), "fixture import should warn when dry-run scope evidence is missing");
+  const afterCleanupFixtureEvidence = {
+    ...fixtureEvidence,
+    afterCleanupRoute: "known-temp-delete",
+    counts: {
+      ...fixtureEvidence.counts,
+      expectedMissingAfterCleanup: 1,
+      unexpectedPresentAfterCleanup: 0
+    },
+    records: [
+      { purpose: "known-temp-fixture", exists: false, expectedMissingAfterCleanup: true, presenceMatches: true, sizeMatches: true, oldEnough: true, expectedBytes: 1024, actualBytes: 0 },
+      ...fixtureEvidence.records.filter((record) => record.purpose !== "known-temp-fixture")
+    ],
+    dryRunScopeCheck: undefined
+  };
+  const afterCleanupFixtureImport = guard.buildFixtureEvidenceImport({
+    evidenceObject: afterCleanupFixtureEvidence,
+    reviewer: "qa-operator",
+    artifactId: "evidence/fixture-after-cleanup.json",
+    currentEvidence: {}
+  });
+  assert.strictEqual(afterCleanupFixtureImport.status, "ready", "after-cleanup fixture evidence should be importable when only known-temp fixture is missing");
+  assert.deepStrictEqual(afterCleanupFixtureImport.mappedCheckIds, ["scanner-fixtures"], "after-cleanup fixture evidence should map scanner fixtures only without dry-run scope proof");
+  assert.strictEqual(afterCleanupFixtureImport.counts.expectedMissingAfterCleanup, 1, "after-cleanup fixture import should retain expected missing count");
+  assert.strictEqual(afterCleanupFixtureImport.validationEvidence["scanner-fixtures"].fixtureSummary.afterCleanupRoute, "known-temp-delete", "fixture summary should preserve after-cleanup route");
+  const forgedAfterCleanupFixtureImport = guard.buildFixtureEvidenceImport({
+    evidenceObject: {
+      ...afterCleanupFixtureEvidence,
+      records: [
+        { purpose: "protected-path-fixture", exists: false, expectedMissingAfterCleanup: true, presenceMatches: true, sizeMatches: true, oldEnough: true, expectedBytes: 1024, actualBytes: 0 },
+        ...fixtureEvidence.records.filter((record) => record.purpose !== "protected-path-fixture")
+      ]
+    },
+    reviewer: "qa-operator",
+    artifactId: "evidence/fixture-forged-after-cleanup.json",
+    currentEvidence: {}
+  });
+  assert.strictEqual(forgedAfterCleanupFixtureImport.status, "fixture-record-failed", "after-cleanup import must reject missing non-temp fixture records");
   const nativeScopeEvidence = guard.buildNativeDryRunScopeEvidence({
     nativeExecutorDryRun: {
       result: {

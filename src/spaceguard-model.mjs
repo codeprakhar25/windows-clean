@@ -10869,7 +10869,8 @@ export function buildFixtureEvidenceImport({
     return buildRejectedFixtureImport("missing-reviewer", "Reviewer is required before fixture evidence can update validation records.", currentEvidence, importedAt, evidence);
   }
 
-  const failingRecords = evidence.records.filter((record) => !record?.exists || !record?.sizeMatches || !record?.oldEnough);
+  const afterCleanupRoute = cleanFixtureAfterCleanupRoute(evidence);
+  const failingRecords = evidence.records.filter((record) => !fixtureRecordPassed(record, afterCleanupRoute));
   if (failingRecords.length) {
     return buildRejectedFixtureImport("fixture-record-failed", `${failingRecords.length} fixture record(s) failed existence, size, or age assertions.`, currentEvidence, importedAt, evidence);
   }
@@ -10901,6 +10902,7 @@ export function buildFixtureEvidenceImport({
       fixtureSummary: {
         schemaVersion: evidence.schemaVersion,
         generatedAt: evidence.generatedAt || "",
+        afterCleanupRoute,
         counts: sanitizeFixtureCounts(evidence.counts),
         purposes,
         dryRunScope
@@ -10922,6 +10924,8 @@ export function buildFixtureEvidenceImport({
       purposes: purposes.length,
       mappedChecks: checkIds.length,
       missing: Number(evidence.counts?.missing || 0),
+      expectedMissingAfterCleanup: Number(evidence.counts?.expectedMissingAfterCleanup || evidence.counts?.expected_missing_after_cleanup || 0),
+      unexpectedPresentAfterCleanup: Number(evidence.counts?.unexpectedPresentAfterCleanup || evidence.counts?.unexpected_present_after_cleanup || 0),
       sizeMismatches: Number(evidence.counts?.sizeMismatches || 0),
       ageMismatches: Number(evidence.counts?.ageMismatches || 0),
       dryRunScopeCases: dryRunScope.caseCount,
@@ -11750,6 +11754,8 @@ function buildRejectedFixtureImport(status, detail, currentEvidence, importedAt,
       purposes: 0,
       mappedChecks: 0,
       missing: Number(evidence?.counts?.missing || 0),
+      expectedMissingAfterCleanup: Number(evidence?.counts?.expectedMissingAfterCleanup || evidence?.counts?.expected_missing_after_cleanup || 0),
+      unexpectedPresentAfterCleanup: Number(evidence?.counts?.unexpectedPresentAfterCleanup || evidence?.counts?.unexpected_present_after_cleanup || 0),
       sizeMismatches: Number(evidence?.counts?.sizeMismatches || 0),
       ageMismatches: Number(evidence?.counts?.ageMismatches || 0),
       dryRunScopeCases: 0,
@@ -11766,9 +11772,34 @@ function sanitizeFixtureCounts(counts = {}) {
   return {
     records: Number(counts.records || 0),
     missing: Number(counts.missing || 0),
+    expectedMissingAfterCleanup: Number(counts.expectedMissingAfterCleanup || counts.expected_missing_after_cleanup || 0),
+    unexpectedPresentAfterCleanup: Number(counts.unexpectedPresentAfterCleanup || counts.unexpected_present_after_cleanup || 0),
     sizeMismatches: Number(counts.sizeMismatches || 0),
     ageMismatches: Number(counts.ageMismatches || 0)
   };
+}
+
+function cleanFixtureAfterCleanupRoute(evidence = {}) {
+  return cleanEvidenceText(evidence.afterCleanupRoute || evidence.after_cleanup_route || "");
+}
+
+function fixtureRecordPassed(record = {}, afterCleanupRoute = "") {
+  const exists = Boolean(record?.exists);
+  const sizeMatches = Boolean(record?.sizeMatches ?? record?.size_matches);
+  const oldEnough = Boolean(record?.oldEnough ?? record?.old_enough);
+  const expectedMissingAfterCleanup = Boolean(record?.expectedMissingAfterCleanup ?? record?.expected_missing_after_cleanup);
+  const presenceMatches = record?.presenceMatches ?? record?.presence_matches;
+  const cleanPurpose = cleanEvidenceText(record?.purpose);
+  const expectedMissingAllowed =
+    afterCleanupRoute === "known-temp-delete" &&
+    cleanPurpose === "known-temp-fixture" &&
+    expectedMissingAfterCleanup;
+
+  if (expectedMissingAllowed) {
+    return !exists && presenceMatches === true && sizeMatches && oldEnough;
+  }
+
+  return exists && sizeMatches && oldEnough && !expectedMissingAfterCleanup;
 }
 
 function buildFixtureImportWarnings(purposes, dryRunScope = null) {
