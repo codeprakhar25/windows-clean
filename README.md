@@ -4,7 +4,7 @@ SpaceGuard is a guarded Windows space recovery assistant. The current app has th
 
 - Browser demo: React + Vite with fixed sample data.
 - Native shell: Tauri + Rust read-only scanner for known local roots.
-- OpenAI advisor: optional Responses API call from `.env` that interprets the current scan/plan context and suggests next actions without direct tool authority.
+- OpenAI advisor: optional Responses API call from `.env` that interprets the current scan/plan context, suggests next actions without direct tool authority, and records a visible handoff when the user follows a brokered recommendation.
 
 The native scanner measures filesystem metadata. Real cleanup is limited to feature-flagged scoped executors for known temp files, reviewed Downloads items, reviewed large-file archives, reviewed project dependency folders, Gradle cache, user `.cache`, Android cache, shader cache, pip cache, Docker build-cache, npm cache, pnpm store, Recycle Bin, and browser cache; all other routes remain read-only, manual, or advisory.
 
@@ -73,6 +73,8 @@ In `npm run start` / Vite dev, **Ask OpenAI** uses the same-origin `/api/openai-
 `npm run validate:route -- --route npm-cache` prints the one-route Windows validation packet. It does not scan, call OpenAI, or run cleanup; it lists the exact pre-run checks, forbidden actions, artifacts to capture, and post-run rescan proof required for that route.
 
 The same `.env` file can hold named scoped executor flags, for example `SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR=1`, when you are validating real cleanup on Windows. Validate and run one selected route at a time, then complete post-run rescan proof before running another executor.
+
+When an OpenAI recommendation routes a user-clicked executor, the app shows **Latest agent handoff** with the recommendation, broker status, deterministic route, checks, ledger row count, and reclaimed bytes. If the native executor accepts the request, the execution ledger is annotated with `OpenAI handoff` and the native write response includes a before/after drive free-space volume proof from the OS probe.
 
 Enable temp cleanup only on a disposable Windows validation machine or after you accept the temp-file risk:
 

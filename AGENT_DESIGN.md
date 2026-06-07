@@ -46,6 +46,7 @@ The OpenAI integration is advisory, not an executor.
 - Browser-only demos may use the legacy `VITE_OPENAI_API_KEY` fallback, but the product path keeps the secret out of the renderer payload.
 - Its allowed action vocabulary is limited to ranking reviewed targets, explaining blockers, asking the user, recommending a rescan, or recommending a scoped executor button.
 - Scoped executor recommendations must match the deterministic action-to-route map. If the model returns `run-npm-cache-executor` with any route other than `bounded-npm-cache-delete`, the broker blocks the action, retains the model route for audit, and routes the UI through the deterministic executor panel only.
+- A user-clicked, brokered recommendation creates a `spaceguard-openai-handoff/v1` record. If it dispatches a native executor and the executor writes a ledger, the ledger is annotated with the OpenAI handoff id, action type, broker status, and reclaimed bytes.
 - It can rank candidates, explain risk, suggest the next workflow branch, and draft questions for the user.
 - It cannot scan local folders directly.
 - It cannot approve consent, gates, item-review decisions, or protected-path changes.
@@ -53,6 +54,8 @@ The OpenAI integration is advisory, not an executor.
 - It cannot delete, move, archive, or modify files.
 
 All state changes still flow through deterministic UI state and native executor contracts.
+
+Native executor success proof has two layers: the write response can report immediate before/after drive free bytes from the OS volume probe, and the workflow still requires a post-run native rescan for route-level verification before another scoped executor runs.
 
 ## Workflow State Machine
 

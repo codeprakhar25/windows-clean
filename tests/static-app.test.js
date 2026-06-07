@@ -15,6 +15,7 @@ const rustScanner = fs.readFileSync(path.join(root, "src-tauri", "src", "main.rs
 const packageJson = fs.readFileSync(path.join(root, "package.json"), "utf8");
 const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const realDataGuide = fs.readFileSync(path.join(root, "WINDOWS_REAL_DATA_SETUP.md"), "utf8");
+const agentDesign = fs.readFileSync(path.join(root, "AGENT_DESIGN.md"), "utf8");
 const nativeBetaRunbook = fs.readFileSync(path.join(root, "NATIVE_BETA_DISTRIBUTION.md"), "utf8");
 const fixtureScript = fs.readFileSync(path.join(root, "scripts", "seed-spaceguard-fixtures.ps1"), "utf8");
 const fixtureInspectScript = fs.readFileSync(path.join(root, "scripts", "inspect-spaceguard-fixtures.ps1"), "utf8");
@@ -1200,13 +1201,18 @@ assert(realDataGuide.includes("inspect-spaceguard-fixtures.ps1"), "real-data gui
 assert(realDataGuide.includes("DryRunScopeEvidencePath"), "real-data guide should explain dry-run scope evidence inspection");
 assert(realDataGuide.includes("Validation pack import"), "real-data guide should explain validation pack import resume flow");
 assert(realDataGuide.includes("beta handoff manifest"), "real-data guide should include beta handoff manifest export");
+assert(realDataGuide.includes("OpenAI handoff"), "real-data guide should require OpenAI handoff ledger evidence");
+assert(realDataGuide.includes("volume proof"), "real-data guide should distinguish native volume proof");
 assert(realDataGuide.includes("local evidence backup"), "real-data guide should include local evidence backup export");
 assert(realDataGuide.includes("Drive inventory"), "real-data guide should require drive inventory review");
 assert(realDataGuide.includes("Storage pressure diagnosis"), "real-data guide should require storage pressure diagnosis review");
 assert(realDataGuide.includes("Native evidence quality"), "real-data guide should require native evidence quality review");
 assert(readme.includes("NATIVE_BETA_DISTRIBUTION.md"), "README should link native beta distribution runbook");
 assert(readme.includes("Beta handoff manifest"), "README should describe beta handoff manifest");
+assert(readme.includes("Latest agent handoff"), "README should describe OpenAI recommendation handoff visibility");
 assert(readme.includes("Local evidence backup"), "README should describe local evidence backup");
+assert(agentDesign.includes("spaceguard-openai-handoff/v1"), "agent design should document OpenAI handoff schema");
+assert(agentDesign.includes("post-run native rescan"), "agent design should keep volume proof below route-level rescan proof");
 assert(readme.includes("Docker build-cache"), "README should list Docker build-cache as a scoped executor family");
 assert(readme.includes("pip cache"), "README should list pip cache as a scoped executor family");
 assert(readme.includes("shader cache"), "README should list shader cache as a scoped executor family");
