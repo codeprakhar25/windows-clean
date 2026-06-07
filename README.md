@@ -74,6 +74,8 @@ In `npm run start` / Vite dev, **Ask OpenAI** uses the same-origin `/api/openai-
 
 The same `.env` file can hold named scoped executor flags, for example `SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR=1`, when you are validating real cleanup on Windows. Validate and run one selected route at a time, then complete post-run rescan proof before running another executor.
 
+After a scoped native route finishes and the post-run rescan matches, export **Selected route proof packet** and paste the `spaceguard-selected-route-proof-packet/v1` markdown or JSON into **Selected route proof import** under Validation evidence. With reviewer and artifact path filled, it maps only to `ledger-rescan-parity`; demo or dry-run proof is rejected.
+
 When an OpenAI recommendation routes a user-clicked executor, the app shows **Latest agent handoff** with the recommendation, broker status, deterministic route, checks, ledger row count, and reclaimed bytes. If the native executor accepts the request, the execution ledger is annotated with `OpenAI handoff` and the native write response includes a before/after drive free-space volume proof from the OS probe.
 
 Enable temp cleanup only on a disposable Windows validation machine or after you accept the temp-file risk:

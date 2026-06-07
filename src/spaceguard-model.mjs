@@ -10736,6 +10736,131 @@ export function buildValidationPackImport({
   };
 }
 
+export function buildSelectedRouteProofEvidenceImport({
+  evidenceText = "",
+  evidenceObject = null,
+  reviewer = "",
+  artifactId = "",
+  currentEvidence = {},
+  importedAt = new Date().toISOString()
+} = {}) {
+  const parsed = parseSelectedRouteProofPacketInput(evidenceObject, evidenceText);
+  if (!parsed.ok) {
+    return buildRejectedSelectedRouteProofEvidenceImport("parse-error", parsed.detail, currentEvidence, importedAt);
+  }
+
+  const packet = parsed.value;
+  if (packet.schemaVersion !== "spaceguard-selected-route-proof-packet/v1") {
+    return buildRejectedSelectedRouteProofEvidenceImport("schema-mismatch", "Selected-route proof must use spaceguard-selected-route-proof-packet/v1.", currentEvidence, importedAt, packet);
+  }
+
+  const route = cleanEvidenceText(packet.route || packet.routeInput);
+  if (!route) {
+    return buildRejectedSelectedRouteProofEvidenceImport("missing-route", "Selected-route proof is missing the executor route.", currentEvidence, importedAt, packet);
+  }
+
+  const counts = getSelectedRouteProofEvidenceCounts(packet);
+  if (packet.status !== "proof-complete" || packet.readyForNextRoute !== true) {
+    return buildRejectedSelectedRouteProofEvidenceImport("incomplete-proof", "Selected-route proof must be proof-complete and readyForNextRoute=true.", currentEvidence, importedAt, packet);
+  }
+  if (!isSelectedRouteProofScopedNative(packet)) {
+    return buildRejectedSelectedRouteProofEvidenceImport("not-scoped-native", "Only scoped native execution proof can satisfy ledger and rescan parity.", currentEvidence, importedAt, packet);
+  }
+  if (packet.rescanStatus !== "matched" || counts.matchedRows < 1 || counts.mismatchRows > 0 || counts.waitingRows > 0) {
+    return buildRejectedSelectedRouteProofEvidenceImport("rescan-not-matched", "Selected-route proof needs matched post-run native rescan rows with no mismatch or waiting rows.", currentEvidence, importedAt, packet);
+  }
+  if (counts.ledgerEntries < 1) {
+    return buildRejectedSelectedRouteProofEvidenceImport("missing-ledger", "Selected-route proof must include at least one execution ledger row.", currentEvidence, importedAt, packet);
+  }
+  if (!counts.volumeProofMeasured) {
+    return buildRejectedSelectedRouteProofEvidenceImport("missing-volume-proof", "Selected-route proof must include measured native write volume proof.", currentEvidence, importedAt, packet);
+  }
+
+  const cleanReviewer = cleanEvidenceText(reviewer || packet.reviewer);
+  const defaultArtifact = `selected-route-proof:${route}:${packet.generatedAt || importedAt}`;
+  const evidencePath = cleanEvidenceText(artifactId || packet.artifactId || packet.evidencePath) || defaultArtifact;
+  const complete = Boolean(cleanReviewer && evidencePath);
+  const validationEvidence = { ...(currentEvidence || {}) };
+  validationEvidence["ledger-rescan-parity"] = {
+    status: "passed",
+    evidencePath,
+    reviewer: cleanReviewer,
+    notes: [
+      "Imported selected-route proof packet.",
+      `route=${route}`,
+      `status=${packet.status}`,
+      `rescan=${packet.rescanStatus}`,
+      `ledgerEntries=${counts.ledgerEntries}`,
+      `matchedRows=${counts.matchedRows}`,
+      `volumeProof=${packet.volumeProof?.status || "measured"}`,
+      `volumeDelta=${formatSignedBytes(counts.freeBytesDelta)}`
+    ].join(" | "),
+    recordedAt: cleanEvidenceText(packet.generatedAt) || importedAt,
+    updatedAt: importedAt,
+    source: "selected-route-proof-import",
+    selectedRouteProofSummary: {
+      schemaVersion: packet.schemaVersion,
+      generatedAt: packet.generatedAt || "",
+      route,
+      planId: packet.planId || "",
+      status: packet.status,
+      rescanStatus: packet.rescanStatus || "",
+      verificationStatus: packet.verificationStatus || "",
+      runKind: packet.runKind || "",
+      runLabel: packet.runLabel || "",
+      scopedNativeExecution: true,
+      postRunScanEvidence: Boolean(packet.postRunScanEvidence),
+      latestExecutionAt: packet.latestExecutionAt || "",
+      scanGeneratedAt: packet.scanGeneratedAt || "",
+      counts: {
+        ledgerEntries: counts.ledgerEntries,
+        rescanRows: counts.rescanRows,
+        matchedRows: counts.matchedRows,
+        mismatchRows: counts.mismatchRows,
+        waitingRows: counts.waitingRows,
+        reclaimedBytes: counts.reclaimedBytes,
+        freeBytesDelta: counts.freeBytesDelta
+      },
+      volumeProof: {
+        status: packet.volumeProof?.status || "measured",
+        measured: true,
+        driveLabel: packet.volumeProof?.driveLabel || packet.volumeProof?.drives?.join?.(", ") || "",
+        freeBytesDelta: counts.freeBytesDelta,
+        source: packet.volumeProof?.source || "native-write-volume-proof"
+      }
+    }
+  };
+
+  const warnings = [];
+  if (!cleanReviewer) warnings.push("ledger-rescan-parity needs reviewer detail before it counts.");
+  if (!artifactId && !packet.artifactId && !packet.evidencePath) warnings.push("Artifact id was generated from the proof route and timestamp; replace it with the saved proof path if available.");
+
+  return {
+    schemaVersion: "spaceguard-selected-route-proof-evidence-import/v1",
+    status: "import-ready",
+    canApply: true,
+    importedAt,
+    generatedAt: packet.generatedAt || "",
+    route,
+    reviewer: cleanReviewer,
+    artifactId: evidencePath,
+    mappedCheckIds: ["ledger-rescan-parity"],
+    detail: complete
+      ? `Selected-route proof imported for ${route}; ledger-rescan-parity is complete.`
+      : `Selected-route proof imported for ${route}; ledger-rescan-parity still needs reviewer detail.`,
+    validationEvidence,
+    warnings,
+    counts: {
+      ...counts,
+      mappedChecks: 1,
+      complete: complete ? 1 : 0,
+      needsDetail: complete ? 0 : 1,
+      failed: 0,
+      ignoredRows: 0
+    }
+  };
+}
+
 export function buildNativeDryRunScopeEvidence({
   nativeExecutorDryRun = null,
   planSnapshot = null,
@@ -11078,6 +11203,72 @@ function parseValidationPackInput(evidenceObject, evidenceText) {
   return { ok: false, detail: "Validation pack evidence could not be parsed as JSON." };
 }
 
+function parseSelectedRouteProofPacketInput(evidenceObject, evidenceText) {
+  if (evidenceObject && typeof evidenceObject === "object" && !Array.isArray(evidenceObject)) {
+    return { ok: true, value: evidenceObject };
+  }
+  const text = String(evidenceText || "").trim();
+  if (!text) {
+    return { ok: false, detail: "Selected-route proof packet JSON or markdown export is required." };
+  }
+  const candidates = [
+    text,
+    ...[...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map((match) => match[1]?.trim()).filter(Boolean)
+  ];
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return { ok: true, value: parsed };
+      }
+    } catch {
+      // Continue through possible markdown code fences.
+    }
+  }
+  return { ok: false, detail: "Selected-route proof packet could not be parsed as JSON." };
+}
+
+function getSelectedRouteProofEvidenceCounts(packet = null) {
+  const ledgerEntries = Number(packet?.counts?.ledgerEntries ?? packet?.ledgerEntries?.length ?? 0);
+  const rescanRows = Number(packet?.counts?.rescanRows ?? packet?.rescanRows?.length ?? 0);
+  const matchedRows = Number(
+    packet?.counts?.matchedRows ??
+      packet?.counts?.matched ??
+      (Array.isArray(packet?.rescanRows) ? packet.rescanRows.filter((row) => row?.state === "matched").length : 0)
+  );
+  const mismatchRows = Number(
+    packet?.counts?.mismatchRows ??
+      packet?.counts?.mismatch ??
+      (Array.isArray(packet?.rescanRows) ? packet.rescanRows.filter((row) => row?.state === "mismatch" || row?.state === "no-finding").length : 0)
+  );
+  const waitingRows = Number(
+    packet?.counts?.waitingRows ??
+      packet?.counts?.waiting ??
+      (Array.isArray(packet?.rescanRows) ? packet.rescanRows.filter((row) => row?.state === "needs-post-run-native-rescan" || row?.state === "needs-native-rescan").length : 0)
+  );
+  const reclaimedBytes = Number(packet?.counts?.reclaimedBytes || 0);
+  const freeBytesDelta = Number(packet?.volumeProof?.freeBytesDelta || 0);
+  const volumeProofMeasured = Boolean(packet?.volumeProof?.measured || packet?.volumeProof?.status === "measured");
+  return {
+    ledgerEntries,
+    rescanRows,
+    matchedRows,
+    mismatchRows,
+    waitingRows,
+    reclaimedBytes,
+    freeBytesDelta,
+    volumeProofMeasured
+  };
+}
+
+function isSelectedRouteProofScopedNative(packet = null) {
+  return Boolean(
+    packet?.scopedNativeExecution ||
+      packet?.runKind === "scoped-native-execution" ||
+      packet?.runLabel === "Scoped native execution"
+  );
+}
+
 function buildRejectedNativeBetaEvidenceImport(status, detail, currentEvidence, importedAt, evidence = null) {
   const rows = Array.isArray(evidence?.rows) ? evidence.rows : [];
   return {
@@ -11116,6 +11307,32 @@ function buildRejectedValidationPackImport(status, detail, currentEvidence, impo
       needsDetail: 0,
       failed: 0,
       ignoredRows: rows.length
+    }
+  };
+}
+
+function buildRejectedSelectedRouteProofEvidenceImport(status, detail, currentEvidence, importedAt, packet = null) {
+  const counts = getSelectedRouteProofEvidenceCounts(packet);
+  return {
+    schemaVersion: "spaceguard-selected-route-proof-evidence-import/v1",
+    status,
+    canApply: false,
+    importedAt,
+    generatedAt: packet?.generatedAt || "",
+    route: cleanEvidenceText(packet?.route || packet?.routeInput),
+    reviewer: "",
+    artifactId: "",
+    mappedCheckIds: [],
+    detail,
+    validationEvidence: currentEvidence || {},
+    warnings: [],
+    counts: {
+      ...counts,
+      mappedChecks: 0,
+      complete: 0,
+      needsDetail: 0,
+      failed: status === "rescan-not-matched" || status === "incomplete-proof" ? 1 : 0,
+      ignoredRows: Math.max(0, counts.ledgerEntries + counts.rescanRows)
     }
   };
 }

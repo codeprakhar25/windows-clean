@@ -3930,6 +3930,79 @@ const assert = require("assert");
   assert(proofPacketMarkdown.includes("matched"), "proof packet markdown should include matched rescan evidence");
   assert(proofPacketMarkdown.includes("Ledger entries: 1"), "proof packet markdown should include ledger count");
   assert(proofPacketMarkdown.includes("Volume proof: measured"), "proof packet markdown should include volume proof status");
+  const scopedTempLedgerWithVolumeProof = tempLedgerWithVolumeProof.map((entry) => ({
+    ...entry,
+    source: "native-temp-executor"
+  }));
+  const scopedTempPostRunVerification = guard.buildPostRunVerificationPlan({
+    planSnapshot: tempPlanSnapshot,
+    ledger: scopedTempLedgerWithVolumeProof,
+    executorPlan: tempExecutorPlan,
+    scanMode: "native-readonly",
+    nativeScan: {
+      available: true,
+      generatedAt: "2026-06-04T10:05:00.000Z",
+      findings: [{ recipeId: "windows-temp", title: "Windows temp", path: "%TEMP%", bytes: 0, status: "measured" }]
+    }
+  });
+  const scopedMatchedComparison = guard.buildRescanComparison({
+    postRunVerification: scopedTempPostRunVerification,
+    ledger: scopedTempLedgerWithVolumeProof,
+    scanMode: "native-readonly",
+    nativeScan: {
+      available: true,
+      generatedAt: "2026-06-04T10:05:00.000Z",
+      findings: [{ recipeId: "windows-temp", title: "Windows temp", path: "%TEMP%", bytes: 0, status: "measured" }]
+    }
+  });
+  const scopedSelectedRouteProofFlow = guard.buildScopedExecutorCommandFlow({
+    smokeRunPacket: tempProofSmokePacket,
+    preferredRoute: "known-temp-delete",
+    executionProofHandoff: { status: "proof-complete" },
+    nativeCapability: { available: true },
+    ledger: scopedTempLedgerWithVolumeProof,
+    postRunVerification: scopedTempPostRunVerification,
+    rescanComparison: scopedMatchedComparison,
+    scanning: false
+  });
+  assert.strictEqual(scopedSelectedRouteProofFlow.proofPacket.scopedNativeExecution, true, "scoped native proof packet should retain execution kind");
+  const importedRouteProof = guard.buildSelectedRouteProofEvidenceImport({
+    evidenceText: [
+      "# SpaceGuard Selected Route Proof Packet",
+      "",
+      "```json",
+      JSON.stringify({ ...scopedSelectedRouteProofFlow.proofPacket, generatedAt: "2026-06-05T02:00:00.000Z" }),
+      "```"
+    ].join("\n"),
+    reviewer: "qa-operator",
+    artifactId: "evidence/selected-route-proof.md",
+    currentEvidence: {},
+    importedAt: "2026-06-05T02:05:00.000Z"
+  });
+  assert.strictEqual(importedRouteProof.schemaVersion, "spaceguard-selected-route-proof-evidence-import/v1", "route proof import should expose a stable schema");
+  assert.strictEqual(importedRouteProof.canApply, true, "complete scoped proof should import into validation evidence");
+  assert.deepStrictEqual(importedRouteProof.mappedCheckIds, ["ledger-rescan-parity"], "route proof should map only to ledger-rescan-parity");
+  assert.strictEqual(importedRouteProof.counts.complete, 1, "route proof import should count complete reviewer-backed evidence");
+  assert.strictEqual(importedRouteProof.counts.ledgerEntries, 1, "route proof import should preserve selected route ledger count");
+  assert.strictEqual(importedRouteProof.counts.matchedRows, 1, "route proof import should preserve matched rescan count");
+  assert.strictEqual(importedRouteProof.validationEvidence["ledger-rescan-parity"].status, "passed", "route proof import should mark ledger-rescan evidence passed");
+  assert.strictEqual(importedRouteProof.validationEvidence["ledger-rescan-parity"].source, "selected-route-proof-import", "route proof import should keep provenance");
+  assert.strictEqual(importedRouteProof.validationEvidence["ledger-rescan-parity"].selectedRouteProofSummary.scopedNativeExecution, true, "route proof evidence should preserve scoped-native proof");
+  assert.strictEqual(importedRouteProof.validationEvidence["ledger-rescan-parity"].selectedRouteProofSummary.volumeProof.status, "measured", "route proof evidence should preserve native volume proof");
+  const routeProofGate = guard.buildReleaseGate({
+    validationEvidence: importedRouteProof.validationEvidence,
+    scanMode: "native-readonly",
+    nativeCapability: { available: true },
+    executorPlan
+  });
+  assert.strictEqual(routeProofGate.rows.find((row) => row.id === "ledger-rescan-parity").passed, true, "route proof import should feed the release gate parity row");
+  const rejectedDryRunProofImport = guard.buildSelectedRouteProofEvidenceImport({
+    evidenceObject: selectedRouteProofFlow.proofPacket,
+    currentEvidence: { "ledger-rescan-parity": { status: "draft" } }
+  });
+  assert.strictEqual(rejectedDryRunProofImport.canApply, false, "dry-run or demo proof must not satisfy route validation evidence");
+  assert.strictEqual(rejectedDryRunProofImport.status, "not-scoped-native", "dry-run proof import should fail on scoped-native provenance");
+  assert.strictEqual(rejectedDryRunProofImport.validationEvidence["ledger-rescan-parity"].status, "draft", "rejected route proof import should preserve current evidence");
   const mismatchProofFlow = guard.buildScopedExecutorCommandFlow({
     smokeRunPacket: tempProofSmokePacket,
     preferredRoute: "known-temp-delete",

@@ -471,12 +471,14 @@ assert(validationRouteScript.includes("openai:smoke:fixture -- --route"), "valid
 assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");
 assert(readme.includes("npm run validate:route -- --route npm-cache"), "README should document route validation packet usage");
 assert(readme.includes("selected-route proof packet export"), "README should document selected-route proof packet validation");
+assert(readme.includes("Selected route proof import"), "README should document selected route proof import");
 assert(readme.includes("native volume proof expectation"), "README should document native volume proof validation");
 assert(readme.includes("multi-flag-blocked"), "README should document multi-flag setup blocking");
 assert(readme.includes("--route pnpm-store"), "README should document selected-route setup doctor commands");
 assert(realDataGuide.includes("npm run setup:route -- --route npm-cache"), "Windows setup guide should document route setup packet usage");
 assert(realDataGuide.includes("npm run validate:route -- --route npm-cache"), "Windows setup guide should document route validation packet usage");
 assert(realDataGuide.includes("Windows validation packet post-run proof checklist"), "Windows setup guide should document validation packet post-run proof checklist");
+assert(realDataGuide.includes("Selected route proof import"), "Windows setup guide should document selected route proof import");
 assert(realDataGuide.includes("multi-flag-blocked"), "Windows setup guide should document multi-flag setup blocking");
 assert(realDataGuide.includes("--route pnpm-store"), "Windows setup guide should document selected-route setup doctor commands");
 assert(openAiAgent.includes("forbiddenActions"), "OpenAI context should expose forbidden actions");
@@ -847,8 +849,13 @@ assert(app.includes("buildValidationEvidencePack"), "validation evidence pack sh
 assert(app.includes("buildValidationPackMarkdown"), "validation pack markdown export should be wired");
 assert(app.includes("validationPackImportText"), "validation pack import text should be tracked in UI state");
 assert(app.includes("importValidationPackEvidence"), "validation pack import should be wired");
+assert(app.includes("routeProofImportText"), "selected route proof import text should be tracked in UI state");
+assert(app.includes("importSelectedRouteProofEvidence"), "selected route proof import should be wired");
 assert(model.includes("buildValidationPackImport"), "model should import validation pack evidence");
 assert(model.includes("spaceguard-validation-pack-import/v1"), "validation pack import should expose a schema");
+assert(model.includes("buildSelectedRouteProofEvidenceImport"), "model should import selected route proof evidence");
+assert(model.includes("spaceguard-selected-route-proof-evidence-import/v1"), "selected route proof import should expose a schema");
+assert(model.includes("ledger-rescan-parity"), "selected route proof import should map into ledger and rescan parity validation");
 assert(app.includes("buildFixtureEvidenceImport"), "fixture evidence import should be wired");
 assert(app.includes("VALIDATION_EVIDENCE_STORAGE_KEY"), "validation evidence should be persisted locally");
 assert(app.includes("MANUAL_STRATEGY_EVIDENCE_STORAGE_KEY"), "manual strategy evidence should be persisted separately");
@@ -876,6 +883,9 @@ assert(app.includes("Reviewer"), "validation evidence should require reviewer in
 assert(app.includes("Validation pack import"), "validation evidence panel should expose validation pack import");
 assert(app.includes("Paste spaceguard-validation-pack/v1 JSON"), "validation pack import should accept exported JSON");
 assert(app.includes("Import validation pack"), "validation pack import should have an explicit action");
+assert(app.includes("Selected route proof import"), "validation evidence panel should expose selected-route proof import");
+assert(app.includes("Paste spaceguard-selected-route-proof-packet/v1 JSON"), "selected route proof import should accept exported JSON");
+assert(app.includes("Import route proof"), "selected route proof import should have an explicit action");
 assert(app.includes("Dry-run scope cases"), "fixture evidence import UI should expose dry-run scope case counts");
 assert(app.includes("setManualStrategyCheckEvidence"), "manual strategy checklist should be editable");
 assert(app.includes("buildPlanSnapshot"), "plan snapshot should be wired");
@@ -1211,6 +1221,7 @@ assert(realDataGuide.includes("Disposable Fixture Run"), "real-data guide should
 assert(realDataGuide.includes("inspect-spaceguard-fixtures.ps1"), "real-data guide should include fixture evidence inspection");
 assert(realDataGuide.includes("DryRunScopeEvidencePath"), "real-data guide should explain dry-run scope evidence inspection");
 assert(realDataGuide.includes("Validation pack import"), "real-data guide should explain validation pack import resume flow");
+assert(realDataGuide.includes("selected route proof import"), "real-data guide should include selected route proof import in proof checklist");
 assert(realDataGuide.includes("beta handoff manifest"), "real-data guide should include beta handoff manifest export");
 assert(realDataGuide.includes("OpenAI handoff"), "real-data guide should require OpenAI handoff ledger evidence");
 assert(realDataGuide.includes("volume proof"), "real-data guide should distinguish native volume proof");

@@ -108,6 +108,7 @@ import {
   buildScopedExecutorCommandFlow,
   buildScopedExecutorRunGate,
   buildSelectedRouteLaunchPacketMarkdown,
+  buildSelectedRouteProofEvidenceImport,
   buildSelectedRouteProofPacketMarkdown,
   buildNativeScanRequestGuard,
   buildStoragePressureDiagnosis,
@@ -428,6 +429,10 @@ export default function App() {
   const [fixtureImportResult, setFixtureImportResult] = useState(null);
   const [validationPackImportText, setValidationPackImportText] = useState("");
   const [validationPackImportResult, setValidationPackImportResult] = useState(null);
+  const [routeProofImportText, setRouteProofImportText] = useState("");
+  const [routeProofImportReviewer, setRouteProofImportReviewer] = useState("");
+  const [routeProofImportArtifact, setRouteProofImportArtifact] = useState("");
+  const [routeProofImportResult, setRouteProofImportResult] = useState(null);
   const [nativeBetaImportText, setNativeBetaImportText] = useState("");
   const [nativeBetaImportResult, setNativeBetaImportResult] = useState(null);
   const [localEvidenceBackupImportText, setLocalEvidenceBackupImportText] = useState("");
@@ -3380,6 +3385,7 @@ export default function App() {
   function resetValidationEvidence() {
     setValidationEvidence({});
     setValidationPackImportResult(null);
+    setRouteProofImportResult(null);
   }
 
   function updateValidationPackImportText(value) {
@@ -3393,6 +3399,34 @@ export default function App() {
       currentEvidence: validationEvidence
     });
     setValidationPackImportResult(result);
+    if (result.canApply) {
+      setValidationEvidence(result.validationEvidence);
+    }
+  }
+
+  function updateRouteProofImportText(value) {
+    setRouteProofImportText(value);
+    setRouteProofImportResult(null);
+  }
+
+  function updateRouteProofImportReviewer(value) {
+    setRouteProofImportReviewer(value);
+    setRouteProofImportResult(null);
+  }
+
+  function updateRouteProofImportArtifact(value) {
+    setRouteProofImportArtifact(value);
+    setRouteProofImportResult(null);
+  }
+
+  function importSelectedRouteProofEvidence() {
+    const result = buildSelectedRouteProofEvidenceImport({
+      evidenceText: routeProofImportText,
+      reviewer: routeProofImportReviewer,
+      artifactId: routeProofImportArtifact,
+      currentEvidence: validationEvidence
+    });
+    setRouteProofImportResult(result);
     if (result.canApply) {
       setValidationEvidence(result.validationEvidence);
     }
@@ -3489,6 +3523,7 @@ export default function App() {
       setNativeBetaEvidence(result.evidence.nativeBetaEvidence);
       setRunHistory(result.runHistory);
       setValidationPackImportResult(null);
+      setRouteProofImportResult(null);
       setNativeBetaImportResult(null);
     }
   }
@@ -4645,12 +4680,20 @@ export default function App() {
               fixtureImportResult={fixtureImportResult}
               validationPackImportText={validationPackImportText}
               validationPackImportResult={validationPackImportResult}
+              routeProofImportText={routeProofImportText}
+              routeProofImportReviewer={routeProofImportReviewer}
+              routeProofImportArtifact={routeProofImportArtifact}
+              routeProofImportResult={routeProofImportResult}
               onFixtureImportText={setFixtureImportText}
               onFixtureImportReviewer={setFixtureImportReviewer}
               onFixtureImportArtifact={setFixtureImportArtifact}
               onImportFixtureEvidence={importFixtureEvidence}
               onValidationPackImportText={updateValidationPackImportText}
               onImportValidationPack={importValidationPackEvidence}
+              onRouteProofImportText={updateRouteProofImportText}
+              onRouteProofImportReviewer={updateRouteProofImportReviewer}
+              onRouteProofImportArtifact={updateRouteProofImportArtifact}
+              onImportRouteProof={importSelectedRouteProofEvidence}
               onToggleEvidence={setValidationCheckEvidence}
               onUpdateEvidence={updateValidationCheckEvidence}
               onReset={resetValidationEvidence}
@@ -12057,12 +12100,20 @@ function ValidationEvidencePanel({
   fixtureImportResult,
   validationPackImportText,
   validationPackImportResult,
+  routeProofImportText,
+  routeProofImportReviewer,
+  routeProofImportArtifact,
+  routeProofImportResult,
   onFixtureImportText,
   onFixtureImportReviewer,
   onFixtureImportArtifact,
   onImportFixtureEvidence,
   onValidationPackImportText,
   onImportValidationPack,
+  onRouteProofImportText,
+  onRouteProofImportReviewer,
+  onRouteProofImportArtifact,
+  onImportRouteProof,
   onToggleEvidence,
   onUpdateEvidence,
   onReset,
@@ -12193,6 +12244,68 @@ function ValidationEvidencePanel({
               {validationPackImportResult.warnings.length ? (
                 <div className="mt-2 flex flex-col gap-1">
                   {validationPackImportResult.warnings.map((warning) => (
+                    <span key={warning}>{warning}</span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">Selected route proof import</span>
+            <Badge variant={routeProofImportResult?.canApply ? "safe" : routeProofImportResult ? "review" : "outline"}>
+              {routeProofImportResult?.status || "waiting"}
+            </Badge>
+          </div>
+          <div className="grid gap-2">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Input
+                value={routeProofImportReviewer}
+                placeholder="Reviewer"
+                aria-label="selected route proof reviewer"
+                onChange={(event) => onRouteProofImportReviewer(event.target.value)}
+              />
+              <Input
+                value={routeProofImportArtifact}
+                placeholder="Evidence path or artifact id"
+                aria-label="selected route proof artifact id"
+                onChange={(event) => onRouteProofImportArtifact(event.target.value)}
+              />
+            </div>
+            <Textarea
+              className="min-h-20 font-mono"
+              value={routeProofImportText}
+              placeholder='Paste spaceguard-selected-route-proof-packet/v1 JSON or the exported markdown file'
+              aria-label="selected route proof import"
+              onChange={(event) => onRouteProofImportText(event.target.value)}
+            />
+            <Button variant="outline" className="w-full" onClick={onImportRouteProof} disabled={!routeProofImportText.trim()}>
+              <ClipboardList className="h-4 w-4" />
+              Import route proof
+            </Button>
+          </div>
+
+          {routeProofImportResult ? (
+            <div className="mt-3 rounded-md border bg-card p-2 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={routeProofImportResult.canApply ? "safe" : "review"}>
+                  {routeProofImportResult.canApply ? "mapped" : "blocked"}
+                </Badge>
+                <span>{routeProofImportResult.detail}</span>
+              </div>
+              <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                <span>Route: {routeProofImportResult.route || "missing"}</span>
+                <span>Mapped checks: {routeProofImportResult.counts.mappedChecks}</span>
+                <span>Ledger rows: {routeProofImportResult.counts.ledgerEntries}</span>
+                <span>Matched rows: {routeProofImportResult.counts.matchedRows}</span>
+                <span>Complete: {routeProofImportResult.counts.complete}</span>
+                <span>Needs detail: {routeProofImportResult.counts.needsDetail}</span>
+              </div>
+              {routeProofImportResult.warnings.length ? (
+                <div className="mt-2 flex flex-col gap-1">
+                  {routeProofImportResult.warnings.map((warning) => (
                     <span key={warning}>{warning}</span>
                   ))}
                 </div>
