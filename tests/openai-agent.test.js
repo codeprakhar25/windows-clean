@@ -406,6 +406,28 @@ const assert = require("assert");
   assert.strictEqual(proofRescanBroker.rows[0].buttonLabel, "Run post-run rescan", "post-run rescan recommendations should not look like a normal discovery scan");
   assert.strictEqual(proofRescanBroker.rows[0].targetPanel, "execution-proof-handoff-panel", "post-run rescan recommendations should route to proof handoff");
   assert.strictEqual(proofRescanBroker.rows[0].canAct, true, "post-run rescan recommendations should be actionable when the handoff can rescan");
+  const blockedProofContext = openai.buildOpenAIAgentContext({
+    scanSession: { status: "current", currentFingerprint: "scan-proof-blocked" },
+    planSnapshot: { id: "plan-proof-blocked", scanMode: "native-readonly" },
+    runtimeCapabilities: { available: false, windows: false },
+    executionProofHandoff: { status: "proof-required", canRunRescan: false },
+    rescanComparison: { status: "needs-native-rescan", postRunScanEvidence: false },
+    customRootTriage: {
+      rows: Array.from({ length: 16 }, (_, index) => ({
+        id: `custom-root-${index + 1}`,
+        title: `Custom root ${index + 1}`,
+        path: `C:\\Review\\Root${index + 1}`,
+        bytes: (index + 1) * 1024 ** 3,
+        status: "manual-review",
+        disposition: "undecided",
+        nextStep: "Review manually."
+      }))
+    }
+  });
+  const blockedProofRescanTask = blockedProofContext.agentTaskQueue.rows.find((row) => row.targetId === "post-run-rescan");
+  assert(blockedProofRescanTask, "OpenAI task queue should retain blocked post-run rescan tasks even when manual review rows fill the queue");
+  assert.strictEqual(blockedProofRescanTask.status, "blocked", "blocked post-run rescan task should expose desktop rescan availability");
+  assert.strictEqual(blockedProofContext.agentTaskQueue.rows[0].targetId, "post-run-rescan", "post-run proof blockers should be the first OpenAI task");
 
   let nativeInvocation = null;
   const nativeResult = await openai.requestOpenAIAgentAdvice({

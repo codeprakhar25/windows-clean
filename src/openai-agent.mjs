@@ -983,6 +983,9 @@ function dedupeOpenAITaskRows(rows = []) {
 }
 
 function compareOpenAITaskRows(left, right) {
+  const leftCritical = getOpenAITaskCriticality(left);
+  const rightCritical = getOpenAITaskCriticality(right);
+  if (leftCritical !== rightCritical) return rightCritical - leftCritical;
   const statusScore = {
     ready: 4,
     "needs-user-review": 3,
@@ -996,6 +999,13 @@ function compareOpenAITaskRows(left, right) {
   const rightBytes = Number(right.bytes || 0);
   if (leftBytes !== rightBytes) return rightBytes - leftBytes;
   return String(left.title || "").localeCompare(String(right.title || ""));
+}
+
+function getOpenAITaskCriticality(row = {}) {
+  if (row.source === "post-run-proof" || row.targetId === "post-run-rescan") return 3;
+  if (row.source === "selected-route-proof-import" || row.targetId === "selected-route-proof-import") return 2;
+  if (row.source === "scoped-executor") return 1;
+  return 0;
 }
 
 function getOpenAITaskPriority(bytes = 0, status = "") {
