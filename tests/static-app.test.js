@@ -902,6 +902,10 @@ assert(app.includes("executionProofContext"), "post-run verification should free
 assert(app.includes("commitExecutionLedger"), "execution ledger writes should go through one proof-context helper");
 assert(app.includes("formatNativeWriteVolumeProof"), "execution ledger should format native drive free-space proof");
 assert(app.includes("Volume proof"), "execution ledger should make native volume proof visible");
+assert(app.includes("buildOpenAIAgentHandoffRecord"), "OpenAI recommendations should create first-class handoff records");
+assert(app.includes("openAiAgentHandoff"), "OpenAI handoff state should survive through executor dispatch");
+assert(app.includes("OpenAI handoff"), "native execution ledger should record OpenAI-brokered handoffs");
+assert(app.includes("Latest agent handoff"), "OpenAI panel should show the latest routed handoff");
 assert(app.includes("verificationPlanSnapshot"), "post-run verification should compare against the frozen execution plan");
 assert(app.includes("verificationExecutorPlan"), "post-run verification should compare against the frozen executor plan");
 assert(app.includes("Post-run native rescan complete"), "post-run rescan should report completion without starting a new plan scan");

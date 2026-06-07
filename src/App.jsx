@@ -231,6 +231,48 @@ function formatNativeWriteVolumeProof(proof = null) {
   return `Volume proof ${proof.drive || "drive"}: free ${direction}${formatBytes(Math.abs(delta))} (${before} -> ${after})`;
 }
 
+function buildOpenAIAgentHandoffRecord({ row = {}, brokerRow = null, deterministicRoute = "", adviceResult = null, status = "ui-routed" } = {}) {
+  const actionType = String(row.actionType || "").toLowerCase();
+  const recommendationKey = getOpenAIAgentRecommendationKey(row);
+  const executorRoute = String(deterministicRoute || brokerRow?.executorRoute || brokerRow?.route || row.route || "");
+  const checks = (brokerRow?.checks || []).slice(0, 6).map((check) => ({
+    id: check.id || "",
+    label: check.label || "",
+    passed: Boolean(check.passed),
+    detail: check.detail || ""
+  }));
+  const passedChecks = checks.filter((check) => check.passed).length;
+  return {
+    schemaVersion: "spaceguard-openai-handoff/v1",
+    id: `openai-handoff-${String(recommendationKey || actionType || "action").replace(/[^a-z0-9_-]+/gi, "-")}-${Date.now().toString(36)}`,
+    createdAt: new Date().toISOString(),
+    updatedAt: "",
+    completedAt: "",
+    status,
+    recommendationKey,
+    title: row.title || brokerRow?.title || actionType || "OpenAI recommendation",
+    reason: row.reason || "",
+    actionType,
+    targetId: String(brokerRow?.targetId || row.targetId || row.id || ""),
+    route: String(row.route || brokerRow?.route || ""),
+    executorRoute,
+    brokerStatus: brokerRow?.status || "unbrokered",
+    brokerTone: brokerRow?.tone || "review",
+    canAct: brokerRow ? Boolean(brokerRow.canAct) : true,
+    targetPanel: brokerRow?.targetPanel || "",
+    buttonLabel: brokerRow?.buttonLabel || aiRecommendationActionLabel(row),
+    blockedReason: brokerRow?.blockedReason || "",
+    requestId: adviceResult?.requestId || "",
+    responseId: adviceResult?.responseId || "",
+    model: adviceResult?.model || "",
+    checks,
+    checkSummary: checks.length ? `${passedChecks}/${checks.length} broker checks passed` : "No broker checks recorded.",
+    ledgerEntryCount: 0,
+    reclaimedBytes: 0,
+    resultNote: ""
+  };
+}
+
 const nativeBetaEvidenceSpecs = [
   {
     id: "publicReleaseResearch",
@@ -312,6 +354,7 @@ export default function App() {
   const [aiPrompt, setAiPrompt] = useState("Find the fastest safe path to recover real space from this scan.");
   const [aiAdvice, setAiAdvice] = useState({ status: "idle", result: null, error: "" });
   const [openAiAgentRunHistory, setOpenAiAgentRunHistory] = useState(() => readStoredOpenAIAgentRunHistory());
+  const [openAiAgentHandoff, setOpenAiAgentHandoff] = useState(null);
   const [runtimeCapabilities, setRuntimeCapabilities] = useState({
     status: "loading",
     result: {
@@ -379,6 +422,7 @@ export default function App() {
   const [executionConsent, setExecutionConsent] = useState({ accepted: false, planId: "", acceptedAt: "" });
   const [selectedScopedExecutorRoute, setSelectedScopedExecutorRoute] = useState("");
   const selectedScopedExecutorRouteRef = useRef("");
+  const openAiAgentHandoffRef = useRef(null);
 
   const scenario = useMemo(() => getScenario(scenarioId), [scenarioId]);
   const nativeCapability = useMemo(() => getNativeScannerCapability(globalThis), []);
@@ -388,6 +432,45 @@ export default function App() {
     const nextRoute = String(route || "");
     selectedScopedExecutorRouteRef.current = nextRoute;
     setSelectedScopedExecutorRoute(nextRoute);
+  }
+
+  function recordOpenAIAgentHandoff(record = null) {
+    openAiAgentHandoffRef.current = record;
+    setOpenAiAgentHandoff(record);
+  }
+
+  function startOpenAIAgentHandoff(row = {}, brokerRow = null, deterministicRoute = "", status = "ui-routed") {
+    const record = buildOpenAIAgentHandoffRecord({
+      row,
+      brokerRow,
+      deterministicRoute,
+      adviceResult: aiAdvice.result,
+      status
+    });
+    recordOpenAIAgentHandoff(record);
+    return record;
+  }
+
+  function finishOpenAIAgentHandoff(record = null, patch = {}) {
+    if (!record || openAiAgentHandoffRef.current?.id !== record.id) return;
+    recordOpenAIAgentHandoff({
+      ...openAiAgentHandoffRef.current,
+      ...patch,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  async function dispatchOpenAIAgentExecutorRecommendation(row = {}, brokerRow = null, deterministicRoute = "", targetPanel = "", executorFn = null) {
+    const handoff = startOpenAIAgentHandoff(row, brokerRow, deterministicRoute, "executor-dispatching");
+    if (targetPanel) focusWorkflowPanel(targetPanel);
+    if (typeof executorFn === "function") await executorFn();
+    if (openAiAgentHandoffRef.current?.id === handoff.id && openAiAgentHandoffRef.current.status === "executor-dispatching") {
+      finishOpenAIAgentHandoff(handoff, {
+        status: "executor-returned-without-ledger",
+        completedAt: new Date().toISOString(),
+        resultNote: "The executor returned without recording a native execution ledger. Inspect the executor panel for the deterministic blocker."
+      });
+    }
   }
 
   useEffect(() => {
@@ -2146,24 +2229,53 @@ export default function App() {
       title: entry.title,
       result: entry.result,
       bytes: entry.bytes,
+      route: entry.route,
       method: `${entry.route}: ${entry.note}${volumeProofNote ? ` | ${volumeProofNote}` : ""}`
     }));
   }
 
+  function getOpenAIAgentLedgerHandoff(nextLedger = [], source = "") {
+    const handoff = openAiAgentHandoffRef.current;
+    if (!handoff || handoff.status !== "executor-dispatching") return null;
+    if (!String(source).startsWith("native-") || source === "native-dry-run") return null;
+    const route = handoff.executorRoute || handoff.route || "";
+    if (!route) return handoff;
+    return nextLedger.some((entry) => entry.route === route || String(entry.method || "").includes(route)) ? handoff : null;
+  }
+
   function commitExecutionLedger(nextLedger, { executedAt = new Date().toISOString(), source = "execution" } = {}) {
+    const openAiHandoff = getOpenAIAgentLedgerHandoff(nextLedger, source);
     const sourcedLedger = nextLedger.map((entry) => ({
       ...entry,
       executedAt: entry.executedAt || executedAt,
-      source: entry.source || source
+      source: entry.source || source,
+      method: openAiHandoff
+        ? `${entry.method || ""}${entry.method ? " | " : ""}OpenAI handoff: ${openAiHandoff.title} (${openAiHandoff.brokerStatus})`
+        : entry.method,
+      openAiHandoffId: openAiHandoff?.id || entry.openAiHandoffId || "",
+      openAiActionType: openAiHandoff?.actionType || entry.openAiActionType || ""
     }));
+    const completedOpenAiHandoff = openAiHandoff
+      ? {
+          ...openAiHandoff,
+          status: "executor-ledger-recorded",
+          completedAt: executedAt,
+          updatedAt: executedAt,
+          ledgerEntryCount: sourcedLedger.length,
+          reclaimedBytes: sourcedLedger.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0),
+          resultNote: "Native executor result was recorded in the execution ledger after an OpenAI-brokered recommendation."
+        }
+      : null;
     setLedger(sourcedLedger);
     setExecutionProofContext({
       planSnapshot,
       executorPlan,
       scanMode: dataMode,
       source,
+      openAiHandoff: completedOpenAiHandoff,
       recordedAt: executedAt
     });
+    if (completedOpenAiHandoff) recordOpenAIAgentHandoff(completedOpenAiHandoff);
     recordLedgerRun(sourcedLedger, source, executedAt);
     window.setTimeout(() => setActiveStage("verify"), 240);
   }
@@ -2309,35 +2421,46 @@ export default function App() {
         ? row.route
         : "";
     if (brokerRow && !brokerRow.canAct) {
+      startOpenAIAgentHandoff(row, brokerRow, deterministicRoute, "blocked-by-broker");
       if (brokerRow.targetPanel) focusWorkflowPanel(brokerRow.targetPanel);
       return;
     }
     if (deterministicRoute) selectScopedExecutorRoute(deterministicRoute);
     if (actionType === "rescan") {
+      const handoff = startOpenAIAgentHandoff(row, brokerRow, deterministicRoute, "scan-dispatching");
       if (nativeCapability.available) {
         await runRealReadonlyScan();
       } else {
         await runScan();
       }
+      finishOpenAIAgentHandoff(handoff, {
+        status: "scan-requested",
+        completedAt: new Date().toISOString(),
+        resultNote: "The scan request was routed through the app scanner; scan results remain owned by the deterministic native/browser scanner."
+      });
       return;
     }
     if (actionType === "review-target") {
+      startOpenAIAgentHandoff(row, brokerRow, deterministicRoute, "ui-routed");
       const actionId = brokerRow?.focusActionId || row.targetId || row.id;
       if (actionId) setFocusedReviewId(actionId);
       focusWorkflowPanel("item-review-panel");
       return;
     }
     if (actionType === "select-action") {
+      startOpenAIAgentHandoff(row, brokerRow, deterministicRoute, "ui-routed");
       const actionId = brokerRow?.targetId || row.targetId || row.id;
       if (actionId) selectActionById(actionId);
       focusWorkflowPanel("cleanup-actions-panel");
       return;
     }
     if (actionType === "ask-user") {
+      startOpenAIAgentHandoff(row, brokerRow, deterministicRoute, "ui-routed");
       focusWorkflowPanel("agent-question-panel");
       return;
     }
     if (actionType === "manual-only") {
+      startOpenAIAgentHandoff(row, brokerRow, deterministicRoute, "ui-routed");
       const targetId = String(row.targetId || row.id || "").toLowerCase();
       const route = String(row.route || "").toLowerCase();
       if (targetId.startsWith("custom-root") || route.includes("custom-root")) {
@@ -2362,73 +2485,46 @@ export default function App() {
       return;
     }
     if (actionType === "run-temp-executor") {
-      focusWorkflowPanel("first-safe-temp-executor-panel");
-      await executeFirstSafeTempCleanup();
-      return;
+      return dispatchOpenAIAgentExecutorRecommendation(row, brokerRow, deterministicRoute, "first-safe-temp-executor-panel", executeFirstSafeTempCleanup);
     }
     if (actionType === "run-downloads-cleanup-executor") {
-      focusWorkflowPanel("downloads-cleanup-executor-panel");
-      await executeReviewedDownloadsCleanup();
-      return;
+      return dispatchOpenAIAgentExecutorRecommendation(row, brokerRow, deterministicRoute, "downloads-cleanup-executor-panel", executeReviewedDownloadsCleanup);
     }
     if (actionType === "run-large-file-archive-executor") {
-      focusWorkflowPanel("large-file-archive-executor-panel");
-      await executeLargeFileArchive();
-      return;
+      return dispatchOpenAIAgentExecutorRecommendation(row, brokerRow, deterministicRoute, "large-file-archive-executor-panel", executeLargeFileArchive);
     }
     if (actionType === "run-project-deps-executor") {
-      focusWorkflowPanel("project-dependency-executor-panel");
-      await executeReviewedProjectDependencies();
-      return;
+      return dispatchOpenAIAgentExecutorRecommendation(row, brokerRow, deterministicRoute, "project-dependency-executor-panel", executeReviewedProjectDependencies);
     }
     if (actionType === "run-browser-cache-executor") {
-      focusWorkflowPanel("browser-cache-executor-panel");
-      await executeBrowserCacheCleanup();
-      return;
+      return dispatchOpenAIAgentExecutorRecommendation(row, brokerRow, deterministicRoute, "browser-cache-executor-panel", executeBrowserCacheCleanup);
     }
     if (actionType === "run-gradle-cache-executor") {
-      focusWorkflowPanel("gradle-cache-executor-panel");
-      await executeGradleCacheCleanup();
-      return;
+      return dispatchOpenAIAgentExecutorRecommendation(row, brokerRow, deterministicRoute, "gradle-cache-executor-panel", executeGradleCacheCleanup);
     }
     if (actionType === "run-user-cache-executor") {
-      focusWorkflowPanel("user-cache-executor-panel");
-      await executeUserCacheCleanup();
-      return;
+      return dispatchOpenAIAgentExecutorRecommendation(row, brokerRow, deterministicRoute, "user-cache-executor-panel", executeUserCacheCleanup);
     }
     if (actionType === "run-android-cache-executor") {
-      focusWorkflowPanel("android-cache-executor-panel");
-      await executeAndroidCacheCleanup();
-      return;
+      return dispatchOpenAIAgentExecutorRecommendation(row, brokerRow, deterministicRoute, "android-cache-executor-panel", executeAndroidCacheCleanup);
     }
     if (actionType === "run-shader-cache-executor") {
-      focusWorkflowPanel("shader-cache-executor-panel");
-      await executeShaderCacheCleanup();
-      return;
+      return dispatchOpenAIAgentExecutorRecommendation(row, brokerRow, deterministicRoute, "shader-cache-executor-panel", executeShaderCacheCleanup);
     }
     if (actionType === "run-pip-cache-executor") {
-      focusWorkflowPanel("pip-cache-executor-panel");
-      await executePipCacheCleanup();
-      return;
+      return dispatchOpenAIAgentExecutorRecommendation(row, brokerRow, deterministicRoute, "pip-cache-executor-panel", executePipCacheCleanup);
     }
     if (actionType === "run-docker-build-cache-executor") {
-      focusWorkflowPanel("docker-build-cache-executor-panel");
-      await executeDockerBuildCacheCleanup();
-      return;
+      return dispatchOpenAIAgentExecutorRecommendation(row, brokerRow, deterministicRoute, "docker-build-cache-executor-panel", executeDockerBuildCacheCleanup);
     }
     if (actionType === "run-npm-cache-executor") {
-      focusWorkflowPanel("npm-cache-executor-panel");
-      await executeNpmCacheCleanup();
-      return;
+      return dispatchOpenAIAgentExecutorRecommendation(row, brokerRow, deterministicRoute, "npm-cache-executor-panel", executeNpmCacheCleanup);
     }
     if (actionType === "run-pnpm-store-executor") {
-      focusWorkflowPanel("pnpm-store-executor-panel");
-      await executePnpmStoreCleanup();
-      return;
+      return dispatchOpenAIAgentExecutorRecommendation(row, brokerRow, deterministicRoute, "pnpm-store-executor-panel", executePnpmStoreCleanup);
     }
     if (actionType === "run-recycle-bin-executor") {
-      focusWorkflowPanel("recycle-bin-executor-panel");
-      await executeRecycleBinCleanup();
+      return dispatchOpenAIAgentExecutorRecommendation(row, brokerRow, deterministicRoute, "recycle-bin-executor-panel", executeRecycleBinCleanup);
     }
   }
 
@@ -4207,6 +4303,7 @@ export default function App() {
               context={openAiAgentContext}
               recommendationBroker={openAiRecommendationBroker}
               runHistory={openAiAgentRunHistory}
+              handoff={openAiAgentHandoff}
               onPrompt={setAiPrompt}
               onAsk={askOpenAIAgent}
               onAction={handleOpenAIAgentRecommendation}
@@ -7374,7 +7471,7 @@ function AgentQuestionPanel({
   );
 }
 
-function OpenAIAgentPanel({ integration, config, prompt, advice, context, recommendationBroker, runHistory = [], onPrompt, onAsk, onAction }) {
+function OpenAIAgentPanel({ integration, config, prompt, advice, context, recommendationBroker, runHistory = [], handoff = null, onPrompt, onAsk, onAction }) {
   const running = advice.status === "running";
   const result = advice.result?.advice || null;
   const recommended = result?.recommendedActions || [];
@@ -7459,6 +7556,29 @@ function OpenAIAgentPanel({ integration, config, prompt, advice, context, recomm
             <span>Last advice: {lastRun ? `${lastRun.recommendedActions.length} recommendation(s)` : "none recorded"}</span>
           </div>
         </div>
+
+        {handoff ? (
+          <div className="rounded-md border bg-card p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-auto text-sm font-medium">Latest agent handoff</span>
+              <Badge variant={handoff.brokerTone || "review"}>{handoff.status}</Badge>
+              <Badge variant={handoff.canAct ? "safe" : "restricted"}>{handoff.brokerStatus}</Badge>
+              {handoff.executorRoute ? <Badge variant="outline">{handoff.executorRoute}</Badge> : null}
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">{handoff.title}</p>
+            <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+              <span>Action: {handoff.actionType || "unknown"}</span>
+              <span>Target: {handoff.targetId || "none"}</span>
+              <span>Panel: {handoff.targetPanel || "not routed"}</span>
+              <span>Checks: {handoff.checkSummary}</span>
+              <span>Ledger rows: {handoff.ledgerEntryCount || 0}</span>
+              <span>Reclaimed: {formatBytes(handoff.reclaimedBytes || 0)}</span>
+              {handoff.requestId ? <span className="font-mono">request {handoff.requestId}</span> : <span>Request: local broker</span>}
+              {handoff.model ? <span>Model: {handoff.model}</span> : <span>Model: not recorded</span>}
+            </div>
+            {handoff.resultNote ? <p className="mt-2 text-xs text-muted-foreground">{handoff.resultNote}</p> : null}
+          </div>
+        ) : null}
 
         {agentTasks.length ? (
           <div className="rounded-md border bg-card p-3">
