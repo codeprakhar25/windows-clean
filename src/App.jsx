@@ -3924,6 +3924,17 @@ export default function App() {
     downloadTextFile("spaceguard-selected-route-proof-packet.md", body, "text/markdown;charset=utf-8");
   }
 
+  function prepareSelectedRouteProofImport() {
+    const proofPacket = scopedExecutorCommandFlow.proofPacket;
+    if (!proofPacket) return;
+    const generatedAt = new Date().toISOString();
+    const exportedPacket = { ...proofPacket, generatedAt };
+    setRouteProofImportText(JSON.stringify(exportedPacket, null, 2));
+    setRouteProofImportArtifact(`selected-route-proof:${exportedPacket.route || "route"}:${generatedAt}`);
+    setRouteProofImportResult(null);
+    focusWorkflowPanel("validation-evidence-panel");
+  }
+
   function exportSupportBundle() {
     const exportedBundle = { ...supportBundle, generatedAt: new Date().toISOString() };
     const markdown = buildSupportBundleMarkdown(exportedBundle);
@@ -4228,6 +4239,7 @@ export default function App() {
               onExportSmokePacket={exportExecutorSmokeRunPacket}
               onExportLaunchPacket={exportSelectedRouteLaunchPacket}
               onExportProofPacket={exportSelectedRouteProofPacket}
+              onPrepareProofImport={prepareSelectedRouteProofImport}
             />
 
             <NativeBetaDistributionPanel
@@ -5061,7 +5073,7 @@ function RealDataLaunchRoadmapPanel({ roadmap }) {
   );
 }
 
-function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRoute, onAskAgent, onAgentAction, onExportSmokePacket, onExportLaunchPacket, onExportProofPacket }) {
+function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRoute, onAskAgent, onAgentAction, onExportSmokePacket, onExportLaunchPacket, onExportProofPacket, onPrepareProofImport }) {
   const next = flow.nextAction || {};
   const routeOptions = flow.routeOptions || [];
   const result = agent.result || null;
@@ -5359,6 +5371,10 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
           <Button type="button" variant="outline" size="sm" onClick={onExportProofPacket} disabled={!proofPacket}>
             <Download className="h-4 w-4" />
             Export proof packet
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={onPrepareProofImport} disabled={!proofPacket || proofPacket.status !== "proof-complete"}>
+            <ClipboardList className="h-4 w-4" />
+            Prepare validation import
           </Button>
         </div>
       </CardContent>
