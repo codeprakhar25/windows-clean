@@ -38,6 +38,14 @@ const script = path.join(root, "scripts", "run-setup-doctor.mjs");
   assert.strictEqual(oneFlag.scopedExecutors.selectedFlag, "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "setup doctor should identify the selected route flag");
   assert.strictEqual(oneFlag.scopedExecutors.selectedRoute.routeInput, "npm-cache", "setup doctor should map the selected flag to its route alias");
   assert(oneFlag.commands.routeValidation.includes("npm run validate:route -- --route npm-cache"), "setup doctor should expose route validation command");
+  assert.strictEqual(oneFlag.realWorkflow.routeInput, "npm-cache", "setup doctor should expose the selected route workflow alias");
+  assert.strictEqual(oneFlag.realWorkflow.ready, true, "one-route setup should make the compact real workflow ready");
+  assert.deepStrictEqual(
+    oneFlag.realWorkflow.steps.map((step) => step.id),
+    ["fixture-openai-smoke", "openai-smoke", "route-setup", "route-validation", "native-scan", "arm-consent", "execute-route", "post-run-rescan", "proof-import", "next-route"],
+    "setup doctor should emit the compact real cleanup workflow in order"
+  );
+  assert(oneFlag.realWorkflow.steps.find((step) => step.id === "proof-import").detail.includes("Selected route proof import"), "compact workflow should include proof import before next route");
 
   const pnpmFlag = runDoctor({
     SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR: "1"

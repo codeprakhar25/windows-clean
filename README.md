@@ -60,6 +60,8 @@ npm run native:dev
 
 `npm run setup:doctor` is a read-only local setup diagnostic. It reports whether `.env` exists, whether `OPENAI_API_KEY` is configured, which model/reasoning defaults will be used, and which scoped executor flags are enabled. Its `status` is `readonly-ready`, `one-route-ready`, or `multi-flag-blocked`; write-mode validation is considered safe to launch only when exactly one scoped executor flag is enabled. It does not call OpenAI, scan folders, or run cleanup.
 
+The same JSON now includes `realWorkflow`, a compact route-specific sequence for the next real validation pass: fixture OpenAI smoke, live OpenAI smoke, route setup, route validation, native scan, consent, selected executor, post-run rescan, Selected route proof import, and only then next-route consideration.
+
 When exactly one scoped executor flag is enabled, `setup:doctor` maps that flag to the matching route alias and prints route-specific OpenAI smoke, `setup:route`, and `validate:route` commands. For example, `SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR=1` prints commands for `--route pnpm-store`, not the npm sample route.
 
 `npm run openai:smoke:fixture -- --route npm-cache` validates the same deterministic fixture task queue and recommendation broker locally without an API key or network call. Pass another route alias, for example `-- --route pnpm-store`, to validate that route's broker path.

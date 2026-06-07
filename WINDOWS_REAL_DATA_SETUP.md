@@ -48,6 +48,8 @@ npm run native:dev
 
 `npm run setup:doctor` is read-only. It checks `.env`, OpenAI key presence, model/reasoning defaults, and scoped executor flags without calling OpenAI, scanning folders, or running cleanup. Its `status` is `readonly-ready`, `one-route-ready`, or `multi-flag-blocked`; write-mode validation is safe to launch only when exactly one scoped executor flag is enabled.
 
+The `realWorkflow` field in the doctor JSON is the compact operator path for the selected route: fixture OpenAI smoke, live OpenAI smoke, route setup, route validation, native scan, consent, selected executor, post-run rescan, Selected route proof import, and only then next-route consideration.
+
 When exactly one scoped executor flag is enabled, `setup:doctor` maps that flag to the matching route alias and prints route-specific OpenAI smoke, `setup:route`, and `validate:route` commands. For example, `SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR=1` prints commands for `--route pnpm-store`, not the npm sample route.
 
 `npm run openai:smoke:fixture -- --route npm-cache` validates the local fixture task queue and recommendation broker without an API key or network call. Pass another route alias, for example `-- --route pnpm-store`, to validate that route's broker path.

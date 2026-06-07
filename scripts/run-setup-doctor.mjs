@@ -120,6 +120,12 @@ export function buildSetupDoctorReport({
       safeToLaunchWriteMode: enabledFlags.length === 1,
       warning: getScopedExecutorWarning(enabledFlags)
     },
+    realWorkflow: buildRealWorkflow({
+      routeInput,
+      selectedRoute,
+      enabledFlags,
+      openAiConfigured: openAiKey.source !== "missing"
+    }),
     commands: {
       install: "npm install",
       test: "npm test",
@@ -158,6 +164,88 @@ function getScopedExecutorWarning(enabledFlags) {
   if (enabledFlags.length > 1) return "Multiple scoped executor flags are enabled. Validate and run one selected route at a time.";
   if (enabledFlags.length === 1) return "One scoped executor flag is enabled.";
   return "No scoped executor flags are enabled; native mode remains read-only.";
+}
+
+function buildRealWorkflow({ routeInput = "npm-cache", selectedRoute = null, enabledFlags = [], openAiConfigured = false } = {}) {
+  const ready = Boolean(selectedRoute && enabledFlags.length === 1);
+  const route = selectedRoute?.route || "";
+  const title = selectedRoute?.title || "selected route";
+  const envVar = selectedRoute?.envVar || "";
+  const panelId = selectedRoute?.panelId || "real-cleanup-command-flow-panel";
+  const actionLabel = selectedRoute?.actionLabel || "Run scoped executor";
+
+  return {
+    schemaVersion: "spaceguard-real-workflow/v1",
+    ready,
+    status: ready ? "one-route-ready" : enabledFlags.length > 1 ? "multi-flag-blocked" : "readonly-ready",
+    route,
+    routeInput,
+    title,
+    envVar,
+    panelId,
+    openAiConfigured,
+    steps: [
+      {
+        id: "fixture-openai-smoke",
+        command: `npm run openai:smoke:fixture -- --route ${routeInput}`,
+        detail: "Validate the deterministic task queue and broker locally before any real disk workflow."
+      },
+      {
+        id: "openai-smoke",
+        command: `npm run openai:smoke -- --route ${routeInput}`,
+        detail: openAiConfigured
+          ? "Validate the .env OpenAI advisor path against fixture context."
+          : "Set OPENAI_API_KEY first, then validate the OpenAI advisor path against fixture context."
+      },
+      {
+        id: "route-setup",
+        command: `npm run setup:route -- --route ${routeInput}`,
+        detail: "Print the selected route flag, request mode, panel, conflicts, and next commands."
+      },
+      {
+        id: "route-validation",
+        command: `npm run validate:route -- --route ${routeInput}`,
+        detail: "Print the Windows validation packet and evidence checklist for exactly one route."
+      },
+      {
+        id: "native-scan",
+        command: "npm run native:dev",
+        panel: "real-data-readiness-panel",
+        detail: "Launch the desktop shell, run a native read-only scan, and confirm scan fingerprint and target evidence."
+      },
+      {
+        id: "arm-consent",
+        command: "Use the app",
+        panel: "execution-consent-panel",
+        detail: "Arm consent for the current plan id and current native scan fingerprint."
+      },
+      {
+        id: "execute-route",
+        command: actionLabel,
+        panel: panelId,
+        detail: ready
+          ? `Run only ${title} (${route}) with ${envVar}=1 and no other scoped executor flag enabled.`
+          : "Enable exactly one scoped executor flag before any real cleanup validation."
+      },
+      {
+        id: "post-run-rescan",
+        command: "Run post-run native rescan",
+        panel: "execution-proof-handoff-panel",
+        detail: "Capture the execution ledger, native volume proof, and matched post-run rescan comparison."
+      },
+      {
+        id: "proof-import",
+        command: "Selected route proof import",
+        panel: "validation-evidence-panel",
+        detail: "Export Selected route proof packet, then paste it into Selected route proof import with reviewer and artifact path."
+      },
+      {
+        id: "next-route",
+        command: "Return to setup:doctor",
+        detail: "Only after proof import is complete should another scoped executor flag or route be considered."
+      }
+    ]
+  };
 }
 
 function buildNextSteps({ openAiConfigured, enabledFlags, routeInput = "npm-cache" }) {

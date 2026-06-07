@@ -469,6 +469,9 @@ assert(setupDoctorScript.includes("setup:route"), "setup doctor should expose th
 assert(setupDoctorScript.includes("validate:route"), "setup doctor should expose the route validation packet command");
 assert(setupDoctorScript.includes("multi-flag-blocked"), "setup doctor should expose multi-flag blocking status");
 assert(setupDoctorScript.includes("safeToLaunchWriteMode"), "setup doctor should expose one-route write launch readiness");
+assert(setupDoctorScript.includes("realWorkflow"), "setup doctor should expose a compact real workflow");
+assert(setupDoctorScript.includes("post-run-rescan"), "setup doctor workflow should include post-run rescan");
+assert(setupDoctorScript.includes("proof-import"), "setup doctor workflow should include selected-route proof import");
 assert(setupDoctorScript.includes("selectedRoute"), "setup doctor should expose the selected route for one enabled flag");
 assert(setupDoctorScript.includes("routeSpecs"), "setup doctor should use route setup specs for selected route commands");
 assert(setupDoctorScript.includes("SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR"), "setup doctor should check scoped executor flags");
@@ -494,12 +497,14 @@ assert(readme.includes("selected-route proof packet export"), "README should doc
 assert(readme.includes("Selected route proof import"), "README should document selected route proof import");
 assert(readme.includes("native volume proof expectation"), "README should document native volume proof validation");
 assert(readme.includes("multi-flag-blocked"), "README should document multi-flag setup blocking");
+assert(readme.includes("realWorkflow"), "README should document setup doctor's compact real workflow");
 assert(readme.includes("--route pnpm-store"), "README should document selected-route setup doctor commands");
 assert(realDataGuide.includes("npm run setup:route -- --route npm-cache"), "Windows setup guide should document route setup packet usage");
 assert(realDataGuide.includes("npm run validate:route -- --route npm-cache"), "Windows setup guide should document route validation packet usage");
 assert(realDataGuide.includes("Windows validation packet post-run proof checklist"), "Windows setup guide should document validation packet post-run proof checklist");
 assert(realDataGuide.includes("Selected route proof import"), "Windows setup guide should document selected route proof import");
 assert(realDataGuide.includes("multi-flag-blocked"), "Windows setup guide should document multi-flag setup blocking");
+assert(realDataGuide.includes("realWorkflow"), "Windows setup guide should document setup doctor's compact real workflow");
 assert(realDataGuide.includes("--route pnpm-store"), "Windows setup guide should document selected-route setup doctor commands");
 assert(openAiAgent.includes("forbiddenActions"), "OpenAI context should expose forbidden actions");
 assert(openAiAgent.includes("task-post-run-rescan"), "OpenAI task queue should expose a deterministic post-run rescan task");
