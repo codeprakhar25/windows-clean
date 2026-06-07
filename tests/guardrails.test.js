@@ -3918,10 +3918,12 @@ const assert = require("assert");
   });
   assert.strictEqual(selectedRouteProofFlow.proofPacket.schemaVersion, "spaceguard-selected-route-proof-packet/v1", "command flow should expose a selected-route proof packet");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.status, "proof-complete", "matched rescan evidence should complete selected-route proof");
+  assert.strictEqual(selectedRouteProofFlow.status, "proof-import-required", "command flow should require validation import before another scoped route");
+  assert.strictEqual(selectedRouteProofFlow.nextAction.type, "prepare-validation-import", "missing validation import should lead the operator to prepare the import");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.route, "known-temp-delete", "proof packet should bind to the selected route");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.counts.ledgerEntries, 1, "proof packet should count selected-route ledger entries");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.rescanStatus, "matched", "proof packet should retain rescan comparison status");
-  assert.strictEqual(selectedRouteProofFlow.proofPacket.readyForNextRoute, true, "matched proof should clear the next-route blocker");
+  assert.strictEqual(selectedRouteProofFlow.proofPacket.readyForNextRoute, false, "matched proof should still block the next route until validation import is complete");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.volumeProof.status, "measured", "proof packet should include native volume proof status");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.validationImport.status, "needs-import", "proof packet should expose missing validation import status");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.ledgerEntries[0].nativeVolumeProof.drive, "C:", "proof packet should keep compact ledger volume proof");
@@ -4001,6 +4003,8 @@ const assert = require("assert");
     validationEvidence: importedRouteProof.validationEvidence,
     scanning: false
   });
+  assert.strictEqual(importedRouteProofFlow.status, "proof-complete", "completed validation import should clear the command flow proof blocker");
+  assert.strictEqual(importedRouteProofFlow.proofPacket.readyForNextRoute, true, "completed validation import should clear the next-route blocker");
   assert.strictEqual(importedRouteProofFlow.proofPacket.validationImport.status, "import-complete", "proof packet should expose completed validation import");
   assert.strictEqual(importedRouteProofFlow.proofPacket.validationImport.complete, true, "completed route proof import should be marked complete");
   assert.strictEqual(importedRouteProofFlow.proofPacket.validationImport.route, "known-temp-delete", "completed route proof import should bind to the selected route");

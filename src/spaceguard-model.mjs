@@ -8400,7 +8400,7 @@ export function buildScopedExecutorCommandFlow({
     flagCheck,
     targetCheck
   });
-  const nextAction = getScopedExecutorNextAction({
+  const baseNextAction = getScopedExecutorNextAction({
     primaryRow,
     packet,
     proofStatus,
@@ -8411,20 +8411,19 @@ export function buildScopedExecutorCommandFlow({
     flagCheck,
     targetCheck
   });
-  const completed = steps.filter((step) => step.status === "complete").length;
-  const status = !primaryRow
+  const baseStatus = !primaryRow
     ? "select-route"
     : proofStatus === "proof-complete"
       ? "proof-complete"
       : proofRequiresAction
         ? "proof-required"
-      : primaryRow.status === "ready"
-        ? "ready-to-execute"
-        : nextAction.type === "run-real-scan"
-          ? "scan-needed"
-          : nextAction.type === "arm-consent"
-            ? "consent-needed"
-            : "route-blocked";
+        : primaryRow.status === "ready"
+          ? "ready-to-execute"
+          : baseNextAction.type === "run-real-scan"
+            ? "scan-needed"
+            : baseNextAction.type === "arm-consent"
+              ? "consent-needed"
+              : "route-blocked";
   const launchGate = buildScopedExecutorRunGate({
     route: primaryRow?.route || "",
     smokeRunPacket: packet,
@@ -8432,29 +8431,80 @@ export function buildScopedExecutorCommandFlow({
     generatedAt
   });
   const setupCommands = buildScopedExecutorSetupCommands(primaryRow);
-  const launchPacket = buildSelectedRouteLaunchPacket({
-    flowStatus: status,
+  const baseLaunchPacket = buildSelectedRouteLaunchPacket({
+    flowStatus: baseStatus,
     primaryRow,
     setupCommands,
-    nextAction,
+    nextAction: baseNextAction,
     launchGate,
     proofStatus,
     generatedAt
   });
-  const proofPacket = buildSelectedRouteProofPacket({
-    launchPacket,
+  const baseProofPacket = buildSelectedRouteProofPacket({
+    launchPacket: baseLaunchPacket,
     ledger,
     postRunVerification,
     rescanComparison,
     validationEvidence,
     generatedAt
   });
+  const proofImportRequired = Boolean(
+    baseProofPacket?.status === "proof-complete" &&
+    baseProofPacket?.validationImport &&
+    !baseProofPacket.validationImport.complete
+  );
+  const status = proofImportRequired ? "proof-import-required" : baseStatus;
+  const nextAction = proofImportRequired
+    ? {
+        type: "prepare-validation-import",
+        label: "Prepare validation import",
+        targetPanel: "validation-evidence-panel",
+        route: primaryRow?.route || baseProofPacket?.route || "",
+        disabled: false
+      }
+    : baseNextAction;
+  const proofImportStep = proofImportRequired
+    ? [
+        buildScopedExecutorCommandStep({
+          id: "validation-import",
+          label: "Validation import",
+          status: "active",
+          detail: baseProofPacket.validationImport.detail || "Import selected-route proof into validation evidence before another scoped executor.",
+          actionType: "prepare-validation-import",
+          targetPanel: "validation-evidence-panel",
+          route: primaryRow?.route || baseProofPacket?.route || ""
+        })
+      ]
+    : [];
+  const effectiveSteps = proofImportRequired ? [...steps, ...proofImportStep] : steps;
+  const completed = effectiveSteps.filter((step) => step.status === "complete").length;
+  const launchPacket = proofImportRequired
+    ? buildSelectedRouteLaunchPacket({
+        flowStatus: status,
+        primaryRow,
+        setupCommands,
+        nextAction,
+        launchGate,
+        proofStatus,
+        generatedAt
+      })
+    : baseLaunchPacket;
+  const proofPacket = proofImportRequired
+    ? buildSelectedRouteProofPacket({
+        launchPacket,
+        ledger,
+        postRunVerification,
+        rescanComparison,
+        validationEvidence,
+        generatedAt
+      })
+    : baseProofPacket;
 
   return {
     schemaVersion: "spaceguard-scoped-executor-command-flow/v1",
     generatedAt,
     status,
-    tone: status === "ready-to-execute" || status === "proof-complete" ? "safe" : status === "proof-required" || status === "route-blocked" ? "restricted" : "review",
+    tone: status === "ready-to-execute" || status === "proof-complete" ? "safe" : status === "proof-required" || status === "proof-import-required" || status === "route-blocked" ? "restricted" : "review",
     route: primaryRow?.route || "",
     selectedRoute: primaryRow?.route || "",
     routeOptions,
@@ -8466,14 +8516,14 @@ export function buildScopedExecutorCommandFlow({
     launchPacket,
     proofPacket,
     nextAction,
-    steps,
+    steps: effectiveSteps,
     counts: {
-      total: steps.length,
+      total: effectiveSteps.length,
       complete: completed,
-      waiting: steps.filter((step) => step.status === "waiting").length,
-      blocked: steps.filter((step) => step.status === "blocked").length
+      waiting: effectiveSteps.filter((step) => step.status === "waiting").length,
+      blocked: effectiveSteps.filter((step) => step.status === "blocked").length
     },
-    progress: steps.length ? Math.round((completed / steps.length) * 100) : 0,
+    progress: effectiveSteps.length ? Math.round((completed / effectiveSteps.length) * 100) : 0,
     primary: getScopedExecutorCommandPrimary(status, primaryRow, nextAction, scanning),
     nativeAvailable: Boolean(nativeCapability?.available || packet.nativeAvailable),
     scanning: Boolean(scanning)
@@ -8591,8 +8641,8 @@ export function buildSelectedRouteProofPacket({
     rescanStatus,
     verificationStatus
   });
-  const readyForNextRoute = status === "proof-complete";
   const validationImport = buildSelectedRouteProofValidationImportStatus(route, validationEvidence);
+  const readyForNextRoute = status === "proof-complete" && validationImport.complete;
 
   return {
     schemaVersion: "spaceguard-selected-route-proof-packet/v1",
@@ -10884,8 +10934,8 @@ export function buildSelectedRouteProofEvidenceImport({
   }
 
   const counts = getSelectedRouteProofEvidenceCounts(packet);
-  if (packet.status !== "proof-complete" || packet.readyForNextRoute !== true) {
-    return buildRejectedSelectedRouteProofEvidenceImport("incomplete-proof", "Selected-route proof must be proof-complete and readyForNextRoute=true.", currentEvidence, importedAt, packet);
+  if (packet.status !== "proof-complete") {
+    return buildRejectedSelectedRouteProofEvidenceImport("incomplete-proof", "Selected-route proof must be proof-complete before import.", currentEvidence, importedAt, packet);
   }
   if (!isSelectedRouteProofScopedNative(packet)) {
     return buildRejectedSelectedRouteProofEvidenceImport("not-scoped-native", "Only scoped native execution proof can satisfy ledger and rescan parity.", currentEvidence, importedAt, packet);
@@ -17455,6 +17505,7 @@ function getScopedExecutorCommandPrimary(status, primaryRow = null, nextAction =
   if (scanning) return "Native scan is running. Wait for current evidence before executing.";
   if (status === "select-route") return "Select a scoped cleanup route to start the real-run command flow.";
   if (status === "proof-complete") return "The latest scoped execution has post-run proof. Export the packet before widening scope.";
+  if (status === "proof-import-required") return "Selected-route proof matched; import it into validation evidence before running another scoped executor.";
   if (status === "proof-required") return "Post-run proof is pending. Run rescan before any other scoped executor.";
   if (status === "ready-to-execute") return `${primaryRow?.title || "Selected route"} is ready to execute through the existing guarded panel.`;
   if (status === "scan-needed") return "Run a real native scan before executing this scoped route.";

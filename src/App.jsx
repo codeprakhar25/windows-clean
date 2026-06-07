@@ -2318,6 +2318,10 @@ export default function App() {
 
   function getPostRunProofExecutionBlocker() {
     if (!activeLedger.length) return "";
+    const validationImport = scopedExecutorCommandFlow?.proofPacket?.validationImport;
+    if (executionProofHandoff.status === "proof-complete" && validationImport && !validationImport.complete) {
+      return `Import selected-route proof into validation evidence before another scoped executor. Current validation import: ${validationImport.status}.`;
+    }
     if (executionProofHandoff.status === "waiting-for-execution" || executionProofHandoff.status === "proof-complete") return "";
     return `Finish post-run proof before another scoped executor. Current proof state: ${executionProofHandoff.status}.`;
   }
@@ -3374,6 +3378,10 @@ export default function App() {
     }
     if (action.type === "run-post-run-rescan") {
       await runPostRunReadonlyScan();
+      return;
+    }
+    if (action.type === "prepare-validation-import") {
+      prepareSelectedRouteProofImport();
       return;
     }
     if (action.type === "execute-route") {
