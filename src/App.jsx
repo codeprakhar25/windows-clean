@@ -4992,6 +4992,7 @@ function NativeScannerPanel({ capability, nativeScan }) {
 function WindowsSetupAssistantPanel({ assistant, onWorkflowStep, onExportWorkflowProof }) {
   const realWorkflow = assistant.realWorkflow || null;
   const workflowSteps = realWorkflow?.steps || [];
+  const appCloseHandoff = realWorkflow?.appCloseHandoff || null;
   return (
     <Card id="windows-setup-assistant-panel">
       <CardHeader className="pb-3">
@@ -5060,6 +5061,19 @@ function WindowsSetupAssistantPanel({ assistant, onWorkflowStep, onExportWorkflo
               </Button>
             </div>
             <p className="mb-3 text-xs text-muted-foreground">{realWorkflow.primary}</p>
+            {appCloseHandoff ? (
+              <div className="mb-3 rounded-md border bg-card p-2 text-xs text-muted-foreground">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-foreground">Proof handoff</span>
+                  <Badge variant="outline">{appCloseHandoff.schemaVersion}</Badge>
+                </div>
+                <div className="grid gap-1 md:grid-cols-2">
+                  <span className="font-mono">{appCloseHandoff.selectedRouteProofPacketPath || ".\\spaceguard-selected-route-proof-packet.md"}</span>
+                  <span className="font-mono">{appCloseHandoff.workflowProofPath || ".\\spaceguard-real-workflow-proof.md"}</span>
+                  <span className="font-mono md:col-span-2">{appCloseHandoff.finalizeFirstRouteCommand || "npm run proof:first-route:windows:finalize"}</span>
+                </div>
+              </div>
+            ) : null}
             <div className="grid gap-2 md:grid-cols-2">
               {workflowSteps.map((step) => {
                 const proofStep = step.id === "post-run-rescan" || step.id === "proof-import";

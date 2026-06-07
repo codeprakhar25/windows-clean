@@ -16525,6 +16525,7 @@ function buildInAppRealWorkflow({
     title,
     envVar: spec?.envVar || "",
     panelId: spec?.panelId || "",
+    appCloseHandoff: buildInAppProofHandoff({ routeInput }),
     proofStatus,
     proofImportStatus: validationImport?.status || "not-imported",
     steps,
@@ -16536,6 +16537,19 @@ function buildInAppRealWorkflow({
       blocked
     },
     primary: getInAppRealWorkflowPrimary({ unsafeRuntime, proofImportComplete, nativeScanCurrent, nativeAvailable, routeInput })
+  };
+}
+
+function buildInAppProofHandoff({ routeInput = "temp-fixture" } = {}) {
+  const contract = buildRealWorkflowAppCloseContract();
+  return {
+    schemaVersion: "spaceguard-in-app-proof-handoff/v1",
+    routeInput,
+    selectedRouteProofPacketPath: ".\\spaceguard-selected-route-proof-packet.md",
+    workflowProofPath: contract.workflowProofPath,
+    validateWorkflowProofCommand: `npm run validate:workflow-proof -- --file ${contract.workflowProofPath}`,
+    finalizeFirstRouteCommand: "npm run proof:first-route:windows:finalize -- -EvidenceRoot .\\evidence\\first-route-proof-YYYYMMDD-HHMMSS",
+    requiredBeforeClosingApp: contract.requiredBeforeClosingApp
   };
 }
 

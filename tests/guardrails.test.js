@@ -797,6 +797,11 @@ const assert = require("assert");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "post-run-rescan").actionType, "run-post-run-rescan", "setup assistant workflow should route proof rescan steps through the app");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "proof-import").actionType, "prepare-validation-import", "setup assistant workflow should route proof import steps through the app");
   assert(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "proof-import").detail.includes("Selected route proof import"), "setup assistant workflow should require proof import before next route");
+  assert.strictEqual(nativeSetupAssistant.realWorkflow.appCloseHandoff.schemaVersion, "spaceguard-in-app-proof-handoff/v1", "setup assistant should expose an in-app proof handoff schema");
+  assert.strictEqual(nativeSetupAssistant.realWorkflow.appCloseHandoff.workflowProofPath, ".\\spaceguard-real-workflow-proof.md", "proof handoff should name the workflow proof export path");
+  assert.strictEqual(nativeSetupAssistant.realWorkflow.appCloseHandoff.selectedRouteProofPacketPath, ".\\spaceguard-selected-route-proof-packet.md", "proof handoff should name the selected-route proof packet export path");
+  assert(nativeSetupAssistant.realWorkflow.appCloseHandoff.finalizeFirstRouteCommand.includes("proof:first-route:windows:finalize"), "proof handoff should expose the first-route finalize command");
+  assert(nativeSetupAssistant.realWorkflow.appCloseHandoff.validateWorkflowProofCommand.includes("validate:workflow-proof"), "proof handoff should expose workflow proof validation");
   const unsafeSetupAssistant = guard.buildWindowsSetupAssistant({
     nativeCapability: { available: true },
     runtimeCapabilities: { available: true, realRunEnabled: true, destructiveCommands: true },

@@ -249,6 +249,12 @@ assert(app.includes("handleWindowsSetupWorkflowStep"), "App should route setup w
 assert(app.includes("step.actionType"), "Windows setup assistant workflow should read model action types");
 assert(app.includes("post-run-rescan"), "Windows setup assistant UI should expose post-run rescan workflow step");
 assert(app.includes("proof-import"), "Windows setup assistant UI should expose proof import workflow step");
+assert(app.includes("appCloseHandoff"), "Windows setup assistant UI should render the app-close proof handoff");
+assert(app.includes("Proof handoff"), "Windows setup assistant should label the first-route proof handoff");
+assert(app.includes("spaceguard-real-workflow-proof.md"), "Windows setup assistant should surface the workflow proof export file");
+assert(app.includes("spaceguard-selected-route-proof-packet.md"), "Windows setup assistant should surface the selected-route proof export file");
+assert(app.includes("proof:first-route:windows:finalize"), "Windows setup assistant should surface the first-route finalize command");
+assert(model.includes("spaceguard-in-app-proof-handoff/v1"), "model should expose the in-app proof handoff schema");
 assert(app.includes("buildRealDataLaunchRoadmap"), "real data launch roadmap should be wired");
 assert(app.includes("nativeEvidenceQuality"), "native evidence quality should feed downstream planning surfaces");
 assert(app.includes("RealDataLaunchRoadmapPanel"), "real data launch roadmap panel should be rendered");
