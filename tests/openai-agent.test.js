@@ -1148,6 +1148,69 @@ const assert = require("assert");
     }
   });
   assert.strictEqual(contextOnlyBroker.rows[0].status, "ready", "broker should use execution state embedded in the OpenAI context");
+  const firstRouteProofBlockedContext = openai.buildOpenAIAgentContext({
+    profile: { name: "First proof blocked" },
+    scanMode: "real",
+    scanSession: { currentFingerprint: "scan-first-proof-blocked" },
+    planSnapshot: { id: "plan-first-proof-blocked", selectedIds: ["npm-cache"] },
+    selectedIds: new Set(["npm-cache"]),
+    nativeScan: {
+      findings: [
+        { recipeId: "npm-cache", title: "npm package cache", path: "C:\\Users\\real\\AppData\\Local\\npm-cache\\_cacache", bytes: 1024, status: "measured" }
+      ]
+    },
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      realRunEnabled: true,
+      executorFlags: { npmCacheExecutor: true }
+    },
+    consentReceipt: { planId: "plan-first-proof-blocked" },
+    writeReadiness: { status: "ready-for-real-execution", readyForRealExecution: true },
+    releaseGate: { readyForRealRun: true },
+    validationPack: { readyForRealRun: true },
+    executionProofHandoff: { status: "waiting-for-execution" },
+    liveValidationManifest: {
+      schemaVersion: "spaceguard-live-route-validation/v1",
+      route: "bounded-npm-cache-delete",
+      routeInput: "npm-cache",
+      title: "npm cache cleanup",
+      status: "first-route-proof-required",
+      contract: {
+        envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
+        requestMode: "execute-npm-cache",
+        panelId: "npm-cache-executor-panel",
+        actionLabel: "Run npm cache cleanup"
+      },
+      runtime: {
+        routeFlagReady: false,
+        canAttemptWindowsValidation: false,
+        canExecuteWithoutAppEvidence: false,
+        singleScopedFlagRequired: true,
+        requiredEnabledFlag: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
+        disabledReason: "Accepted first-route completion proof is required before this real-data route can be validated."
+      },
+      requiredAppEvidence: ["current-native-scan-fingerprint"],
+      requiredPostRunProof: ["execution-ledger"]
+    }
+  });
+  const firstProofBlockedTask = firstRouteProofBlockedContext.agentTaskQueue.rows.find((row) => row.actionType === "run-npm-cache-executor");
+  assert(firstProofBlockedTask, "OpenAI task queue should still show the npm route while first-route proof is missing");
+  assert.strictEqual(firstProofBlockedTask.status, "blocked", "OpenAI task queue should block real-data executor rows until first-route proof is accepted");
+  assert.strictEqual(firstProofBlockedTask.blocker, "first-route-proof", "task queue should expose first-route proof as the blocker");
+  assert(firstProofBlockedTask.checks.some((check) => check.id === "first-route-proof" && !check.passed), "task queue should include first-route proof check evidence");
+  const firstProofBlockedBroker = openai.buildOpenAIAgentRecommendationBroker({
+    advice: result.advice,
+    context: firstRouteProofBlockedContext,
+    executionState: {
+      planId: "plan-first-proof-blocked",
+      scanFingerprint: "scan-first-proof-blocked",
+      consentPlanId: "plan-first-proof-blocked"
+    }
+  });
+  assert.strictEqual(firstProofBlockedBroker.rows[0].status, "blocked", "OpenAI broker should block executor recommendations until first-route proof is accepted");
+  assert.strictEqual(firstProofBlockedBroker.rows[0].canAct, false, "first-route proof blocker should prevent OpenAI-brokered execution");
+  assert(firstProofBlockedBroker.rows[0].checks.some((check) => check.id === "first-route-proof" && !check.passed), "broker should expose first-route proof blocker evidence");
   const multiFlagContext = openai.buildOpenAIAgentContext({
     profile: { name: "Multi flag" },
     scanMode: "real",

@@ -438,9 +438,14 @@ export function buildOpenAIAgentContext({
       bytes: Number(row.bytes || 0)
     }))
   };
+  const liveRouteValidation = buildOpenAILiveRouteValidationContext({
+    liveValidationManifest,
+    scopedExecutorCommandFlow
+  });
   const agentTaskQueue = buildOpenAIAgentTaskQueue({
     runtime: runtimeSummary,
     execution: executionSummary,
+    liveRouteValidation,
     executableRows,
     projectDependencyReviewTargets,
     reviewedDownloadsTargets,
@@ -461,10 +466,6 @@ export function buildOpenAIAgentContext({
     wslCompactionWorkOrder,
     driveInventoryRows,
     customRootRows
-  });
-  const liveRouteValidation = buildOpenAILiveRouteValidationContext({
-    liveValidationManifest,
-    scopedExecutorCommandFlow
   });
 
   return {
@@ -822,6 +823,7 @@ function getOpenAIEnabledScopedExecutorFlags(runtimeOrFlags = {}) {
 function buildOpenAIAgentTaskQueue({
   runtime = {},
   execution = {},
+  liveRouteValidation = null,
   executableRows = [],
   projectDependencyReviewTargets = [],
   reviewedDownloadsTargets = [],
@@ -846,20 +848,20 @@ function buildOpenAIAgentTaskQueue({
   const rows = [
     ...buildOpenAIProofRescanTaskRows(execution),
     ...buildOpenAIProofImportTaskRows(execution),
-    ...buildOpenAIExecutorTaskRows("run-temp-executor", executableRows.filter((row) => row.route === "known-temp-delete"), runtime, execution),
-    ...buildOpenAIExecutorTaskRows("run-downloads-cleanup-executor", reviewedDownloadsTargets, runtime, execution),
-    ...buildOpenAIExecutorTaskRows("run-large-file-archive-executor", largeFileArchiveTargets, runtime, execution),
-    ...buildOpenAIExecutorTaskRows("run-project-deps-executor", reviewedProjectTargets, runtime, execution),
-    ...buildOpenAIExecutorTaskRows("run-browser-cache-executor", browserCacheTargets, runtime, execution),
-    ...buildOpenAIExecutorTaskRows("run-gradle-cache-executor", gradleCacheTargets, runtime, execution),
-    ...buildOpenAIExecutorTaskRows("run-user-cache-executor", userCacheTargets, runtime, execution),
-    ...buildOpenAIExecutorTaskRows("run-android-cache-executor", androidCacheTargets, runtime, execution),
-    ...buildOpenAIExecutorTaskRows("run-shader-cache-executor", shaderCacheTargets, runtime, execution),
-    ...buildOpenAIExecutorTaskRows("run-pip-cache-executor", pipCacheTargets, runtime, execution),
-    ...buildOpenAIExecutorTaskRows("run-docker-build-cache-executor", dockerBuildCacheTargets, runtime, execution),
-    ...buildOpenAIExecutorTaskRows("run-npm-cache-executor", npmCacheTargets, runtime, execution),
-    ...buildOpenAIExecutorTaskRows("run-pnpm-store-executor", pnpmStoreTargets, runtime, execution),
-    ...buildOpenAIExecutorTaskRows("run-recycle-bin-executor", recycleBinTargets, runtime, execution),
+    ...buildOpenAIExecutorTaskRows("run-temp-executor", executableRows.filter((row) => row.route === "known-temp-delete"), runtime, execution, liveRouteValidation),
+    ...buildOpenAIExecutorTaskRows("run-downloads-cleanup-executor", reviewedDownloadsTargets, runtime, execution, liveRouteValidation),
+    ...buildOpenAIExecutorTaskRows("run-large-file-archive-executor", largeFileArchiveTargets, runtime, execution, liveRouteValidation),
+    ...buildOpenAIExecutorTaskRows("run-project-deps-executor", reviewedProjectTargets, runtime, execution, liveRouteValidation),
+    ...buildOpenAIExecutorTaskRows("run-browser-cache-executor", browserCacheTargets, runtime, execution, liveRouteValidation),
+    ...buildOpenAIExecutorTaskRows("run-gradle-cache-executor", gradleCacheTargets, runtime, execution, liveRouteValidation),
+    ...buildOpenAIExecutorTaskRows("run-user-cache-executor", userCacheTargets, runtime, execution, liveRouteValidation),
+    ...buildOpenAIExecutorTaskRows("run-android-cache-executor", androidCacheTargets, runtime, execution, liveRouteValidation),
+    ...buildOpenAIExecutorTaskRows("run-shader-cache-executor", shaderCacheTargets, runtime, execution, liveRouteValidation),
+    ...buildOpenAIExecutorTaskRows("run-pip-cache-executor", pipCacheTargets, runtime, execution, liveRouteValidation),
+    ...buildOpenAIExecutorTaskRows("run-docker-build-cache-executor", dockerBuildCacheTargets, runtime, execution, liveRouteValidation),
+    ...buildOpenAIExecutorTaskRows("run-npm-cache-executor", npmCacheTargets, runtime, execution, liveRouteValidation),
+    ...buildOpenAIExecutorTaskRows("run-pnpm-store-executor", pnpmStoreTargets, runtime, execution, liveRouteValidation),
+    ...buildOpenAIExecutorTaskRows("run-recycle-bin-executor", recycleBinTargets, runtime, execution, liveRouteValidation),
     ...buildOpenAIReviewTaskRows(projectDependencyReviewTargets, {
       source: "project-dependency-review",
       route: "item-review-project-cache",
@@ -985,11 +987,11 @@ function buildOpenAIProofImportTaskRows(execution = {}) {
   ];
 }
 
-function buildOpenAIExecutorTaskRows(actionType, targets = [], runtime = {}, execution = {}) {
+function buildOpenAIExecutorTaskRows(actionType, targets = [], runtime = {}, execution = {}, liveRouteValidation = null) {
   const policy = OPENAI_RECOMMENDATION_EXECUTOR_POLICIES[actionType];
   if (!policy) return [];
   return (Array.isArray(targets) ? targets : []).slice(0, 12).map((target, index) => {
-    const status = getOpenAIExecutorTaskStatus({ policy, runtime, execution });
+    const status = getOpenAIExecutorTaskStatus({ policy, runtime, execution, liveRouteValidation });
     const targetId = String(target.id || `${policy.route}-${index + 1}`).trim();
     const title = target.title || target.name || policy.targetLabel;
     const bytes = Number(target.bytes || 0);
@@ -1014,15 +1016,17 @@ function buildOpenAIExecutorTaskRows(actionType, targets = [], runtime = {}, exe
   });
 }
 
-function getOpenAIExecutorTaskStatus({ policy, runtime = {}, execution = {} }) {
+function getOpenAIExecutorTaskStatus({ policy, runtime = {}, execution = {}, liveRouteValidation = null }) {
   const enabledScopedFlags = Array.isArray(runtime.enabledScopedExecutorFlags)
     ? runtime.enabledScopedExecutorFlags
     : getOpenAIEnabledScopedExecutorFlags(runtime);
+  const liveRouteCheck = buildLiveRouteValidationBrokerCheck(policy, liveRouteValidation);
   const checks = [
     buildBrokerCheck("native-runtime", "Native runtime", Boolean(runtime.nativeAvailable), runtime.nativeAvailable ? "native runtime available" : "desktop shell required"),
     buildBrokerCheck("real-run-flag", "Scoped real-run flag", Boolean(runtime.realRunEnabled), runtime.realRunEnabled ? "real scoped execution exposed" : "real scoped execution disabled"),
     buildBrokerCheck("feature-flag", "Route feature flag", Boolean(runtime[policy.flag]), runtime[policy.flag] ? `${policy.flag} enabled` : `${policy.flag} disabled`),
     buildBrokerCheck("single-scoped-flag", "Single scoped flag", enabledScopedFlags.length <= 1, enabledScopedFlags.length <= 1 ? `${enabledScopedFlags.length} scoped executor flag(s) enabled` : `Turn off all but one scoped executor flag: ${enabledScopedFlags.join(", ")}`),
+    ...(liveRouteCheck ? [liveRouteCheck] : []),
     buildBrokerCheck("scan-fingerprint", "Scan fingerprint", Boolean(execution.scanFingerprintPresent), execution.scanFingerprintPresent ? "current scan fingerprint present" : "scan fingerprint missing"),
     buildBrokerCheck("consent", "Consent receipt", Boolean(execution.consentMatchesPlan), execution.consentMatchesPlan ? "consent matches current plan" : "current plan consent missing"),
     buildBrokerCheck("post-run-proof", "Post-run proof", Boolean(execution.proofAllowsNextExecutor), execution.proofAllowsNextExecutor ? `proof=${execution.proofStatus || "waiting-for-execution"}` : `proof=${execution.proofStatus || "blocked"}`)
@@ -1374,12 +1378,14 @@ function buildExecutorRecommendationBrokerRow({ row, actionType, key, policy, co
   const targetIdMatches = Boolean(targetId) && targets.some((target) =>
     targetMatchesRecommendationId(target, targetId, { allowPrefix: Boolean(policy.allowTargetPrefix) })
   );
+  const liveRouteCheck = buildLiveRouteValidationBrokerCheck(policy, context?.liveRouteValidation);
   const checks = [
     buildBrokerCheck("native-runtime", "Native runtime", Boolean(runtime.nativeAvailable), runtime.nativeAvailable ? "Tauri native runtime is available." : "Use the desktop shell before running scoped executors."),
     buildBrokerCheck("real-run-flag", "Scoped real-run flag", Boolean(runtime.realRunEnabled), runtime.realRunEnabled ? "Runtime exposes scoped real execution." : "Scoped real execution is disabled."),
     buildBrokerCheck("feature-flag", "Route feature flag", Boolean(runtime[policy.flag]), runtime[policy.flag] ? `${policy.flag} is enabled.` : `${policy.flag} is disabled.`),
     buildBrokerCheck("single-scoped-flag", "Single scoped flag", enabledScopedFlags.length <= 1, enabledScopedFlags.length <= 1 ? `${enabledScopedFlags.length} scoped executor flag(s) enabled.` : `Turn off all but one scoped executor flag: ${enabledScopedFlags.join(", ")}`),
     buildBrokerCheck("route-match", "Action-route match", routeMatches, routeMatches ? `${actionType} maps to ${policy.route}.` : `OpenAI returned route ${recommendedRoute || "missing"} for ${actionType}; expected ${policy.route}.`),
+    ...(liveRouteCheck ? [liveRouteCheck] : []),
     buildBrokerCheck("target-id-match", "Selected target", targetIdMatches, targetId ? `target=${targetId}; available=${targets.map((target) => target.id).filter(Boolean).join(",") || "none"}` : "OpenAI did not name a specific target id."),
     buildBrokerCheck("post-run-proof", "Post-run proof", proofAllowsExecution, proofAllowsExecution ? `proof=${proofStatus}` : `Finish post-run proof before another scoped executor. proof=${proofStatus}`),
     buildBrokerCheck("plan-id", "Current plan", Boolean(planId), planId || "missing plan id"),
@@ -1448,6 +1454,33 @@ function buildBrokerCheck(id, label, passed, detail) {
     passed: Boolean(passed),
     detail
   };
+}
+
+function buildLiveRouteValidationBrokerCheck(policy = null, liveRouteValidation = null) {
+  const route = String(liveRouteValidation?.route || "").trim();
+  if (!policy?.route || route !== policy.route) return null;
+  const status = String(liveRouteValidation.status || "unknown").trim();
+  const routeReady = status === "ready" &&
+    liveRouteValidation.routeFlagReady === true &&
+    liveRouteValidation.canAttemptWindowsValidation === true;
+  const detail = liveRouteValidation.disabledReason ||
+    (routeReady
+      ? `live route validation ready for ${route}`
+      : `live route validation status=${status || "unknown"}`);
+  if (status === "first-route-proof-required") {
+    return buildBrokerCheck(
+      "first-route-proof",
+      "First-route proof",
+      false,
+      detail || "Accepted first-route completion proof is required before real-data executor recommendations can run."
+    );
+  }
+  return buildBrokerCheck(
+    "live-route-validation",
+    "Live route validation",
+    routeReady,
+    detail
+  );
 }
 
 function getExecutorRecommendationTargets(policy, context = null) {
