@@ -10769,6 +10769,7 @@ export function normalizeValidationEvidenceRecord(checkId, value = null) {
       updatedAt: "",
       source: "",
       selectedRouteProofSummary: null,
+      fixtureSummary: null,
       detail: "Legacy checkbox evidence must be replaced with reviewer and artifact path before release."
     };
   }
@@ -10790,6 +10791,7 @@ export function normalizeValidationEvidenceRecord(checkId, value = null) {
       updatedAt: "",
       source: "",
       selectedRouteProofSummary: null,
+      fixtureSummary: null,
       detail: "No evidence record has been captured."
     };
   }
@@ -10802,6 +10804,7 @@ export function normalizeValidationEvidenceRecord(checkId, value = null) {
   const updatedAt = String(value.updatedAt || value.updated_at || "").trim();
   const source = cleanEvidenceText(value.source);
   const selectedRouteProofSummary = normalizeSelectedRouteProofSummary(value.selectedRouteProofSummary);
+  const fixtureSummary = normalizeFixtureEvidenceSummary(value.fixtureSummary);
   const complete = status === "passed" && Boolean(evidencePath) && Boolean(reviewer);
   const qualityStatus = complete
     ? "passed"
@@ -10827,6 +10830,7 @@ export function normalizeValidationEvidenceRecord(checkId, value = null) {
     updatedAt,
     source,
     selectedRouteProofSummary,
+    fixtureSummary,
     detail: complete
       ? `Evidence recorded by ${reviewer}.`
       : status === "passed"
@@ -11076,7 +11080,8 @@ export function buildValidationPackImport({
       recordedAt: cleanEvidenceText(row.recordedAt) || pack.generatedAt || importedAt,
       updatedAt: importedAt,
       source: cleanEvidenceText(row.source) || "validation-pack-import",
-      selectedRouteProofSummary: normalizeSelectedRouteProofSummary(row.selectedRouteProofSummary)
+      selectedRouteProofSummary: normalizeSelectedRouteProofSummary(row.selectedRouteProofSummary),
+      fixtureSummary: normalizeFixtureEvidenceSummary(row.fixtureSummary)
     };
   }
 
@@ -11746,6 +11751,39 @@ function normalizeSelectedRouteProofSummary(value = null) {
           driveLabel: cleanEvidenceText(volumeProof.driveLabel),
           freeBytesDelta: Number(volumeProof.freeBytesDelta || 0),
           source: cleanEvidenceText(volumeProof.source)
+        }
+      : null
+  };
+}
+
+function normalizeFixtureEvidenceSummary(value = null) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const artifactChain = Array.isArray(value.artifactChain)
+    ? value.artifactChain.map((entry) => normalizeFixtureEvidenceArtifactEntry(entry)).filter(Boolean)
+    : [];
+  const counts = value.counts && typeof value.counts === "object" && !Array.isArray(value.counts)
+    ? sanitizeFixtureCounts(value.counts)
+    : sanitizeFixtureCounts();
+  const purposes = Array.isArray(value.purposes)
+    ? Array.from(new Set(value.purposes.map((purpose) => cleanEvidenceText(purpose)).filter(Boolean))).sort()
+    : [];
+
+  return {
+    schemaVersion: cleanEvidenceText(value.schemaVersion) || "spaceguard-fixture-evidence/v1",
+    generatedAt: cleanEvidenceText(value.generatedAt),
+    afterCleanupRoute: cleanEvidenceText(value.afterCleanupRoute || value.after_cleanup_route || ""),
+    artifactChain,
+    counts,
+    purposes,
+    dryRunScope: value.dryRunScope && typeof value.dryRunScope === "object" && !Array.isArray(value.dryRunScope)
+      ? {
+          provided: Boolean(value.dryRunScope.provided),
+          passed: Boolean(value.dryRunScope.passed),
+          destructiveCommands: Boolean(value.dryRunScope.destructiveCommands),
+          caseCount: Number(value.dryRunScope.caseCount || 0),
+          failures: Number(value.dryRunScope.failures || 0),
+          allowed: Number(value.dryRunScope.allowed || 0),
+          rejected: Number(value.dryRunScope.rejected || 0)
         }
       : null
   };
@@ -12701,6 +12739,7 @@ export function buildValidationEvidencePack({
       updatedAt: row.evidenceRecord?.updatedAt || "",
       source: row.evidenceRecord?.source || "",
       selectedRouteProofSummary: row.evidenceRecord?.selectedRouteProofSummary || null,
+      fixtureSummary: row.evidenceRecord?.fixtureSummary || null,
       evidenceComplete: Boolean(row.evidenceRecord?.complete),
       evidenceLegacy: Boolean(row.evidenceRecord?.legacy),
       evidenceDetail: row.evidenceRecord?.detail || ""

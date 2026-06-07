@@ -4197,6 +4197,36 @@ const assert = require("assert");
   assert.strictEqual(recordedValidationPack.validationChecks.find((check) => check.id === "windows-native-build").evidenceComplete, true, "validation pack should mark detailed records complete");
   assert.strictEqual(recordedValidationPack.validationChecks.find((check) => check.id === "windows-native-build").reviewer, "qa-operator", "validation pack should export reviewer");
   assert(guard.buildValidationPackMarkdown(recordedValidationPack).includes("- [x] Windows native build"), "validation markdown should check recorded evidence rows");
+  const chainedFixtureValidationGate = guard.buildReleaseGate({
+    featureFlags: { realExecutors: true },
+    validationEvidence: {
+      ...chainedAfterCleanupFixtureImport.validationEvidence,
+      ...makePassedEvidence(["windows-native-build"])
+    },
+    scanMode: "native-readonly",
+    nativeCapability: { available: true },
+    executorPlan
+  });
+  const chainedFixtureValidationPack = guard.buildValidationEvidencePack({
+    releaseGate: chainedFixtureValidationGate,
+    executorPlan,
+    executorManifest,
+    scanMode: "native-readonly",
+    runtimeCapabilities: { available: true, realRunEnabled: false, destructiveCommands: false }
+  });
+  const chainedFixtureCheck = chainedFixtureValidationPack.validationChecks.find((check) => check.id === "scanner-fixtures");
+  assert.strictEqual(chainedFixtureCheck.fixtureSummary.artifactChain.length, 2, "validation pack export should preserve fixture artifact chain");
+  const reimportedFixtureValidationPack = guard.buildValidationPackImport({
+    evidenceObject: chainedFixtureValidationPack,
+    currentEvidence: {},
+    importedAt: "2026-06-05T01:30:00.000Z"
+  });
+  assert.strictEqual(reimportedFixtureValidationPack.validationEvidence["scanner-fixtures"].fixtureSummary.artifactChain.length, 2, "validation pack import should restore fixture artifact chain");
+  assert.deepStrictEqual(
+    reimportedFixtureValidationPack.validationEvidence["scanner-fixtures"].fixtureSummary.artifactChain.map((entry) => entry.evidencePath),
+    ["evidence/fixture-evidence.json", "evidence/fixture-after-cleanup.json"],
+    "validation pack roundtrip should keep both fixture proof artifacts"
+  );
   const importedValidationPack = guard.buildValidationPackImport({
     evidenceText: [
       "# SpaceGuard Validation Evidence Pack",

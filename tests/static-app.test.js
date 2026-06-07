@@ -1150,6 +1150,7 @@ assert(model.includes("spaceguard-fixture-evidence-import/v1"), "model should ex
 assert(model.includes("destructive-evidence"), "fixture evidence import should reject destructive evidence");
 assert(model.includes("scanner-fixtures"), "fixture evidence import should map scanner fixture readiness evidence");
 assert(model.includes("buildFixtureEvidenceArtifactChain"), "fixture evidence import should preserve before/after artifact chains");
+assert(model.includes("normalizeFixtureEvidenceSummary"), "validation packs should preserve fixture evidence summaries");
 assert(model.includes("after-cleanup"), "fixture evidence import should label after-cleanup fixture artifacts");
 assert(model.includes("dry-run-target-scope"), "model should expose dry-run target-scope validation");
 assert(model.includes("spaceguard-native-dry-run-scope/v1"), "model should expose native dry-run scope evidence schema");
