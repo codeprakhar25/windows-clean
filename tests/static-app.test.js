@@ -362,6 +362,8 @@ assert(model.includes("spaceguard-selected-route-proof-packet/v1"), "model shoul
 assert(model.includes("buildSelectedRouteProofPacketMarkdown"), "model should export selected-route proof packet markdown");
 assert(app.includes("buildSelectedRouteProofPacketMarkdown"), "app should wire selected-route proof packet markdown export");
 assert(app.includes("flow.proofPacket"), "command flow UI should receive the selected-route proof packet");
+assert(model.includes("compactNativeVolumeProof"), "selected-route proof packet should compact native volume proof");
+assert(model.includes("Volume proof delta"), "selected-route proof markdown should include volume proof deltas");
 assert(app.includes("Export proof packet"), "command flow UI should export the selected-route proof packet");
 assert(openAiAgent.includes("directDeleteAuthority"), "OpenAI context should deny direct delete authority");
 assert(openAiAgent.includes("text: {"), "OpenAI adapter should configure Responses API text output");

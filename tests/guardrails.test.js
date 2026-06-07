@@ -3893,12 +3893,25 @@ const assert = require("assert");
       findings: [{ recipeId: "windows-temp", status: "measured", path: "%TEMP%", bytes: 0 }]
     }
   });
+  const tempLedgerWithVolumeProof = tempLedger.map((entry, index) => ({
+    ...entry,
+    nativeVolumeProof: index === 0
+      ? {
+          status: "measured",
+          drive: "C:",
+          freeBytesDelta: entry.bytes,
+          beforeFreeBytes: 20 * guard.GB,
+          afterFreeBytes: 20 * guard.GB + Number(entry.bytes || 0),
+          source: "GetDiskFreeSpaceExW"
+        }
+      : null
+  }));
   const selectedRouteProofFlow = guard.buildScopedExecutorCommandFlow({
     smokeRunPacket: tempProofSmokePacket,
     preferredRoute: "known-temp-delete",
     executionProofHandoff: { status: "proof-complete" },
     nativeCapability: { available: true },
-    ledger: tempLedger,
+    ledger: tempLedgerWithVolumeProof,
     postRunVerification: tempPostRunVerification,
     rescanComparison: matchedComparison,
     scanning: false
@@ -3909,11 +3922,14 @@ const assert = require("assert");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.counts.ledgerEntries, 1, "proof packet should count selected-route ledger entries");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.rescanStatus, "matched", "proof packet should retain rescan comparison status");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.readyForNextRoute, true, "matched proof should clear the next-route blocker");
+  assert.strictEqual(selectedRouteProofFlow.proofPacket.volumeProof.status, "measured", "proof packet should include native volume proof status");
+  assert.strictEqual(selectedRouteProofFlow.proofPacket.ledgerEntries[0].nativeVolumeProof.drive, "C:", "proof packet should keep compact ledger volume proof");
   const proofPacketMarkdown = guard.buildSelectedRouteProofPacketMarkdown(selectedRouteProofFlow.proofPacket);
   assert(proofPacketMarkdown.includes("# SpaceGuard Selected Route Proof Packet"), "proof packet markdown should have a stable title");
   assert(proofPacketMarkdown.includes("known-temp-delete"), "proof packet markdown should include the selected route");
   assert(proofPacketMarkdown.includes("matched"), "proof packet markdown should include matched rescan evidence");
   assert(proofPacketMarkdown.includes("Ledger entries: 1"), "proof packet markdown should include ledger count");
+  assert(proofPacketMarkdown.includes("Volume proof: measured"), "proof packet markdown should include volume proof status");
   const mismatchProofFlow = guard.buildScopedExecutorCommandFlow({
     smokeRunPacket: tempProofSmokePacket,
     preferredRoute: "known-temp-delete",

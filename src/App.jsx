@@ -5033,6 +5033,8 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
   const launchChecks = (launchPacket?.checks || []).slice(0, 6);
   const proofLedgerRows = (proofPacket?.ledgerEntries || []).slice(0, 3);
   const proofRescanRows = (proofPacket?.rescanRows || []).slice(0, 3);
+  const proofVolumeDelta = Number(proofPacket?.volumeProof?.freeBytesDelta || 0);
+  const proofVolumeDeltaLabel = `${proofVolumeDelta >= 0 ? "+" : "-"}${formatBytes(Math.abs(proofVolumeDelta))}`;
   const setupCommandRows = setupCommands
     ? [
         { label: ".env", command: setupCommands.enableEnv, detail: "Selected route flag" },
@@ -5174,12 +5176,13 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
               {proofPacket.rescanStatus ? <Badge variant="outline">{proofPacket.rescanStatus}</Badge> : null}
               {proofPacket.runLabel ? <Badge variant="outline">{proofPacket.runLabel}</Badge> : null}
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
               <QueueStat label="Ledger" value={proofPacket.counts?.ledgerEntries || 0} tone={proofPacket.counts?.ledgerEntries ? "safe" : "review"} />
               <QueueStat label="Matched" value={proofPacket.counts?.matchedRows || 0} tone={proofPacket.counts?.matchedRows ? "safe" : "review"} />
               <QueueStat label="Mismatch" value={proofPacket.counts?.mismatchRows || 0} tone={proofPacket.counts?.mismatchRows ? "restricted" : "safe"} />
               <QueueStat label="Waiting" value={proofPacket.counts?.waitingRows || 0} tone={proofPacket.counts?.waitingRows ? "review" : "safe"} />
               <QueueStat label="Reclaimed" value={formatBytes(proofPacket.counts?.reclaimedBytes || 0)} tone={proofPacket.counts?.reclaimedBytes ? "safe" : "review"} />
+              <QueueStat label="Volume proof" value={proofPacket.volumeProof?.measured ? proofVolumeDeltaLabel : "none"} tone={proofPacket.volumeProof?.measured ? "safe" : "review"} />
             </div>
             <p className="mt-2 text-xs text-muted-foreground">{proofPacket.primary}</p>
             <div className="mt-3 grid gap-2 md:grid-cols-2">

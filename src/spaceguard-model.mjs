@@ -8577,6 +8577,7 @@ export function buildSelectedRouteProofPacket({
   const rescanRows = filterSelectedRouteRows(rescanComparison?.rows || [], route, proofIds);
   const ledgerEntries = filterSelectedRouteLedgerEntries(ledger, route, proofIds);
   const counts = buildSelectedRouteProofCounts({ ledgerEntries, checkpoints, rescanRows });
+  const volumeProof = buildNativeVolumeProofHandoffSummary(ledgerEntries);
   const rescanStatus = rescanComparison?.status || "not-run";
   const verificationStatus = postRunVerification?.status || "not-run";
   const status = getSelectedRouteProofStatus({
@@ -8611,6 +8612,7 @@ export function buildSelectedRouteProofPacket({
     postRunScanEvidence: Boolean(rescanComparison?.postRunScanEvidence || postRunVerification?.postRunScanEvidence),
     readyForNextRoute,
     counts,
+    volumeProof,
     ledgerEntries: ledgerEntries.map(compactSelectedRouteProofLedgerEntry),
     checkpoints: checkpoints.map(compactSelectedRouteProofCheckpoint),
     rescanRows: rescanRows.map(compactSelectedRouteProofRescanRow),
@@ -8627,7 +8629,10 @@ export function buildSelectedRouteProofPacketMarkdown(packet = null) {
           `  - ID: ${entry.id}`,
           `  - Bytes: ${formatBytes(entry.bytes)}`,
           `  - Executed: ${entry.executedAt || "missing"}`,
-          `  - Source: ${entry.source || "unknown"}`
+          `  - Source: ${entry.source || "unknown"}`,
+          entry.nativeVolumeProof?.status === "measured"
+            ? `  - Volume proof: ${entry.nativeVolumeProof.drive || "drive"} ${formatSignedBytes(entry.nativeVolumeProof.freeBytesDelta || 0)} free bytes`
+            : ""
         ].join("\n"))
         .join("\n")
     : "- No selected-route ledger entries.";
@@ -8661,6 +8666,8 @@ export function buildSelectedRouteProofPacketMarkdown(packet = null) {
     `Ready for next route: ${packet?.readyForNextRoute ? "yes" : "no"}`,
     `Ledger entries: ${packet?.counts?.ledgerEntries || 0}`,
     `Reclaimed bytes: ${formatBytes(packet?.counts?.reclaimedBytes || 0)}`,
+    `Volume proof: ${packet?.volumeProof?.status || "not-collected"}`,
+    `Volume proof delta: ${formatSignedBytes(packet?.volumeProof?.freeBytesDelta || 0)}`,
     `Post-run scan evidence: ${packet?.postRunScanEvidence ? "yes" : "no"}`,
     `Ledger timestamp: ${packet?.latestExecutionAt || "missing"}`,
     `Scan timestamp: ${packet?.scanGeneratedAt || "missing"}`,
@@ -8676,6 +8683,12 @@ export function buildSelectedRouteProofPacketMarkdown(packet = null) {
     "",
     "This proof packet is evidence only. It does not grant cleanup authority; it only proves whether the selected route can be followed by another scoped route."
   ].join("\n");
+}
+
+function formatSignedBytes(bytes = 0) {
+  const value = Number(bytes || 0);
+  if (!value) return "0 GB";
+  return `${value > 0 ? "+" : "-"}${formatBytes(Math.abs(value))}`;
 }
 
 function collectSelectedRouteProofIds(route, postRunVerification = null, rescanComparison = null) {
@@ -8746,7 +8759,20 @@ function compactSelectedRouteProofLedgerEntry(entry = {}) {
     result: entry.result || "",
     bytes: Number(entry.bytes || 0),
     method: entry.method || "",
-    source: entry.source || ""
+    source: entry.source || "",
+    nativeVolumeProof: compactNativeVolumeProof(entry.nativeVolumeProof)
+  };
+}
+
+function compactNativeVolumeProof(proof = null) {
+  if (!proof || proof.status !== "measured") return null;
+  return {
+    status: proof.status,
+    drive: proof.drive || "",
+    freeBytesDelta: Number(proof.freeBytesDelta || 0),
+    beforeFreeBytes: Number(proof.beforeFreeBytes || 0),
+    afterFreeBytes: Number(proof.afterFreeBytes || 0),
+    source: proof.source || "native-write-volume-proof"
   };
 }
 
