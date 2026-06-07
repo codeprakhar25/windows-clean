@@ -903,6 +903,9 @@ assert(app.includes("executionProofContext"), "post-run verification should free
 assert(app.includes("commitExecutionLedger"), "execution ledger writes should go through one proof-context helper");
 assert(app.includes("formatNativeWriteVolumeProof"), "execution ledger should format native drive free-space proof");
 assert(app.includes("Volume proof"), "execution ledger should make native volume proof visible");
+assert(app.includes("nativeVolumeProof"), "execution ledger should preserve structured native volume proof");
+assert(app.includes("Native volume proof"), "execution proof handoff should show native volume proof details");
+assert(model.includes("buildNativeVolumeProofHandoffSummary"), "model should summarize native volume proof for execution handoff");
 assert(app.includes("buildOpenAIAgentHandoffRecord"), "OpenAI recommendations should create first-class handoff records");
 assert(app.includes("openAiAgentHandoff"), "OpenAI handoff state should survive through executor dispatch");
 assert(app.includes("OpenAI handoff"), "native execution ledger should record OpenAI-brokered handoffs");

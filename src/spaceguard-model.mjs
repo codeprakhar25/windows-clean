@@ -12532,6 +12532,7 @@ export function buildExecutionProofHandoff({
   const matched = Number(rescanComparison?.counts?.matched || 0);
   const mismatch = Number(rescanComparison?.counts?.mismatch || 0) + Number(rescanComparison?.counts?.noFinding || 0);
   const waiting = Number(rescanComparison?.counts?.waiting || 0);
+  const volumeProof = buildNativeVolumeProofHandoffSummary(ledgerEntries);
   const nativeAvailable = Boolean(nativeCapability?.available);
   const postRunScanEvidence = Boolean(rescanComparison?.postRunScanEvidence);
   const scopedNativeExecution = Boolean(
@@ -12598,6 +12599,7 @@ export function buildExecutionProofHandoff({
     matched,
     mismatch,
     waiting,
+    volumeProof,
     postRunScanEvidence,
     nativeAvailable,
     scanning: Boolean(scanning),
@@ -12605,6 +12607,47 @@ export function buildExecutionProofHandoff({
     actionLabel,
     primary,
     steps
+  };
+}
+
+function buildNativeVolumeProofHandoffSummary(ledgerEntries = []) {
+  const proofs = ledgerEntries
+    .map((entry) => entry?.nativeVolumeProof)
+    .filter((proof) => proof && proof.status === "measured");
+  if (!proofs.length) {
+    return {
+      status: "not-collected",
+      measured: false,
+      entries: 0,
+      drives: [],
+      driveLabel: "none",
+      freeBytesDelta: 0,
+      beforeFreeBytes: 0,
+      afterFreeBytes: 0,
+      source: "not-collected",
+      primary: "No native write volume proof is attached to this ledger."
+    };
+  }
+  const freeBytesDelta = proofs.reduce((sum, proof) => sum + Number(proof.freeBytesDelta || 0), 0);
+  const beforeFreeBytes = proofs.length === 1 ? Number(proofs[0].beforeFreeBytes || 0) : 0;
+  const afterFreeBytes = proofs.length === 1 ? Number(proofs[0].afterFreeBytes || 0) : 0;
+  const drives = [...new Set(proofs.map((proof) => proof.drive).filter(Boolean))];
+  const deltaDirection = freeBytesDelta >= 0 ? "+" : "-";
+  const primary = proofs.length === 1
+    ? `${drives[0] || "Drive"} free space changed ${deltaDirection}${formatBytes(Math.abs(freeBytesDelta))} during native execution.`
+    : `${proofs.length} native write volume proof(s) changed free space ${deltaDirection}${formatBytes(Math.abs(freeBytesDelta))} across ${drives.length || 1} drive(s).`;
+
+  return {
+    status: "measured",
+    measured: true,
+    entries: proofs.length,
+    drives,
+    driveLabel: drives.join(", ") || "drive",
+    freeBytesDelta,
+    beforeFreeBytes,
+    afterFreeBytes,
+    source: proofs[0]?.source || "native-write-volume-proof",
+    primary
   };
 }
 

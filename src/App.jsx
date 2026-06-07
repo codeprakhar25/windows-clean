@@ -231,6 +231,19 @@ function formatNativeWriteVolumeProof(proof = null) {
   return `Volume proof ${proof.drive || "drive"}: free ${direction}${formatBytes(Math.abs(delta))} (${before} -> ${after})`;
 }
 
+function buildNativeWriteVolumeProofLedgerSummary(proof = null) {
+  if (!proof || proof.status !== "measured") return null;
+  return {
+    status: proof.status,
+    drive: proof.drive || "",
+    freeBytesDelta: Number(proof.freeBytesDelta || 0),
+    beforeFreeBytes: Number(proof.before?.freeBytes || 0),
+    afterFreeBytes: Number(proof.after?.freeBytes || 0),
+    source: proof.source || "native-write-volume-proof",
+    note: proof.note || ""
+  };
+}
+
 function buildOpenAIAgentHandoffRecord({ row = {}, brokerRow = null, deterministicRoute = "", adviceResult = null, status = "ui-routed" } = {}) {
   const actionType = String(row.actionType || "").toLowerCase();
   const recommendationKey = getOpenAIAgentRecommendationKey(row);
@@ -2221,6 +2234,7 @@ export default function App() {
 
   function buildNativeExecutionLedger(result, executedAt) {
     const volumeProofNote = formatNativeWriteVolumeProof(result?.volumeProof);
+    const volumeProofSummary = buildNativeWriteVolumeProofLedgerSummary(result?.volumeProof);
     return (result.entries || []).map((entry, index) => ({
       id: entry.id,
       planId: planSnapshot.id,
@@ -2230,6 +2244,7 @@ export default function App() {
       result: entry.result,
       bytes: entry.bytes,
       route: entry.route,
+      nativeVolumeProof: index === 0 ? volumeProofSummary : null,
       method: `${entry.route}: ${entry.note}${volumeProofNote ? ` | ${volumeProofNote}` : ""}`
     }));
   }
@@ -11358,6 +11373,9 @@ function ExecutionProofHandoffPanel({ handoff, onRescan }) {
   const blocked = handoff.status === "proof-mismatch";
   const waiting = handoff.status === "waiting-for-execution";
   const buttonDisabled = !handoff.canRunRescan || complete || waiting;
+  const volumeProof = handoff.volumeProof || {};
+  const volumeDelta = Number(volumeProof.freeBytesDelta || 0);
+  const volumeDeltaLabel = `${volumeDelta >= 0 ? "+" : "-"}${formatBytes(Math.abs(volumeDelta))}`;
 
   return (
     <Card id="execution-proof-handoff-panel">
@@ -11369,11 +11387,12 @@ function ExecutionProofHandoffPanel({ handoff, onRescan }) {
         <CardDescription>{handoff.primary}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
           <QueueStat label="Run" value={handoff.runLabel} tone={handoff.scopedNativeExecution ? "restricted" : "review"} />
           <QueueStat label="Reclaimed" value={formatBytes(handoff.reclaimedBytes)} tone={handoff.reclaimedBytes ? "safe" : "review"} />
           <QueueStat label="Checkpoints" value={handoff.checkpointCount} tone={handoff.checkpointCount ? "advanced" : "review"} />
           <QueueStat label="Post scan" value={handoff.postRunScanEvidence ? "yes" : "no"} tone={handoff.postRunScanEvidence ? "safe" : "review"} />
+          <QueueStat label="Volume proof" value={volumeProof.measured ? volumeDeltaLabel : "none"} tone={volumeProof.measured ? "safe" : "review"} />
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
@@ -11390,6 +11409,23 @@ function ExecutionProofHandoffPanel({ handoff, onRescan }) {
             <QueueStat label="Waiting" value={handoff.waiting} tone={handoff.waiting ? "review" : "safe"} />
           </div>
         </div>
+
+        {volumeProof.measured ? (
+          <div className="rounded-md border bg-card p-3">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium">Native volume proof</span>
+              <Badge variant="safe">{volumeProof.status}</Badge>
+              <Badge variant="outline">{volumeProof.driveLabel}</Badge>
+              <Badge variant="outline">{volumeProof.source}</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">{volumeProof.primary}</p>
+            {volumeProof.beforeFreeBytes || volumeProof.afterFreeBytes ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Free bytes: {formatBytes(volumeProof.beforeFreeBytes)} {"->"} {formatBytes(volumeProof.afterFreeBytes)}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="flex flex-col gap-2">
           {handoff.steps.slice(0, 3).map((step) => (

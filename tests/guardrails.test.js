@@ -2491,6 +2491,29 @@ const assert = require("assert");
   assert.strictEqual(proofRequiredHandoff.status, "proof-required", "ledgered execution should require post-run proof");
   assert.strictEqual(proofRequiredHandoff.canRunRescan, false, "handoff should not offer post-run rescan outside the native shell");
   assert.strictEqual(proofRequiredHandoff.ledgerEntries, taggedItemLedger.length, "handoff should count ledger rows");
+  const volumeProofLedger = taggedItemLedger.map((entry, index) => ({
+    ...entry,
+    nativeVolumeProof: index === 0
+      ? {
+          status: "measured",
+          drive: "C:",
+          freeBytesDelta: 150 * guard.MB,
+          beforeFreeBytes: 10 * guard.GB,
+          afterFreeBytes: 10 * guard.GB + 150 * guard.MB,
+          source: "GetDiskFreeSpaceExW"
+        }
+      : null
+  }));
+  const volumeProofHandoff = guard.buildExecutionProofHandoff({
+    ledger: volumeProofLedger,
+    verificationSummary: currentVerification,
+    postRunVerification,
+    rescanComparison: demoRescanComparison,
+    nativeCapability: { available: true }
+  });
+  assert.strictEqual(volumeProofHandoff.volumeProof.status, "measured", "handoff should expose native write volume proof status");
+  assert.strictEqual(volumeProofHandoff.volumeProof.driveLabel, "C:", "handoff should expose the measured volume drive");
+  assert.strictEqual(volumeProofHandoff.volumeProof.freeBytesDelta, 150 * guard.MB, "handoff should expose native free-byte delta without double counting ledger entries");
 
   const tempPlanSnapshot = guard.buildPlanSnapshot({
     selectedIds: new Set(["windows-temp"]),
