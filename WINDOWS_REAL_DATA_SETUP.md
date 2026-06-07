@@ -47,7 +47,9 @@ npm run openai:smoke:fixture -- --route npm-cache
 npm run openai:smoke -- --route npm-cache
 npm run setup:route -- --route npm-cache
 npm run validate:route -- --route npm-cache
-npm run native:dev
+npm run proof:route:windows -- -Route npm-cache
+# manual fallback if you skip the selected-route runner:
+# npm run native:dev
 ```
 
 `npm run setup:doctor` is read-only. It checks `.env`, OpenAI key presence, model/reasoning defaults, scoped executor flags, and the first-route completion proof without calling OpenAI, scanning folders, or running cleanup. Its `status` is `readonly-ready`, `first-route-proof-required`, `one-route-ready`, or `multi-flag-blocked`; write-mode validation is safe to launch only when exactly one scoped executor flag is enabled and non-temp real-data routes have an accepted `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK`.
@@ -73,6 +75,14 @@ For every route after the seeded temp fixture, `setup:route` stays at `first-rou
 `npm run proof:first-route:windows` runs the first-route operator preflight on Windows. It creates an evidence folder, loads `.env`, forces a one-route environment with only `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1`, captures the first-route packet, seeds and inspects fixtures, runs setup doctor, fixture OpenAI smoke, live OpenAI smoke when `OPENAI_API_KEY` is configured, route setup, and route validation, then launches the Tauri app. It writes `operator-preflight.json`, `operator-preflight-check.json`, and `commands.ndjson` before launch. It does not clean anything outside the desktop workflow; the actual fixture deletion still requires in-app scan, target selection, consent, and the **Real temp cleanup** button. After the app exits, the runner writes `native-dev-exit.json`; a nonzero desktop exit stops proof finalization as `native-dev-failed`. A clean app exit continues into after-cleanup fixture inspection, workflow proof validation, and the first-route completion verifier. Use `-SkipPostAppValidation` only for preflight/dev sessions where the app will not export proof yet.
 
 When the completion verifier accepts that evidence, keep the generated first-route completion check JSON and set `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to that path before enabling `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR`, `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR`, or another non-temp route flag.
+
+After first-route proof is accepted, `npm run proof:route:windows -- -Route npm-cache` runs the selected-route operator preflight on Windows. It loads `.env`, requires `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to point at an accepted `spaceguard-first-route-completion-check/v1` file, forces all scoped executor flags off except the selected route flag, runs setup doctor, route-specific OpenAI fixture smoke, live OpenAI smoke when configured, route setup, and route validation, then launches the Tauri app. It writes `operator-preflight.json`, `operator-app-handoff.md`, and `commands.ndjson` before launch. It does not clean anything outside the desktop workflow; the actual selected-route cleanup still requires in-app scan, target selection, consent, selected executor click, native volume proof, post-run rescan, selected-route proof import, and `spaceguard-real-workflow-proof.md` export.
+
+If selected-route proof export/import is corrected after the desktop session closes, resume only selected-route post-app finalization against the existing evidence folder:
+
+```powershell
+npm run proof:route:windows:finalize -- -Route npm-cache -EvidenceRoot .\evidence\route-proof-npm-cache-YYYYMMDD-HHMMSS
+```
 
 If proof export/import is corrected after the desktop session closes, resume only post-app finalization against the existing evidence folder:
 

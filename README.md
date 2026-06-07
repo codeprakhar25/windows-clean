@@ -59,7 +59,9 @@ npm run openai:smoke:fixture -- --route npm-cache
 npm run openai:smoke -- --route npm-cache
 npm run setup:route -- --route npm-cache
 npm run validate:route -- --route npm-cache
-npm run native:dev
+npm run proof:route:windows -- -Route npm-cache
+# manual fallback if you skip the selected-route runner:
+# npm run native:dev
 ```
 
 `npm run setup:doctor` is a read-only local setup diagnostic. It reports whether `.env` exists, whether `OPENAI_API_KEY` is configured, which model/reasoning defaults will be used, which scoped executor flags are enabled, and whether the first-route completion proof is accepted. Its `status` is `readonly-ready`, `first-route-proof-required`, `one-route-ready`, or `multi-flag-blocked`; write-mode validation is considered safe to launch only when exactly one scoped executor flag is enabled and non-temp real-data routes have an accepted `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK`. It does not call OpenAI, scan folders, or run cleanup.
@@ -85,6 +87,14 @@ For every route after the seeded temp fixture, `setup:route` stays at `first-rou
 `npm run proof:first-route:windows` is the fastest disposable-VM path for the first real proof. Run it on Windows after setting `.env`; it creates an evidence folder, loads `.env`, forces every scoped executor flag off except `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1`, seeds and inspects the fixture, runs setup doctor, fixture OpenAI smoke, live OpenAI smoke when `OPENAI_API_KEY` is configured, route setup, route validation, writes `operator-preflight.json`, `operator-preflight-check.json`, and `commands.ndjson`, then launches `npm run native:dev`. It does not run cleanup itself; deletion still requires the desktop app's scan, target selection, consent, and executor button. After the app exits, the runner writes `native-dev-exit.json`; a nonzero desktop exit stops proof finalization as `native-dev-failed`. A clean app exit continues into after-cleanup fixture inspection, workflow proof validation, and the first-route completion verifier. Use `-SkipPostAppValidation` only for preflight/dev sessions where the app will not export proof yet.
 
 When the completion verifier accepts that evidence, keep the generated first-route completion check JSON and set `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to that path before enabling `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR`, `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR`, or another non-temp route flag.
+
+After first-route proof is accepted, `npm run proof:route:windows -- -Route npm-cache` is the fastest selected-route proof path. It runs only on Windows, loads `.env`, requires `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to point at an accepted `spaceguard-first-route-completion-check/v1` file, forces all scoped executor flags off except the selected route flag, runs setup doctor, route-specific OpenAI fixture smoke, live OpenAI smoke when configured, route setup, route validation, writes `operator-preflight.json`, `operator-app-handoff.md`, and `commands.ndjson`, then launches `npm run native:dev`. It does not run cleanup itself; deletion still requires the desktop app's real scan, target selection, consent, executor button, native volume proof, post-run rescan, selected-route proof import, and workflow proof export.
+
+If the app proof export is fixed after the selected-route desktop session closes, rerun only the post-app finalization against the existing evidence root:
+
+```bash
+npm run proof:route:windows:finalize -- -Route npm-cache -EvidenceRoot evidence/route-proof-npm-cache-YYYYMMDD-HHMMSS
+```
 
 If the app proof export is fixed after the desktop session closes, rerun only the post-app finalization against the existing evidence root:
 
