@@ -431,6 +431,16 @@ const assert = require("assert");
   assert(manualContext.agentTaskQueue.rows.some((row) => row.actionType === "run-user-cache-executor" && row.targetId === "user-cache" && row.status === "ready"), "OpenAI task queue should expose ready scoped executor rows");
   assert(manualContext.agentTaskQueue.rows.some((row) => row.actionType === "review-target" && row.targetId === "expo-shop-node-modules" && row.status === "needs-user-review"), "OpenAI task queue should expose review-only project dependency rows");
   assert(manualContext.agentTaskQueue.rows.some((row) => row.actionType === "manual-only" && row.targetId === "app-old-ide" && row.manualOnly), "OpenAI task queue should keep app uninstall follow-up manual-only");
+  const appTask = manualContext.agentTaskQueue.rows.find((row) => row.actionType === "manual-only" && row.targetId === "app-old-ide");
+  assert.strictEqual(appTask.usageProof, "not proven", "OpenAI app task rows should expose missing usage proof");
+  assert.strictEqual(appTask.uninstallEntry, "present", "OpenAI app task rows should expose uninstall-entry evidence");
+  assert.strictEqual(appTask.unusedReviewTier, "strong-review", "OpenAI app task rows should expose conservative unused-review tier");
+  assert.strictEqual(appTask.canCreateExecutor, false, "OpenAI app task rows must not create executor authority");
+  assert(appTask.forbiddenActions.includes("run-uninstall-string"), "OpenAI app task rows should preserve uninstall guardrails");
+  const expoTask = manualContext.agentTaskQueue.rows.find((row) => row.actionType === "review-target" && row.targetId === "expo-shop-node-modules");
+  assert.strictEqual(expoTask.kind, "Expo project dependency folder", "OpenAI project task rows should expose Expo dependency kind");
+  assert(expoTask.signals.some((signal) => signal.label === "framework" && signal.value === "expo"), "OpenAI project task rows should preserve Expo framework signals");
+  assert.strictEqual(expoTask.executorRequiresUserRemoveDecision, true, "OpenAI project task rows should require user Remove decision before execution");
   const proofCompleteContext = openai.buildOpenAIAgentContext({
     scanSession: { status: "current", currentFingerprint: "scan-proof-complete" },
     planSnapshot: { id: "plan-proof-complete", scanMode: "native-readonly" },

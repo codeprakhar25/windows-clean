@@ -1071,6 +1071,21 @@ function buildOpenAIReviewTaskRows(targets = [], {
   return (Array.isArray(targets) ? targets : []).slice(0, 12).map((target, index) => {
     const targetId = String(target.id || `${source || "review"}-${index + 1}`).trim();
     const bytes = Number(target.bytes || 0);
+    const signals = normalizeAgentReviewSignals(target.signals);
+    const usageProof = target.usageProof || getAgentSignalValue(signals, "usage proof") || "";
+    const uninstallEntry = target.uninstallEntry || getAgentSignalValue(signals, "uninstall entry") || "";
+    const registryMatch = target.registryMatch || getAgentSignalValue(signals, "registry match") || "";
+    const unusedReview = manualOnly && (target.route || route) === "manual-app-uninstall"
+      ? buildAgentUnusedReviewScore({
+          usageProof: usageProof || "not proven",
+          uninstallEntry,
+          registryMatch,
+          recommendation: target.recommendation,
+          decision: target.decision,
+          ageDays: target.ageDays,
+          bytes
+        })
+      : { score: Number(target.unusedReviewScore || 0), tier: target.unusedReviewTier || "", factors: target.scoreFactors || [] };
     return {
       id: `task-${source || actionType}-${targetId}`,
       source: source || "review",
@@ -1080,6 +1095,22 @@ function buildOpenAIReviewTaskRows(targets = [], {
       focusActionId,
       title: target.title || target.name || target.id || "Review target",
       bytes,
+      path: target.path || "",
+      ageDays: Number(target.ageDays || 0),
+      kind: target.kind || "",
+      recommendation: target.recommendation || "review",
+      decision: target.decision || "undecided",
+      signals,
+      usageProof,
+      uninstallEntry,
+      registryMatch,
+      unusedReviewTier: target.unusedReviewTier || unusedReview.tier || "",
+      unusedReviewScore: Number(target.unusedReviewScore || unusedReview.score || 0),
+      scoreFactors: Array.isArray(target.scoreFactors) ? target.scoreFactors.slice(0, 6) : Array.isArray(unusedReview.factors) ? unusedReview.factors.slice(0, 6) : [],
+      officialAction: target.officialAction || "",
+      canCreateExecutor: Boolean(target.canCreateExecutor),
+      executorRequiresUserRemoveDecision: Boolean(target.executorRequiresUserRemoveDecision),
+      forbiddenActions: Array.isArray(target.forbiddenActions) ? target.forbiddenActions.slice(0, 8) : manualOnly ? ["automated-uninstall", "delete-program-files", "run-uninstall-string"] : [],
       priority: getOpenAITaskPriority(bytes, manualOnly ? "manual-only" : "needs-user-review"),
       status: manualOnly ? "manual-only" : "needs-user-review",
       canExecuteNow: false,

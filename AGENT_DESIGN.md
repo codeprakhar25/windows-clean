@@ -41,7 +41,8 @@ The agent must never silently:
 The OpenAI integration is advisory, not an executor.
 
 - It receives a bounded context packet: scan mode, selected actions, candidate samples, readiness state, runtime capability flags, and policy boundaries.
-- It receives reviewed project dependency targets only after item-review decisions mark them as Remove.
+- Its deterministic task queue preserves scan-derived evidence such as Expo/React Native project signals, usage-proof state, uninstall-entry presence, unused-review tier, and manual-only guardrails so the model ranks evidence instead of inferring authority.
+- It receives reviewed project dependency executor targets only after item-review decisions mark them as Remove; pre-review project candidates remain review-only task rows.
 - In the desktop shell, its Responses API call runs through native command `openai_agent_advice`; Rust reads `OPENAI_API_KEY`, `OPENAI_MODEL`, and `OPENAI_REASONING_EFFORT` from the process environment or local `.env` and requests strict JSON schema output named `spaceguard_cleanup_agent_advice`.
 - Browser-only demos may use the legacy `VITE_OPENAI_API_KEY` fallback, but the product path keeps the secret out of the renderer payload.
 - Its allowed action vocabulary is limited to ranking reviewed targets, explaining blockers, asking the user, recommending a rescan, or recommending a scoped executor button.
