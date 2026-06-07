@@ -43,6 +43,7 @@ npm run openai:smoke:fixture -- --route npm-cache
 npm run openai:smoke -- --route npm-cache
 npm run setup:route -- --route npm-cache
 npm run validate:route -- --route npm-cache
+npm run proof:first-route
 npm run native:dev
 ```
 
@@ -61,6 +62,8 @@ In `npm run start`, the OpenAI button uses Vite's same-origin `/api/openai-agent
 `npm run setup:route -- --route npm-cache` emits a read-only setup packet for the selected real cleanup route. It shows the exact scoped executor flag, native request mode, app panel id, conflicting enabled flags, route-specific OpenAI smoke commands, and next commands before you launch the desktop shell.
 
 `npm run validate:route -- --route npm-cache` emits a read-only Windows validation packet for the selected real cleanup route. It records the pre-run checklist, one-flag requirement, forbidden actions, evidence artifacts, native volume proof expectation, selected-route proof packet export/import, and post-run rescan proof checklist. It does not scan folders, call OpenAI, or execute cleanup.
+
+`npm run proof:first-route` emits a read-only first-route proof packet for the seeded temp fixture. Use it on a disposable Windows VM before the first real cleanup proof; it gives the fixture seed command, the one temp executor flag, route-contract coverage, app steps, forbidden broad-temp actions, and the final positive recovered-byte workflow proof acceptance rule.
 
 After the app exports `spaceguard-real-workflow-proof.md`, validate the final route handoff:
 
