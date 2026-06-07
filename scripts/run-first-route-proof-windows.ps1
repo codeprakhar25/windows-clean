@@ -250,6 +250,7 @@ try {
     afterAppCommands = [PSCustomObject]@{
       inspectAfterCleanup = "powershell -ExecutionPolicy Bypass -File .\scripts\inspect-spaceguard-fixtures.ps1 -ManifestPath `"$ManifestPath`" -AfterCleanupRoute known-temp-delete -EvidencePath `"$AfterFixturePath`""
       validateWorkflowProof = "npm run validate:workflow-proof -- --file .\spaceguard-real-workflow-proof.md"
+      validateFirstRouteCompletion = "npm run validate:first-route-completion -- --preflight `"$PreflightPath`" --after-fixture `"$AfterFixturePath`" --workflow-proof .\spaceguard-real-workflow-proof.md"
     }
   }
 
@@ -270,6 +271,7 @@ try {
   Write-Host "After the app run:"
   Write-Host " - $($preflight.afterAppCommands.inspectAfterCleanup)"
   Write-Host " - $($preflight.afterAppCommands.validateWorkflowProof)"
+  Write-Host " - $($preflight.afterAppCommands.validateFirstRouteCompletion)"
 
   if (-not $SkipLaunch) {
     Write-CommandRecord -Record ([PSCustomObject]@{

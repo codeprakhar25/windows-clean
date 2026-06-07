@@ -18,6 +18,10 @@ assert(
   packageJson.scripts["validate:first-route-preflight"]?.includes("run-first-route-preflight-check.mjs"),
   "package.json should expose the first-route preflight verifier"
 );
+assert(
+  packageJson.scripts["validate:first-route-completion"]?.includes("run-first-route-completion-check.mjs"),
+  "package.json should expose the first-route completion verifier"
+);
 assert(runner.includes("spaceguard-first-route-windows-operator/v1"), "runner should write a stable operator evidence schema");
 assert(runner.includes("[System.PlatformID]::Win32NT"), "runner should refuse non-Windows execution");
 assert(runner.includes("Unsupported first-route proof route"), "runner should reject non-temp first-proof routes");
@@ -39,6 +43,7 @@ assert(runner.includes("operator-preflight.json"), "runner should write a prefli
 assert(runner.includes("operator-preflight-check.json"), "runner should write a preflight verifier artifact");
 assert(runner.includes("run-first-route-preflight-check.mjs"), "runner should validate preflight evidence before app launch");
 assert(runner.includes("commands.ndjson"), "runner should write command evidence records");
+assert(runner.includes("validate:first-route-completion"), "runner should print the final first-route completion verifier command");
 
 assert(!/\bRemove-Item\b/i.test(runner), "runner must not delete files directly");
 assert(!/\bClear-RecycleBin\b/i.test(runner), "runner must not empty Recycle Bin");

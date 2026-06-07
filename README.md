@@ -94,6 +94,12 @@ npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md
 
 The verifier accepts only `spaceguard-real-workflow-proof/v1` packets that are `workflow-proven`, have `readyForNextRoute=true`, include completed selected-route proof import, and retain ledger plus matched rescan evidence.
 
+For the seeded first route, also validate the whole preflight plus after-cleanup fixture plus workflow proof chain:
+
+```bash
+npm run validate:first-route-completion -- --preflight evidence/first-route-proof-YYYYMMDD-HHMMSS/operator-preflight.json --after-fixture evidence/first-route-proof-YYYYMMDD-HHMMSS/fixture-after-cleanup.json --workflow-proof spaceguard-real-workflow-proof.md
+```
+
 The same `.env` file can hold named scoped executor flags, for example `SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR=1`, when you are validating real cleanup on Windows. Validate and run one selected route at a time, then complete post-run rescan proof before running another executor.
 
 After a scoped native route finishes and the post-run rescan matches, export **Selected route proof packet** and paste the `spaceguard-selected-route-proof-packet/v1` markdown or JSON into **Selected route proof import** under Validation evidence. With reviewer and artifact path filled, it maps only to `ledger-rescan-parity`; demo or dry-run proof is rejected.
