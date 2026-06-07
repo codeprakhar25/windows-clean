@@ -8755,6 +8755,154 @@ export function buildSelectedRouteProofPacketMarkdown(packet = null) {
   ].join("\n");
 }
 
+export function buildRealWorkflowProofPacket({
+  windowsSetupAssistant = null,
+  scopedExecutorCommandFlow = null,
+  executionProofHandoff = null,
+  scanSession = null,
+  generatedAt = "set-on-export"
+} = {}) {
+  const workflow = windowsSetupAssistant?.realWorkflow || {};
+  const proofPacket = scopedExecutorCommandFlow?.proofPacket || {};
+  const route = String(proofPacket.route || workflow.route || scopedExecutorCommandFlow?.route || "").trim();
+  const routeInput = executorCliRouteAliases[route] || workflow.routeInput || route || "unknown";
+  const validationImport = proofPacket.validationImport || {};
+  const nativeScanCurrent = Boolean(scanSession?.readyForPlanning && scanSession?.nativeEvidence);
+  const proofComplete = Boolean(proofPacket.status === "proof-complete" || executionProofHandoff?.status === "proof-complete");
+  const importComplete = Boolean(validationImport.complete);
+  const readyForNextRoute = Boolean(proofPacket.readyForNextRoute && importComplete);
+  const unsafeRuntime = Boolean(windowsSetupAssistant?.destructiveCommands || windowsSetupAssistant?.status === "unsafe-runtime");
+  const rows = [
+    buildRealWorkflowProofRow({
+      id: "native-scan-current",
+      label: "Native scan current",
+      passed: nativeScanCurrent,
+      detail: nativeScanCurrent
+        ? `Scan session ${scanSession?.currentFingerprint || "current"} is ready for planning.`
+        : "Run a current native read-only scan before route proof."
+    }),
+    buildRealWorkflowProofRow({
+      id: "post-run-proof-complete",
+      label: "Post-run proof complete",
+      passed: proofComplete,
+      detail: proofComplete
+        ? `Selected-route proof status is ${proofPacket.status || executionProofHandoff?.status}.`
+        : `Post-run proof is ${proofPacket.status || executionProofHandoff?.status || "missing"}.`
+    }),
+    buildRealWorkflowProofRow({
+      id: "selected-route-proof-import",
+      label: "Selected-route proof import",
+      passed: importComplete,
+      detail: importComplete
+        ? validationImport.detail || "Selected-route proof is imported into validation evidence."
+        : validationImport.detail || "Import selected-route proof into validation evidence with reviewer and artifact path."
+    }),
+    buildRealWorkflowProofRow({
+      id: "next-route-clearance",
+      label: "Next route clearance",
+      passed: readyForNextRoute,
+      detail: readyForNextRoute
+        ? "Proof import is complete, so another scoped route may be considered."
+        : "Another scoped route stays blocked until selected-route proof import is complete."
+    })
+  ];
+  const blockedRows = rows.filter((row) => !row.passed);
+  const status = unsafeRuntime
+    ? "unsafe-runtime"
+    : !nativeScanCurrent
+      ? "native-scan-required"
+      : !proofComplete
+        ? "post-run-proof-required"
+        : !importComplete
+          ? "proof-import-required"
+          : !readyForNextRoute
+            ? "next-route-blocked"
+            : "workflow-proven";
+
+  return {
+    schemaVersion: "spaceguard-real-workflow-proof/v1",
+    generatedAt,
+    status,
+    tone: status === "workflow-proven" ? "safe" : status === "unsafe-runtime" ? "restricted" : "review",
+    route,
+    routeInput,
+    title: proofPacket.title || workflow.title || route || "Selected route",
+    workflowStatus: workflow.status || "unknown",
+    proofStatus: proofPacket.status || executionProofHandoff?.status || "unknown",
+    proofImportStatus: validationImport.status || "not-imported",
+    readyForNextRoute,
+    nativeScanCurrent,
+    unsafeRuntime,
+    rows,
+    blockedRows,
+    counts: {
+      total: rows.length,
+      passed: rows.filter((row) => row.passed).length,
+      blocked: blockedRows.length,
+      ledgerEntries: Number(proofPacket.counts?.ledgerEntries || 0),
+      matchedRows: Number(proofPacket.counts?.matchedRows || 0),
+      reclaimedBytes: Number(proofPacket.counts?.reclaimedBytes || 0)
+    },
+    primary: getRealWorkflowProofPrimary(status, { routeInput, blockedRows, proofPacket })
+  };
+}
+
+function buildRealWorkflowProofRow({ id, label, passed = false, detail = "" } = {}) {
+  return {
+    id,
+    label,
+    status: passed ? "passed" : "blocked",
+    tone: passed ? "safe" : "review",
+    passed: Boolean(passed),
+    detail
+  };
+}
+
+function getRealWorkflowProofPrimary(status, { routeInput = "unknown", blockedRows = [], proofPacket = null } = {}) {
+  if (status === "workflow-proven") {
+    return `${routeInput} has current scan, execution proof, validation import, and next-route clearance (${formatBytes(proofPacket?.counts?.reclaimedBytes || 0)} recorded).`;
+  }
+  if (status === "unsafe-runtime") return "Runtime write capability is visible; workflow proof cannot be accepted.";
+  if (status === "native-scan-required") return "A current native read-only scan is required before workflow proof.";
+  if (status === "post-run-proof-required") return "Run post-run native rescan and build selected-route proof.";
+  if (status === "proof-import-required") return "Import selected-route proof into validation evidence before accepting workflow proof.";
+  if (status === "next-route-blocked") return "Selected-route proof exists, but next-route clearance is still blocked.";
+  return blockedRows[0]?.detail || "Real workflow proof is incomplete.";
+}
+
+export function buildRealWorkflowProofPacketMarkdown(packet = null) {
+  const rows = packet?.rows?.length
+    ? packet.rows.map((row) => `- [${row.passed ? "x" : " "}] ${row.label}: ${row.detail}`).join("\n")
+    : "- No workflow proof rows.";
+  return [
+    "# SpaceGuard Real Workflow Proof",
+    "",
+    `Generated: ${packet?.generatedAt || "set-on-export"}`,
+    `Schema: ${packet?.schemaVersion || "spaceguard-real-workflow-proof/v1"}`,
+    `Status: ${packet?.status || "unknown"}`,
+    `Route: ${packet?.route || "unknown"}`,
+    `Route alias: ${packet?.routeInput || "unknown"}`,
+    `Workflow status: ${packet?.workflowStatus || "unknown"}`,
+    `Proof status: ${packet?.proofStatus || "unknown"}`,
+    `Proof import: ${packet?.proofImportStatus || "not-imported"}`,
+    `Ready for next route: ${packet?.readyForNextRoute ? "yes" : "no"}`,
+    `Ledger entries: ${packet?.counts?.ledgerEntries || 0}`,
+    `Matched rows: ${packet?.counts?.matchedRows || 0}`,
+    `Reclaimed bytes: ${formatBytes(packet?.counts?.reclaimedBytes || 0)}`,
+    "",
+    "## Summary",
+    packet?.primary || "Real workflow proof is not built.",
+    "",
+    "## Proof Rows",
+    rows,
+    "",
+    "## Structured JSON",
+    "```json",
+    JSON.stringify(packet || {}, null, 2),
+    "```"
+  ].join("\n");
+}
+
 function formatSignedBytes(bytes = 0) {
   const value = Number(bytes || 0);
   if (!value) return "0 GB";

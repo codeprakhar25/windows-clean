@@ -90,6 +90,8 @@ import {
   buildRecoveryAdvisor,
   buildRealDataLaunchRoadmap,
   buildRealExecutorCapsule,
+  buildRealWorkflowProofPacket,
+  buildRealWorkflowProofPacketMarkdown,
   buildRollbackPlan,
   buildItemReview,
   buildReport,
@@ -3980,6 +3982,29 @@ export default function App() {
     downloadTextFile("spaceguard-selected-route-proof-packet.md", body, "text/markdown;charset=utf-8");
   }
 
+  function exportRealWorkflowProofPacket() {
+    const exportedPacket = buildRealWorkflowProofPacket({
+      windowsSetupAssistant,
+      scopedExecutorCommandFlow,
+      executionProofHandoff,
+      scanSession,
+      generatedAt: new Date().toISOString()
+    });
+    const markdown = buildRealWorkflowProofPacketMarkdown(exportedPacket);
+    const body = [
+      markdown,
+      "",
+      "---",
+      "",
+      "## Structured Real Workflow Proof JSON",
+      "",
+      "```json",
+      JSON.stringify(exportedPacket, null, 2),
+      "```"
+    ].join("\n");
+    downloadTextFile("spaceguard-real-workflow-proof.md", body, "text/markdown;charset=utf-8");
+  }
+
   function prepareSelectedRouteProofImport() {
     const proofPacket = scopedExecutorCommandFlow.proofPacket;
     if (!proofPacket || proofPacket.status !== "proof-complete") {
@@ -4276,7 +4301,7 @@ export default function App() {
           <div className="space-y-3">
             <NativeScannerPanel capability={nativeCapability} nativeScan={nativeScan} />
 
-            <WindowsSetupAssistantPanel assistant={windowsSetupAssistant} onWorkflowStep={handleWindowsSetupWorkflowStep} />
+            <WindowsSetupAssistantPanel assistant={windowsSetupAssistant} onWorkflowStep={handleWindowsSetupWorkflowStep} onExportWorkflowProof={exportRealWorkflowProofPacket} />
 
             <RealDataLaunchRoadmapPanel roadmap={realDataLaunchRoadmap} />
 
@@ -4962,7 +4987,7 @@ function NativeScannerPanel({ capability, nativeScan }) {
   );
 }
 
-function WindowsSetupAssistantPanel({ assistant, onWorkflowStep }) {
+function WindowsSetupAssistantPanel({ assistant, onWorkflowStep, onExportWorkflowProof }) {
   const realWorkflow = assistant.realWorkflow || null;
   const workflowSteps = realWorkflow?.steps || [];
   return (
@@ -5027,6 +5052,10 @@ function WindowsSetupAssistantPanel({ assistant, onWorkflowStep }) {
               <Badge variant={realWorkflow.tone || "review"}>{realWorkflow.status}</Badge>
               <Badge variant="outline">{realWorkflow.routeInput}</Badge>
               {realWorkflow.envVar ? <Badge variant="outline">{realWorkflow.envVar}</Badge> : null}
+              <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={onExportWorkflowProof}>
+                <Download className="h-4 w-4" />
+                Export proof
+              </Button>
             </div>
             <p className="mb-3 text-xs text-muted-foreground">{realWorkflow.primary}</p>
             <div className="grid gap-2 md:grid-cols-2">

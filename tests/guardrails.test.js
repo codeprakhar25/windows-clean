@@ -4023,6 +4023,41 @@ const assert = require("assert");
   assert.strictEqual(importedRouteProofFlow.proofPacket.validationImport.route, "known-temp-delete", "completed route proof import should bind to the selected route");
   assert(importedRouteProofFlow.proofPacket.primary.includes("validation import"), "proof packet primary should mention completed validation import");
   assert(guard.buildSelectedRouteProofPacketMarkdown(importedRouteProofFlow.proofPacket).includes("Validation import: import-complete"), "proof packet markdown should include validation import status");
+  const incompleteWorkflowProof = guard.buildRealWorkflowProofPacket({
+    windowsSetupAssistant: nativeSetupAssistant,
+    scopedExecutorCommandFlow: selectedRouteProofFlow,
+    executionProofHandoff: { status: "proof-complete" },
+    scanSession: currentScanSession,
+    generatedAt: "2026-06-05T02:15:00.000Z"
+  });
+  assert.strictEqual(incompleteWorkflowProof.schemaVersion, "spaceguard-real-workflow-proof/v1", "real workflow proof packet should expose a stable schema");
+  assert.strictEqual(incompleteWorkflowProof.status, "proof-import-required", "workflow proof should block until selected-route proof is imported");
+  assert.strictEqual(incompleteWorkflowProof.readyForNextRoute, false, "incomplete workflow proof should not unlock another route");
+  const completeWorkflowSetupAssistant = guard.buildWindowsSetupAssistant({
+    nativeCapability: { available: true },
+    runtimeCapabilities: { available: true, platform: "windows", scanKnownRoots: true, realRunEnabled: false, destructiveCommands: false },
+    scanMode: "native-readonly",
+    scanSession: currentScanSession,
+    scanCoverage: { confidenceScore: 80 },
+    privacyBoundary: { cloudDisabled: true, telemetryDisabled: true, exportOnly: true },
+    publicBetaReadiness: { readyForNativeBeta: false },
+    validationPack: { readyForRealRun: false },
+    releaseGate: { readyForRealRun: false },
+    preferredRoute: "known-temp-delete",
+    executionProofHandoff: { status: "proof-complete" },
+    scopedExecutorCommandFlow: importedRouteProofFlow
+  });
+  const completeWorkflowProof = guard.buildRealWorkflowProofPacket({
+    windowsSetupAssistant: completeWorkflowSetupAssistant,
+    scopedExecutorCommandFlow: importedRouteProofFlow,
+    executionProofHandoff: { status: "proof-complete" },
+    scanSession: currentScanSession,
+    generatedAt: "2026-06-05T02:20:00.000Z"
+  });
+  assert.strictEqual(completeWorkflowProof.status, "workflow-proven", "imported selected-route proof should complete the real workflow proof");
+  assert.strictEqual(completeWorkflowProof.readyForNextRoute, true, "complete workflow proof should unlock another route");
+  assert.strictEqual(completeWorkflowProof.route, "known-temp-delete", "workflow proof should retain the selected route");
+  assert(guard.buildRealWorkflowProofPacketMarkdown(completeWorkflowProof).includes("Status: workflow-proven"), "workflow proof markdown should include final status");
   const routeProofGate = guard.buildReleaseGate({
     validationEvidence: importedRouteProof.validationEvidence,
     scanMode: "native-readonly",

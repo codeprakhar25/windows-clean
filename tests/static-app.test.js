@@ -241,6 +241,7 @@ assert(app.includes("buildWindowsSetupAssistant"), "Windows setup assistant shou
 assert(app.includes("WindowsSetupAssistantPanel"), "Windows setup assistant panel should be rendered");
 assert(app.includes("assistant.realWorkflow"), "Windows setup assistant should render the compact real workflow");
 assert(app.includes("onWorkflowStep"), "Windows setup assistant should expose workflow step actions");
+assert(app.includes("onExportWorkflowProof"), "Windows setup assistant should expose real workflow proof export");
 assert(app.includes("handleWindowsSetupWorkflowStep"), "App should route setup workflow steps through existing handlers");
 assert(app.includes("step.actionType"), "Windows setup assistant workflow should read model action types");
 assert(app.includes("post-run-rescan"), "Windows setup assistant UI should expose post-run rescan workflow step");
@@ -380,6 +381,8 @@ assert(viteConfig.includes("requestOpenAIAgentAdvice"), "Vite proxy should reuse
 assert(model.includes("spaceguard-selected-route-proof-packet/v1"), "model should expose selected-route proof packets");
 assert(model.includes("buildSelectedRouteProofPacketMarkdown"), "model should export selected-route proof packet markdown");
 assert(app.includes("buildSelectedRouteProofPacketMarkdown"), "app should wire selected-route proof packet markdown export");
+assert(model.includes("buildRealWorkflowProofPacketMarkdown"), "model should export real workflow proof packet markdown");
+assert(app.includes("buildRealWorkflowProofPacketMarkdown"), "app should wire real workflow proof markdown export");
 assert(app.includes("flow.proofPacket"), "command flow UI should receive the selected-route proof packet");
 assert(model.includes("compactNativeVolumeProof"), "selected-route proof packet should compact native volume proof");
 assert(model.includes("Volume proof delta"), "selected-route proof markdown should include volume proof deltas");
