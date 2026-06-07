@@ -124,7 +124,9 @@ export function buildOpenAIAgentContext({
   consentReceipt,
   executionProofHandoff,
   rescanComparison,
-  planSnapshot
+  planSnapshot,
+  liveValidationManifest,
+  scopedExecutorCommandFlow
 } = {}) {
   const selected = actionList
     .filter((action) => selectedIds.has(action.id))
@@ -458,6 +460,10 @@ export function buildOpenAIAgentContext({
     driveInventoryRows,
     customRootRows
   });
+  const liveRouteValidation = buildOpenAILiveRouteValidationContext({
+    liveValidationManifest,
+    scopedExecutorCommandFlow
+  });
 
   return {
     schemaVersion: "spaceguard-openai-agent-context/v1",
@@ -501,6 +507,7 @@ export function buildOpenAIAgentContext({
     selectedActions: selected,
     topFindings,
     executableRows,
+    liveRouteValidation,
     agentTaskQueue,
     projectDependencyReviewTargets,
     reviewedDownloadsTargets,
@@ -534,6 +541,167 @@ export function buildOpenAIAgentContext({
       skippedCount: Number(row.skippedCount || 0),
       sampleNames: row.sampleNames || []
     }))
+  };
+}
+
+const OPENAI_LIVE_ROUTE_NATIVE_BOUNDARIES = {
+  "bounded-npm-cache-delete": {
+    tauriCommand: "execute_cleanup_plan",
+    adapterFunction: "runNativeNpmCacheExecutor",
+    rustFunction: "execute_npm_cache_cleanup",
+    requestShape: [
+      "schemaVersion=spaceguard-npm-cache-request/v1",
+      "requestMode=execute-npm-cache",
+      "route=bounded-npm-cache-delete",
+      "dryRunOnly=false",
+      "mutationAttempted=true",
+      "planId, scanFingerprint, consentPlanId, expectedBytes, and one action required"
+    ],
+    targetAllowlist: [
+      "current user %LocalAppData%\\npm-cache\\_cacache only",
+      "target must come from the latest native-scanned npm-cache finding",
+      "target must be a real directory, not a symlink"
+    ],
+    targetRejects: [
+      "node_modules",
+      "global npm packages",
+      "AppData\\Roaming\\npm",
+      "Program Files",
+      "ProgramData",
+      "Windows",
+      "Downloads, Documents, Desktop"
+    ],
+    deletePolicy: [
+      "Deletes only age-gated files under _cacache\\content-v2 and _cacache\\tmp.",
+      "Skips npm index metadata outside content-v2/tmp.",
+      "Skips lock files.",
+      "Skips symlinks and unreadable entries.",
+      "Removes only empty cache subdirectories below _cacache."
+    ],
+    postRunProof: [
+      "execution ledger entry for bounded-npm-cache-delete",
+      "native GetDiskFreeSpaceExW before/after volume proof",
+      "post-run native rescan comparison",
+      "accepted spaceguard-real-workflow-proof/v1 check"
+    ]
+  }
+};
+
+function buildOpenAILiveRouteValidationContext({
+  liveValidationManifest = null,
+  scopedExecutorCommandFlow = null
+} = {}) {
+  const source =
+    liveValidationManifest?.schemaVersion === "spaceguard-live-route-validation/v1"
+      ? liveValidationManifest
+      : buildOpenAILiveRouteValidationManifestFromFlow(scopedExecutorCommandFlow);
+  if (!source) return null;
+
+  const contract = source.contract || {};
+  const runtime = source.runtime || {};
+  const boundary = source.nativeBoundary || {};
+  const route = String(source.route || "").trim();
+  const mappedBoundary = OPENAI_LIVE_ROUTE_NATIVE_BOUNDARIES[route] || {};
+  const nativeBoundary = {
+    tauriCommand: String(boundary.tauriCommand || mappedBoundary.tauriCommand || "execute_cleanup_plan"),
+    adapterFunction: String(boundary.adapterFunction || mappedBoundary.adapterFunction || ""),
+    rustFunction: String(boundary.rustFunction || mappedBoundary.rustFunction || ""),
+    requestShape: normalizeStringList(boundary.requestShape || mappedBoundary.requestShape),
+    targetAllowlist: normalizeStringList(boundary.targetAllowlist || mappedBoundary.targetAllowlist),
+    targetRejects: normalizeStringList(boundary.targetRejects || mappedBoundary.targetRejects),
+    deletePolicy: normalizeStringList(boundary.deletePolicy || mappedBoundary.deletePolicy),
+    postRunProof: normalizeStringList(boundary.postRunProof || mappedBoundary.postRunProof)
+  };
+
+  return {
+    schemaVersion: "spaceguard-openai-live-route-validation/v1",
+    route,
+    routeInput: String(source.routeInput || "").trim(),
+    title: String(source.title || "").trim(),
+    status: String(source.status || "unknown").trim(),
+    envVar: String(contract.envVar || runtime.requiredEnabledFlag || "").trim(),
+    requestMode: String(contract.requestMode || "").trim(),
+    panelId: String(contract.panelId || "").trim(),
+    actionLabel: String(contract.actionLabel || "").trim(),
+    routeFlagReady: Boolean(runtime.routeFlagReady),
+    canAttemptWindowsValidation: Boolean(runtime.canAttemptWindowsValidation ?? source.status === "ready"),
+    canExecuteWithoutAppEvidence: false,
+    singleScopedFlagRequired: Boolean(runtime.singleScopedFlagRequired ?? true),
+    requiredEnabledFlag: String(runtime.requiredEnabledFlag || contract.envVar || "").trim(),
+    disabledReason: String(runtime.disabledReason || "").trim(),
+    requiredAppEvidence: normalizeStringList(source.requiredAppEvidence),
+    requiredPostRunProof: normalizeStringList(source.requiredPostRunProof),
+    nativeBoundary,
+    targetAllowlist: nativeBoundary.targetAllowlist,
+    targetRejects: nativeBoundary.targetRejects,
+    deletePolicy: nativeBoundary.deletePolicy,
+    postRunProof: nativeBoundary.postRunProof
+  };
+}
+
+function buildOpenAILiveRouteValidationManifestFromFlow(flow = null) {
+  if (!flow || flow.schemaVersion !== "spaceguard-scoped-executor-command-flow/v1") return null;
+  const row = flow.primaryRow || {};
+  const launchPacket = flow.launchPacket || {};
+  const setupCommands = flow.setupCommands || launchPacket.setupCommands || {};
+  const route = String(row.route || flow.route || launchPacket.route || "").trim();
+  if (!route) return null;
+  const mappedBoundary = OPENAI_LIVE_ROUTE_NATIVE_BOUNDARIES[route] || {};
+  const envVar = row.envVar || setupCommands.envVar || "";
+  const requestMode = row.requestMode || setupCommands.requestMode || "";
+  const panelId = row.panelId || flow.panelId || launchPacket.panelId || "";
+
+  return {
+    schemaVersion: "spaceguard-live-route-validation/v1",
+    route,
+    routeInput: launchPacket.routeInput || setupCommands.routeInput || "",
+    title: row.title || flow.title || launchPacket.title || "",
+    status: row.status || flow.status || launchPacket.status || "unknown",
+    contract: {
+      envVar,
+      requestMode,
+      panelId,
+      actionLabel: row.actionLabel || flow.actionLabel || launchPacket.actionLabel || ""
+    },
+    runtime: {
+      routeFlagReady: Boolean(row.flagEnabled),
+      canAttemptWindowsValidation: Boolean(row.flagEnabled && flow.nativeAvailable),
+      canExecuteWithoutAppEvidence: false,
+      singleScopedFlagRequired: true,
+      requiredEnabledFlag: envVar,
+      disabledReason: row.blockedReason || launchPacket.blockedReason || ""
+    },
+    requiredAppEvidence: [
+      "current-native-scan-fingerprint",
+      "current-plan-consent-receipt",
+      "native-scanned-target",
+      "selected-action-row",
+      "single-scoped-executor-flag"
+    ],
+    requiredPostRunProof: [
+      "execution-ledger",
+      "native-write-volume-proof",
+      "post-run-rescan-comparison",
+      "selected-route-proof-packet",
+      "selected-route-proof-import",
+      "real-workflow-proof",
+      "workflow-proof-check-output"
+    ],
+    nativeBoundary: {
+      ...mappedBoundary,
+      requestShape: mappedBoundary.requestShape || [
+        `requestMode=${requestMode}`,
+        "dryRunOnly=false",
+        "mutationAttempted=true",
+        "planId, scanFingerprint, and consentPlanId required"
+      ],
+      targetAllowlist: mappedBoundary.targetAllowlist || [
+        row.targetEvidence || launchPacket.targetEvidence || "Use only the native-scanned target for the selected route."
+      ],
+      targetRejects: mappedBoundary.targetRejects || ["custom roots", "system folders", "personal folders outside the selected route"],
+      deletePolicy: mappedBoundary.deletePolicy || ["Mutation is scoped to the selected route-specific native executor only."],
+      postRunProof: mappedBoundary.postRunProof || ["execution ledger", "native volume proof", "post-run native rescan"]
+    }
   };
 }
 
@@ -1529,6 +1697,7 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
         bytes: Number(row.bytes || 0)
       }))
     },
+    liveRouteValidation: compactOpenAILiveRouteValidationContext(context?.liveRouteValidation),
     counts: {
       selectedActions: selectedActions.length,
       topFindings: Array.isArray(context?.topFindings) ? context.topFindings.length : 0,
@@ -1565,6 +1734,38 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
       storesRawModelText: false,
       storesFullContext: false
     }
+  };
+}
+
+function compactOpenAILiveRouteValidationContext(value = null) {
+  if (!value || value.schemaVersion !== "spaceguard-openai-live-route-validation/v1") return null;
+  return {
+    schemaVersion: value.schemaVersion,
+    route: String(value.route || ""),
+    routeInput: String(value.routeInput || ""),
+    title: String(value.title || ""),
+    status: String(value.status || ""),
+    envVar: String(value.envVar || ""),
+    requestMode: String(value.requestMode || ""),
+    panelId: String(value.panelId || ""),
+    actionLabel: String(value.actionLabel || ""),
+    routeFlagReady: Boolean(value.routeFlagReady),
+    canAttemptWindowsValidation: Boolean(value.canAttemptWindowsValidation),
+    canExecuteWithoutAppEvidence: false,
+    singleScopedFlagRequired: Boolean(value.singleScopedFlagRequired),
+    requiredEnabledFlag: String(value.requiredEnabledFlag || value.envVar || ""),
+    disabledReason: String(value.disabledReason || ""),
+    requiredAppEvidence: normalizeStringList(value.requiredAppEvidence),
+    requiredPostRunProof: normalizeStringList(value.requiredPostRunProof),
+    nativeBoundary: {
+      tauriCommand: String(value.nativeBoundary?.tauriCommand || ""),
+      adapterFunction: String(value.nativeBoundary?.adapterFunction || ""),
+      rustFunction: String(value.nativeBoundary?.rustFunction || ""),
+      targetAllowlist: normalizeStringList(value.nativeBoundary?.targetAllowlist || value.targetAllowlist),
+      targetRejects: normalizeStringList(value.nativeBoundary?.targetRejects || value.targetRejects),
+      deletePolicy: normalizeStringList(value.nativeBoundary?.deletePolicy || value.deletePolicy)
+    },
+    deletePolicy: normalizeStringList(value.deletePolicy || value.nativeBoundary?.deletePolicy)
   };
 }
 
@@ -1651,6 +1852,7 @@ export async function requestOpenAIAgentAdvice({
       "You cannot approve gates, modify files, run shell commands, or delete data.",
       "Manual review targets such as installed app footprints, custom roots, and broad drive inventory rows are advisory only; never recommend direct folder deletion or automated uninstall.",
       "Use context.agentTaskQueue.rows as the primary task list. When recommending one of those tasks, copy its actionType, targetId, and route exactly.",
+      "When context.liveRouteValidation is present, treat it as the selected live route contract and do not recommend a different executor route until its proof is complete.",
       "When a scoped executor is visible, recommend the exact UI button only after the context says current consent and route-specific targets exist.",
       "If execution.proofAllowsNextExecutor is false, recommend post-run rescan or proof review instead of another executor.",
       "Use execution.consentMatchesPlan, execution.scanFingerprintPresent, and execution.proofStatus when explaining blockers.",

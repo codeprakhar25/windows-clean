@@ -253,6 +253,46 @@ const assert = require("assert");
         userCacheExecutor: true
       }
     },
+    liveValidationManifest: {
+      schemaVersion: "spaceguard-live-route-validation/v1",
+      route: "bounded-npm-cache-delete",
+      routeInput: "npm-cache",
+      title: "npm cache cleanup",
+      status: "ready",
+      contract: {
+        envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
+        requestMode: "execute-npm-cache",
+        panelId: "npm-cache-executor-panel",
+        actionLabel: "Run npm cache cleanup"
+      },
+      runtime: {
+        routeFlagReady: true,
+        canAttemptWindowsValidation: true,
+        canExecuteWithoutAppEvidence: false,
+        singleScopedFlagRequired: true,
+        requiredEnabledFlag: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"
+      },
+      requiredAppEvidence: [
+        "current-native-scan-fingerprint",
+        "current-plan-consent-receipt",
+        "native-scanned-target"
+      ],
+      requiredPostRunProof: [
+        "execution-ledger",
+        "workflow-proof-check-output"
+      ],
+      nativeBoundary: {
+        tauriCommand: "execute_cleanup_plan",
+        adapterFunction: "runNativeNpmCacheExecutor",
+        rustFunction: "execute_npm_cache_cleanup",
+        targetAllowlist: ["current user %LocalAppData%\\npm-cache\\_cacache only"],
+        targetRejects: ["node_modules", "Program Files", "Windows"],
+        deletePolicy: [
+          "Deletes only age-gated files under _cacache\\content-v2 and _cacache\\tmp.",
+          "Skips lock files."
+        ]
+      }
+    },
     consentReceipt: { planId: "plan-openai-manual" },
     writeReadiness: { status: "ready-for-real-execution", readyForRealExecution: true },
     releaseGate: { readyForRealRun: true },
@@ -271,6 +311,14 @@ const assert = require("assert");
   assert.deepStrictEqual(manualContext.runtime.enabledScopedExecutorFlags, ["userCacheExecutor"], "OpenAI context should expose the enabled scoped executor flag list");
   assert.strictEqual(manualContext.runtime.enabledScopedExecutorFlagCount, 1, "OpenAI context should expose the enabled scoped executor flag count");
   assert.strictEqual(manualContext.runtime.executorScopeStatus, "single-scoped-flag", "OpenAI context should expose derived executor scope status");
+  assert.strictEqual(manualContext.liveRouteValidation.schemaVersion, "spaceguard-openai-live-route-validation/v1", "OpenAI context should expose live route validation evidence");
+  assert.strictEqual(manualContext.liveRouteValidation.route, "bounded-npm-cache-delete", "OpenAI live route evidence should preserve the bounded route id");
+  assert.strictEqual(manualContext.liveRouteValidation.requestMode, "execute-npm-cache", "OpenAI live route evidence should preserve native request mode");
+  assert.strictEqual(manualContext.liveRouteValidation.panelId, "npm-cache-executor-panel", "OpenAI live route evidence should preserve the target UI panel");
+  assert.strictEqual(manualContext.liveRouteValidation.canExecuteWithoutAppEvidence, false, "OpenAI live route evidence must keep app evidence required");
+  assert.strictEqual(manualContext.liveRouteValidation.nativeBoundary.adapterFunction, "runNativeNpmCacheExecutor", "OpenAI live route evidence should expose the native adapter boundary");
+  assert(manualContext.liveRouteValidation.requiredAppEvidence.includes("current-native-scan-fingerprint"), "OpenAI live route evidence should expose required pre-run app evidence");
+  assert(manualContext.liveRouteValidation.deletePolicy.some((row) => row.includes("content-v2")), "OpenAI live route evidence should expose delete policy constraints");
   const nativeScopeContext = openai.buildOpenAIAgentContext({
     runtimeCapabilities: {
       available: true,
@@ -292,6 +340,44 @@ const assert = require("assert");
     "OpenAI context should prefer native scoped executor flag names when present"
   );
   assert.strictEqual(nativeScopeContext.runtime.enabledScopedExecutorFlagCount, 2, "OpenAI context should preserve native scoped executor flag count");
+  const flowDerivedContext = openai.buildOpenAIAgentContext({
+    scopedExecutorCommandFlow: {
+      schemaVersion: "spaceguard-scoped-executor-command-flow/v1",
+      status: "ready-to-execute",
+      route: "bounded-npm-cache-delete",
+      selectedRoute: "bounded-npm-cache-delete",
+      title: "npm cache cleanup",
+      panelId: "npm-cache-executor-panel",
+      actionLabel: "Run npm cache cleanup",
+      nativeAvailable: true,
+      setupCommands: {
+        routeInput: "npm-cache",
+        envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
+        requestMode: "execute-npm-cache"
+      },
+      launchPacket: {
+        route: "bounded-npm-cache-delete",
+        routeInput: "npm-cache",
+        panelId: "npm-cache-executor-panel",
+        actionLabel: "Run npm cache cleanup",
+        targetEvidence: "1 scanned native target(s)"
+      },
+      primaryRow: {
+        route: "bounded-npm-cache-delete",
+        title: "npm cache cleanup",
+        envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
+        flagEnabled: true,
+        requestMode: "execute-npm-cache",
+        panelId: "npm-cache-executor-panel",
+        actionLabel: "Run npm cache cleanup",
+        status: "ready",
+        targetEvidence: "1 scanned native target(s)"
+      }
+    }
+  });
+  assert.strictEqual(flowDerivedContext.liveRouteValidation.route, "bounded-npm-cache-delete", "OpenAI context should derive live route validation from the in-app scoped executor flow");
+  assert.strictEqual(flowDerivedContext.liveRouteValidation.envVar, "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "derived OpenAI live route validation should preserve the scoped executor env var");
+  assert.strictEqual(flowDerivedContext.liveRouteValidation.nativeBoundary.rustFunction, "execute_npm_cache_cleanup", "derived OpenAI live route validation should attach the npm native boundary");
   assert.strictEqual(manualContext.appBoundary.allowedActions.includes("recommend-manual-review"), true, "OpenAI context should permit manual-review recommendations");
   assert.strictEqual(manualContext.plan.id, "plan-openai-manual", "OpenAI context should include the current plan id");
   assert.strictEqual(manualContext.plan.selectedCount, 1, "OpenAI context should include current plan selection counts");
@@ -518,6 +604,9 @@ const assert = require("assert");
   assert.strictEqual(nativeRunRecord.context.counts.wslCompactionRows, 1, "OpenAI run records should retain compact WSL work-order counts");
   assert.strictEqual(nativeRunRecord.context.runtime.executorScopeStatus, "single-scoped-flag", "OpenAI run records should retain compact executor scope status");
   assert.strictEqual(nativeRunRecord.context.execution.scanFingerprintPresent, true, "OpenAI run records should retain compact scan proof presence");
+  assert.strictEqual(nativeRunRecord.context.liveRouteValidation.route, "bounded-npm-cache-delete", "OpenAI run records should retain compact live route identity");
+  assert.strictEqual(nativeRunRecord.context.liveRouteValidation.canExecuteWithoutAppEvidence, false, "OpenAI run records should retain compact route evidence requirements");
+  assert.strictEqual(nativeRunRecord.context.liveRouteValidation.nativeBoundary.adapterFunction, "runNativeNpmCacheExecutor", "OpenAI run records should retain compact native route boundary");
   assert.strictEqual(nativeRunRecord.context.execution.proofStatus, "waiting-for-execution", "OpenAI run records should retain compact proof status");
   assert.strictEqual(nativeRunRecord.context.privacy.storesFullContext, false, "OpenAI run records should not persist the full path-level context");
   assert.strictEqual(nativeRunRecord.recommendationBroker.status, "not-recorded", "OpenAI run records should show missing broker provenance explicitly");

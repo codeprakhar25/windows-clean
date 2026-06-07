@@ -1660,7 +1660,8 @@ export default function App() {
         consentReceipt,
         executionProofHandoff,
         rescanComparison,
-        planSnapshot
+        planSnapshot,
+        scopedExecutorCommandFlow
       }),
     [
       profile,
@@ -1688,7 +1689,8 @@ export default function App() {
       consentReceipt,
       executionProofHandoff,
       rescanComparison,
-      planSnapshot
+      planSnapshot,
+      scopedExecutorCommandFlow
     ]
   );
   const openAiRecommendationExecutionState = useMemo(
