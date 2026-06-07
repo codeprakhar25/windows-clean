@@ -44,6 +44,7 @@ try {
   $WorkflowProofCheckPath = Join-Path $EvidenceRoot "workflow-proof-check.json"
   $CompletionCheckPath = Join-Path $EvidenceRoot "first-route-completion-check.json"
   $PostAppFinalizationPath = Join-Path $EvidenceRoot "post-app-finalization.json"
+  $NativeDevExitPath = Join-Path $EvidenceRoot "native-dev-exit.json"
 
   New-Item -ItemType Directory -Path $EvidenceRoot -Force | Out-Null
 
@@ -202,9 +203,15 @@ try {
       }
     }
 
-    if ($SkipPostAppValidation -or $Reason -eq "launch-skipped") {
+    if ($SkipPostAppValidation -or $Reason -eq "launch-skipped" -or $Reason -eq "native-dev-failed") {
       $summary.skipped = $true
-      $summary.reason = if ($Reason -eq "launch-skipped") { "launch-skipped" } else { "SkipPostAppValidation" }
+      if ($Reason -eq "launch-skipped") {
+        $summary.reason = "launch-skipped"
+      } elseif ($Reason -eq "native-dev-failed") {
+        $summary.reason = "native-dev-failed"
+      } else {
+        $summary.reason = "SkipPostAppValidation"
+      }
       Write-JsonFile -Value $summary -Path $PostAppFinalizationPath
       Write-CommandRecord -Record ([PSCustomObject]@{
           id = "finalize-after-app"
@@ -303,6 +310,7 @@ try {
       validateRoute = $ValidateRoutePath
       openAiFixtureSmoke = $FixtureSmokePath
       openAiLiveSmoke = $LiveSmokePath
+      nativeDevExit = $NativeDevExitPath
     }
     userGatedAppSteps = @(
       "Run real scan in the Tauri desktop app.",
@@ -350,6 +358,32 @@ try {
         note = "Interactive Tauri desktop launch; cleanup still requires in-app target selection and consent."
       })
     npm run native:dev
+    $nativeExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+    $nativeExit = [PSCustomObject]@{
+      schemaVersion = "spaceguard-native-dev-exit/v1"
+      generatedAt = (Get-Date).ToUniversalTime().ToString("o")
+      command = "npm run native:dev"
+      exitCode = $nativeExitCode
+      success = ($nativeExitCode -eq 0)
+      evidenceRoot = $EvidenceRoot
+      postAppFinalizationPath = $PostAppFinalizationPath
+    }
+    Write-JsonFile -Value $nativeExit -Path $NativeDevExitPath
+    Write-CommandRecord -Record ([PSCustomObject]@{
+        id = "native-dev-exit"
+        command = "npm run native:dev"
+        outputPath = $NativeDevExitPath
+        exitCode = $nativeExitCode
+        startedAt = (Get-Date).ToUniversalTime().ToString("o")
+        endedAt = (Get-Date).ToUniversalTime().ToString("o")
+        userGated = $true
+      })
+
+    if ($nativeExitCode -ne 0) {
+      Complete-PostAppValidation -Reason "native-dev-failed"
+      throw "Native desktop workflow exited with code $nativeExitCode. See $NativeDevExitPath"
+    }
+
     Complete-PostAppValidation -Reason "native-dev-exited"
   } else {
     Write-Host ""
