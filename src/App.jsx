@@ -497,6 +497,15 @@ export default function App() {
     return targetId.includes("selected-route-proof-import") || route.includes("validation-evidence");
   }
 
+  function shouldRunPostRunRescanFromOpenAI() {
+    if (executionProofHandoff.canRunRescan) return true;
+    return Boolean(
+      activeLedger.length &&
+        executionProofHandoff.status !== "waiting-for-execution" &&
+        executionProofHandoff.status !== "proof-complete"
+    );
+  }
+
   useEffect(() => {
     selectedScopedExecutorRouteRef.current = selectedScopedExecutorRoute;
   }, [selectedScopedExecutorRoute]);
@@ -2466,15 +2475,20 @@ export default function App() {
     if (deterministicRoute) selectScopedExecutorRoute(deterministicRoute);
     if (actionType === "rescan") {
       const handoff = startOpenAIAgentHandoff(row, brokerRow, deterministicRoute, "scan-dispatching");
-      if (nativeCapability.available) {
+      const postRunRescan = shouldRunPostRunRescanFromOpenAI();
+      if (postRunRescan) {
+        await runPostRunReadonlyScan();
+      } else if (nativeCapability.available) {
         await runRealReadonlyScan();
       } else {
         await runScan();
       }
       finishOpenAIAgentHandoff(handoff, {
-        status: "scan-requested",
+        status: postRunRescan ? "post-run-scan-requested" : "scan-requested",
         completedAt: new Date().toISOString(),
-        resultNote: "The scan request was routed through the app scanner; scan results remain owned by the deterministic native/browser scanner."
+        resultNote: postRunRescan
+          ? "The scan request was routed through the ledger-preserving post-run native rescan path."
+          : "The scan request was routed through the app scanner; scan results remain owned by the deterministic native/browser scanner."
       });
       return;
     }

@@ -328,15 +328,23 @@ assert(app.includes("Open gate"), "blocked OpenAI recommendations should route u
 assert(app.includes("brokerRow?.focusActionId || row.targetId || row.id"), "OpenAI review-target actions should focus the broker-resolved parent action id");
 assert(app.includes("isSelectedRouteProofImportRecommendation"), "OpenAI proof-import recommendations should be detected before generic manual routing");
 assert(app.includes("validation-import-prepared"), "OpenAI proof-import recommendations should record prepared import handoffs");
+assert(app.includes("shouldRunPostRunRescanFromOpenAI"), "OpenAI rescan recommendations should detect pending proof before scanning");
+assert(app.includes("post-run-scan-requested"), "OpenAI post-run rescan recommendations should record a distinct handoff status");
 const openAiHandlerStart = app.indexOf("async function handleOpenAIAgentRecommendation");
 const blockedOpenAiRecommendationIndex = app.indexOf("if (brokerRow && !brokerRow.canAct)", openAiHandlerStart);
 const openAiRouteArmIndex = app.indexOf("selectScopedExecutorRoute(deterministicRoute)", openAiHandlerStart);
 const proofImportPreparationIndex = app.indexOf("prepareSelectedRouteProofImport()", blockedOpenAiRecommendationIndex);
+const openAiRescanIndex = app.indexOf('if (actionType === "rescan")', openAiHandlerStart);
+const openAiPostRunRescanIndex = app.indexOf("runPostRunReadonlyScan()", openAiRescanIndex);
+const openAiRealScanIndex = app.indexOf("runRealReadonlyScan()", openAiRescanIndex);
 assert(openAiHandlerStart >= 0, "OpenAI recommendation handler should exist");
 assert(blockedOpenAiRecommendationIndex > openAiHandlerStart, "OpenAI handler should check blocked broker rows");
 assert(openAiRouteArmIndex > openAiHandlerStart, "OpenAI handler should arm deterministic executor routes");
 assert(proofImportPreparationIndex > blockedOpenAiRecommendationIndex, "blocked proof-import recommendations should prepare the validation import");
 assert(proofImportPreparationIndex < openAiRouteArmIndex, "proof-import recommendations must prepare evidence before scoped route arming");
+assert(openAiRescanIndex > openAiHandlerStart, "OpenAI handler should route rescan recommendations");
+assert(openAiPostRunRescanIndex > openAiRescanIndex, "OpenAI rescan recommendations should support post-run rescans");
+assert(openAiPostRunRescanIndex < openAiRealScanIndex, "OpenAI rescan recommendations must choose ledger-preserving post-run rescan before normal scans");
 assert(
   blockedOpenAiRecommendationIndex < openAiRouteArmIndex,
   "blocked OpenAI recommendations must return before arming a scoped executor route"
