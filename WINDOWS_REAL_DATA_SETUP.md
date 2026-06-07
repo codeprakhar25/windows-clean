@@ -81,7 +81,7 @@ After the app exports `spaceguard-real-workflow-proof.md`, validate the final ro
 npm run validate:workflow-proof -- --file .\spaceguard-real-workflow-proof.md
 ```
 
-The verifier exits successfully only for `spaceguard-real-workflow-proof/v1` packets with `workflow-proven`, `readyForNextRoute=true`, completed selected-route proof import, and retained execution-ledger plus matched-rescan counts.
+The verifier exits successfully only for `spaceguard-real-workflow-proof/v1` packets with `workflow-proven`, `readyForNextRoute=true`, completed selected-route proof import, retained execution-ledger plus matched-rescan counts, and the app-close proof contract exported by the desktop app.
 
 For the seeded first route, validate the whole first-delete chain after `fixture-after-cleanup.json` exists:
 

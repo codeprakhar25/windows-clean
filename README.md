@@ -92,7 +92,7 @@ After exporting `spaceguard-real-workflow-proof.md`, validate the final handoff 
 npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md
 ```
 
-The verifier accepts only `spaceguard-real-workflow-proof/v1` packets that are `workflow-proven`, have `readyForNextRoute=true`, include completed selected-route proof import, and retain ledger plus matched rescan evidence.
+The verifier accepts only `spaceguard-real-workflow-proof/v1` packets that are `workflow-proven`, have `readyForNextRoute=true`, include completed selected-route proof import, retain ledger plus matched rescan evidence, and carry the app-close proof contract exported by the desktop app.
 
 For the seeded first route, also validate the whole preflight plus after-cleanup fixture plus workflow proof chain:
 
