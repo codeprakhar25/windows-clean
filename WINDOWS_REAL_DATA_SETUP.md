@@ -65,6 +65,8 @@ In `npm run start`, the OpenAI button uses Vite's same-origin `/api/openai-agent
 
 `npm run proof:first-route` emits a read-only first-route proof packet for the seeded temp fixture. Use it on a disposable Windows VM before the first real cleanup proof; it gives the fixture seed command, before/after fixture inspection commands, the one temp executor flag, route-contract coverage, app steps, forbidden broad-temp actions, and the final positive recovered-byte workflow proof acceptance rule.
 
+`npm run proof:first-route:windows` runs the first-route operator preflight on Windows. It creates an evidence folder, loads `.env`, forces a one-route environment with only `SPACEGUARD_ENABLE_TEMP_EXECUTOR=1`, captures the first-route packet, seeds and inspects fixtures, runs setup doctor, fixture OpenAI smoke, live OpenAI smoke when `OPENAI_API_KEY` is configured, route setup, and route validation, then launches the Tauri app. It writes `operator-preflight.json` and `commands.ndjson` before launch. It does not clean anything outside the desktop workflow; the actual fixture deletion still requires in-app scan, target selection, consent, and the **Real temp cleanup** button.
+
 After the app exports `spaceguard-real-workflow-proof.md`, validate the final route handoff:
 
 ```powershell
@@ -250,7 +252,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\seed-spaceguard-fixtures.ps1 
 
 The optional large candidate can consume real disk space depending on the filesystem. Use it only in a disposable VM or set a smaller value for smoke testing that does not exercise the 1 GiB threshold.
 
-After seeding:
+The fastest first-proof path is:
+
+```powershell
+npm run proof:first-route:windows
+```
+
+For manual seeding:
 
 1. Run `npm run native:dev`.
 2. Click **Run real scan**.
