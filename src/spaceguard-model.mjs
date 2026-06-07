@@ -10543,6 +10543,8 @@ export function normalizeValidationEvidenceRecord(checkId, value = null) {
       notes: "",
       recordedAt: "",
       updatedAt: "",
+      source: "",
+      selectedRouteProofSummary: null,
       detail: "Legacy checkbox evidence must be replaced with reviewer and artifact path before release."
     };
   }
@@ -10562,6 +10564,8 @@ export function normalizeValidationEvidenceRecord(checkId, value = null) {
       notes: "",
       recordedAt: "",
       updatedAt: "",
+      source: "",
+      selectedRouteProofSummary: null,
       detail: "No evidence record has been captured."
     };
   }
@@ -10572,6 +10576,8 @@ export function normalizeValidationEvidenceRecord(checkId, value = null) {
   const notes = String(value.notes || "").trim();
   const recordedAt = String(value.recordedAt || value.recorded_at || "").trim();
   const updatedAt = String(value.updatedAt || value.updated_at || "").trim();
+  const source = cleanEvidenceText(value.source);
+  const selectedRouteProofSummary = normalizeSelectedRouteProofSummary(value.selectedRouteProofSummary);
   const complete = status === "passed" && Boolean(evidencePath) && Boolean(reviewer);
   const qualityStatus = complete
     ? "passed"
@@ -10595,6 +10601,8 @@ export function normalizeValidationEvidenceRecord(checkId, value = null) {
     notes,
     recordedAt,
     updatedAt,
+    source,
+    selectedRouteProofSummary,
     detail: complete
       ? `Evidence recorded by ${reviewer}.`
       : status === "passed"
@@ -10827,7 +10835,8 @@ export function buildValidationPackImport({
       notes: cleanEvidenceText(row.notes),
       recordedAt: cleanEvidenceText(row.recordedAt) || pack.generatedAt || importedAt,
       updatedAt: importedAt,
-      source: "validation-pack-import"
+      source: cleanEvidenceText(row.source) || "validation-pack-import",
+      selectedRouteProofSummary: normalizeSelectedRouteProofSummary(row.selectedRouteProofSummary)
     };
   }
 
@@ -11454,6 +11463,52 @@ function buildRejectedSelectedRouteProofEvidenceImport(status, detail, currentEv
 
 function cleanEvidenceText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeSelectedRouteProofSummary(value = null) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const schemaVersion = cleanEvidenceText(value.schemaVersion);
+  const route = cleanEvidenceText(value.route);
+  const status = cleanEvidenceText(value.status);
+  const rescanStatus = cleanEvidenceText(value.rescanStatus);
+  const counts = value.counts && typeof value.counts === "object" && !Array.isArray(value.counts) ? value.counts : {};
+  const volumeProof = value.volumeProof && typeof value.volumeProof === "object" && !Array.isArray(value.volumeProof) ? value.volumeProof : null;
+  if (schemaVersion !== "spaceguard-selected-route-proof-packet/v1" && !route && !status && !rescanStatus) return null;
+
+  return {
+    schemaVersion: schemaVersion || "spaceguard-selected-route-proof-packet/v1",
+    generatedAt: cleanEvidenceText(value.generatedAt),
+    route,
+    planId: cleanEvidenceText(value.planId),
+    status,
+    rescanStatus,
+    verificationStatus: cleanEvidenceText(value.verificationStatus),
+    runKind: cleanEvidenceText(value.runKind),
+    runLabel: cleanEvidenceText(value.runLabel),
+    scopedNativeExecution: Boolean(value.scopedNativeExecution),
+    postRunScanEvidence: Boolean(value.postRunScanEvidence),
+    latestExecutionAt: cleanEvidenceText(value.latestExecutionAt),
+    scanGeneratedAt: cleanEvidenceText(value.scanGeneratedAt),
+    counts: {
+      ledgerEntries: Number(counts.ledgerEntries || 0),
+      rescanRows: Number(counts.rescanRows || 0),
+      matchedRows: Number(counts.matchedRows || 0),
+      mismatchRows: Number(counts.mismatchRows || 0),
+      waitingRows: Number(counts.waitingRows || 0),
+      reclaimedBytes: Number(counts.reclaimedBytes || 0),
+      freeBytesDelta: Number(counts.freeBytesDelta || 0)
+    },
+    volumeProof: volumeProof
+      ? {
+          status: cleanEvidenceText(volumeProof.status),
+          measured: Boolean(volumeProof.measured || volumeProof.status === "measured"),
+          driveLabel: cleanEvidenceText(volumeProof.driveLabel),
+          freeBytesDelta: Number(volumeProof.freeBytesDelta || 0),
+          source: cleanEvidenceText(volumeProof.source)
+        }
+      : null
+  };
 }
 
 function buildRejectedFixtureImport(status, detail, currentEvidence, importedAt, evidence = null) {
@@ -12329,6 +12384,8 @@ export function buildValidationEvidencePack({
       reviewer: row.evidenceRecord?.reviewer || "",
       recordedAt: row.evidenceRecord?.recordedAt || "",
       updatedAt: row.evidenceRecord?.updatedAt || "",
+      source: row.evidenceRecord?.source || "",
+      selectedRouteProofSummary: row.evidenceRecord?.selectedRouteProofSummary || null,
       evidenceComplete: Boolean(row.evidenceRecord?.complete),
       evidenceLegacy: Boolean(row.evidenceRecord?.legacy),
       evidenceDetail: row.evidenceRecord?.detail || ""

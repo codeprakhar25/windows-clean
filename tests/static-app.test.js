@@ -1105,6 +1105,7 @@ assert(model.includes("normalizeWritePreflightChecks"), "model should normalize 
 assert(model.includes("normalizeExecutorFeatureFlags"), "model should normalize per-executor runtime feature flags");
 assert(model.includes("contract-mismatch"), "write boundary probe should reject mismatched contract echoes");
 assert(model.includes("normalizeValidationEvidenceRecord"), "model should normalize structured validation evidence");
+assert(model.includes("normalizeSelectedRouteProofSummary"), "model should preserve route proof provenance through validation packs");
 assert(model.includes("spaceguard-fixture-evidence-import/v1"), "model should expose fixture evidence import schema");
 assert(model.includes("destructive-evidence"), "fixture evidence import should reject destructive evidence");
 assert(model.includes("scanner-fixtures"), "fixture evidence import should map scanner fixture readiness evidence");

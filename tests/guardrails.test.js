@@ -4013,6 +4013,36 @@ const assert = require("assert");
     executorPlan
   });
   assert.strictEqual(routeProofGate.rows.find((row) => row.id === "ledger-rescan-parity").passed, true, "route proof import should feed the release gate parity row");
+  const routeProofValidationPack = guard.buildValidationEvidencePack({
+    releaseGate: routeProofGate,
+    executorPlan,
+    executorManifest,
+    scanMode: "native-readonly",
+    runtimeCapabilities: { available: true, realRunEnabled: false, destructiveCommands: false }
+  });
+  const routeProofValidationCheck = routeProofValidationPack.validationChecks.find((check) => check.id === "ledger-rescan-parity");
+  assert.strictEqual(routeProofValidationCheck.source, "selected-route-proof-import", "validation pack should preserve selected-route proof provenance");
+  assert.strictEqual(routeProofValidationCheck.selectedRouteProofSummary.route, "known-temp-delete", "validation pack should export selected-route proof route");
+  assert.strictEqual(routeProofValidationCheck.selectedRouteProofSummary.volumeProof.status, "measured", "validation pack should export selected-route native volume proof");
+  const reimportedRouteProofValidationPack = guard.buildValidationPackImport({
+    evidenceObject: routeProofValidationPack,
+    currentEvidence: {},
+    importedAt: "2026-06-05T02:10:00.000Z"
+  });
+  assert.strictEqual(reimportedRouteProofValidationPack.validationEvidence["ledger-rescan-parity"].selectedRouteProofSummary.route, "known-temp-delete", "validation pack import should restore selected-route proof route");
+  assert.strictEqual(reimportedRouteProofValidationPack.validationEvidence["ledger-rescan-parity"].selectedRouteProofSummary.volumeProof.status, "measured", "validation pack import should restore selected-route native volume proof");
+  const reimportedRouteProofFlow = guard.buildScopedExecutorCommandFlow({
+    smokeRunPacket: tempProofSmokePacket,
+    preferredRoute: "known-temp-delete",
+    executionProofHandoff: { status: "proof-complete" },
+    nativeCapability: { available: true },
+    ledger: scopedTempLedgerWithVolumeProof,
+    postRunVerification: scopedTempPostRunVerification,
+    rescanComparison: scopedMatchedComparison,
+    validationEvidence: reimportedRouteProofValidationPack.validationEvidence,
+    scanning: false
+  });
+  assert.strictEqual(reimportedRouteProofFlow.proofPacket.validationImport.status, "import-complete", "validation-pack round trip should keep route proof import complete");
   const rejectedDryRunProofImport = guard.buildSelectedRouteProofEvidenceImport({
     evidenceObject: selectedRouteProofFlow.proofPacket,
     currentEvidence: { "ledger-rescan-parity": { status: "draft" } }
