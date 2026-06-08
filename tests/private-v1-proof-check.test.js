@@ -1,4 +1,5 @@
 const assert = require("assert");
+const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -31,6 +32,9 @@ function createPrivateV1Evidence(patch = {}) {
   const proofPath = path.join(dir, "private-v1-proof.json");
   const archivedProofPath = path.join(dir, "archived-first-route-root-exports", "spaceguard-real-workflow-proof.md");
   const bundleArtifactPath = path.join(dir, "private-demo-preflight", "src-tauri", "target", "release", "bundle", "nsis", "SpaceGuard_0.1.0_x64-setup.exe");
+  const bundleEvidencePath = path.join(dir, "private-demo-preflight", "native-bundle-artifacts", "SpaceGuard_0.1.0_x64-setup.exe");
+  const bundleBytes = Buffer.from("spaceguard-native-bundle-fixture");
+  const bundleSha256 = crypto.createHash("sha256").update(bundleBytes).digest("hex");
 
   const preflight = {
     schemaVersion: "spaceguard-private-demo-windows-preflight/v1",
@@ -47,7 +51,9 @@ function createPrivateV1Evidence(patch = {}) {
         path: bundleArtifactPath,
         fileName: "SpaceGuard_0.1.0_x64-setup.exe",
         extension: ".exe",
-        bytes: 10485760,
+        bytes: bundleBytes.length,
+        evidencePath: bundleEvidencePath,
+        sha256: bundleSha256,
         modifiedAt: "2026-06-08T10:00:00.000Z"
       }
     ],
@@ -132,7 +138,9 @@ function createPrivateV1Evidence(patch = {}) {
   fs.mkdirSync(path.dirname(archivedProofPath), { recursive: true });
   fs.writeFileSync(archivedProofPath, "# archived first route proof\n");
   fs.mkdirSync(path.dirname(bundleArtifactPath), { recursive: true });
-  fs.writeFileSync(bundleArtifactPath, Buffer.alloc(1024));
+  fs.writeFileSync(bundleArtifactPath, bundleBytes);
+  fs.mkdirSync(path.dirname(bundleEvidencePath), { recursive: true });
+  fs.writeFileSync(bundleEvidencePath, bundleBytes);
 
   return { dir, proofPath, commandLogPath, firstRouteCompletionPath, selectedRouteCompletionPath };
 }
@@ -202,6 +210,26 @@ function createPrivateV1Evidence(patch = {}) {
     "native bundle artifact blocker should be explicit"
   );
 
+  const missingBundleEvidence = createPrivateV1Evidence({
+    preflight: {
+      nativeBundleArtifacts: [
+        {
+          path: path.join(os.tmpdir(), "SpaceGuard_0.1.0_x64-setup.exe"),
+          fileName: "SpaceGuard_0.1.0_x64-setup.exe",
+          extension: ".exe",
+          bytes: 10485760,
+          sha256: "0".repeat(64)
+        }
+      ]
+    }
+  });
+  const missingBundleEvidenceCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingBundleEvidence.proofPath });
+  assert.strictEqual(missingBundleEvidenceCheck.status, "blocked", "missing copied bundle artifact evidence should block private V1 proof");
+  assert(
+    missingBundleEvidenceCheck.blockers.some((blocker) => blocker.id === "native-bundle-artifact-evidence"),
+    "copied bundle evidence blocker should be explicit"
+  );
+
   const coordinator = fs.readFileSync(coordinatorPath, "utf8");
   assert(coordinator.includes("private-v1-proof-check.json"), "V1 coordinator should write private V1 proof verifier output");
   assert(coordinator.includes("run-private-v1-proof-check.mjs --file"), "V1 coordinator should invoke the independent private V1 proof verifier");
@@ -210,6 +238,8 @@ function createPrivateV1Evidence(patch = {}) {
   assert(windowsSetup.includes("npm run validate:private-v1-proof -- --file"), "Windows setup guide should document private V1 proof validation");
   assert(readme.includes("native bundle artifact"), "README should mention native bundle artifact evidence in the V1 proof");
   assert(windowsSetup.includes("native bundle artifact"), "Windows setup guide should mention native bundle artifact evidence in the V1 proof");
+  assert(readme.includes("copied native bundle artifact") && readme.includes("SHA-256"), "README should document copied native bundle artifact hashes");
+  assert(windowsSetup.includes("copied native bundle artifact") && windowsSetup.includes("SHA-256"), "Windows setup guide should document copied native bundle artifact hashes");
 
   console.log("private v1 proof check ok");
 })().catch((error) => {

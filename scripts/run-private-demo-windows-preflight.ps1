@@ -31,6 +31,7 @@ try {
   $OpenAiFixtureSmokePath = Join-Path $EvidenceRoot "openai-fixture-smoke.txt"
   $OpenAiLiveSmokePath = Join-Path $EvidenceRoot "openai-live-smoke.txt"
   $NativeBundleRoot = Join-Path $RepoRoot "src-tauri\target\release\bundle"
+  $NativeBundleEvidenceRoot = Join-Path $EvidenceRoot "native-bundle-artifacts"
 
   New-Item -ItemType Directory -Path $EvidenceRoot -Force | Out-Null
 
@@ -119,6 +120,33 @@ try {
       })
   }
 
+  function Copy-NativeBundleArtifacts {
+    param(
+      [Parameter(Mandatory = $true)][string]$Root,
+      [Parameter(Mandatory = $true)][string]$EvidenceRoot
+    )
+
+    New-Item -ItemType Directory -Path $EvidenceRoot -Force | Out-Null
+    $index = 0
+    return @(Get-NativeBundleArtifacts -Root $Root | ForEach-Object {
+        $index += 1
+        $evidenceFileName = ("{0:D2}-{1}" -f $index, $_.fileName)
+        $evidencePath = Join-Path $EvidenceRoot $evidenceFileName
+        Copy-Item -LiteralPath $_.path -Destination $evidencePath -Force
+        $hash = Get-FileHash -LiteralPath $evidencePath -Algorithm SHA256
+        [PSCustomObject]@{
+          path = $_.path
+          evidencePath = $evidencePath
+          fileName = $_.fileName
+          evidenceFileName = $evidenceFileName
+          extension = $_.extension
+          bytes = [int64](Get-Item -LiteralPath $evidencePath).Length
+          sha256 = $hash.Hash.ToLowerInvariant()
+          modifiedAt = $_.modifiedAt
+        }
+      })
+  }
+
   $startedAt = (Get-Date).ToUniversalTime().ToString("o")
   $commands = [PSCustomObject]@{
     jsTests = "npm test"
@@ -141,7 +169,7 @@ try {
   Invoke-LoggedCommand -Id "openai-fixture-smoke" -CommandLine $commands.openAiFixtureSmoke -OutputPath $OpenAiFixtureSmokePath | Out-Null
   Invoke-LoggedCommand -Id "openai-live-smoke" -CommandLine $commands.openAiLiveSmoke -OutputPath $OpenAiLiveSmokePath | Out-Null
   Invoke-LoggedCommand -Id "native-build" -CommandLine $commands.nativeBuild -OutputPath (Join-Path $EvidenceRoot "native-build.txt") | Out-Null
-  $nativeBundleArtifacts = Get-NativeBundleArtifacts -Root $NativeBundleRoot
+  $nativeBundleArtifacts = Copy-NativeBundleArtifacts -Root $NativeBundleRoot -EvidenceRoot $NativeBundleEvidenceRoot
   if ($nativeBundleArtifacts.Count -lt 1) {
     throw "native-bundle-artifacts-missing: npm run native:build completed but no supported bundle artifacts were found under $NativeBundleRoot"
   }
@@ -161,6 +189,7 @@ try {
       openAiFixtureSmoke = $OpenAiFixtureSmokePath
       openAiLiveSmoke = $OpenAiLiveSmokePath
       nativeBundleRoot = $NativeBundleRoot
+      nativeBundleEvidenceRoot = $NativeBundleEvidenceRoot
     }
     nativeBundleArtifacts = $nativeBundleArtifacts
     commands = $commands

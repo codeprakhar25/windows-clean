@@ -28,7 +28,12 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
   assert(runner.includes("npm run openai:smoke -- --route $SelectedRoute"), "preflight runner should run selected-route live OpenAI smoke");
   assert(runner.includes("npm run native:build"), "preflight runner should produce the native bundle");
   assert(runner.includes("Get-NativeBundleArtifacts"), "preflight runner should enumerate native bundle artifacts");
+  assert(runner.includes("Copy-NativeBundleArtifacts"), "preflight runner should copy native bundle artifacts into evidence");
+  assert(runner.includes("native-bundle-artifacts"), "preflight runner should use a native bundle evidence folder");
+  assert(runner.includes("Get-FileHash"), "preflight runner should hash copied native bundle artifacts");
   assert(runner.includes("src-tauri\\target\\release\\bundle"), "preflight runner should inspect the Tauri bundle output folder");
+  assert(runner.includes("evidencePath"), "preflight runner should record copied bundle artifact evidence paths");
+  assert(runner.includes("sha256"), "preflight runner should record copied bundle artifact hashes");
   assert(runner.includes("nativeBundleArtifacts"), "preflight runner should write native bundle artifact evidence");
   assert(runner.includes("proof:first-route:windows -- -Route temp-fixture"), "preflight runner should print the first-route proof as the next command");
   assert(runner.includes("proof:route:windows -- -Route $SelectedRoute"), "preflight runner should print the selected real-data route command");

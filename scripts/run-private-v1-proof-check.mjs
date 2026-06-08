@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -232,10 +233,16 @@ function validateNativeBundleArtifacts(preflight, add) {
   let validCount = 0;
   for (const [index, artifact] of artifacts.entries()) {
     const artifactPath = String(artifact?.path || "");
+    const evidencePath = String(artifact?.evidencePath || "");
     const extension = String(artifact?.extension || path.extname(artifactPath)).toLowerCase();
     const bytes = Number(artifact?.bytes || 0);
+    const sha256 = String(artifact?.sha256 || "").toLowerCase();
     if (!artifactPath) {
       add("native-bundle-artifact-path", "Native bundle artifact path missing", `Native bundle artifact ${index + 1} has no path.`);
+      continue;
+    }
+    if (!evidencePath) {
+      add("native-bundle-artifact-evidence", "Copied native bundle artifact missing", `Native bundle artifact ${index + 1} has no copied evidencePath.`);
       continue;
     }
     if (!supportedExtensions.has(extension)) {
@@ -246,8 +253,26 @@ function validateNativeBundleArtifacts(preflight, add) {
       add("native-bundle-artifact-bytes", "Native bundle artifact byte count missing", `Native bundle artifact ${index + 1} must report positive bytes.`);
       continue;
     }
-    if (!fs.existsSync(artifactPath)) {
-      add("native-bundle-artifact-file", "Native bundle artifact file missing", `Native bundle artifact does not exist: ${artifactPath}`);
+    if (!/^[a-f0-9]{64}$/.test(sha256)) {
+      add("native-bundle-artifact-sha256", "Native bundle artifact hash missing", `Native bundle artifact ${index + 1} must report a SHA-256 hash.`);
+      continue;
+    }
+    if (!fs.existsSync(evidencePath)) {
+      add("native-bundle-artifact-evidence", "Copied native bundle artifact missing", `Copied native bundle artifact does not exist: ${evidencePath}`);
+      continue;
+    }
+    const evidenceStat = fs.statSync(evidencePath);
+    if (!evidenceStat.isFile()) {
+      add("native-bundle-artifact-evidence", "Copied native bundle artifact is not a file", `Copied native bundle artifact is not a file: ${evidencePath}`);
+      continue;
+    }
+    if (evidenceStat.size !== bytes) {
+      add("native-bundle-artifact-bytes", "Copied native bundle artifact byte count mismatch", `Copied native bundle artifact size does not match metadata: ${evidencePath}`);
+      continue;
+    }
+    const actualHash = crypto.createHash("sha256").update(fs.readFileSync(evidencePath)).digest("hex");
+    if (actualHash !== sha256) {
+      add("native-bundle-artifact-sha256", "Copied native bundle artifact hash mismatch", `Copied native bundle artifact hash does not match metadata: ${evidencePath}`);
       continue;
     }
     validCount += 1;

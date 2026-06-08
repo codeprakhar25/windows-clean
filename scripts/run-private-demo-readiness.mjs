@@ -162,6 +162,9 @@ export function buildPrivateDemoReadinessSummary({
       passed: scriptIncludes(packageJson, "demo:private-windows-preflight", "run-private-demo-windows-preflight.ps1") &&
         fileReady(privateWindowsPreflightRunner) &&
         privateWindowsPreflightRunner.includes("Get-NativeBundleArtifacts") &&
+        privateWindowsPreflightRunner.includes("Copy-NativeBundleArtifacts") &&
+        privateWindowsPreflightRunner.includes("evidencePath") &&
+        privateWindowsPreflightRunner.includes("sha256") &&
         privateWindowsPreflightRunner.includes("nativeBundleArtifacts"),
       detail: "Private demo readiness must provide one Windows host preflight command that captures native bundle artifacts before fixture and npm-cache proof runs."
     }),
