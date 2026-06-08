@@ -128,7 +128,8 @@ assert(app.includes("buildInAppSupportBundleReport"), "proof export should build
 assert(app.includes("renderInAppSupportBundleMarkdown"), "proof export should render support bundle markdown inside the desktop app");
 assert(app.includes("supportBundleWritten"), "cleanup queue should keep next route locked until support bundle capture succeeds");
 assert(app.includes("supportBundleWritten: Boolean(supportBundleWritten)"), "OpenAI context should receive support bundle completion state");
-assert(app.includes("proofAllowsNextExecutor: !executionRecord || supportBundleWritten"), "OpenAI context should not allow another executor until support bundle capture succeeds");
+assert(app.includes("proofAllowsNextExecutor: workflowLocks.proofAllowsNextExecutor"), "OpenAI context should use the tested workflow lock policy for next-executor allowance");
+assert(app.includes("noOpExecution: Boolean(workflowLocks.noOpExecution)"), "OpenAI context should expose accepted zero-byte no-op handoff state");
 assert(app.includes("agentTaskQueue"), "OpenAI context should include the app task queue that the advisor instructions require");
 assert(app.includes("selected-route-proof-reviewed"), "app workflow proof should require reviewed selected-route proof export");
 assert(!app.includes("selected-route-proof-import"), "app workflow proof should not require obsolete selected-route proof import");

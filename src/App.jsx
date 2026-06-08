@@ -357,9 +357,10 @@ function App() {
       permanentRemovalConfirmed,
       workflowProofAccepted,
       workflowProofCheck,
-      supportBundleWritten
+      supportBundleWritten,
+      workflowLocks
     }),
-    [runtime, scan, candidates, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted, workflowProofCheck, supportBundleWritten]
+    [runtime, scan, candidates, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted, workflowProofCheck, supportBundleWritten, workflowLocks]
   );
   const agentBroker = useMemo(
     () => {
@@ -2038,7 +2039,8 @@ function buildAgentContext({
   permanentRemovalConfirmed = false,
   workflowProofAccepted = false,
   workflowProofCheck = null,
-  supportBundleWritten = false
+  supportBundleWritten = false,
+  workflowLocks = buildWorkflowLocks({ executionRecord, workflowProofAccepted, supportBundleWritten })
 }) {
   const cleanupQueue = candidates.slice(0, 24).map((candidate) => ({
     id: candidate.id,
@@ -2063,7 +2065,9 @@ function buildAgentContext({
     accepted: executionRecord.accepted,
     reclaimedBytes: executionRecord.bytes,
     proofStatus: getAgentProofStatus(executionRecord, postRunProof, workflowProofAccepted),
-    proofAllowsNextExecutor: !executionRecord || supportBundleWritten,
+    proofAllowsNextExecutor: workflowLocks.proofAllowsNextExecutor,
+    proofHandoffRequired: Boolean(workflowLocks.proofHandoffRequired),
+    noOpExecution: Boolean(workflowLocks.noOpExecution),
     workflowProofCheckStatus: workflowProofCheck?.status || "not-run",
     workflowProofCheckCanAccept: Boolean(workflowProofCheck?.canAccept),
     supportBundleWritten: Boolean(supportBundleWritten),

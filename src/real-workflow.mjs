@@ -706,6 +706,7 @@ export function buildWorkflowLocks({
   const noOpExecution = Boolean(accepted && reclaimedBytes <= 0);
   const positiveExecution = Boolean(accepted && reclaimedBytes > 0);
   const proofHandoffRequired = Boolean(positiveExecution && !supportBundleWritten);
+  const proofAllowsNextExecutor = !proofHandoffRequired;
   const targetSwitchLocked = proofHandoffRequired;
   const routeSetupLocked = proofHandoffRequired;
 
@@ -717,6 +718,7 @@ export function buildWorkflowLocks({
     workflowProofAccepted: Boolean(workflowProofAccepted),
     supportBundleWritten: Boolean(supportBundleWritten),
     proofHandoffRequired,
+    proofAllowsNextExecutor,
     targetSwitchLocked,
     routeSetupLocked,
     primary: noOpExecution
@@ -835,7 +837,7 @@ export function buildAppAgentTaskQueue({
   execution = {}
 } = {}) {
   const rows = [];
-  if (execution?.accepted && execution.rescanComparisonStatus !== "matched") {
+  if (execution?.accepted && !execution.noOpExecution && execution.rescanComparisonStatus !== "matched") {
     const canRun = Boolean(execution.canRunPostRunRescan);
     rows.push({
       id: "task-post-run-rescan",

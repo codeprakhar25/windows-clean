@@ -168,6 +168,7 @@ const assert = require("assert");
   });
   assert.strictEqual(zeroByteNoOpLocks.noOpExecution, true, "accepted zero-byte executions should be classified as no-op handoffs");
   assert.strictEqual(zeroByteNoOpLocks.proofHandoffRequired, false, "accepted zero-byte executions should not require impossible positive-byte proof handoff");
+  assert.strictEqual(zeroByteNoOpLocks.proofAllowsNextExecutor, true, "accepted zero-byte executions should allow the next executor without support bundle proof handoff");
   assert.strictEqual(zeroByteNoOpLocks.targetSwitchLocked, false, "accepted zero-byte executions should not lock target switching");
   assert.strictEqual(zeroByteNoOpLocks.routeSetupLocked, false, "accepted zero-byte executions should not lock route setup switching");
 
@@ -180,6 +181,7 @@ const assert = require("assert");
     supportBundleWritten: false
   });
   assert.strictEqual(positiveExecutionLocks.proofHandoffRequired, true, "positive accepted executions should require proof handoff");
+  assert.strictEqual(positiveExecutionLocks.proofAllowsNextExecutor, false, "positive accepted executions should block next executor until support bundle handoff");
   assert.strictEqual(positiveExecutionLocks.targetSwitchLocked, true, "positive accepted executions should lock target switching before support bundle handoff");
   assert.strictEqual(positiveExecutionLocks.routeSetupLocked, true, "positive accepted executions should lock route setup before support bundle handoff");
 
@@ -191,6 +193,7 @@ const assert = require("assert");
     workflowProofAccepted: true,
     supportBundleWritten: true
   });
+  assert.strictEqual(handedOffLocks.proofAllowsNextExecutor, true, "support bundle handoff should allow the next executor");
   assert.strictEqual(handedOffLocks.targetSwitchLocked, false, "support bundle handoff should unlock target switching");
   assert.strictEqual(handedOffLocks.routeSetupLocked, false, "support bundle handoff should unlock route setup switching");
 
@@ -348,6 +351,23 @@ const assert = require("assert");
   });
   assert(rescanAgentQueue.rows.some((row) => row.source === "post-run-proof" && row.actionType === "rescan"), "app agent task queue should prioritize post-run rescan while proof is pending");
   assert(!rescanAgentQueue.rows.some((row) => row.source === "scoped-executor" && row.status === "ready"), "app agent task queue should not expose ready executor rows before proof handoff is complete");
+
+  const noOpAgentQueue = workflow.buildAppAgentTaskQueue({
+    cleanupQueue: [queueCandidate],
+    execution: {
+      accepted: true,
+      noOpExecution: true,
+      proofStatus: "proof-not-required-no-op",
+      proofAllowsNextExecutor: true,
+      canRunPostRunRescan: true,
+      rescanComparisonStatus: "needs-rescan",
+      postRunScanEvidence: false,
+      consentMatchesPlan: true,
+      scanFingerprintPresent: true
+    }
+  });
+  assert(!noOpAgentQueue.rows.some((row) => row.source === "post-run-proof"), "accepted no-op executions should not force a post-run proof task");
+  assert(noOpAgentQueue.rows.some((row) => row.source === "scoped-executor" && row.status === "ready"), "accepted no-op executions should allow ready executor rows");
 
   const supportAgentQueue = workflow.buildAppAgentTaskQueue({
     cleanupQueue: [queueCandidate],
