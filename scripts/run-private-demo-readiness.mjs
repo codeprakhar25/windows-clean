@@ -29,6 +29,7 @@ export function buildPrivateDemoReadinessSummary({
   const workflowProofCheck = readText(path.join(root, "scripts", "run-workflow-proof-check.mjs"));
   const privateV1ProofCheck = readText(path.join(root, "scripts", "run-private-v1-proof-check.mjs"));
   const firstRouteCompletionCheck = readText(path.join(root, "scripts", "run-first-route-completion-check.mjs"));
+  const selectedRoutePreflightCheck = readText(path.join(root, "scripts", "run-route-preflight-check.mjs"));
   const selectedRouteCompletionCheck = readText(path.join(root, "scripts", "run-route-completion-check.mjs"));
   const openAiSmokeRunner = readText(path.join(root, "scripts", "run-openai-advisor-smoke.mjs"));
   const openAiAgent = readText(path.join(root, "src", "openai-agent.mjs"));
@@ -220,10 +221,14 @@ export function buildPrivateDemoReadinessSummary({
       id: "completion-verifiers",
       label: "Completion verifiers",
       passed: scriptIncludes(packageJson, "validate:first-route-completion", "run-first-route-completion-check.mjs") &&
+        scriptIncludes(packageJson, "validate:route-preflight", "run-route-preflight-check.mjs") &&
         scriptIncludes(packageJson, "validate:route-completion", "run-route-completion-check.mjs") &&
         firstRouteCompletionCheck.includes("spaceguard-first-route-completion-check/v1") &&
+        selectedRoutePreflightCheck.includes("spaceguard-selected-route-preflight-check/v1") &&
+        selectedRoutePreflightCheck.includes("selected-route-setup") &&
+        selectedRoutePreflightCheck.includes("resolve-selected-route") &&
         selectedRouteCompletionCheck.includes("spaceguard-selected-route-completion-check/v1"),
-      detail: "First-route and selected-route completion verifiers must be present."
+      detail: "First-route, selected-route preflight, and selected-route completion verifiers must be present."
     }),
     buildCheck({
       id: "runner-direct-delete-free",

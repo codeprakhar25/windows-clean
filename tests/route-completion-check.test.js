@@ -32,6 +32,7 @@ function createSelectedRouteEvidence(patch = {}) {
   const firstRouteCompletionCheck = path.join(dir, "first-route-completion-check.json");
   const artifacts = {
     commandLog: path.join(dir, "commands.ndjson"),
+    selectedRouteSetup: path.join(dir, "selected-route-setup.json"),
     setupDoctor: path.join(dir, "setup-doctor.json"),
     setupRoute: path.join(dir, "setup-route.json"),
     validateRoute: path.join(dir, "validate-route.json"),
@@ -108,6 +109,21 @@ function createSelectedRouteEvidence(patch = {}) {
       safeToLaunchWriteMode: true,
       firstRouteProof: { status: "accepted", accepted: true }
     }
+  };
+  const selectedRouteSetup = {
+    schemaVersion: "spaceguard-route-setup-packet/v1",
+    status: "flag-disabled",
+    routeInput,
+    route,
+    selected: {
+      route,
+      aliases: [routeInput, "npm", route],
+      envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
+      enabled: false,
+      requestMode: "execute-npm-cache",
+      panelId: "npm-cache-executor-panel"
+    },
+    ...patch.selectedRouteSetup
   };
   const setupRoute = {
     schemaVersion: "spaceguard-route-setup-packet/v1",
@@ -208,6 +224,7 @@ function createSelectedRouteEvidence(patch = {}) {
     ...patch.nativeDevExit
   };
   const commands = [
+    "resolve-selected-route",
     "setup-doctor",
     "openai-fixture-smoke",
     "setup-route",
@@ -223,6 +240,7 @@ function createSelectedRouteEvidence(patch = {}) {
 
   writeJson(path.join(dir, "operator-preflight.json"), preflight);
   writeJson(firstRouteCompletionCheck, firstRouteCompletion);
+  writeJson(artifacts.selectedRouteSetup, selectedRouteSetup, { npmWrapped: true });
   writeJson(artifacts.setupDoctor, { ...setupDoctor, ...patch.setupDoctor }, { npmWrapped: true });
   writeJson(artifacts.setupRoute, { ...setupRoute, ...patch.setupRoute }, { npmWrapped: true });
   writeJson(artifacts.validateRoute, { ...validateRoute, ...patch.validateRoute }, { npmWrapped: true });

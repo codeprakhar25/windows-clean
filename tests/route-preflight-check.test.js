@@ -28,6 +28,7 @@ function createEvidenceFolder(patch = {}) {
   const firstRouteCompletionCheck = path.join(dir, "first-route-completion-check.json");
   const artifacts = {
     commandLog: path.join(dir, "commands.ndjson"),
+    selectedRouteSetup: path.join(dir, "selected-route-setup.json"),
     setupDoctor: path.join(dir, "setup-doctor.json"),
     setupRoute: path.join(dir, "setup-route.json"),
     validateRoute: path.join(dir, "validate-route.json"),
@@ -98,6 +99,21 @@ function createEvidenceFolder(patch = {}) {
       firstRouteProof: { status: "accepted", accepted: true }
     }
   };
+  const selectedRouteSetup = {
+    schemaVersion: "spaceguard-route-setup-packet/v1",
+    status: "flag-disabled",
+    routeInput: "npm-cache",
+    route: "bounded-npm-cache-delete",
+    selected: {
+      route: "bounded-npm-cache-delete",
+      aliases: ["npm-cache", "npm", "bounded-npm-cache-delete"],
+      envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
+      enabled: false,
+      requestMode: "execute-npm-cache",
+      panelId: "npm-cache-executor-panel"
+    },
+    ...patch.selectedRouteSetup
+  };
   const setupRoute = {
     schemaVersion: "spaceguard-route-setup-packet/v1",
     status: "ready",
@@ -132,6 +148,7 @@ function createEvidenceFolder(patch = {}) {
     }
   };
   const commands = [
+    "resolve-selected-route",
     "setup-doctor",
     "openai-fixture-smoke",
     "setup-route",
@@ -148,6 +165,7 @@ function createEvidenceFolder(patch = {}) {
 
   writeJson(path.join(dir, "operator-preflight.json"), preflight);
   writeJson(firstRouteCompletionCheck, firstRouteCompletion);
+  writeJson(artifacts.selectedRouteSetup, selectedRouteSetup, { npmWrapped: true });
   writeJson(artifacts.setupDoctor, { ...setupDoctor, ...patch.setupDoctor }, { npmWrapped: true });
   writeJson(artifacts.setupRoute, { ...setupRoute, ...patch.setupRoute }, { npmWrapped: true });
   writeJson(artifacts.validateRoute, { ...validateRoute, ...patch.validateRoute }, { npmWrapped: true });
@@ -186,8 +204,8 @@ function createEvidenceFolder(patch = {}) {
   assert.strictEqual(accepted.canLaunchApp, true, "accepted selected-route preflight should clear the app launch");
   assert.strictEqual(accepted.route, "bounded-npm-cache-delete", "accepted preflight should preserve native route");
   assert.strictEqual(accepted.routeInput, "npm-cache", "accepted preflight should preserve route input");
-  assert.strictEqual(accepted.counts.requiredCommandsPassed, 4, "accepted preflight should count required command records");
-  assert.strictEqual(accepted.counts.requiredArtifactsPresent, 6, "accepted preflight should count required artifacts");
+  assert.strictEqual(accepted.counts.requiredCommandsPassed, 5, "accepted preflight should count required command records");
+  assert.strictEqual(accepted.counts.requiredArtifactsPresent, 7, "accepted preflight should count required artifacts");
   assert.strictEqual(accepted.appCloseContract.minimumReclaimedBytes, 1, "selected-route app-close contract should require positive recovered bytes");
   assert(accepted.appCloseContract.requiredBeforeClosingApp.includes("native-volume-proof-captured"), "selected-route preflight should require native volume proof before closing");
 
@@ -216,6 +234,15 @@ function createEvidenceFolder(patch = {}) {
   assert(
     skippedConfiguredLiveOpenAi.blockers.some((blocker) => blocker.id === "command-openai-live-smoke"),
     "configured live OpenAI skip blocker should name the live smoke command"
+  );
+
+  const missingSelectedRouteSetupFolder = createEvidenceFolder();
+  fs.unlinkSync(missingSelectedRouteSetupFolder.artifacts.selectedRouteSetup);
+  const missingSelectedRouteSetup = verifier.buildSelectedRoutePreflightCheck({ preflightPath: missingSelectedRouteSetupFolder.preflightPath });
+  assert.strictEqual(missingSelectedRouteSetup.status, "blocked", "missing selected-route setup resolution should block preflight");
+  assert(
+    missingSelectedRouteSetup.blockers.some((blocker) => blocker.id === "artifact-selected-route-setup"),
+    "missing selected-route setup blocker should name the resolution artifact"
   );
 
   const missingProofFolder = createEvidenceFolder();
@@ -247,6 +274,13 @@ function createEvidenceFolder(patch = {}) {
   const routeMismatch = verifier.buildSelectedRoutePreflightCheck({ preflightPath: routeMismatchFolder.preflightPath });
   assert.strictEqual(routeMismatch.status, "blocked", "route mismatch should block selected-route preflight");
   assert(routeMismatch.blockers.some((blocker) => blocker.id === "setup-route"), "route mismatch blocker should name setup-route");
+
+  const routeResolutionMismatchFolder = createEvidenceFolder({
+    selectedRouteSetup: { route: "bounded-pnpm-store-delete" }
+  });
+  const routeResolutionMismatch = verifier.buildSelectedRoutePreflightCheck({ preflightPath: routeResolutionMismatchFolder.preflightPath });
+  assert.strictEqual(routeResolutionMismatch.status, "blocked", "route resolution mismatch should block selected-route preflight");
+  assert(routeResolutionMismatch.blockers.some((blocker) => blocker.id === "selected-route-setup"), "route resolution blocker should name selected-route setup");
 
   const missingHandoffFolder = createEvidenceFolder();
   fs.unlinkSync(missingHandoffFolder.artifacts.operatorAppHandoff);

@@ -14,6 +14,7 @@ const APP_CLOSE_CONTRACT_SCHEMA = "spaceguard-selected-route-app-close-contract/
 const WORKFLOW_PROOF_SCHEMA = "spaceguard-real-workflow-proof/v1";
 const FIRST_ROUTE = "known-temp-delete";
 const REQUIRED_COMMANDS = [
+  "resolve-selected-route",
   "setup-doctor",
   "openai-fixture-smoke",
   "setup-route",
@@ -96,6 +97,7 @@ export function buildSelectedRoutePreflightCheck({
   validateScopedExecutor(preflight?.scopedExecutor, routeSpec, add);
   const commandRecords = readCommandRecords(artifactPaths.commandLog, add);
   const commandSummary = validateCommandRecords(commandRecords, preflight?.openAi, add);
+  const selectedRouteSetup = readOptionalJsonArtifact("selected-route-setup", artifactPaths.selectedRouteSetup, add);
   const setupDoctor = readOptionalJsonArtifact("setup-doctor", artifactPaths.setupDoctor, add);
   const setupRoute = readOptionalJsonArtifact("setup-route", artifactPaths.setupRoute, add);
   const validateRoute = readOptionalJsonArtifact("validate-route", artifactPaths.validateRoute, add);
@@ -103,6 +105,7 @@ export function buildSelectedRoutePreflightCheck({
   const operatorAppHandoff = readOptionalTextArtifact("operator-app-handoff", artifactPaths.operatorAppHandoff, add);
   const appCloseContract = validateAppCloseContract(preflight?.appCloseContract, baseDir, add);
 
+  validateSelectedRouteSetup(selectedRouteSetup, routeSpec, preflight, add);
   validateSetupDoctor(setupDoctor, routeSpec, add);
   validateSetupRoute(setupRoute, routeSpec, add);
   validateRoutePacket(validateRoute, routeSpec, add);
@@ -111,6 +114,7 @@ export function buildSelectedRoutePreflightCheck({
 
   const requiredArtifactCount = [
     "commandLog",
+    "selectedRouteSetup",
     "setupDoctor",
     "setupRoute",
     "validateRoute",
@@ -374,6 +378,28 @@ function validateScopedExecutor(scoped = {}, routeSpec, add) {
   }
   if (String(scoped.dotenvExecutorFlagsIgnored || "") !== "1" || scoped.siblingFlagsForcedOff !== true) {
     add("sibling-flags", "Sibling flags not locked", "Preflight must ignore dotenv executor flags and force sibling executor flags off.");
+  }
+}
+
+function validateSelectedRouteSetup(packet, routeSpec, preflight, add) {
+  if (!packet || !routeSpec) return;
+  if (packet.schemaVersion !== "spaceguard-route-setup-packet/v1") {
+    add("selected-route-setup", "Selected-route setup schema mismatch", "Selected-route setup output must use spaceguard-route-setup-packet/v1.");
+  }
+  if (packet.status === "unknown-route" || packet.status === "route-required" || !packet.selected) {
+    add("selected-route-setup", "Selected-route setup unresolved", "Selected-route setup must resolve the operator route before any executor flags are enabled.");
+  }
+  if (packet.route === FIRST_ROUTE) {
+    add("selected-route-setup", "Selected-route setup is bootstrap route", "Selected-route setup must resolve a real-data route, not known-temp-delete.");
+  }
+  if (packet.route !== routeSpec.route || packet.selected?.envVar !== routeSpec.envVar) {
+    add("selected-route-setup", "Selected-route setup mismatch", `Selected-route setup must resolve ${routeSpec.route} with ${routeSpec.envVar}.`);
+  }
+  if (packet.selected?.requestMode !== routeSpec.requestMode || packet.selected?.panelId !== routeSpec.panelId) {
+    add("selected-route-setup", "Selected-route setup boundary mismatch", "Selected-route setup request mode and panel id must match the selected native route boundary.");
+  }
+  if (preflight?.routeInput && packet.routeInput && preflight.routeInput !== packet.routeInput) {
+    add("selected-route-setup", "Selected-route setup input mismatch", "Preflight routeInput must match selected-route setup routeInput.");
   }
 }
 

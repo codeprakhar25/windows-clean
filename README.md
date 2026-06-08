@@ -108,6 +108,8 @@ To re-check a captured selected-route preflight bundle manually:
 npm run validate:route-preflight -- --file evidence/route-proof-npm-cache-YYYYMMDD-HHMMSS/operator-preflight.json
 ```
 
+That verifier now requires the captured `selected-route-setup.json`, the `resolve-selected-route` command record, the ready `setup-route.json`, and the selected-route validation packet to agree on the same canonical route and scoped executor flag.
+
 If the app proof export is fixed after the desktop session closes, rerun only the post-app finalization against the existing evidence root:
 
 ```bash
