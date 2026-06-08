@@ -269,6 +269,7 @@ function App() {
   const [executionResult, setExecutionResult] = useState(null);
   const [executionRecord, setExecutionRecord] = useState(null);
   const [proofReviewed, setProofReviewed] = useState(false);
+  const [workflowProofAccepted, setWorkflowProofAccepted] = useState(false);
   const [proofExportStatus, setProofExportStatus] = useState("idle");
   const [proofExportMessage, setProofExportMessage] = useState("");
   const [agentPrompt, setAgentPrompt] = useState("Find the safest next cleanup step from the current real scan.");
@@ -316,7 +317,7 @@ function App() {
       executionStatus !== "running"
   );
   const canExportProof = Boolean(postRunProof.status === "matched" && proofReviewed && executionRecord?.accepted);
-  const targetSwitchLocked = Boolean(executionRecord?.accepted && proofExportStatus !== "complete");
+  const targetSwitchLocked = Boolean(executionRecord?.accepted && !workflowProofAccepted);
   const agentContext = useMemo(
     () => buildAgentContext({
       runtime,
@@ -329,9 +330,10 @@ function App() {
       scanFingerprint,
       consentPlanId: canExecute ? activePlanId : "",
       archiveDestination,
-      permanentRemovalConfirmed
+      permanentRemovalConfirmed,
+      workflowProofAccepted
     }),
-    [runtime, scan, candidates, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, permanentRemovalConfirmed]
+    [runtime, scan, candidates, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted]
   );
   const agentBroker = useMemo(
     () => {
@@ -343,13 +345,13 @@ function App() {
           planId: activePlanId,
           scanFingerprint,
           consentPlanId: canExecute ? activePlanId : "",
-          proofStatus: getAgentProofStatus(executionRecord, postRunProof),
+          proofStatus: getAgentProofStatus(executionRecord, postRunProof, workflowProofAccepted),
           largeFileArchiveDestination: archiveDestination,
           permanentRemovalConfirmed
         }
       });
     },
-    [agentAdvice, agentContext, activePlanId, scanFingerprint, canExecute, executionRecord, postRunProof, archiveDestination, permanentRemovalConfirmed]
+    [agentAdvice, agentContext, activePlanId, scanFingerprint, canExecute, executionRecord, postRunProof, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted]
   );
 
   async function refreshRuntime() {
@@ -379,6 +381,7 @@ function App() {
       if (afterExecution) {
         setPostRunScan(result);
         setProofReviewed(false);
+        setWorkflowProofAccepted(false);
         setProofExportStatus("idle");
         setProofExportMessage("");
       } else {
@@ -391,6 +394,7 @@ function App() {
         setConfirmationText("");
         setPermanentRemovalConfirmed(false);
         setProofReviewed(false);
+        setWorkflowProofAccepted(false);
         setProofExportStatus("idle");
         setProofExportMessage("");
       }
@@ -407,6 +411,7 @@ function App() {
     setExecutionStatus("running");
     setExecutionError("");
     setExecutionResult(null);
+    setWorkflowProofAccepted(false);
     setProofExportStatus("idle");
     setProofExportMessage("");
     const planId = activePlanId || `plan-${Date.now()}-${selectedCandidate.id}`;
@@ -469,6 +474,7 @@ function App() {
     if (!selectedCandidate || !executionRecord) return;
     setProofExportStatus("running");
     setProofExportMessage("");
+    setWorkflowProofAccepted(false);
     try {
       const generatedAt = new Date().toISOString();
       const selectedRouteProof = buildSelectedRouteProofPacket({
@@ -575,6 +581,7 @@ function App() {
               setConfirmationText("");
               setPermanentRemovalConfirmed(false);
               setProofReviewed(false);
+              setWorkflowProofAccepted(false);
               setProofExportStatus("idle");
               setProofExportMessage("");
             }}
@@ -607,6 +614,8 @@ function App() {
             scanStatus={scanStatus}
             proofReviewed={proofReviewed}
             setProofReviewed={setProofReviewed}
+            workflowProofAccepted={workflowProofAccepted}
+            setWorkflowProofAccepted={setWorkflowProofAccepted}
             canExportProof={canExportProof}
             proofExportStatus={proofExportStatus}
             proofExportMessage={proofExportMessage}
@@ -1105,7 +1114,7 @@ function CleanupQueue({ candidates, selectedId, setSelectedId, scan, targetSwitc
         ) : candidates.length ? (
           <div className="grid gap-3">
             {targetSwitchLocked ? (
-              <Notice tone="review" icon={Lock} text="Finish proof export before selecting another cleanup target." />
+              <Notice tone="review" icon={Lock} text="Run workflow proof verifier and mark accepted before selecting another cleanup target." />
             ) : null}
             {candidates.map((candidate) => (
               <button
@@ -1263,6 +1272,8 @@ function ProofPanel({
   scanStatus,
   proofReviewed,
   setProofReviewed,
+  workflowProofAccepted,
+  setWorkflowProofAccepted,
   canExportProof,
   proofExportStatus,
   proofExportMessage,
@@ -1319,6 +1330,12 @@ function ProofPanel({
                 icon={proofExportStatus === "error" ? AlertTriangle : CheckCircle2}
                 text={proofExportMessage}
               />
+            ) : null}
+            {proofExportStatus === "complete" ? (
+              <label className="flex items-start gap-3 text-sm">
+                <Checkbox checked={workflowProofAccepted} onClick={() => setWorkflowProofAccepted(!workflowProofAccepted)} />
+                <span>npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted.</span>
+              </label>
             ) : null}
           </>
         )}
@@ -1906,7 +1923,8 @@ function buildAgentContext({
   scanFingerprint = "",
   consentPlanId = "",
   archiveDestination = "",
-  permanentRemovalConfirmed = false
+  permanentRemovalConfirmed = false,
+  workflowProofAccepted = false
 }) {
   const cleanupQueue = candidates.slice(0, 24).map((candidate) => ({
     id: candidate.id,
@@ -1980,8 +1998,8 @@ function buildAgentContext({
       route: executionRecord.route,
       accepted: executionRecord.accepted,
       reclaimedBytes: executionRecord.bytes,
-      proofStatus: getAgentProofStatus(executionRecord, postRunProof),
-      proofAllowsNextExecutor: !executionRecord || postRunProof.matched,
+      proofStatus: getAgentProofStatus(executionRecord, postRunProof, workflowProofAccepted),
+      proofAllowsNextExecutor: !executionRecord || workflowProofAccepted,
       canRunPostRunRescan: Boolean(executionRecord),
       rescanComparisonStatus: postRunProof.status,
       postRunScanEvidence: Boolean(postRunProof.scanGeneratedAt),
@@ -2006,9 +2024,10 @@ function buildAgentContext({
   };
 }
 
-function getAgentProofStatus(executionRecord, postRunProof) {
+function getAgentProofStatus(executionRecord, postRunProof, workflowProofAccepted = false) {
   if (!executionRecord) return "waiting-for-execution";
-  if (postRunProof?.matched) return "proof-complete";
+  if (workflowProofAccepted) return "proof-complete";
+  if (postRunProof?.matched) return "workflow-proof-validation-required";
   return postRunProof?.status || "proof-pending";
 }
 

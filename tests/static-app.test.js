@@ -104,8 +104,10 @@ assert(app.includes("buildRouteSetupChecklist"), "app should use tested route se
 assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
 assert(app.includes("executionRecord?.accepted"), "proof export should require an accepted native execution record");
 assert(app.includes("targetSwitchLocked"), "cleanup queue should lock target switching after accepted execution until proof export completes");
-assert(app.includes("Finish proof export before selecting another cleanup target."), "cleanup queue should explain the post-execution target switch lock");
+assert(app.includes("workflowProofAccepted"), "cleanup queue should require accepted workflow proof validation before unlocking another target");
+assert(app.includes("Run workflow proof verifier and mark accepted before selecting another cleanup target."), "cleanup queue should explain the workflow proof validation lock");
 assert(app.includes("disabled={targetSwitchLocked && candidate.id !== selectedId}"), "cleanup queue should disable other targets while proof export is pending");
+assert(app.includes("npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted"), "proof panel should require operator confirmation of accepted workflow proof validation");
 assert(
   /setSelectedId=\{\(id\) => \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setPostRunScan\(null\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}\}/.test(app),
   "selecting a different cleanup target should clear stale execution, rescan, and proof export state"
