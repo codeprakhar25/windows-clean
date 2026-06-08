@@ -185,11 +185,13 @@ function createSelectedRouteEvidence(patch = {}) {
     proofImportStatus: "import-complete",
     readyForNextRoute: true,
     unsafeRuntime: false,
+    volumeProof: { status: "measured", measured: true, driveLabel: "C:", freeBytesDelta: 1048576, entries: 1 },
     counts: { ledgerEntries: 1, matchedRows: 1, reclaimedBytes: 1048576 },
     rows: [
       { id: "native-scan-current", passed: true },
       { id: "post-run-proof-complete", passed: true },
       { id: "selected-route-proof-import", passed: true },
+      { id: "native-volume-proof", passed: true },
       { id: "next-route-clearance", passed: true }
     ],
     ...patch.workflowProof

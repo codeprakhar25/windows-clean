@@ -149,7 +149,13 @@ function buildWorkflowProofBlockers(proof = {}) {
   if (Number(proof.counts?.reclaimedBytes || 0) <= 0) add("reclaimed-bytes", "Recovered bytes missing", "Workflow proof must report positive reclaimed bytes before next-route handoff is accepted.");
   validateAppCloseContract(proof.appCloseContract, add);
 
-  for (const rowId of requiredRowIds) {
+  const selectedRouteContract = proof.appCloseContract?.schemaVersion === SELECTED_ROUTE_APP_CLOSE_CONTRACT_SCHEMA;
+  const effectiveRequiredRowIds = selectedRouteContract ? [...requiredRowIds, "native-volume-proof"] : requiredRowIds;
+  if (selectedRouteContract && proof.volumeProof?.status !== "measured" && proof.volumeProof?.measured !== true) {
+    add("native-volume-proof", "Native volume proof missing", "Selected-route workflow proof must include measured native volume proof.");
+  }
+
+  for (const rowId of effectiveRequiredRowIds) {
     const row = Array.isArray(proof.rows) ? proof.rows.find((item) => item?.id === rowId) : null;
     if (!row?.passed) add(rowId, "Proof row blocked", `${rowId} must be present and passed.`);
   }

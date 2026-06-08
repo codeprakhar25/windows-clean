@@ -53,6 +53,13 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
     ...provenPacket,
     route: "bounded-npm-cache-delete",
     routeInput: "npm-cache",
+    volumeProof: {
+      status: "measured",
+      measured: true,
+      driveLabel: "C:",
+      freeBytesDelta: 1024,
+      entries: 1
+    },
     appCloseContract: {
       schemaVersion: "spaceguard-selected-route-app-close-contract/v1",
       workflowProofPath: ".\\spaceguard-real-workflow-proof.md",
@@ -67,11 +74,25 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
         "selected-route-proof-import-complete",
         "spaceguard-real-workflow-proof-exported"
       ]
-    }
+    },
+    rows: [
+      ...provenPacket.rows,
+      { id: "native-volume-proof", passed: true }
+    ]
   };
   const acceptedSelectedRoute = verifier.buildWorkflowProofCheck({ evidenceObject: selectedRoutePacket });
   assert.strictEqual(acceptedSelectedRoute.status, "accepted", "selected-route workflow proof contract should be accepted");
   assert.strictEqual(acceptedSelectedRoute.canAccept, true, "selected-route workflow proof should clear the selected route handoff");
+
+  const missingSelectedRouteMeasuredVolumeProof = verifier.buildWorkflowProofCheck({
+    evidenceObject: {
+      ...selectedRoutePacket,
+      volumeProof: null,
+      rows: selectedRoutePacket.rows.map((row) => row.id === "native-volume-proof" ? { ...row, passed: false } : row)
+    }
+  });
+  assert.strictEqual(missingSelectedRouteMeasuredVolumeProof.status, "blocked", "selected-route workflow proof without measured native volume proof should block");
+  assert(missingSelectedRouteMeasuredVolumeProof.blockers.some((blocker) => blocker.id === "native-volume-proof"), "missing measured native volume proof blocker should be surfaced");
 
   const markdown = [
     "# SpaceGuard Real Workflow Proof",
