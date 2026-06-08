@@ -1362,9 +1362,10 @@ export default function App() {
         supportBundle,
         preferredRoute: selectedScopedExecutorRoute,
         executionProofHandoff,
-        scopedExecutorCommandFlow
+        scopedExecutorCommandFlow,
+        selectedRouteProofExported: selectedRouteProofExportedForCurrentPacket(scopedExecutorCommandFlow.proofPacket)
       }),
-    [nativeCapability, runtimeCapabilities.result, dataMode, scanSession, scanCoverage, privacyBoundary, publicBetaReadiness, validationPack, releaseGate, supportBundle, selectedScopedExecutorRoute, executionProofHandoff, scopedExecutorCommandFlow]
+    [nativeCapability, runtimeCapabilities.result, dataMode, scanSession, scanCoverage, privacyBoundary, publicBetaReadiness, validationPack, releaseGate, supportBundle, selectedScopedExecutorRoute, executionProofHandoff, scopedExecutorCommandFlow, selectedRouteProofExportReceipt]
   );
   const demoRehearsalRunbook = useMemo(
     () =>
@@ -3400,6 +3401,10 @@ export default function App() {
       await runPostRunReadonlyScan();
       return;
     }
+    if (action.type === "export-selected-route-proof") {
+      exportSelectedRouteProofPacket();
+      return;
+    }
     if (action.type === "prepare-validation-import") {
       prepareSelectedRouteProofImport();
       return;
@@ -5141,8 +5146,9 @@ function WindowsSetupAssistantPanel({ assistant, onWorkflowStep, onExportWorkflo
             ) : null}
             <div className="grid gap-2 md:grid-cols-2">
               {workflowSteps.map((step) => {
-                const proofStep = step.id === "post-run-rescan" || step.id === "proof-import";
-                const stepDisabled = !step.actionType || step.status === "blocked";
+                const proofStep = step.id === "post-run-rescan" || step.id === "proof-export" || step.id === "proof-import";
+                const proofStepWaiting = proofStep && step.status === "waiting";
+                const stepDisabled = !step.actionType || step.status === "blocked" || proofStepWaiting;
                 return (
                   <button
                     key={step.id}

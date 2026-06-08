@@ -788,15 +788,45 @@ const assert = require("assert");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.routeInput, "npm-cache", "setup assistant should default the workflow route alias");
   assert.deepStrictEqual(
     nativeSetupAssistant.realWorkflow.steps.map((step) => step.id),
-    ["setup-doctor", "route-validation", "native-scan", "arm-consent", "execute-route", "post-run-rescan", "proof-import", "next-route"],
+    ["setup-doctor", "route-validation", "native-scan", "arm-consent", "execute-route", "post-run-rescan", "proof-export", "proof-import", "next-route"],
     "setup assistant should expose the compact in-app workflow order"
   );
   assert.strictEqual(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "native-scan").actionType, "run-real-scan", "setup assistant workflow should route scan steps through the app");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "arm-consent").actionType, "arm-consent", "setup assistant workflow should route consent steps through the app");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "execute-route").actionType, "execute-route", "setup assistant workflow should route executor steps through the app");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "post-run-rescan").actionType, "run-post-run-rescan", "setup assistant workflow should route proof rescan steps through the app");
+  assert.strictEqual(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "proof-export").actionType, "export-selected-route-proof", "setup assistant workflow should route proof export through the app");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "proof-import").actionType, "prepare-validation-import", "setup assistant workflow should route proof import steps through the app");
   assert(nativeSetupAssistant.realWorkflow.steps.find((step) => step.id === "proof-import").detail.includes("Selected route proof import"), "setup assistant workflow should require proof import before next route");
+  const proofCompletePendingImportFlow = {
+    route: "bounded-npm-cache-delete",
+    selectedRoute: "bounded-npm-cache-delete",
+    proofPacket: {
+      status: "proof-complete",
+      readyForNextRoute: false,
+      validationImport: { status: "needs-import", complete: false }
+    }
+  };
+  const proofCompletePendingExportAssistant = guard.buildWindowsSetupAssistant({
+    nativeCapability: { available: true },
+    runtimeCapabilities: { available: true, platform: "windows", scanKnownRoots: true, realRunEnabled: false, destructiveCommands: false },
+    scanMode: "native-readonly",
+    scanSession: currentScanSession,
+    scopedExecutorCommandFlow: proofCompletePendingImportFlow,
+    selectedRouteProofExported: false
+  });
+  assert.strictEqual(proofCompletePendingExportAssistant.realWorkflow.steps.find((step) => step.id === "proof-export").status, "active", "completed proof should activate proof export before validation import");
+  assert.strictEqual(proofCompletePendingExportAssistant.realWorkflow.steps.find((step) => step.id === "proof-import").status, "waiting", "proof import should wait until selected-route proof export is complete");
+  const proofCompleteExportedAssistant = guard.buildWindowsSetupAssistant({
+    nativeCapability: { available: true },
+    runtimeCapabilities: { available: true, platform: "windows", scanKnownRoots: true, realRunEnabled: false, destructiveCommands: false },
+    scanMode: "native-readonly",
+    scanSession: currentScanSession,
+    scopedExecutorCommandFlow: proofCompletePendingImportFlow,
+    selectedRouteProofExported: true
+  });
+  assert.strictEqual(proofCompleteExportedAssistant.realWorkflow.steps.find((step) => step.id === "proof-export").status, "complete", "exported selected-route proof should complete the proof export step");
+  assert.strictEqual(proofCompleteExportedAssistant.realWorkflow.steps.find((step) => step.id === "proof-import").status, "active", "proof import should activate only after selected-route proof export");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.appCloseHandoff.schemaVersion, "spaceguard-in-app-proof-handoff/v1", "setup assistant should expose an in-app proof handoff schema");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.appCloseHandoff.workflowProofPath, ".\\spaceguard-real-workflow-proof.md", "proof handoff should name the workflow proof export path");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.appCloseHandoff.selectedRouteProofPacketPath, ".\\spaceguard-selected-route-proof-packet.md", "proof handoff should name the selected-route proof packet export path");

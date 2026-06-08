@@ -6429,7 +6429,8 @@ export function buildWindowsSetupAssistant({
   supportBundle = null,
   preferredRoute = "",
   executionProofHandoff = null,
-  scopedExecutorCommandFlow = null
+  scopedExecutorCommandFlow = null,
+  selectedRouteProofExported = false
 } = {}) {
   const unsafeRuntime = Boolean(runtimeCapabilities?.realRunEnabled || runtimeCapabilities?.destructiveCommands);
   const nativeAvailable = Boolean(nativeCapability?.available || runtimeCapabilities?.available);
@@ -6506,7 +6507,8 @@ export function buildWindowsSetupAssistant({
     unsafeRuntime,
     runtimeCapabilities,
     executionProofHandoff,
-    scopedExecutorCommandFlow
+    scopedExecutorCommandFlow,
+    selectedRouteProofExported
   });
   const status = unsafeRuntime
     ? "unsafe-runtime"
@@ -16439,7 +16441,8 @@ function buildInAppRealWorkflow({
   unsafeRuntime = false,
   runtimeCapabilities = {},
   executionProofHandoff = null,
-  scopedExecutorCommandFlow = null
+  scopedExecutorCommandFlow = null,
+  selectedRouteProofExported = false
 } = {}) {
   const enabledFlagRows = getEnabledExecutorFlagRows(runtimeCapabilities?.executorFlags || runtimeCapabilities?.executor_flags || {});
   const selectedRoute =
@@ -16455,6 +16458,7 @@ function buildInAppRealWorkflow({
   const validationImport = scopedExecutorCommandFlow?.proofPacket?.validationImport || null;
   const proofComplete = proofStatus === "proof-complete" || scopedExecutorCommandFlow?.proofPacket?.status === "proof-complete";
   const proofImportComplete = Boolean(validationImport?.complete || scopedExecutorCommandFlow?.proofPacket?.readyForNextRoute);
+  const proofExportComplete = Boolean(proofImportComplete || selectedRouteProofExported);
   const ready = Boolean(nativeAvailable && nativeScanCurrent && !unsafeRuntime);
   const steps = [
     buildInAppRealWorkflowStep({
@@ -16522,9 +16526,20 @@ function buildInAppRealWorkflow({
       detail: "Capture the execution ledger, native volume proof, and matched post-run rescan comparison."
     }),
     buildInAppRealWorkflowStep({
+      id: "proof-export",
+      label: "Proof export",
+      status: unsafeRuntime ? "blocked" : proofExportComplete ? "complete" : proofComplete ? "active" : "waiting",
+      command: "Export selected route proof",
+      actionType: "export-selected-route-proof",
+      targetPanel: "scoped-executor-command-flow-panel",
+      route,
+      panel: "scoped-executor-command-flow-panel",
+      detail: "Export spaceguard-selected-route-proof-packet.md before preparing validation evidence import."
+    }),
+    buildInAppRealWorkflowStep({
       id: "proof-import",
       label: "Proof import",
-      status: unsafeRuntime ? "blocked" : proofImportComplete ? "complete" : proofComplete ? "active" : "waiting",
+      status: unsafeRuntime ? "blocked" : proofImportComplete ? "complete" : proofComplete && proofExportComplete ? "active" : "waiting",
       command: "Selected route proof import",
       actionType: "prepare-validation-import",
       targetPanel: "validation-evidence-panel",

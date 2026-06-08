@@ -402,6 +402,7 @@ assert(model.includes("Validation import:"), "selected-route proof markdown shou
 assert(model.includes("buildSelectedRouteProofValidationImportStatus"), "model should derive selected-route proof validation import status");
 assert(app.includes("Export proof packet"), "command flow UI should export the selected-route proof packet");
 assert(app.includes("prepareSelectedRouteProofImport"), "command flow should prepare selected-route proof import");
+assert(app.includes('step.status === "waiting"'), "setup assistant proof workflow should disable waiting proof export/import steps");
 assert(app.includes('if (!proofPacket || proofPacket.status !== "proof-complete")'), "selected-route proof packet export should require a completed proof packet");
 assert(app.includes('disabled={!proofPacketComplete}'), "selected-route proof packet export button should stay disabled until proof is complete");
 assert(app.includes('proofPacket.status !== "proof-complete"'), "selected-route proof import preparation should require a completed proof packet");
@@ -509,6 +510,7 @@ assert(setupDoctorScript.includes("multi-flag-blocked"), "setup doctor should ex
 assert(setupDoctorScript.includes("safeToLaunchWriteMode"), "setup doctor should expose one-route write launch readiness");
 assert(setupDoctorScript.includes("realWorkflow"), "setup doctor should expose a compact real workflow");
 assert(setupDoctorScript.includes("post-run-rescan"), "setup doctor workflow should include post-run rescan");
+assert(setupDoctorScript.includes("proof-export"), "setup doctor workflow should include selected-route proof export");
 assert(setupDoctorScript.includes("proof-import"), "setup doctor workflow should include selected-route proof import");
 assert(setupDoctorScript.includes("selectedRoute"), "setup doctor should expose the selected route for one enabled flag");
 assert(setupDoctorScript.includes("routeSpecs"), "setup doctor should use route setup specs for selected route commands");

@@ -72,9 +72,10 @@ const script = path.join(root, "scripts", "run-setup-doctor.mjs");
   assert.strictEqual(oneFlag.realWorkflow.ready, true, "one-route setup should make the compact real workflow ready");
   assert.deepStrictEqual(
     oneFlag.realWorkflow.steps.map((step) => step.id),
-    ["fixture-openai-smoke", "openai-smoke", "route-setup", "route-validation", "native-scan", "arm-consent", "execute-route", "post-run-rescan", "proof-import", "workflow-proof-check", "route-completion-check", "next-route"],
+    ["fixture-openai-smoke", "openai-smoke", "route-setup", "route-validation", "native-scan", "arm-consent", "execute-route", "post-run-rescan", "proof-export", "proof-import", "workflow-proof-check", "route-completion-check", "next-route"],
     "setup doctor should emit the compact real cleanup workflow in order"
   );
+  assert(oneFlag.realWorkflow.steps.find((step) => step.id === "proof-export").detail.includes("spaceguard-selected-route-proof-packet.md"), "compact workflow should export selected-route proof before import");
   assert(oneFlag.realWorkflow.steps.find((step) => step.id === "proof-import").detail.includes("Selected route proof import"), "compact workflow should include proof import before next route");
   assert(oneFlag.realWorkflow.steps.find((step) => step.id === "workflow-proof-check").command.includes("validate:workflow-proof"), "compact workflow should validate the exported workflow proof before next route");
   assert(oneFlag.realWorkflow.steps.find((step) => step.id === "route-completion-check").command.includes("validate:route-completion"), "compact workflow should validate selected-route completion before next route");

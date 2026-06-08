@@ -261,6 +261,12 @@ function buildRealWorkflow({
         detail: "Capture the execution ledger, native volume proof, and matched post-run rescan comparison."
       },
       {
+        id: "proof-export",
+        command: "Export selected route proof",
+        panel: "scoped-executor-command-flow-panel",
+        detail: "Export spaceguard-selected-route-proof-packet.md before preparing validation evidence import."
+      },
+      {
         id: "proof-import",
         command: "Selected route proof import",
         panel: "validation-evidence-panel",
