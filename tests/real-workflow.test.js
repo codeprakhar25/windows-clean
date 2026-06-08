@@ -271,6 +271,30 @@ const assert = require("assert");
   assert.strictEqual(multiFlagSetup.ready, false, "multi-flag setup should not be ready");
   assert(multiFlagSetup.blockers.find((blocker) => blocker.id === "single-route-scope").detail.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "multi-flag blocker should name enabled flags");
 
+  const installedAppGuidance = workflow.buildManualFindingGuidance({
+    recipeId: "installed-app-footprints",
+    title: "Installed app footprints",
+    path: "Windows uninstall inventory",
+    bytes: 8 * 1024 * 1024 * 1024,
+    status: "measured"
+  });
+  assert.strictEqual(installedAppGuidance.schemaVersion, "spaceguard-manual-finding-guidance/v1", "manual guidance should expose a stable schema");
+  assert.strictEqual(installedAppGuidance.kind, "installed-app-review", "installed app findings should use app review guidance");
+  assert.strictEqual(installedAppGuidance.primaryAction, "Review in Windows Settings before uninstalling.", "installed app guidance should point to Windows uninstall review");
+  assert.strictEqual(installedAppGuidance.command, "ms-settings:appsfeatures", "installed app guidance should expose the Windows settings URI");
+  assert(installedAppGuidance.blockedActions.includes("Do not delete application folders directly."), "installed app guidance should block raw folder deletion");
+
+  const customRootGuidance = workflow.buildManualFindingGuidance({
+    recipeId: "custom-root-0",
+    title: "Custom root",
+    path: "D:\\Archive",
+    bytes: 20 * 1024 * 1024 * 1024,
+    status: "measured"
+  });
+  assert.strictEqual(customRootGuidance.kind, "manual-filesystem-review", "custom roots should stay manual filesystem review");
+  assert.strictEqual(customRootGuidance.command, "explorer.exe /select,\"D:\\Archive\"", "custom root guidance should expose an Explorer review command");
+  assert(customRootGuidance.blockedActions.includes("No SpaceGuard executor is mapped to this finding."), "custom root guidance should block unmapped execution");
+
   console.log("real workflow ok");
 })().catch((error) => {
   console.error(error);

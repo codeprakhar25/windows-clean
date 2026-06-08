@@ -97,6 +97,9 @@ assert(app.includes("./real-workflow.mjs"), "app should import tested real workf
 assert(app.includes("buildRouteReadiness"), "app should use tested route readiness guardrails");
 assert(app.includes("buildRouteSetupChecklist"), "app should use tested route setup checklist guardrails");
 assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
+assert(app.includes("buildManualFindingGuidance"), "app should use tested manual finding guidance");
+assert(app.includes("Recommended safe action"), "manual review panel should render recommended safe action copy");
+assert(app.includes("Blocked actions"), "manual review panel should render blocked action guardrails");
 assert(app.includes("Selected .env block"), "route setup panel should render a copyable selected .env block");
 assert(app.includes("copyEnvBlock"), "route setup panel should expose a copy action for selected .env content");
 assert(app.includes("navigator.clipboard.writeText(checklist.envBlock.content)"), "route setup copy action should copy the tested env block");

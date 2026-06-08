@@ -167,6 +167,86 @@ export function buildRouteEnvBlock({ route = {}, firstRouteProofPath = "" } = {}
   };
 }
 
+export function buildManualFindingGuidance(finding = {}) {
+  const recipeId = String(finding.recipeId || "");
+  const path = String(finding.path || "");
+  if (recipeId === "installed-app-footprints") {
+    return manualGuidance({
+      kind: "installed-app-review",
+      primaryAction: "Review in Windows Settings before uninstalling.",
+      command: "ms-settings:appsfeatures",
+      confidence: "review-required",
+      blockedActions: [
+        "Do not delete application folders directly.",
+        "Do not remove Program Files, ProgramData, or AppData folders as a cleanup shortcut.",
+        "Do not treat size alone as unused-app evidence."
+      ]
+    });
+  }
+  if (recipeId === "large-user-files") {
+    return manualGuidance({
+      kind: "reviewed-file-archive",
+      primaryAction: "Select individual large-file rows in the cleanup queue or archive manually.",
+      command: path ? `explorer.exe /select,"${path}"` : "Open File Explorer",
+      confidence: "review-required",
+      blockedActions: [
+        "Do not bulk delete folders from this summary row.",
+        "Do not archive without confirming the exact selected file and destination.",
+        "Do not move files from protected profile folders through this manual card."
+      ]
+    });
+  }
+  if (recipeId === "docker-volumes") {
+    return manualGuidance({
+      kind: "tool-owned-data-review",
+      primaryAction: "Review Docker volumes in Docker Desktop or docker volume commands.",
+      command: "docker volume ls",
+      confidence: "restricted",
+      blockedActions: [
+        "No SpaceGuard executor deletes Docker volumes.",
+        "Do not delete Docker data-root folders directly.",
+        "Do not run broad docker system prune from this app."
+      ]
+    });
+  }
+  if (recipeId.startsWith("custom-root-") || recipeId.startsWith("drive-")) {
+    return manualGuidance({
+      kind: "manual-filesystem-review",
+      primaryAction: "Review the measured location in File Explorer before deciding.",
+      command: path ? `explorer.exe /select,"${path}"` : "Open File Explorer",
+      confidence: "manual-only",
+      blockedActions: [
+        "No SpaceGuard executor is mapped to this finding.",
+        "Do not delete parent folders from a size summary.",
+        "Do not bypass the cleanup queue consent flow."
+      ]
+    });
+  }
+
+  return manualGuidance({
+    kind: "manual-review",
+    primaryAction: "Review this finding manually before taking action.",
+    command: path ? `explorer.exe /select,"${path}"` : "Open File Explorer",
+    confidence: "manual-only",
+    blockedActions: [
+      "No SpaceGuard executor is mapped to this finding.",
+      "Do not delete files without inspecting the exact target.",
+      "Do not treat this advisory row as cleanup approval."
+    ]
+  });
+}
+
+function manualGuidance({ kind, primaryAction, command, confidence, blockedActions }) {
+  return {
+    schemaVersion: "spaceguard-manual-finding-guidance/v1",
+    kind,
+    primaryAction,
+    command,
+    confidence,
+    blockedActions
+  };
+}
+
 function setupStep({ id, label, status, command, detail }) {
   return {
     id,

@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, formatBytes } from "./real-workflow.mjs";
+import { buildManualFindingGuidance, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, formatBytes } from "./real-workflow.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
   targetDrive: "C:",
@@ -1290,6 +1290,27 @@ function ManualReviewPanel({ findings }) {
                 <p className="mt-2 truncate text-xs text-muted-foreground">{finding.path || finding.recipeId}</p>
                 <p className="mt-2 text-lg font-semibold">{formatBytes(finding.bytes)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{finding.note || "Manual review only."}</p>
+                <div className="mt-3 rounded-md border bg-muted/30 p-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">{finding.manualGuidance.confidence}</Badge>
+                    <p className="text-xs font-medium">Recommended safe action</p>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{finding.manualGuidance.primaryAction}</p>
+                  <code className="mt-2 block overflow-hidden text-ellipsis rounded border bg-background px-2 py-1 text-xs">
+                    {finding.manualGuidance.command}
+                  </code>
+                </div>
+                <div className="mt-3">
+                  <p className="text-xs font-medium">Blocked actions</p>
+                  <ul className="mt-1 space-y-1">
+                    {finding.manualGuidance.blockedActions.slice(0, 3).map((action) => (
+                      <li key={action} className="flex gap-2 text-xs text-muted-foreground">
+                        <Lock className="mt-0.5 h-3 w-3 shrink-0" />
+                        <span>{action}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             ))}
           </div>
@@ -1484,7 +1505,8 @@ function buildManualFindings(scan) {
     })
     .map((finding) => ({
       ...finding,
-      title: MANUAL_RECIPE_LABELS[finding.recipeId] || finding.title || "Manual review"
+      title: MANUAL_RECIPE_LABELS[finding.recipeId] || finding.title || "Manual review",
+      manualGuidance: buildManualFindingGuidance(finding)
     }))
     .sort((left, right) => right.bytes - left.bytes);
 }
