@@ -125,7 +125,7 @@ export function buildRouteContractAuditReport({
       ? failed.slice(0, 3).map((row) => `${row.route}: fix ${row.checks.filter((check) => !check.passed).map((check) => check.id).join(", ")}`)
       : [
           "Run the selected route on Windows with exactly one scoped executor flag.",
-          "Capture before scan, consent, execution ledger, native volume proof, post-run rescan, selected-route proof import, and workflow proof verifier output."
+          "Capture before scan, consent, execution ledger, native volume proof, post-run rescan, selected-route proof packet export, selected-route proof import, and workflow proof verifier output."
         ]
   };
 }

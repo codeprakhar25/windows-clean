@@ -34,6 +34,7 @@ const script = path.join(root, "scripts", "run-route-contract-audit.mjs");
 
   assert(report.captureArtifacts.includes("route-contract-audit-report"), "route contract audit should name its capture artifact");
   assert(report.nextSteps.some((step) => step.includes("Windows")), "route contract audit should point to Windows validation as next proof");
+  assert(report.nextSteps.some((step) => step.includes("selected-route proof packet export")), "route contract audit should require selected-route proof packet export before import");
 
   console.log("route contract audit ok");
 })().catch((error) => {

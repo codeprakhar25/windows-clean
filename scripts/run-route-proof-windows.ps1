@@ -368,7 +368,7 @@ try {
       "9. Complete Selected route proof import with reviewer and artifact path.",
       "10. Re-export spaceguard-selected-route-proof-packet.md to the repo root after import complete.",
       "11. Export spaceguard-real-workflow-proof.md to the repo root before closing the app.",
-      "12. Do not close the app until native volume proof, selected-route proof import, and workflow proof export are complete.",
+      "12. Do not close the app until native volume proof, selected-route proof packet export, selected-route proof import, and workflow proof export are complete.",
       "",
       "## Resume validation",
       "npm run proof:route:windows:finalize -- -Route $Route -EvidenceRoot `"$EvidenceRoot`"",
