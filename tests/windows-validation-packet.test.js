@@ -132,6 +132,30 @@ function writeAcceptedFirstRouteCompletion() {
   assert(pnpmBlocked.liveValidationManifest.nativeBoundary.targetRejects.some((row) => row.includes("node_modules")), "pnpm live manifest should describe pnpm target rejects");
   assert(pnpmBlocked.liveValidationManifest.nativeBoundary.deletePolicy.some((row) => row.includes("versioned")), "pnpm live manifest should describe versioned store deletion scope");
 
+  const recycleBlocked = validation.buildWindowsValidationPacket({
+    routeInput: "recycle-bin",
+    env: cleanEnv()
+  });
+  const recycleRequirements = recycleBlocked.preRunChecklist.find((row) => row.id === "route-specific-requirements");
+  assert(recycleRequirements, "Recycle Bin validation should expose route-specific requirements");
+  assert.strictEqual(recycleRequirements.status, "blocked", "disabled Recycle Bin validation should block route-specific requirements");
+  assert(recycleRequirements.detail.includes("Permanent-removal confirmation"), "Recycle Bin requirement should mention permanent-removal confirmation");
+  assert(recycleBlocked.liveValidationManifest.routeRequirements.some((row) => row.includes("Permanent-removal confirmation")), "live manifest should carry Recycle Bin route requirements");
+  assert(recycleBlocked.captureArtifacts.includes("route-specific-requirements-evidence"), "validation packet should require evidence for route-specific requirements");
+
+  const largeArchiveReady = validation.buildWindowsValidationPacket({
+    routeInput: "large-files",
+    env: cleanEnv({
+      SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR: "1",
+      SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK: proofPath
+    })
+  });
+  const largeArchiveRequirements = largeArchiveReady.preRunChecklist.find((row) => row.id === "route-specific-requirements");
+  assert(largeArchiveRequirements, "large-file archive validation should expose route-specific requirements");
+  assert.strictEqual(largeArchiveRequirements.status, "pending", "ready large-file archive validation should require pending user evidence");
+  assert(largeArchiveRequirements.detail.includes("Archive destination"), "large-file archive requirement should mention archive destination");
+  assert(largeArchiveReady.liveValidationManifest.routeRequirements.some((row) => row.includes("Archive destination")), "live manifest should carry large-file archive requirements");
+
   const multiple = validation.buildWindowsValidationPacket({
     routeInput: "npm-cache",
     env: cleanEnv({

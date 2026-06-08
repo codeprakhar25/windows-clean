@@ -107,7 +107,7 @@ function buildCommands(selected) {
 function buildPreRunChecklist(routePacket) {
   const ready = routePacket.status === "ready";
   const selected = routePacket.selected || {};
-  return [
+  const rows = [
     {
       id: "setup-doctor",
       label: "Setup doctor",
@@ -144,11 +144,26 @@ function buildPreRunChecklist(routePacket) {
       status: ready ? "pending" : "blocked",
       detail: `Use only route ${selected.route}, requestMode ${selected.requestMode}, and panel ${selected.panelId}.`
     },
+    ...buildRouteSpecificRequirementChecklist(selected, ready),
     {
       id: "post-run-proof-slot",
       label: "Post-run proof slot",
       status: ready ? "pending" : "blocked",
       detail: "Do not start a second executor until execution ledger and post-run rescan comparison are captured."
+    }
+  ];
+  return rows;
+}
+
+function buildRouteSpecificRequirementChecklist(selected, ready) {
+  const requirements = Array.isArray(selected.requirements) ? selected.requirements.filter(Boolean) : [];
+  if (!requirements.length) return [];
+  return [
+    {
+      id: "route-specific-requirements",
+      label: "Route-specific requirements",
+      status: ready ? "pending" : "blocked",
+      detail: requirements.join(" ")
     }
   ];
 }
@@ -210,7 +225,7 @@ function buildPostRunProofChecklist(routePacket) {
 }
 
 function buildCaptureArtifacts(selected) {
-  return [
+  const artifacts = [
     "setup-doctor-report",
     "route-setup-packet",
     "windows-validation-packet",
@@ -232,6 +247,10 @@ function buildCaptureArtifacts(selected) {
     "openai-handoff-if-used",
     "support-bundle-if-any-warning"
   ];
+  if (Array.isArray(selected.requirements) && selected.requirements.length) {
+    artifacts.splice(9, 0, "route-specific-requirements-evidence");
+  }
+  return artifacts;
 }
 
 function buildLiveValidationManifest(selected, status) {
@@ -244,6 +263,7 @@ function buildLiveValidationManifest(selected, status) {
     routeInput,
     title: selected.title,
     status,
+    routeRequirements: Array.isArray(selected.requirements) ? selected.requirements.filter(Boolean) : [],
     contract: {
       envVar: selected.envVar,
       requestMode: selected.requestMode,
