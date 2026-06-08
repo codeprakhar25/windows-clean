@@ -236,6 +236,64 @@ export function buildManualFindingGuidance(finding = {}) {
   });
 }
 
+export function buildManualFindingReviewRows(finding = {}) {
+  const recipeId = String(finding.recipeId || "");
+  const rows = Array.isArray(finding.items)
+    ? finding.items
+        .filter((item) => item && (item.name || item.path))
+        .slice(0, 6)
+        .map((item) => buildManualReviewRow(recipeId, item))
+    : [];
+  return {
+    schemaVersion: "spaceguard-manual-review-rows/v1",
+    recipeId,
+    rows
+  };
+}
+
+function buildManualReviewRow(recipeId, item = {}) {
+  const recommendation = String(item.recommendation || "review").toLowerCase();
+  const signals = normalizeReviewSignals(item.signals);
+  const installedApp = recipeId === "installed-app-footprints";
+  const action = installedApp && recommendation === "keep"
+    ? "keep-installed"
+    : installedApp
+      ? "review-uninstall"
+      : "review-item";
+  const actionLabel = action === "keep-installed"
+    ? "Keep installed"
+    : action === "review-uninstall"
+      ? "Review uninstall"
+      : "Review item";
+  return {
+    id: String(item.id || item.path || item.name || ""),
+    name: String(item.name || item.path || "Review item"),
+    path: String(item.path || ""),
+    bytes: Number(item.bytes || 0),
+    recommendation,
+    reason: String(item.reason || ""),
+    action,
+    actionLabel,
+    blockedAction: installedApp
+      ? "Do not delete this folder directly."
+      : "Do not act on this row without selecting the exact target.",
+    signals
+  };
+}
+
+function normalizeReviewSignals(signals = []) {
+  return Array.isArray(signals)
+    ? signals
+        .map((signal) => ({
+          label: String(signal?.label || "").trim(),
+          value: String(signal?.value || "").trim(),
+          tone: String(signal?.tone || "outline").trim() || "outline"
+        }))
+        .filter((signal) => signal.label || signal.value)
+        .slice(0, 6)
+    : [];
+}
+
 function manualGuidance({ kind, primaryAction, command, confidence, blockedActions }) {
   return {
     schemaVersion: "spaceguard-manual-finding-guidance/v1",

@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildManualFindingGuidance, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, formatBytes } from "./real-workflow.mjs";
+import { buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, formatBytes } from "./real-workflow.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
   targetDrive: "C:",
@@ -1311,6 +1311,36 @@ function ManualReviewPanel({ findings }) {
                     ))}
                   </ul>
                 </div>
+                {finding.reviewRows.rows.length ? (
+                  <div className="mt-3 rounded-md border bg-background">
+                    <div className="border-b px-2 py-2">
+                      <p className="text-xs font-medium">Review candidates</p>
+                    </div>
+                    <div className="divide-y">
+                      {finding.reviewRows.rows.slice(0, 3).map((row) => (
+                        <div key={row.id || row.path} className="p-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-medium">{row.name}</p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">{formatBytes(row.bytes)}</p>
+                            </div>
+                            <Badge variant={row.action === "keep-installed" ? "safe" : "review"}>{row.actionLabel}</Badge>
+                          </div>
+                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{row.reason}</p>
+                          <p className="mt-2 text-xs font-medium">Usage evidence</p>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {row.signals.slice(0, 4).map((signal) => (
+                              <Badge key={`${row.id}-${signal.label}-${signal.value}`} variant={signal.tone === "safe" ? "safe" : signal.tone === "restricted" ? "restricted" : "outline"}>
+                                {signal.label}: {signal.value}
+                              </Badge>
+                            ))}
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">{row.blockedAction}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -1506,7 +1536,8 @@ function buildManualFindings(scan) {
     .map((finding) => ({
       ...finding,
       title: MANUAL_RECIPE_LABELS[finding.recipeId] || finding.title || "Manual review",
-      manualGuidance: buildManualFindingGuidance(finding)
+      manualGuidance: buildManualFindingGuidance(finding),
+      reviewRows: buildManualFindingReviewRows(finding)
     }))
     .sort((left, right) => right.bytes - left.bytes);
 }

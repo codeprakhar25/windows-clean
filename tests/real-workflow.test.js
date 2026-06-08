@@ -295,6 +295,44 @@ const assert = require("assert");
   assert.strictEqual(customRootGuidance.command, "explorer.exe /select,\"D:\\Archive\"", "custom root guidance should expose an Explorer review command");
   assert(customRootGuidance.blockedActions.includes("No SpaceGuard executor is mapped to this finding."), "custom root guidance should block unmapped execution");
 
+  const installedAppRows = workflow.buildManualFindingReviewRows({
+    recipeId: "installed-app-footprints",
+    items: [
+      {
+        id: "app-old-ide",
+        name: "Old IDE 2023",
+        path: "C:\\Program Files\\Old IDE 2023",
+        bytes: 6 * 1024 * 1024 * 1024,
+        recommendation: "review",
+        reason: "Manual uninstall candidate",
+        signals: [
+          { label: "usage proof", value: "not proven", tone: "restricted" },
+          { label: "uninstall entry", value: "present", tone: "safe" }
+        ]
+      },
+      {
+        id: "app-unity-hub",
+        name: "Unity Hub",
+        path: "C:\\Program Files\\Unity Hub",
+        bytes: 4 * 1024 * 1024 * 1024,
+        recommendation: "keep",
+        reason: "Read-only app usage evidence found via UserAssist launch evidence matching Unity Hub.",
+        signals: [
+          { label: "usage proof", value: "UserAssist launch evidence", tone: "safe" },
+          { label: "usage match", value: "name match: unity hub", tone: "safe" }
+        ]
+      }
+    ]
+  });
+  assert.strictEqual(installedAppRows.schemaVersion, "spaceguard-manual-review-rows/v1", "manual review rows should expose a stable schema");
+  assert.strictEqual(installedAppRows.rows.length, 2, "manual review rows should preserve visible installed-app candidates");
+  assert.strictEqual(installedAppRows.rows[0].action, "review-uninstall", "unused-app candidates should be review-only uninstall hints");
+  assert.strictEqual(installedAppRows.rows[0].actionLabel, "Review uninstall");
+  assert.strictEqual(installedAppRows.rows[0].blockedAction, "Do not delete this folder directly.");
+  assert(installedAppRows.rows[0].signals.some((signal) => signal.label === "usage proof" && signal.value === "not proven"), "review row should preserve missing usage proof");
+  assert.strictEqual(installedAppRows.rows[1].action, "keep-installed", "apps with usage evidence should not be framed as uninstall candidates");
+  assert(installedAppRows.rows[1].signals.some((signal) => signal.label === "usage proof" && signal.value === "UserAssist launch evidence"), "keep row should preserve usage evidence");
+
   console.log("real workflow ok");
 })().catch((error) => {
   console.error(error);
