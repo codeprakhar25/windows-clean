@@ -50,9 +50,8 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { requestOpenAIAgentAdvice } from "./openai-agent.mjs";
+import { buildPostRunProof, formatBytes } from "./real-workflow.mjs";
 
-const GB = 1024 ** 3;
-const MB = 1024 ** 2;
 const DEFAULT_SCAN_REQUEST = {
   targetDrive: "C:",
   protectedPaths: "",
@@ -64,7 +63,6 @@ const DEFAULT_SCAN_REQUEST = {
 const PROOF_PACKET_FILE = "spaceguard-selected-route-proof-packet.md";
 const WORKFLOW_PROOF_FILE = "spaceguard-real-workflow-proof.md";
 const CONFIRM_PREFIX = "RUN";
-const RESCAN_TOLERANCE_BYTES = 64 * MB;
 
 const EXECUTOR_RECIPES = {
   "windows-temp": {
@@ -289,8 +287,8 @@ function App() {
   const manualFindings = useMemo(() => buildManualFindings(scan), [scan]);
   const scanFingerprint = useMemo(() => buildScanFingerprint(scan), [scan]);
   const postRunProof = useMemo(
-    () => buildPostRunProof({ candidate: selectedCandidate, executionRecord, scan, postRunScan }),
-    [selectedCandidate, executionRecord, scan, postRunScan]
+    () => buildPostRunProof({ candidate: selectedCandidate, executionRecord, postRunScan }),
+    [selectedCandidate, executionRecord, postRunScan]
   );
   const expectedConfirmation = selectedCandidate
     ? `${CONFIRM_PREFIX} ${selectedCandidate.routeInput}`
@@ -1047,9 +1045,16 @@ function ProofPanel({
               Run post-run rescan
             </Button>
             {postRunScan ? (
-              <div className="rounded-md border bg-background p-3 text-sm">
-                <p className="font-medium">{postRunProof.status === "matched" ? "Rescan matched the ledger" : "Rescan still needs review"}</p>
-                <p className="mt-1 text-muted-foreground">{postRunProof.detail}</p>
+              <div className="space-y-3 rounded-md border bg-background p-3 text-sm">
+                <div>
+                  <p className="font-medium">{postRunProof.status === "matched" ? "Rescan matched the ledger" : "Rescan still needs review"}</p>
+                  <p className="mt-1 text-muted-foreground">{postRunProof.detail}</p>
+                </div>
+                <div className="grid gap-2 md:grid-cols-3">
+                  <Metric label="Proof target" value={postRunProof.targetEvidence?.kind === "item" ? "selected item" : "scanned finding"} />
+                  <Metric label="Observed bytes" value={formatBytes(postRunProof.actualBytes)} />
+                  <Metric label="Expected remaining" value={formatBytes(postRunProof.expectedRemaining)} />
+                </div>
               </div>
             ) : null}
             <label className="flex items-start gap-3 text-sm">
@@ -1412,49 +1417,6 @@ async function dispatchExecutor(candidate, { planId, scanFingerprint, archiveDes
   }
 }
 
-function buildPostRunProof({ candidate, executionRecord, scan, postRunScan }) {
-  if (!candidate || !executionRecord) {
-    return { status: "not-run", detail: "Run a native executor first.", matched: false };
-  }
-  if (!postRunScan) {
-    return { status: "needs-rescan", detail: "Run post-run rescan after the cleanup ledger.", matched: false };
-  }
-  const postFinding = findMatchingFinding(postRunScan, candidate);
-  const beforeBytes = Number(candidate.bytes || 0);
-  const actualBytes = Number(postFinding?.bytes || 0);
-  const reclaimedBytes = Number(executionRecord.bytes || 0);
-  const generatedAt = Date.parse(postRunScan.generatedAt || "");
-  const executedAt = Date.parse(executionRecord.executedAt || "");
-  const newerScan = Number.isFinite(generatedAt) && Number.isFinite(executedAt) && generatedAt >= executedAt;
-  const expectedRemaining = Math.max(0, beforeBytes - reclaimedBytes);
-  const matched = Boolean(newerScan && reclaimedBytes > 0 && actualBytes <= expectedRemaining + RESCAN_TOLERANCE_BYTES);
-  return {
-    status: matched ? "matched" : "review-needed",
-    detail: matched
-      ? `Post-run scan is newer than the ledger and target bytes are within ${formatBytes(RESCAN_TOLERANCE_BYTES)} tolerance.`
-      : `Expected remaining ${formatBytes(expectedRemaining)}, observed ${formatBytes(actualBytes)}. Review before exporting proof.`,
-    matched,
-    beforeBytes,
-    actualBytes,
-    expectedRemaining,
-    reclaimedBytes,
-    scanGeneratedAt: postRunScan.generatedAt || "",
-    latestExecutionAt: executionRecord.executedAt || "",
-    postFinding
-  };
-}
-
-function findMatchingFinding(scan, candidate) {
-  return (scan?.findings || []).find((finding) =>
-    finding.recipeId === candidate.recipeId &&
-    normalizePathKey(finding.path || "") === normalizePathKey(candidate.sourceFinding?.path || candidate.targetPath || "")
-  ) || null;
-}
-
-function normalizePathKey(value = "") {
-  return String(value || "").trim().toLowerCase().replace(/\//g, "\\");
-}
-
 function buildSelectedRouteProofPacket({ candidate, executionRecord, postRunProof, generatedAt }) {
   const selectedRoute = candidate.route !== "known-temp-delete";
   return {
@@ -1732,15 +1694,6 @@ function buildScanFingerprint(scan) {
 
 function totalEntryBytes(entries = []) {
   return entries.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
-}
-
-function formatBytes(bytes = 0) {
-  const value = Number(bytes || 0);
-  if (!Number.isFinite(value) || value <= 0) return "0 B";
-  if (value >= GB) return `${(value / GB).toFixed(value >= 10 * GB ? 1 : 2)} GB`;
-  if (value >= MB) return `${(value / MB).toFixed(value >= 10 * MB ? 1 : 2)} MB`;
-  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
-  return `${Math.round(value)} B`;
 }
 
 function formatShortDate(value = "") {
