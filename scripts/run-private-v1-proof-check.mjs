@@ -20,6 +20,11 @@ const REQUIRED_COMMANDS = [
   "archive-first-route-root-exports",
   "selected-route-proof"
 ];
+const REQUIRED_STDERR_COMMANDS = new Set([
+  "private-windows-preflight",
+  "first-route-proof",
+  "selected-route-proof"
+]);
 
 function parseArgs(argv = []) {
   const args = { file: "", allowIncomplete: false };
@@ -54,7 +59,7 @@ export function buildPrivateV1ProofCheck({
 
   validatePrivateV1Proof(proof, resolvedProofPath, add);
   const commandRecords = readCommandRecords(resolvedCommandLogPath, add);
-  const commandSummary = validateCommandRecords(commandRecords, add);
+  const commandSummary = validateCommandRecords(commandRecords, add, path.dirname(resolvedCommandLogPath || baseDir));
   const selectedRouteSetup = readJsonArtifact("selected-route-setup", resolvedSelectedRouteSetupPath, add);
   const preflight = readJsonArtifact("private-windows-preflight", resolvedPreflightPath, add);
   const firstRouteCompletion = readJsonArtifact("first-route-completion", resolvedFirstRouteCompletionPath, add);
@@ -190,7 +195,7 @@ function validatePrivateV1Proof(proof, resolvedProofPath, add) {
   }
 }
 
-function validateCommandRecords(commandRecords, add) {
+function validateCommandRecords(commandRecords, add, baseDir = process.cwd()) {
   let requiredPassed = 0;
   for (const id of REQUIRED_COMMANDS) {
     const record = commandRecords.find((row) => row.id === id);
@@ -206,6 +211,9 @@ function validateCommandRecords(commandRecords, add) {
       add(`command-${id}`, "Required command failed", `${id} must exit 0 for private V1 proof acceptance.`);
       continue;
     }
+    if (REQUIRED_STDERR_COMMANDS.has(id)) {
+      validateCommandStderrArtifact(record, id, baseDir, add);
+    }
     requiredPassed += 1;
   }
 
@@ -215,6 +223,22 @@ function validateCommandRecords(commandRecords, add) {
   }
 
   return { requiredPassed };
+}
+
+function validateCommandStderrArtifact(record, id, baseDir, add) {
+  const stderrPath = normalizeArtifactPath(record?.stderrPath || "", baseDir);
+  if (!stderrPath) {
+    add(`command-stderr-${id}`, "Required command stderr missing", `${id} must record a stderrPath artifact for auditability.`);
+    return;
+  }
+  if (!fs.existsSync(stderrPath)) {
+    add(`command-stderr-${id}`, "Required command stderr missing", `${id} stderr artifact does not exist: ${stderrPath}`);
+    return;
+  }
+  const stat = fs.statSync(stderrPath);
+  if (!stat.isFile()) {
+    add(`command-stderr-${id}`, "Required command stderr invalid", `${id} stderr artifact must be a file: ${stderrPath}`);
+  }
 }
 
 function hasDirectCleanupCommand(command = "") {

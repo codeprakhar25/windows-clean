@@ -106,13 +106,16 @@ function createPrivateV1Evidence(patch = {}) {
     },
     ...patch.selectedRouteCompletion
   };
+  const privatePreflightOutputPath = path.join(dir, "private-demo-preflight.txt");
+  const firstRouteProofOutputPath = path.join(dir, "first-route-proof.txt");
+  const selectedRouteProofOutputPath = path.join(dir, "selected-route-proof.txt");
   const commands = [
     { id: "selected-route-setup", command: "node scripts\\run-setup-route.mjs --route \"npm-cache\"", outputPath: selectedRouteSetupPath, exitCode: 0 },
-    { id: "private-windows-preflight", command: "npm run demo:private-windows-preflight", outputPath: preflightPath, exitCode: 0 },
-    { id: "first-route-proof", command: "npm run proof:first-route:windows -- -Route temp-fixture", outputPath: path.join(dir, "first-route-proof.txt"), exitCode: 0 },
+    { id: "private-windows-preflight", command: "npm run demo:private-windows-preflight", outputPath: privatePreflightOutputPath, stderrPath: `${privatePreflightOutputPath}.stderr.txt`, exitCode: 0 },
+    { id: "first-route-proof", command: "npm run proof:first-route:windows -- -Route temp-fixture", outputPath: firstRouteProofOutputPath, stderrPath: `${firstRouteProofOutputPath}.stderr.txt`, exitCode: 0 },
     { id: "bind-first-route-completion", command: "set SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK", outputPath: firstRouteCompletionPath, exitCode: 0 },
     { id: "archive-first-route-root-exports", command: "archive first-route repo-root proof exports", outputPath: path.dirname(archivedProofPath), exitCode: 0 },
-    { id: "selected-route-proof", command: "npm run proof:route:windows -- -Route npm-cache", outputPath: path.join(dir, "selected-route-proof.txt"), exitCode: 0 },
+    { id: "selected-route-proof", command: "npm run proof:route:windows -- -Route npm-cache", outputPath: selectedRouteProofOutputPath, stderrPath: `${selectedRouteProofOutputPath}.stderr.txt`, exitCode: 0 },
     ...(patch.commands || [])
   ];
   const proof = {
@@ -175,6 +178,12 @@ function createPrivateV1Evidence(patch = {}) {
   writeJson(preflightPath, preflight);
   writeJson(firstRouteCompletionPath, firstRouteCompletion);
   writeJson(selectedRouteCompletionPath, selectedRouteCompletion);
+  for (const command of commands) {
+    if (command.stderrPath) {
+      fs.mkdirSync(path.dirname(command.stderrPath), { recursive: true });
+      fs.writeFileSync(command.stderrPath, "");
+    }
+  }
   writeNdjson(commandLogPath, commands);
   writeJson(proofPath, proof);
   fs.mkdirSync(path.dirname(archivedProofPath), { recursive: true });
@@ -211,6 +220,21 @@ function createPrivateV1Evidence(patch = {}) {
   assert.strictEqual(accepted.counts.nativeBundleArtifacts, 1, "verifier should count native bundle artifacts");
   assert.strictEqual(accepted.counts.commandRecords, 6, "verifier should count command ledger records");
   assert.strictEqual(accepted.blockers.length, 0, "accepted V1 proof should not have blockers");
+
+  const missingChildStderr = createPrivateV1Evidence();
+  const childRecords = fs.readFileSync(missingChildStderr.commandLogPath, "utf8")
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => JSON.parse(line));
+  const firstRouteRecord = childRecords.find((record) => record.id === "first-route-proof");
+  fs.unlinkSync(firstRouteRecord.stderrPath);
+  writeNdjson(missingChildStderr.commandLogPath, childRecords);
+  const missingChildStderrCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingChildStderr.proofPath });
+  assert.strictEqual(missingChildStderrCheck.status, "blocked", "missing child command stderr evidence should block private V1 proof");
+  assert(
+    missingChildStderrCheck.blockers.some((blocker) => blocker.id === "command-stderr-first-route-proof"),
+    "missing child command stderr blocker should name the command"
+  );
 
   const missingSelectedRouteSetup = createPrivateV1Evidence();
   fs.unlinkSync(missingSelectedRouteSetup.selectedRouteSetupPath);
