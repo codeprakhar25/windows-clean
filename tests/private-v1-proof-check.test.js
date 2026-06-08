@@ -332,6 +332,36 @@ function writeOpenAiSmokeEvidence(filePath, {
   assert.strictEqual(acceptedGradle.selectedRoute, "gradle-cache", "verifier should preserve the Gradle selected route alias");
   assert.strictEqual(acceptedGradle.blockers.length, 0, "accepted Gradle V1 proof should not have blockers");
 
+  const staleFirstRouteCompletionPath = createPrivateV1Evidence();
+  const staleFirstRouteDir = fs.mkdtempSync(path.join(os.tmpdir(), "spaceguard-stale-first-route-completion-"));
+  const copiedFirstRouteCompletionPath = path.join(staleFirstRouteDir, "first-route-completion-check.json");
+  fs.copyFileSync(staleFirstRouteCompletionPath.firstRouteCompletionPath, copiedFirstRouteCompletionPath);
+  const staleFirstRouteProof = JSON.parse(fs.readFileSync(staleFirstRouteCompletionPath.proofPath, "utf8"));
+  staleFirstRouteProof.artifacts.firstRouteCompletionCheck = copiedFirstRouteCompletionPath;
+  staleFirstRouteProof.firstRouteCompletion.path = copiedFirstRouteCompletionPath;
+  writeJson(staleFirstRouteCompletionPath.proofPath, staleFirstRouteProof);
+  const staleFirstRouteCompletionCheck = verifier.buildPrivateV1ProofCheck({ proofPath: staleFirstRouteCompletionPath.proofPath });
+  assert.strictEqual(staleFirstRouteCompletionCheck.status, "blocked", "private V1 proof should block first-route completion artifacts outside the private evidence root");
+  assert(
+    staleFirstRouteCompletionCheck.blockers.some((blocker) => blocker.id === "first-route-completion-root"),
+    "first-route completion root blocker should be explicit"
+  );
+
+  const staleSelectedRouteCompletionPath = createPrivateV1Evidence();
+  const staleSelectedRouteDir = fs.mkdtempSync(path.join(os.tmpdir(), "spaceguard-stale-selected-route-completion-"));
+  const copiedSelectedRouteCompletionPath = path.join(staleSelectedRouteDir, "selected-route-completion-check.json");
+  fs.copyFileSync(staleSelectedRouteCompletionPath.selectedRouteCompletionPath, copiedSelectedRouteCompletionPath);
+  const staleSelectedRouteProof = JSON.parse(fs.readFileSync(staleSelectedRouteCompletionPath.proofPath, "utf8"));
+  staleSelectedRouteProof.artifacts.selectedRouteCompletionCheck = copiedSelectedRouteCompletionPath;
+  staleSelectedRouteProof.selectedRouteCompletion.path = copiedSelectedRouteCompletionPath;
+  writeJson(staleSelectedRouteCompletionPath.proofPath, staleSelectedRouteProof);
+  const staleSelectedRouteCompletionCheck = verifier.buildPrivateV1ProofCheck({ proofPath: staleSelectedRouteCompletionPath.proofPath });
+  assert.strictEqual(staleSelectedRouteCompletionCheck.status, "blocked", "private V1 proof should block selected-route completion artifacts outside the private evidence root");
+  assert(
+    staleSelectedRouteCompletionCheck.blockers.some((blocker) => blocker.id === "selected-route-completion-root"),
+    "selected-route completion root blocker should be explicit"
+  );
+
   const reusedPreflight = createPrivateV1Evidence();
   const reusedPreflightRecords = fs.readFileSync(reusedPreflight.commandLogPath, "utf8")
     .trim()

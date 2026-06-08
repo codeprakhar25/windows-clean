@@ -639,6 +639,14 @@ function validateFirstRouteCompletion(completion, proof, resolvedPath, add) {
   if (summary.path && !samePath(summary.path, resolvedPath)) {
     add("first-route-completion-path", "First-route completion path mismatch", "Private V1 summary must point at the checked first-route completion artifact.");
   }
+  validateChildCompletionRoot({
+    proof,
+    resolvedPath,
+    childFolder: "first-route-proof",
+    blockerId: "first-route-completion-root",
+    label: "First-route",
+    add
+  });
   if (summary.status && summary.status !== completion.status) {
     add("first-route-completion-summary", "First-route completion summary mismatch", "Private V1 summary status must match first-route completion.");
   }
@@ -665,11 +673,45 @@ function validateSelectedRouteCompletion(completion, proof, resolvedPath, add) {
   if (summary.path && !samePath(summary.path, resolvedPath)) {
     add("selected-route-completion-path", "Selected-route completion path mismatch", "Private V1 summary must point at the checked selected-route completion artifact.");
   }
+  validateChildCompletionRoot({
+    proof,
+    resolvedPath,
+    childFolder: `selected-route-proof-${routeSlug(proof?.selectedRoute || completion.routeInput || "selected-route")}`,
+    blockerId: "selected-route-completion-root",
+    label: "Selected-route",
+    add
+  });
   if (summary.status && summary.status !== completion.status) {
     add("selected-route-completion-summary", "Selected-route completion summary mismatch", "Private V1 summary status must match selected-route completion.");
   }
   validateCompletionSummaryCounts(summary, proofCounts, "selected-route", "Selected-route", add);
   return proofCounts;
+}
+
+function validateChildCompletionRoot({ proof, resolvedPath, childFolder, blockerId, label, add } = {}) {
+  const privateRoot = normalizeArtifactPath(proof?.evidenceRoot || "", resolvedPath ? path.dirname(resolvedPath) : process.cwd());
+  if (!privateRoot) {
+    add(blockerId, `${label} completion root missing`, "Private V1 proof must record evidenceRoot before child completion artifacts can be trusted.");
+    return;
+  }
+  const expectedRoot = path.join(privateRoot, childFolder);
+  if (!isPathInsideDirectory(resolvedPath, expectedRoot)) {
+    add(
+      blockerId,
+      `${label} completion outside private evidence root`,
+      `${label} completion artifact must live under ${expectedRoot}.`
+    );
+  }
+}
+
+function isPathInsideDirectory(filePath = "", directoryPath = "") {
+  if (!filePath || !directoryPath) return false;
+  const relative = path.relative(normalizeComparablePath(directoryPath), normalizeComparablePath(filePath));
+  return Boolean(relative && !relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function routeSlug(routeInput = "") {
+  return String(routeInput || "selected-route").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "selected-route";
 }
 
 function validateCompletionProofCounts(completion, idPrefix, label, add) {
