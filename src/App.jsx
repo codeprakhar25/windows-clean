@@ -974,6 +974,7 @@ export default function App() {
           tempCleanupExecutor: Boolean(executorFlags.tempCleanupExecutor),
           downloadsCleanupExecutor: Boolean(executorFlags.downloadsCleanupExecutor),
           largeFileArchiveExecutor: Boolean(executorFlags.largeFileArchiveExecutor),
+          projectDependencyExecutor: Boolean(executorFlags.projectDependencyExecutor),
           gradleCacheExecutor: Boolean(executorFlags.gradleCacheExecutor),
           userCacheExecutor: Boolean(executorFlags.userCacheExecutor),
           androidCacheExecutor: Boolean(executorFlags.androidCacheExecutor),
