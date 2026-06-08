@@ -161,7 +161,7 @@ try {
   }
 
   $startedAt = (Get-Date).ToUniversalTime().ToString("o")
-  $preflightCommand = "npm run demo:private-windows-preflight -- -EvidenceRoot `"$PreflightEvidenceRoot`""
+  $preflightCommand = "npm run demo:private-windows-preflight -- -EvidenceRoot `"$PreflightEvidenceRoot`" -SelectedRoute $SelectedRoute"
   $firstRouteCommand = "npm run proof:first-route:windows -- -Route temp-fixture -EvidenceRoot `"$FirstRouteEvidenceRoot`""
   $selectedRouteCommand = "npm run proof:route:windows -- -Route $SelectedRoute -EvidenceRoot `"$SelectedRouteEvidenceRoot`""
 

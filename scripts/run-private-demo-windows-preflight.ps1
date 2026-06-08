@@ -1,5 +1,6 @@
 param(
-  [string]$EvidenceRoot = ""
+  [string]$EvidenceRoot = "",
+  [string]$SelectedRoute = "npm-cache"
 )
 
 Set-StrictMode -Version Latest
@@ -13,6 +14,11 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $RepoRoot
 
 try {
+  $SelectedRoute = $SelectedRoute.Trim()
+  if ([string]::IsNullOrWhiteSpace($SelectedRoute)) {
+    throw "SelectedRoute is required. Example: npm run demo:private-windows-preflight -- -SelectedRoute npm-cache"
+  }
+
   $RunStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
   if ([string]::IsNullOrWhiteSpace($EvidenceRoot)) {
     $EvidenceRoot = Join-Path $RepoRoot "evidence\private-demo-preflight-$RunStamp"
@@ -120,11 +126,11 @@ try {
     rustTests = "cargo test --manifest-path src-tauri\Cargo.toml"
     webBuild = "npm run build"
     privateReadiness = "npm run demo:private-readiness"
-    openAiFixtureSmoke = "npm run openai:smoke:fixture -- --route npm-cache"
-    openAiLiveSmoke = "npm run openai:smoke -- --route npm-cache"
+    openAiFixtureSmoke = "npm run openai:smoke:fixture -- --route $SelectedRoute"
+    openAiLiveSmoke = "npm run openai:smoke -- --route $SelectedRoute"
     nativeBuild = "npm run native:build"
     nextFirstRoute = "npm run proof:first-route:windows -- -Route temp-fixture"
-    nextSelectedRoute = "npm run proof:route:windows -- -Route npm-cache"
+    nextSelectedRoute = "npm run proof:route:windows -- -Route $SelectedRoute"
   }
 
   Invoke-LoggedCommand -Id "js-tests" -CommandLine $commands.jsTests -OutputPath (Join-Path $EvidenceRoot "npm-test.txt") | Out-Null
@@ -145,6 +151,7 @@ try {
     generatedAt = (Get-Date).ToUniversalTime().ToString("o")
     startedAt = $startedAt
     status = "passed"
+    selectedRoute = $SelectedRoute
     evidenceRoot = $EvidenceRoot
     commandLogPath = $CommandLogPath
     artifacts = [PSCustomObject]@{

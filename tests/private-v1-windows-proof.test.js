@@ -22,6 +22,7 @@ const windowsSetup = fs.readFileSync(path.join(root, "WINDOWS_REAL_DATA_SETUP.md
   assert(runner.includes("spaceguard-private-v1-windows-proof/v1"), "V1 proof coordinator should write a stable schema");
   assert(runner.includes("[System.PlatformID]::Win32NT"), "V1 proof coordinator should refuse non-Windows execution");
   assert(runner.includes("npm run demo:private-windows-preflight"), "V1 proof coordinator should start with host preflight");
+  assert(runner.includes("-SelectedRoute $SelectedRoute"), "V1 proof coordinator should pass the selected route into host preflight");
   assert(runner.includes("npm run proof:first-route:windows -- -Route temp-fixture"), "V1 proof coordinator should run the seeded first route");
   assert(runner.includes("first-route-completion-check.json"), "V1 proof coordinator should require the first-route completion artifact");
   assert(runner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"), "V1 proof coordinator should bind first-route completion for selected routes");
@@ -39,6 +40,8 @@ const windowsSetup = fs.readFileSync(path.join(root, "WINDOWS_REAL_DATA_SETUP.md
     windowsSetup.includes("npm run demo:private-v1-windows -- -SelectedRoute npm-cache"),
     "Windows setup guide should expose the single-command private V1 Windows proof"
   );
+  assert(readme.includes("-SelectedRoute gradle-cache"), "README should show that the private V1 coordinator can target another scoped route");
+  assert(windowsSetup.includes("-SelectedRoute gradle-cache"), "Windows setup guide should show that the private V1 coordinator can target another scoped route");
   assert(!/\bRemove-Item\b/i.test(runner), "V1 proof coordinator must not delete files");
   assert(!/\bClear-RecycleBin\b/i.test(runner), "V1 proof coordinator must not empty Recycle Bin");
   assert(!/\bdel\s+/i.test(runner), "V1 proof coordinator must not call del directly");
