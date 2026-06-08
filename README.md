@@ -27,6 +27,7 @@ Inside the desktop app:
 4. Execute selected cleanup.
 5. Run post-run rescan.
 6. Export `spaceguard-selected-route-proof-packet.md`, `spaceguard-real-workflow-proof.md`, and `spaceguard-workflow-proof-check.json`.
+7. Run `npm run support:bundle` to write `spaceguard-support-bundle.md` for handoff/debugging.
 
 The app runs the workflow proof verifier during export. The CLI verifier below remains useful as an external audit.
 
@@ -42,6 +43,7 @@ npm run setup:doctor
 npm run setup:route -- --route npm-cache
 npm run openai:smoke -- --route npm-cache
 npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md
+npm run support:bundle
 ```
 
 For a real route test, use the desktop app as the control point: scan, select one ready route, consent, execute, rescan, and export proof.

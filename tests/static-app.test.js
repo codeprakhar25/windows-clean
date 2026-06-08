@@ -18,6 +18,7 @@ const setupDoctorScript = fs.readFileSync(path.join(root, "scripts", "run-setup-
 const setupRouteScript = fs.readFileSync(path.join(root, "scripts", "run-setup-route.mjs"), "utf8");
 const openAiSmokeScript = fs.readFileSync(path.join(root, "scripts", "run-openai-advisor-smoke.mjs"), "utf8");
 const workflowProofScript = fs.readFileSync(path.join(root, "scripts", "run-workflow-proof-check.mjs"), "utf8");
+const supportBundleScript = fs.readFileSync(path.join(root, "scripts", "run-support-bundle.mjs"), "utf8");
 const workflowProofModule = fs.readFileSync(path.join(root, "src", "workflow-proof-check.mjs"), "utf8");
 const realWorkflow = fs.readFileSync(path.join(root, "src", "real-workflow.mjs"), "utf8");
 const removedDataWord = "de" + "mo";
@@ -170,6 +171,7 @@ assert(packageJson.includes("\"openai:smoke\""), "package scripts should expose 
 assert(packageJson.includes("\"setup:doctor\""), "package scripts should expose the setup doctor command");
 assert(packageJson.includes("\"setup:route\""), "package scripts should expose route setup");
 assert(packageJson.includes("\"validate:workflow-proof\""), "package scripts should expose workflow proof validation");
+assert(packageJson.includes("\"support:bundle\""), "package scripts should expose support bundle capture");
 for (const removedScript of [
   "\"openai:smoke:fixture\"",
   "\"validate:route\"",
@@ -195,6 +197,10 @@ assert(setupDoctorScript.includes("realWorkflow"), "setup doctor should expose a
 assert(setupRouteScript.includes("spaceguard-route-setup-packet/v1"), "route setup script should emit a stable packet schema");
 assert(setupRouteScript.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "route setup script should know the npm cache feature flag");
 assert(workflowProofScript.includes("../src/workflow-proof-check.mjs"), "workflow proof CLI should use the shared verifier module");
+assert(supportBundleScript.includes("spaceguard-support-bundle/v1"), "support bundle should emit a stable schema");
+assert(supportBundleScript.includes("spaceguard-selected-route-proof-packet.md"), "support bundle should inspect selected-route proof");
+assert(supportBundleScript.includes("spaceguard-real-workflow-proof.md"), "support bundle should inspect real workflow proof");
+assert(supportBundleScript.includes("spaceguard-workflow-proof-check.json"), "support bundle should inspect workflow proof check output");
 assert(workflowProofModule.includes("spaceguard-workflow-proof-check/v1"), "workflow proof verifier should emit a stable schema");
 assert(workflowProofModule.includes("spaceguard-real-workflow-proof/v1"), "workflow proof verifier should require real workflow proof packets");
 assert(workflowProofModule.includes("readyForNextRoute"), "workflow proof verifier should require next-route clearance");
@@ -249,9 +255,11 @@ assert(readme.includes("npm run native:dev"), "README should document the deskto
 assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");
 assert(readme.includes("npm run validate:workflow-proof -- --file"), "README should document workflow proof verifier usage");
 assert(readme.includes("spaceguard-workflow-proof-check.json"), "README should document persisted workflow proof check output");
+assert(readme.includes("npm run support:bundle"), "README should document support bundle capture");
 assert(realDataGuide.includes("npm run native:dev"), "Windows setup guide should document the desktop shell");
 assert(realDataGuide.includes("OPENAI_API_KEY"), "Windows setup guide should document OpenAI key setup");
 assert(realDataGuide.includes("npm run validate:workflow-proof -- --file"), "Windows setup guide should document workflow proof verifier usage");
 assert(realDataGuide.includes("spaceguard-workflow-proof-check.json"), "Windows setup guide should document persisted workflow proof check output");
+assert(realDataGuide.includes("npm run support:bundle"), "Windows setup guide should document support bundle capture");
 
 console.log("static app ok");

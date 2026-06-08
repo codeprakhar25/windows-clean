@@ -168,6 +168,12 @@ export function buildWindowsRealTestRunbook({ route = {}, envBlock = buildRouteE
       label: "Audit exported proof",
       command: "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md",
       expected: "Optional audit matches the in-app verifier and prints accepted before testing another route."
+    }),
+    runbookCommand({
+      id: "support-bundle",
+      label: "Capture support bundle",
+      command: "npm run support:bundle",
+      expected: "spaceguard-support-bundle.md summarizes setup, proof artifacts, verifier status, and next step."
     })
   ];
   const appSteps = [
@@ -176,7 +182,8 @@ export function buildWindowsRealTestRunbook({ route = {}, envBlock = buildRouteE
     runbookStep("consent", "Review and consent", "Check the consent box and type the exact confirmation phrase."),
     runbookStep("execute-route", "Execute selected cleanup", "Run the scoped native executor from the app, not from a shell command."),
     runbookStep("post-run-rescan", "Run post-run rescan", "Capture the newer native scan and compare the selected target."),
-    runbookStep("export-proof", "Export proof", "Export selected-route proof, real workflow proof, and spaceguard-workflow-proof-check.json from the app.")
+    runbookStep("export-proof", "Export proof", "Export selected-route proof, real workflow proof, and spaceguard-workflow-proof-check.json from the app."),
+    runbookStep("support-bundle", "Capture support bundle", "Run npm run support:bundle after proof export to collect the proof handoff summary.")
   ];
   const guardrails = [
     runbookGuardrail("one-route", "Keep exactly one route flag enabled before launch."),
