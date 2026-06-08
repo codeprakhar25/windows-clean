@@ -51,6 +51,7 @@ import {
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
 import { buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, formatBytes } from "./real-workflow.mjs";
+import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
   targetDrive: "C:",
@@ -270,6 +271,7 @@ function App() {
   const [executionRecord, setExecutionRecord] = useState(null);
   const [proofReviewed, setProofReviewed] = useState(false);
   const [workflowProofAccepted, setWorkflowProofAccepted] = useState(false);
+  const [workflowProofCheck, setWorkflowProofCheck] = useState(null);
   const [proofExportStatus, setProofExportStatus] = useState("idle");
   const [proofExportMessage, setProofExportMessage] = useState("");
   const [agentPrompt, setAgentPrompt] = useState("Find the safest next cleanup step from the current real scan.");
@@ -331,9 +333,10 @@ function App() {
       consentPlanId: canExecute ? activePlanId : "",
       archiveDestination,
       permanentRemovalConfirmed,
-      workflowProofAccepted
+      workflowProofAccepted,
+      workflowProofCheck
     }),
-    [runtime, scan, candidates, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted]
+    [runtime, scan, candidates, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted, workflowProofCheck]
   );
   const agentBroker = useMemo(
     () => {
@@ -382,6 +385,7 @@ function App() {
         setPostRunScan(result);
         setProofReviewed(false);
         setWorkflowProofAccepted(false);
+        setWorkflowProofCheck(null);
         setProofExportStatus("idle");
         setProofExportMessage("");
       } else {
@@ -395,6 +399,7 @@ function App() {
         setPermanentRemovalConfirmed(false);
         setProofReviewed(false);
         setWorkflowProofAccepted(false);
+        setWorkflowProofCheck(null);
         setProofExportStatus("idle");
         setProofExportMessage("");
       }
@@ -412,6 +417,7 @@ function App() {
     setExecutionError("");
     setExecutionResult(null);
     setWorkflowProofAccepted(false);
+    setWorkflowProofCheck(null);
     setProofExportStatus("idle");
     setProofExportMessage("");
     const planId = activePlanId || `plan-${Date.now()}-${selectedCandidate.id}`;
@@ -475,6 +481,7 @@ function App() {
     setProofExportStatus("running");
     setProofExportMessage("");
     setWorkflowProofAccepted(false);
+    setWorkflowProofCheck(null);
     try {
       const generatedAt = new Date().toISOString();
       const selectedRouteProof = buildSelectedRouteProofPacket({
@@ -497,9 +504,17 @@ function App() {
         route: selectedCandidate.route,
         proofKind: "real-workflow-proof"
       });
+      const acceptedCheck = buildWorkflowProofCheck({
+        evidenceObject: workflowProof,
+        checkedAt: new Date().toISOString()
+      });
+      setWorkflowProofCheck(acceptedCheck);
+      setWorkflowProofAccepted(Boolean(acceptedCheck.canAccept));
       setProofExportStatus("complete");
       setProofExportMessage(
-        `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE} and ${workflowWrite.fileName || WORKFLOW_PROOF_FILE} into the runner working directory.`
+        acceptedCheck.canAccept
+          ? `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE} and ${workflowWrite.fileName || WORKFLOW_PROOF_FILE} into the runner working directory. Workflow proof accepted by in-app verifier.`
+          : `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE} and ${workflowWrite.fileName || WORKFLOW_PROOF_FILE} into the runner working directory. Workflow proof blocked by in-app verifier: ${acceptedCheck.blockers.length} blocker(s).`
       );
     } catch (error) {
       setProofExportStatus("error");
@@ -582,6 +597,7 @@ function App() {
               setPermanentRemovalConfirmed(false);
               setProofReviewed(false);
               setWorkflowProofAccepted(false);
+              setWorkflowProofCheck(null);
               setProofExportStatus("idle");
               setProofExportMessage("");
             }}
@@ -615,7 +631,7 @@ function App() {
             proofReviewed={proofReviewed}
             setProofReviewed={setProofReviewed}
             workflowProofAccepted={workflowProofAccepted}
-            setWorkflowProofAccepted={setWorkflowProofAccepted}
+            workflowProofCheck={workflowProofCheck}
             canExportProof={canExportProof}
             proofExportStatus={proofExportStatus}
             proofExportMessage={proofExportMessage}
@@ -1273,7 +1289,7 @@ function ProofPanel({
   proofReviewed,
   setProofReviewed,
   workflowProofAccepted,
-  setWorkflowProofAccepted,
+  workflowProofCheck,
   canExportProof,
   proofExportStatus,
   proofExportMessage,
@@ -1326,16 +1342,29 @@ function ProofPanel({
             </Button>
             {proofExportMessage ? (
               <Notice
-                tone={proofExportStatus === "error" ? "restricted" : "safe"}
-                icon={proofExportStatus === "error" ? AlertTriangle : CheckCircle2}
+                tone={proofExportStatus === "error" || (workflowProofCheck && !workflowProofCheck.canAccept) ? "restricted" : "safe"}
+                icon={proofExportStatus === "error" || (workflowProofCheck && !workflowProofCheck.canAccept) ? AlertTriangle : CheckCircle2}
                 text={proofExportMessage}
               />
             ) : null}
-            {proofExportStatus === "complete" ? (
-              <label className="flex items-start gap-3 text-sm">
-                <Checkbox checked={workflowProofAccepted} onClick={() => setWorkflowProofAccepted(!workflowProofAccepted)} />
-                <span>npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted.</span>
-              </label>
+            {workflowProofCheck ? (
+              <div className="space-y-2 rounded-md border bg-background p-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium">Workflow proof verifier</span>
+                  <Badge variant={workflowProofAccepted ? "safe" : "restricted"}>{workflowProofCheck.status}</Badge>
+                </div>
+                <p className="text-muted-foreground">{workflowProofCheck.primary}</p>
+                {workflowProofCheck.blockers?.length ? (
+                  <div className="grid gap-2">
+                    {workflowProofCheck.blockers.slice(0, 4).map((blocker) => (
+                      <div key={`${blocker.id}-${blocker.label}`} className="rounded border px-3 py-2">
+                        <p className="text-xs font-medium">{blocker.label}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{blocker.detail}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             ) : null}
           </>
         )}
@@ -1924,7 +1953,8 @@ function buildAgentContext({
   consentPlanId = "",
   archiveDestination = "",
   permanentRemovalConfirmed = false,
-  workflowProofAccepted = false
+  workflowProofAccepted = false,
+  workflowProofCheck = null
 }) {
   const cleanupQueue = candidates.slice(0, 24).map((candidate) => ({
     id: candidate.id,
@@ -2000,6 +2030,15 @@ function buildAgentContext({
       reclaimedBytes: executionRecord.bytes,
       proofStatus: getAgentProofStatus(executionRecord, postRunProof, workflowProofAccepted),
       proofAllowsNextExecutor: !executionRecord || workflowProofAccepted,
+      workflowProofCheckStatus: workflowProofCheck?.status || "not-run",
+      workflowProofCheckCanAccept: Boolean(workflowProofCheck?.canAccept),
+      workflowProofCheckBlockers: Array.isArray(workflowProofCheck?.blockers)
+        ? workflowProofCheck.blockers.map((blocker) => ({
+            id: blocker.id || "",
+            label: blocker.label || "",
+            detail: blocker.detail || ""
+          }))
+        : [],
       canRunPostRunRescan: Boolean(executionRecord),
       rescanComparisonStatus: postRunProof.status,
       postRunScanEvidence: Boolean(postRunProof.scanGeneratedAt),

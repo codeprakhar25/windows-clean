@@ -18,6 +18,7 @@ const setupDoctorScript = fs.readFileSync(path.join(root, "scripts", "run-setup-
 const setupRouteScript = fs.readFileSync(path.join(root, "scripts", "run-setup-route.mjs"), "utf8");
 const openAiSmokeScript = fs.readFileSync(path.join(root, "scripts", "run-openai-advisor-smoke.mjs"), "utf8");
 const workflowProofScript = fs.readFileSync(path.join(root, "scripts", "run-workflow-proof-check.mjs"), "utf8");
+const workflowProofModule = fs.readFileSync(path.join(root, "src", "workflow-proof-check.mjs"), "utf8");
 const realWorkflow = fs.readFileSync(path.join(root, "src", "real-workflow.mjs"), "utf8");
 const removedDataWord = "de" + "mo";
 const removedSampleWord = "sce" + "nario";
@@ -105,9 +106,12 @@ assert(app.includes("RouteReadinessList"), "app should render route readiness gu
 assert(app.includes("executionRecord?.accepted"), "proof export should require an accepted native execution record");
 assert(app.includes("targetSwitchLocked"), "cleanup queue should lock target switching after accepted execution until proof export completes");
 assert(app.includes("workflowProofAccepted"), "cleanup queue should require accepted workflow proof validation before unlocking another target");
+assert(app.includes("buildWorkflowProofCheck"), "proof export should run the shared workflow proof verifier inside the app");
+assert(app.includes("workflowProofCheck"), "proof panel should render workflow proof validation output from the app");
+assert(app.includes("Workflow proof accepted by in-app verifier."), "proof export should report accepted in-app workflow proof validation");
 assert(app.includes("Run workflow proof verifier and mark accepted before selecting another cleanup target."), "cleanup queue should explain the workflow proof validation lock");
 assert(app.includes("disabled={targetSwitchLocked && candidate.id !== selectedId}"), "cleanup queue should disable other targets while proof export is pending");
-assert(app.includes("npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted"), "proof panel should require operator confirmation of accepted workflow proof validation");
+assert(!app.includes("npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted"), "proof panel should not rely on a manual CLI acceptance checkbox");
 assert(
   /setSelectedId=\{\(id\) => \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setPostRunScan\(null\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}\}/.test(app),
   "selecting a different cleanup target should clear stale execution, rescan, and proof export state"
@@ -186,9 +190,10 @@ assert(setupDoctorScript.includes("multi-flag-blocked"), "setup doctor should ex
 assert(setupDoctorScript.includes("realWorkflow"), "setup doctor should expose a compact real workflow");
 assert(setupRouteScript.includes("spaceguard-route-setup-packet/v1"), "route setup script should emit a stable packet schema");
 assert(setupRouteScript.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "route setup script should know the npm cache feature flag");
-assert(workflowProofScript.includes("spaceguard-workflow-proof-check/v1"), "workflow proof verifier should emit a stable schema");
-assert(workflowProofScript.includes("spaceguard-real-workflow-proof/v1"), "workflow proof verifier should require real workflow proof packets");
-assert(workflowProofScript.includes("readyForNextRoute"), "workflow proof verifier should require next-route clearance");
+assert(workflowProofScript.includes("../src/workflow-proof-check.mjs"), "workflow proof CLI should use the shared verifier module");
+assert(workflowProofModule.includes("spaceguard-workflow-proof-check/v1"), "workflow proof verifier should emit a stable schema");
+assert(workflowProofModule.includes("spaceguard-real-workflow-proof/v1"), "workflow proof verifier should require real workflow proof packets");
+assert(workflowProofModule.includes("readyForNextRoute"), "workflow proof verifier should require next-route clearance");
 assert(realWorkflow.includes("findPostRunTargetEvidence"), "real workflow helper should expose post-run target evidence matching");
 assert(realWorkflow.includes("reviewTarget?.path"), "real workflow helper should compare selected review item paths");
 assert(realWorkflow.includes("single-route-scope"), "real workflow helper should expose single route scope guardrail rows");
