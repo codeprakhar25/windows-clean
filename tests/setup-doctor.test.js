@@ -53,12 +53,14 @@ const script = path.join(root, "scripts", "run-setup-doctor.mjs");
   assert.strictEqual(oneFlag.realWorkflow.ready, true, "one-route setup should make the compact real workflow ready");
   assert.deepStrictEqual(
     oneFlag.realWorkflow.steps.map((step) => step.id),
-    ["openai-smoke", "route-setup", "native-scan", "arm-consent", "execute-route", "post-run-rescan", "proof-export", "proof-import", "workflow-proof-check", "next-route"],
+    ["openai-smoke", "route-setup", "native-scan", "arm-consent", "execute-route", "post-run-rescan", "proof-export", "support-bundle", "next-route"],
     "setup doctor should emit the compact real cleanup workflow in order"
   );
-  assert(oneFlag.realWorkflow.steps.find((step) => step.id === "proof-export").detail.includes("spaceguard-selected-route-proof-packet.md"), "compact workflow should export selected-route proof before import");
-  assert(oneFlag.realWorkflow.steps.find((step) => step.id === "proof-import").detail.includes("Selected route proof import"), "compact workflow should include proof import before next route");
-  assert(oneFlag.realWorkflow.steps.find((step) => step.id === "workflow-proof-check").command.includes("validate:workflow-proof"), "compact workflow should validate the exported workflow proof before next route");
+  assert(oneFlag.commands.supportBundle.includes("npm run support:bundle"), "setup doctor should expose support bundle capture command");
+  assert(oneFlag.realWorkflow.steps.find((step) => step.id === "proof-export").detail.includes("spaceguard-workflow-proof-check.json"), "compact workflow should export the in-app proof check artifact");
+  assert(!oneFlag.realWorkflow.steps.some((step) => step.id === "proof-import"), "compact workflow should not require a manual selected-route proof import");
+  assert(!oneFlag.realWorkflow.steps.some((step) => step.id === "workflow-proof-check"), "compact workflow should not require a separate verifier step before support bundle capture");
+  assert(oneFlag.realWorkflow.steps.find((step) => step.id === "support-bundle").command.includes("support:bundle"), "compact workflow should capture support bundle before next route");
 
   const pnpmFlag = runDoctor({
     SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR: "1"

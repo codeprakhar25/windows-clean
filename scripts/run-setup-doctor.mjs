@@ -83,6 +83,7 @@ export function buildSetupDoctorReport({
   const routeInput = selectedRoute?.routeInput || "npm-cache";
   const routeSetupCommand = `npm run setup:route -- --route ${routeInput}`;
   const workflowProofValidationCommand = "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md";
+  const supportBundleCommand = "npm run support:bundle";
   const openAiSmokeCommand = `npm run openai:smoke -- --route ${routeInput}`;
 
   return {
@@ -133,6 +134,7 @@ export function buildSetupDoctorReport({
       openAiSmoke: openAiSmokeCommand,
       routeSetup: routeSetupCommand,
       workflowProofValidation: workflowProofValidationCommand,
+      supportBundle: supportBundleCommand,
       nativeDev: "npm run native:dev"
     },
     nextSteps: buildNextSteps({ openAiConfigured: openAiKey.source !== "missing", enabledFlags, routeInput })
@@ -170,8 +172,7 @@ function buildRealWorkflow({
   selectedRoute = null,
   enabledFlags = [],
   validationStatus = "",
-  openAiConfigured = false,
-  workflowProofValidationCommand = "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md"
+  openAiConfigured = false
 } = {}) {
   const ready = validationStatus === "one-route-ready";
   const route = selectedRoute?.route || "";
@@ -231,26 +232,20 @@ function buildRealWorkflow({
       },
       {
         id: "proof-export",
-        command: "Export selected route proof",
+        command: "Export proof",
         panel: "scoped-executor-command-flow-panel",
-        detail: "Export spaceguard-selected-route-proof-packet.md before preparing validation evidence import."
+        detail: "Export spaceguard-selected-route-proof-packet.md, spaceguard-real-workflow-proof.md, and spaceguard-workflow-proof-check.json from the desktop app."
       },
       {
-        id: "proof-import",
-        command: "Selected route proof import",
-        panel: "validation-evidence-panel",
-        detail: "Export Selected route proof packet, then paste it into Selected route proof import with reviewer and artifact path."
-      },
-      {
-        id: "workflow-proof-check",
-        command: workflowProofValidationCommand,
+        id: "support-bundle",
+        command: "npm run support:bundle",
         panel: "real-cleanup-command-flow-panel",
-        detail: "Export spaceguard-real-workflow-proof.md and accept it with the workflow proof verifier before another route is considered."
+        detail: "Capture spaceguard-support-bundle.md after the in-app workflow proof verifier accepts the export."
       },
       {
         id: "next-route",
         command: "Return to setup:doctor",
-        detail: "Only after workflow proof validation passes should another scoped executor flag or route be considered."
+        detail: "Only after the support bundle is handoff-ready should another scoped executor flag or route be considered."
       }
     ]
   };
@@ -270,7 +265,7 @@ function buildNextSteps({ openAiConfigured, enabledFlags, routeInput = "npm-cach
   if (!enabledFlags.length) {
     steps.push("Run npm run native:dev for read-only scanning, or enable exactly one scoped executor flag for Windows real-route validation.");
   } else if (enabledFlags.length === 1) {
-    steps.push(`Launch npm run native:dev with ${enabledFlags[0]} enabled, run one scoped executor, export spaceguard-real-workflow-proof.md, then run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md before enabling another route.`);
+    steps.push(`Launch npm run native:dev with ${enabledFlags[0]} enabled, run one scoped executor, export proof in the app, then run npm run support:bundle before enabling another route.`);
   } else {
     steps.push("Turn off all but one scoped executor flag before real cleanup validation.");
   }
