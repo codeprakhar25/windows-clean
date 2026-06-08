@@ -148,7 +148,7 @@ export function buildOpenAIAgentContext({
       title: row.title,
       route: row.route,
       bytes: Number(row.bytes || 0),
-      targetPath: row.targetPath || row.target || row.path || "",
+      targetPath: redactAgentPath(row.targetPath || row.target || row.path || ""),
       canExecute: Boolean(row.canExecute),
       canSimulate: Boolean(row.canSimulate)
     }));
@@ -159,11 +159,11 @@ export function buildOpenAIAgentContext({
         id: target.id || row.id,
         name: target.name || row.title,
         route: row.route,
-        path: target.path || "",
+        path: redactAgentPath(target.path || ""),
         bytes: Number(target.bytes || 0),
         ageDays: Number(target.ageDays || 0),
         kind: target.kind || "project dependency folder",
-        reason: target.reason || "",
+        reason: redactAgentText(target.reason || ""),
         signals: normalizeAgentReviewSignals(target.signals)
       }))
     )
@@ -175,11 +175,11 @@ export function buildOpenAIAgentContext({
         id: target.id || row.id,
         name: target.name || row.title,
         route: row.route,
-        path: target.path || "",
+        path: redactAgentPath(target.path || ""),
         bytes: Number(target.bytes || 0),
         ageDays: Number(target.ageDays || 0),
         kind: target.kind || "reviewed Downloads file",
-        reason: target.reason || "",
+        reason: redactAgentText(target.reason || ""),
         signals: normalizeAgentReviewSignals(target.signals)
       }))
     )
@@ -191,12 +191,12 @@ export function buildOpenAIAgentContext({
         id: target.id || row.id,
         name: target.name || row.title,
         route: row.route,
-        path: target.path || "",
+        path: redactAgentPath(target.path || ""),
         bytes: Number(target.bytes || 0),
         ageDays: Number(target.ageDays || 0),
         kind: target.kind || "large user file",
         decision: target.decision || "archive",
-        reason: target.reason || "",
+        reason: redactAgentText(target.reason || ""),
         signals: normalizeAgentReviewSignals(target.signals)
       }))
     )
@@ -208,7 +208,7 @@ export function buildOpenAIAgentContext({
       id: `browser-cache-${index + 1}`,
       title: finding.title || "Browser cache root",
       route: "browser-cache-only",
-      path: finding.path,
+      path: redactAgentPath(finding.path),
       bytes: Number(finding.bytes || 0),
       status: finding.status || "unknown"
     }))
@@ -220,7 +220,7 @@ export function buildOpenAIAgentContext({
       id: "gradle-cache",
       title: finding.title || "Gradle dependency and build cache",
       route: "bounded-cache-delete",
-      path: finding.path,
+      path: redactAgentPath(finding.path),
       bytes: Number(finding.bytes || 0),
       status: finding.status || "unknown"
     }))
@@ -232,7 +232,7 @@ export function buildOpenAIAgentContext({
       id: "npm-cache",
       title: finding.title || "npm package cache",
       route: "bounded-npm-cache-delete",
-      path: finding.path,
+      path: redactAgentPath(finding.path),
       bytes: Number(finding.bytes || 0),
       status: finding.status || "unknown"
     }))
@@ -244,7 +244,7 @@ export function buildOpenAIAgentContext({
       id: "user-cache",
       title: finding.title || "User .cache folder",
       route: "bounded-user-cache-delete",
-      path: finding.path,
+      path: redactAgentPath(finding.path),
       bytes: Number(finding.bytes || 0),
       status: finding.status || "unknown"
     }))
@@ -256,7 +256,7 @@ export function buildOpenAIAgentContext({
       id: `android-cache-${index + 1}`,
       title: finding.title || "Android Studio cache folder",
       route: "bounded-android-cache-delete",
-      path: finding.path,
+      path: redactAgentPath(finding.path),
       bytes: Number(finding.bytes || 0),
       status: finding.status || "unknown"
     }))
@@ -268,7 +268,7 @@ export function buildOpenAIAgentContext({
       id: `shader-cache-${index + 1}`,
       title: finding.title || "Graphics shader cache folder",
       route: "launcher-cache-cleanup",
-      path: finding.path,
+      path: redactAgentPath(finding.path),
       bytes: Number(finding.bytes || 0),
       status: finding.status || "unknown"
     }))
@@ -280,7 +280,7 @@ export function buildOpenAIAgentContext({
       id: "pip-cache",
       title: finding.title || "pip package cache",
       route: "bounded-pip-cache-delete",
-      path: finding.path,
+      path: redactAgentPath(finding.path),
       bytes: Number(finding.bytes || 0),
       status: finding.status || "unknown"
     }))
@@ -292,7 +292,7 @@ export function buildOpenAIAgentContext({
       id: "docker-build-cache",
       title: finding.title || "Docker build cache",
       route: "tool-native-docker-build-cache-prune",
-      path: finding.path,
+      path: redactAgentPath(finding.path),
       bytes: Number(finding.bytes || 0),
       status: finding.status || "unknown"
     }))
@@ -304,7 +304,7 @@ export function buildOpenAIAgentContext({
       id: "pnpm-store",
       title: finding.title || "pnpm global store",
       route: "bounded-pnpm-store-delete",
-      path: finding.path,
+      path: redactAgentPath(finding.path),
       bytes: Number(finding.bytes || 0),
       status: finding.status || "unknown"
     }))
@@ -316,7 +316,7 @@ export function buildOpenAIAgentContext({
       id: "recycle-bin",
       title: finding.title || "Recycle Bin",
       route: "shell-recycle-bin",
-      path: finding.path,
+      path: redactAgentPath(finding.path),
       bytes: Number(finding.bytes || 0),
       status: finding.status || "unknown",
       consequence: "permanent removal"
@@ -329,7 +329,7 @@ export function buildOpenAIAgentContext({
       id: `wsl-vhdx-${index + 1}`,
       title: finding.title || "WSL virtual disk",
       route: "advanced-checklist",
-      path: finding.path,
+      path: redactAgentPath(finding.path),
       bytes: Number(finding.bytes || 0),
       status: finding.status || "unknown",
       manualOnly: true,
@@ -361,7 +361,7 @@ export function buildOpenAIAgentContext({
     .map((row) => ({
       id: row.id || "",
       name: row.name || "",
-      path: row.path || "",
+      path: redactAgentPath(row.path || ""),
       bytes: Number(row.bytes || 0),
       status: row.status || "unknown",
       classification: row.classification || "unknown-review",
@@ -374,7 +374,7 @@ export function buildOpenAIAgentContext({
     .map((row) => ({
       id: row.id || "",
       title: row.title || "",
-      path: row.path || "",
+      path: redactAgentPath(row.path || ""),
       bytes: Number(row.bytes || 0),
       status: row.status || "unknown",
       disposition: row.disposition || "undecided",
@@ -543,7 +543,7 @@ export function buildOpenAIAgentContext({
       title: row.title,
       route: row.route,
       status: row.status,
-      targetPath: row.targetPath,
+      targetPath: redactAgentPath(row.targetPath),
       candidateBytes: Number(row.candidateBytes || 0),
       candidateCount: Number(row.candidateCount || 0),
       skippedCount: Number(row.skippedCount || 0),
@@ -1112,7 +1112,7 @@ function buildOpenAIReviewTaskRows(targets = [], {
       focusActionId,
       title: target.title || target.name || target.id || "Review target",
       bytes,
-      path: target.path || "",
+      path: redactAgentPath(target.path || ""),
       ageDays: Number(target.ageDays || 0),
       kind: target.kind || "",
       recommendation: target.recommendation || "review",
@@ -1134,7 +1134,7 @@ function buildOpenAIReviewTaskRows(targets = [], {
       manualOnly: Boolean(manualOnly),
       executorFlag: "",
       buttonLabel: manualOnly ? "Open manual review" : "Open review",
-      reason: target.reason || reason,
+      reason: redactAgentText(target.reason || reason),
       blocker: manualOnly ? "manual-only" : "user-review-required",
       checks: [
         buildBrokerCheck("advisory-only", "Advisory boundary", true, "OpenAI can route this task to UI review only."),
@@ -1962,7 +1962,7 @@ function buildManualReviewTargets({ nativeScan = null, itemReviewsByAction = nul
       id: item.id || "",
       name: item.name || "",
       route: "manual-app-uninstall",
-      path: item.path || "",
+      path: redactAgentPath(item.path || ""),
       bytes: Number(item.bytes || 0),
       ageDays: Number(item.ageDays || 0),
       kind: item.kind || "installed app footprint",
@@ -1972,7 +1972,7 @@ function buildManualReviewTargets({ nativeScan = null, itemReviewsByAction = nul
       canCreateExecutor: false,
       manualOnly: true,
       officialAction: "Use Windows Settings or the vendor uninstaller only.",
-      reason: item.reason || "Installed app footprint is manual review evidence, not an automated cleanup target.",
+      reason: redactAgentText(item.reason || "Installed app footprint is manual review evidence, not an automated cleanup target."),
       signals: normalizeAgentReviewSignals(item.signals)
     }));
 }
@@ -2039,7 +2039,7 @@ function buildProjectDependencyReviewTargets({ nativeScan = null, itemReviewsByA
       id: item.id || "",
       name: item.name || "",
       route: "item-review-project-cache",
-      path: item.path || "",
+      path: redactAgentPath(item.path || ""),
       bytes: Number(item.bytes || 0),
       ageDays: Number(item.ageDays || 0),
       kind: item.kind || "project dependency folder",
@@ -2048,7 +2048,7 @@ function buildProjectDependencyReviewTargets({ nativeScan = null, itemReviewsByA
       canCreateExecutor: false,
       manualOnly: false,
       executorRequiresUserRemoveDecision: true,
-      reason: item.reason || "Project dependency folder needs user review before it can become a reviewed Remove target.",
+      reason: redactAgentText(item.reason || "Project dependency folder needs user review before it can become a reviewed Remove target."),
       signals: normalizeAgentReviewSignals(item.signals)
     }));
 }
@@ -2077,7 +2077,7 @@ function buildInstalledAppReviewContext(manualReviewTargets = [], evidenceSummar
         id: target.id,
         name: target.name,
         route: target.route,
-        path: target.path,
+        path: redactAgentPath(target.path),
         bytes: Number(target.bytes || 0),
         ageDays: Number(target.ageDays || 0),
         kind: target.kind,
@@ -2092,7 +2092,7 @@ function buildInstalledAppReviewContext(manualReviewTargets = [], evidenceSummar
         manualOnly: true,
         canCreateExecutor: false,
         officialAction: target.officialAction || "Use Windows Settings or the vendor uninstaller only.",
-        reason: target.reason || ""
+        reason: redactAgentText(target.reason || "")
       };
     })
     .slice(0, 12);
@@ -2124,7 +2124,7 @@ function buildInstalledAppUninstallWorkOrderContext(installedAppReview = null, {
       id: row.id,
       name: row.name,
       route: "manual-app-uninstall",
-      path: row.path,
+      path: redactAgentPath(row.path),
       bytes: Number(row.bytes || 0),
       ageDays: Number(row.ageDays || 0),
       usageProof: row.usageProof || "not proven",
@@ -2281,7 +2281,7 @@ function buildWslCompactionWorkOrderContext(wslVhdxTargets = [], {
       id: row.id,
       title: row.title,
       route: "advanced-checklist",
-      path: row.path,
+      path: redactAgentPath(row.path),
       bytes: Number(row.bytes || 0),
       status: row.status || "unknown",
       manualOnly: true,
@@ -2303,12 +2303,35 @@ function getAgentSignalValue(signals = [], label = "") {
   return match?.value || "";
 }
 
+function redactAgentPath(value = "") {
+  const clean = String(value || "").trim();
+  if (!clean) return "";
+  return redactKnownWindowsPaths(clean);
+}
+
+function redactAgentText(value = "") {
+  const clean = String(value || "").trim();
+  if (!clean) return "";
+  return redactKnownWindowsPaths(clean);
+}
+
+function redactKnownWindowsPaths(value = "") {
+  return String(value || "")
+    .replace(/[A-Za-z]:\\Users\\[^\\]+\\AppData\\LocalLow/gi, "%USERPROFILE%\\AppData\\LocalLow")
+    .replace(/[A-Za-z]:\\Users\\[^\\]+\\AppData\\Local/gi, "%LOCALAPPDATA%")
+    .replace(/[A-Za-z]:\\Users\\[^\\]+\\AppData\\Roaming/gi, "%APPDATA%")
+    .replace(/[A-Za-z]:\\Users\\[^\\]+/gi, "%USERPROFILE%")
+    .replace(/[A-Za-z]:\\Program Files \(x86\)/gi, "%PROGRAMFILES(X86)%")
+    .replace(/[A-Za-z]:\\Program Files/gi, "%PROGRAMFILES%")
+    .replace(/[A-Za-z]:\\ProgramData/gi, "%PROGRAMDATA%");
+}
+
 function normalizeAgentReviewSignals(value = []) {
   return Array.isArray(value)
     ? value
         .map((signal) => ({
           label: String(signal?.label || signal?.name || "").trim(),
-          value: String(signal?.value || signal?.detail || "").trim(),
+          value: redactAgentText(signal?.value || signal?.detail || ""),
           tone: normalizeAgentSignalTone(signal?.tone || signal?.status || "")
         }))
         .filter((signal) => signal.label || signal.value)
@@ -2330,7 +2353,7 @@ function toAgentAction(action = {}) {
     gate: action.gate,
     route: action.route || "",
     method: action.method || "",
-    path: action.path || "",
+    path: redactAgentPath(action.path || ""),
     bytes: Number(action.bytes || 0),
     scanStatus: action.scanStatus || "unknown",
     consequence: action.consequence || ""
