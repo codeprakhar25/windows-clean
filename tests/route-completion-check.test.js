@@ -142,6 +142,7 @@ function createSelectedRouteEvidence(patch = {}) {
   };
   const selectedRouteProofPacket = {
     schemaVersion: "spaceguard-selected-route-proof-packet/v1",
+    generatedAt: "2026-06-08T10:40:00.000Z",
     status: "proof-complete",
     route,
     routeInput,
@@ -150,6 +151,8 @@ function createSelectedRouteEvidence(patch = {}) {
     scopedNativeExecution: true,
     postRunScanEvidence: true,
     readyForNextRoute: true,
+    latestExecutionAt: "2026-06-08T10:35:00.000Z",
+    scanGeneratedAt: "2026-06-08T10:36:00.000Z",
     counts: { ledgerEntries: 1, matchedRows: 1, reclaimedBytes: 1048576 },
     volumeProof: { status: "measured", drive: "C:", freeBytesDelta: 1048576, source: "GetDiskFreeSpaceExW" },
     validationImport: { status: "import-complete", complete: true, route, evidencePath: artifacts.selectedRouteProofPacket },
@@ -159,6 +162,7 @@ function createSelectedRouteEvidence(patch = {}) {
   };
   const workflowProof = {
     schemaVersion: "spaceguard-real-workflow-proof/v1",
+    generatedAt: "2026-06-08T10:45:00.000Z",
     status: "workflow-proven",
     route,
     routeInput,
@@ -208,8 +212,8 @@ function createSelectedRouteEvidence(patch = {}) {
   ].map((id) => ({ id, command: id, outputPath: path.join(dir, `${id}.txt`), exitCode: 0 }));
   commands.push(
     { id: "validate-selected-route-preflight", command: "node scripts\\run-route-preflight-check.mjs", outputPath: artifacts.routePreflightCheck, exitCode: 0 },
-    { id: "native-dev-launch", command: "npm run native:dev", outputPath: "", exitCode: null, userGated: true },
-    { id: "native-dev-exit", command: "npm run native:dev", outputPath: artifacts.nativeDevExit, exitCode: 0, userGated: true },
+    { id: "native-dev-launch", command: "npm run native:dev", outputPath: "", exitCode: null, userGated: true, startedAt: "2026-06-08T10:20:00.000Z" },
+    { id: "native-dev-exit", command: "npm run native:dev", outputPath: artifacts.nativeDevExit, exitCode: 0, userGated: true, endedAt: "2026-06-08T10:30:00.000Z" },
     { id: "finalize-after-app", command: "validate selected-route workflow proof", outputPath: artifacts.postAppFinalization, exitCode: null, userGated: true },
     { id: "workflow-proof-check", command: "node scripts\\run-workflow-proof-check.mjs", outputPath: artifacts.workflowProofCheck, exitCode: 0 }
   );
@@ -270,6 +274,7 @@ function createSelectedRouteEvidence(patch = {}) {
   assert.strictEqual(accepted.counts.routeCommandsPassed, 5, "completion should count required route command records");
   assert.strictEqual(accepted.counts.reclaimedBytes, 1048576, "completion should preserve workflow recovered bytes");
   assert.strictEqual(accepted.counts.selectedRouteProofPacketReclaimedBytes, 1048576, "completion should preserve selected-route packet recovered bytes");
+  assert.strictEqual(accepted.counts.nativeLaunchStartedAt, "2026-06-08T10:20:00.000Z", "completion should expose the native launch timestamp used for proof freshness");
 
   const missingNativeExitEvidence = createSelectedRouteEvidence();
   fs.unlinkSync(missingNativeExitEvidence.nativeExitPath);
@@ -323,6 +328,34 @@ function createSelectedRouteEvidence(patch = {}) {
   });
   assert.strictEqual(zeroByteWorkflow.status, "blocked", "completion should block zero-byte workflow proof");
   assert(zeroByteWorkflow.blockers.some((blocker) => blocker.id === "workflow-proof"), "zero-byte workflow blocker should be surfaced");
+
+  const staleProofPacketEvidence = createSelectedRouteEvidence({
+    selectedRouteProofPacket: {
+      generatedAt: "2026-06-08T10:10:00.000Z",
+      latestExecutionAt: "2026-06-08T10:10:00.000Z",
+      scanGeneratedAt: "2026-06-08T10:10:00.000Z"
+    }
+  });
+  const staleProofPacket = verifier.buildSelectedRouteCompletionCheck({
+    preflightPath: staleProofPacketEvidence.preflightPath,
+    workflowProofPath: staleProofPacketEvidence.workflowProofPath,
+    nativeExitPath: staleProofPacketEvidence.nativeExitPath
+  });
+  assert.strictEqual(staleProofPacket.status, "blocked", "completion should block proof packets older than the native app launch");
+  assert(staleProofPacket.blockers.some((blocker) => blocker.id === "proof-freshness"), "stale proof packet blocker should be surfaced");
+
+  const staleWorkflowProofEvidence = createSelectedRouteEvidence({
+    workflowProof: {
+      generatedAt: "2026-06-08T10:10:00.000Z"
+    }
+  });
+  const staleWorkflowProof = verifier.buildSelectedRouteCompletionCheck({
+    preflightPath: staleWorkflowProofEvidence.preflightPath,
+    workflowProofPath: staleWorkflowProofEvidence.workflowProofPath,
+    nativeExitPath: staleWorkflowProofEvidence.nativeExitPath
+  });
+  assert.strictEqual(staleWorkflowProof.status, "blocked", "completion should block workflow proof older than the native app launch");
+  assert(staleWorkflowProof.blockers.some((blocker) => blocker.id === "proof-freshness"), "stale workflow proof blocker should be surfaced");
 
   console.log("route completion check ok");
 })().catch((error) => {
