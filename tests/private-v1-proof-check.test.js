@@ -127,10 +127,15 @@ function createPrivateV1Evidence(patch = {}) {
     { id: "selected-route-proof", command: "npm run proof:route:windows -- -Route npm-cache", outputPath: selectedRouteProofOutputPath, stderrPath: `${selectedRouteProofOutputPath}.stderr.txt`, exitCode: 0 },
     ...(patch.commands || [])
   ];
-  const privatePreflightCommands = [
+  const privatePreflightCommands = patch.privatePreflightCommands || [
     { id: "js-tests", command: "npm test", outputPath: path.join(dir, "private-demo-preflight", "npm-test.txt"), exitCode: 0 },
-    { id: "native-build", command: "npm run native:build", outputPath: path.join(dir, "private-demo-preflight", "native-build.txt"), exitCode: 0 },
-    ...(patch.privatePreflightCommands || [])
+    { id: "native-executor-coverage", command: "npm run native:executor-coverage", outputPath: path.join(dir, "private-demo-preflight", "native-executor-coverage.json"), exitCode: 0 },
+    { id: "rust-tests", command: "cargo test --manifest-path src-tauri\\Cargo.toml", outputPath: path.join(dir, "private-demo-preflight", "cargo-test.txt"), exitCode: 0 },
+    { id: "web-build", command: "npm run build", outputPath: path.join(dir, "private-demo-preflight", "npm-build.txt"), exitCode: 0 },
+    { id: "private-demo-readiness", command: "npm run demo:private-readiness", outputPath: path.join(dir, "private-demo-preflight", "private-demo-readiness.json"), exitCode: 0 },
+    { id: "openai-fixture-smoke", command: "npm run openai:smoke:fixture -- --route npm-cache", outputPath: path.join(dir, "private-demo-preflight", "openai-fixture-smoke.txt"), exitCode: 0 },
+    { id: "openai-live-smoke", command: "npm run openai:smoke -- --route npm-cache", outputPath: path.join(dir, "private-demo-preflight", "openai-live-smoke.txt"), exitCode: 0 },
+    { id: "native-build", command: "npm run native:build", outputPath: path.join(dir, "private-demo-preflight", "native-build.txt"), exitCode: 0 }
   ];
   const firstRouteCommands = [
     { id: "openai-fixture-smoke", command: "npm run openai:smoke:fixture -- --route temp-fixture", outputPath: firstRouteFixtureSmokePath, stderrPath: `${firstRouteFixtureSmokePath}.stderr.txt`, exitCode: 0 },
@@ -268,6 +273,7 @@ function writeOpenAiSmokeEvidence(filePath, { routeInput, route, transport }) {
   assert.strictEqual(accepted.counts.firstRouteRescanExpectedBytes, 8388608, "verifier should report first-route rescan expected bytes");
   assert.strictEqual(accepted.counts.selectedRouteRescanExpectedBytes, 1048576, "verifier should report selected-route rescan expected bytes");
   assert.strictEqual(accepted.counts.selectedRouteLedgerReclaimedBytes, 1048576, "verifier should report selected-route ledger reclaimed bytes");
+  assert.strictEqual(accepted.counts.privatePreflightCommandRecords, 8, "verifier should count private preflight command records");
   assert.strictEqual(accepted.counts.nativeBundleArtifacts, 1, "verifier should count native bundle artifacts");
   assert.strictEqual(accepted.counts.openAiSmokeArtifacts, 4, "verifier should count required child OpenAI smoke artifacts");
   assert.strictEqual(accepted.counts.commandRecords, 6, "verifier should count command ledger records");
@@ -333,6 +339,7 @@ function writeOpenAiSmokeEvidence(filePath, { routeInput, route, transport }) {
 
   const preflightDirectCleanup = createPrivateV1Evidence({
     privatePreflightCommands: [
+      { id: "js-tests", command: "npm test", outputPath: path.join(os.tmpdir(), "npm-test.txt"), exitCode: 0 },
       { id: "unsafe-preflight-cleanup", command: "cmd /c rmdir /s /q C:\\Users\\demo\\Downloads\\old", exitCode: 0 }
     ]
   });
@@ -341,6 +348,24 @@ function writeOpenAiSmokeEvidence(filePath, { routeInput, route, transport }) {
   assert(
     preflightDirectCleanupCheck.blockers.some((blocker) => blocker.id === "private-preflight-command-direct-cleanup"),
     "private preflight direct cleanup blocker should be explicit"
+  );
+
+  const missingPreflightLiveOpenAi = createPrivateV1Evidence({
+    privatePreflightCommands: [
+      { id: "js-tests", command: "npm test", outputPath: path.join(os.tmpdir(), "npm-test.txt"), exitCode: 0 },
+      { id: "native-executor-coverage", command: "npm run native:executor-coverage", outputPath: path.join(os.tmpdir(), "native-executor-coverage.json"), exitCode: 0 },
+      { id: "rust-tests", command: "cargo test --manifest-path src-tauri\\Cargo.toml", outputPath: path.join(os.tmpdir(), "cargo-test.txt"), exitCode: 0 },
+      { id: "web-build", command: "npm run build", outputPath: path.join(os.tmpdir(), "npm-build.txt"), exitCode: 0 },
+      { id: "private-demo-readiness", command: "npm run demo:private-readiness", outputPath: path.join(os.tmpdir(), "private-demo-readiness.json"), exitCode: 0 },
+      { id: "openai-fixture-smoke", command: "npm run openai:smoke:fixture -- --route npm-cache", outputPath: path.join(os.tmpdir(), "openai-fixture-smoke.txt"), exitCode: 0 },
+      { id: "native-build", command: "npm run native:build", outputPath: path.join(os.tmpdir(), "native-build.txt"), exitCode: 0 }
+    ]
+  });
+  const missingPreflightLiveOpenAiCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingPreflightLiveOpenAi.proofPath });
+  assert.strictEqual(missingPreflightLiveOpenAiCheck.status, "blocked", "missing private preflight live OpenAI smoke command should block private V1 proof");
+  assert(
+    missingPreflightLiveOpenAiCheck.blockers.some((blocker) => blocker.id === "private-preflight-command-openai-live-smoke"),
+    "missing private preflight live OpenAI smoke blocker should be explicit"
   );
 
   const missingSelectedRouteSetup = createPrivateV1Evidence();

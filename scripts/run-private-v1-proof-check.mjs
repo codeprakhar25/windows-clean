@@ -25,6 +25,16 @@ const REQUIRED_STDERR_COMMANDS = new Set([
   "first-route-proof",
   "selected-route-proof"
 ]);
+const REQUIRED_PRIVATE_PREFLIGHT_COMMANDS = [
+  "js-tests",
+  "native-executor-coverage",
+  "rust-tests",
+  "web-build",
+  "private-demo-readiness",
+  "openai-fixture-smoke",
+  "openai-live-smoke",
+  "native-build"
+];
 
 function parseArgs(argv = []) {
   const args = { file: "", allowIncomplete: false };
@@ -385,6 +395,20 @@ function validatePrivatePreflightCommandRecords(preflight, preflightPath, add) {
   const baseDir = preflightPath ? path.dirname(preflightPath) : process.cwd();
   const commandLogPath = normalizeArtifactPath(preflight.commandLogPath || "", baseDir);
   const records = readChildCommandRecords("private-preflight-command-log", commandLogPath, add);
+  for (const id of REQUIRED_PRIVATE_PREFLIGHT_COMMANDS) {
+    const record = findLatestCommandRecord(records, id);
+    if (!record) {
+      add(`private-preflight-command-${id}`, "Private preflight command missing", `Private preflight command ledger must include ${id}.`);
+      continue;
+    }
+    if (record.skipped === true) {
+      add(`private-preflight-command-${id}`, "Private preflight command skipped", `${id} must run before private V1 proof acceptance.`);
+      continue;
+    }
+    if (!isExitCodeZero(record.exitCode)) {
+      add(`private-preflight-command-${id}`, "Private preflight command failed", `${id} exited with ${record.exitCode ?? "missing"}.`);
+    }
+  }
   const directCommand = records.find((row) => hasDirectCleanupCommand(row.command));
   if (directCommand) {
     add("private-preflight-command-direct-cleanup", "Direct cleanup command found", `Private preflight command ledger contains direct cleanup command: ${directCommand.command}`);
