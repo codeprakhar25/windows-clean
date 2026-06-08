@@ -152,7 +152,7 @@ For a selected route after `known-temp-delete`, validate the whole route complet
 npm run validate:route-completion -- --preflight .\evidence\route-proof-npm-cache-YYYYMMDD-HHMMSS\operator-preflight.json --native-exit .\evidence\route-proof-npm-cache-YYYYMMDD-HHMMSS\native-dev-exit.json --workflow-proof .\spaceguard-real-workflow-proof.md
 ```
 
-This completion verifier reads the selected-route preflight bundle, `commands.ndjson`, native app exit evidence, selected-route proof packet, and workflow proof. It requires successful records for `validate-selected-route-preflight`, `native-dev-launch`, `native-dev-exit`, `finalize-after-app`, and `workflow-proof-check`, verifies that ledger rows, rescan rows, and workflow proof all bind to the same route and reclaimed byte count, then reports whether the next route may start.
+This completion verifier reads the selected-route preflight bundle, `commands.ndjson`, native app exit evidence, selected-route proof packet, and workflow proof. It requires successful records for `validate-selected-route-preflight`, `native-dev-launch`, `native-dev-exit`, `finalize-after-app`, and `workflow-proof-check`, verifies that native app exit evidence belongs to the same selected-route evidence root and post-app finalization artifact, verifies that ledger rows, rescan rows, and workflow proof all bind to the same route and reclaimed byte count, then reports whether the next route may start.
 
 For the seeded first route, validate the whole first-delete chain after `fixture-after-cleanup.json` exists:
 

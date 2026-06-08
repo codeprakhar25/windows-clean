@@ -525,6 +525,7 @@ try {
       selectedRouteProofPacket = $SelectedRouteProofPacketPath
       workflowProof = $WorkflowProofPath
       workflowProofCheck = $WorkflowProofCheckPath
+      postAppFinalization = $PostAppFinalizationPath
       selectedRouteCompletionCheck = $CompletionCheckPath
     }
     appCloseContract = [PSCustomObject]@{

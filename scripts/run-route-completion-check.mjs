@@ -79,7 +79,10 @@ export function buildSelectedRouteCompletionCheck({
 
   const expectedRoute = String(preflightObject?.route || preflightCheck.route || "");
   const expectedRouteInput = String(preflightObject?.routeInput || preflightCheck.routeInput || expectedRoute);
-  validateNativeExitEvidence(nativeExit, add);
+  validateNativeExitEvidence(nativeExit, {
+    expectedEvidenceRoot: normalizeArtifactPath(preflightObject?.evidenceRoot || baseDir, baseDir),
+    expectedPostAppFinalizationPath: normalizeArtifactPath(artifacts.postAppFinalization || "", baseDir)
+  }, add);
   const selectedRouteProofSummary = validateSelectedRouteProofPacket(
     selectedRouteProofPacket,
     expectedRoute,
@@ -324,7 +327,7 @@ function isExitCodeZero(value) {
   return value === 0 || value === "0";
 }
 
-function validateNativeExitEvidence(evidence, add) {
+function validateNativeExitEvidence(evidence, { expectedEvidenceRoot = "", expectedPostAppFinalizationPath = "" } = {}, add) {
   if (!evidence) return;
   if (evidence.schemaVersion !== NATIVE_DEV_EXIT_SCHEMA) {
     add("native-exit", "Native app exit schema mismatch", `Expected ${NATIVE_DEV_EXIT_SCHEMA}.`);
@@ -341,6 +344,25 @@ function validateNativeExitEvidence(evidence, add) {
       `Native desktop workflow must exit successfully before completion; observed exit code ${Number.isFinite(exitCode) ? exitCode : "missing"}.`
     );
   }
+  if (!sameOptionalPath(evidence.evidenceRoot, expectedEvidenceRoot)) {
+    add(
+      "native-exit-root",
+      "Native app exit evidence root mismatch",
+      `Native app exit evidence must bind to selected-route evidence root ${expectedEvidenceRoot || "missing"}.`
+    );
+  }
+  if (!sameOptionalPath(evidence.postAppFinalizationPath, expectedPostAppFinalizationPath)) {
+    add(
+      "native-exit-finalization",
+      "Native app exit finalization path mismatch",
+      `Native app exit evidence must point at selected-route post-app finalization artifact ${expectedPostAppFinalizationPath || "missing"}.`
+    );
+  }
+}
+
+function sameOptionalPath(left = "", right = "") {
+  if (!left || !right) return false;
+  return normalizeComparablePath(left) === normalizeComparablePath(right);
 }
 
 function validateSelectedRouteProofPacket(packet, expectedRoute, expectedRouteInput, expectedProofPacketPath, add) {

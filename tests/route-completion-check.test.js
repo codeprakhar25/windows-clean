@@ -309,6 +309,20 @@ function createSelectedRouteEvidence(patch = {}) {
   assert.strictEqual(missingNativeExit.status, "blocked", "completion should block missing native exit evidence");
   assert(missingNativeExit.blockers.some((blocker) => blocker.id === "native-exit"), "missing native exit blocker should be surfaced");
 
+  const mismatchedNativeExitRootEvidence = createSelectedRouteEvidence({
+    nativeDevExit: {
+      evidenceRoot: path.join(os.tmpdir(), "spaceguard-stale-route-root"),
+      postAppFinalizationPath: path.join(os.tmpdir(), "spaceguard-stale-route-root", "post-app-finalization.json")
+    }
+  });
+  const mismatchedNativeExitRoot = verifier.buildSelectedRouteCompletionCheck({
+    preflightPath: mismatchedNativeExitRootEvidence.preflightPath,
+    workflowProofPath: mismatchedNativeExitRootEvidence.workflowProofPath,
+    nativeExitPath: mismatchedNativeExitRootEvidence.nativeExitPath
+  });
+  assert.strictEqual(mismatchedNativeExitRoot.status, "blocked", "completion should block native exit evidence from another selected-route evidence root");
+  assert(mismatchedNativeExitRoot.blockers.some((blocker) => blocker.id === "native-exit-root"), "mismatched native exit evidence root blocker should be surfaced");
+
   const wrongRouteEvidence = createSelectedRouteEvidence({
     selectedRouteProofPacket: { route: "bounded-gradle-cache-delete" }
   });
