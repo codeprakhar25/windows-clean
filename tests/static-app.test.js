@@ -112,6 +112,8 @@ assert(app.includes("buildWorkflowProofCheck"), "proof export should run the sha
 assert(app.includes("workflowProofCheck"), "proof panel should render workflow proof validation output from the app");
 assert(app.includes("Workflow proof accepted by in-app verifier."), "proof export should report accepted in-app workflow proof validation");
 assert(app.includes("proofKind: \"workflow-proof-check\""), "proof export should persist the in-app verifier output as a restricted artifact");
+assert(app.includes("selected-route-proof-reviewed"), "app workflow proof should require reviewed selected-route proof export");
+assert(!app.includes("selected-route-proof-import"), "app workflow proof should not require obsolete selected-route proof import");
 assert(app.includes("Export proof and let the in-app verifier accept it before selecting another cleanup target."), "cleanup queue should explain the workflow proof validation lock");
 assert(app.includes("disabled={targetSwitchLocked && candidate.id !== selectedId}"), "cleanup queue should disable other targets while proof export is pending");
 assert(!app.includes("npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted"), "proof panel should not rely on a manual CLI acceptance checkbox");
@@ -204,6 +206,8 @@ assert(supportBundleScript.includes("spaceguard-workflow-proof-check.json"), "su
 assert(workflowProofModule.includes("spaceguard-workflow-proof-check/v1"), "workflow proof verifier should emit a stable schema");
 assert(workflowProofModule.includes("spaceguard-real-workflow-proof/v1"), "workflow proof verifier should require real workflow proof packets");
 assert(workflowProofModule.includes("readyForNextRoute"), "workflow proof verifier should require next-route clearance");
+assert(workflowProofModule.includes("selected-route-proof-reviewed"), "workflow proof verifier should require selected-route proof review");
+assert(!workflowProofModule.includes("selected-route-proof-import"), "workflow proof verifier should not require obsolete selected-route proof import");
 assert(realWorkflow.includes("findPostRunTargetEvidence"), "real workflow helper should expose post-run target evidence matching");
 assert(realWorkflow.includes("reviewTarget?.path"), "real workflow helper should compare selected review item paths");
 assert(realWorkflow.includes("single-route-scope"), "real workflow helper should expose single route scope guardrail rows");
@@ -214,6 +218,10 @@ assert(!nativeAdapter.includes("TEMP_FIXTURE_ACTION_ID"), "native scanner adapte
 assert(!nativeAdapter.includes("spaceguard-fixture"), "native scanner adapter must not promote seeded fixture paths into cleanup rows");
 assert(!nativeAdapter.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"), "native scanner adapter must not synthesize seeded proof env vars");
 assert(!openAiAgent.includes("first-route-proof-required"), "OpenAI broker must not preserve seeded proof route blockers");
+assert(!openAiAgent.includes("selected-route-proof-import"), "OpenAI broker must not recommend obsolete selected-route proof import tasks");
+assert(!openAiAgent.includes("candidateSamples"), "OpenAI broker must not expose sample-named candidate context");
+assert(!openAiAgent.includes("sampleNames"), "OpenAI broker must not expose sample-named candidate entries");
+assert(openAiAgent.includes("support-bundle"), "OpenAI broker should guide proof-complete users toward support bundle capture");
 assert(openAiSmokeScript.includes("buildRouteContractContext"), "OpenAI smoke should validate real route contracts");
 assert(openAiSmokeScript.includes("--local-contract"), "OpenAI smoke should expose offline contract validation without fixture data");
 for (const removedSmokeMarker of [

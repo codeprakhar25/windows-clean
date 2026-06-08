@@ -5,7 +5,7 @@ const SELECTED_ROUTE_APP_CLOSE_CONTRACT_SCHEMA = "spaceguard-selected-route-app-
 const COMMON_APP_CLOSE_REQUIREMENTS = [
   "post-run-rescan-matched",
   "selected-route-proof-packet-exported",
-  "selected-route-proof-import-complete",
+  "selected-route-proof-reviewed",
   "spaceguard-real-workflow-proof-exported"
 ];
 const appCloseContracts = {
@@ -18,7 +18,7 @@ const appCloseContracts = {
 const requiredRowIds = [
   "native-scan-current",
   "post-run-proof-complete",
-  "selected-route-proof-import",
+  "selected-route-proof-reviewed",
   "selected-route-proof-export",
   "next-route-clearance"
 ];
@@ -73,7 +73,7 @@ export function buildWorkflowProofCheck({
     route: String(proof.route || ""),
     routeInput: String(proof.routeInput || proof.route || ""),
     proofStatus: proof.proofStatus || "",
-    proofImportStatus: proof.proofImportStatus || "",
+    selectedRouteProofReviewStatus: proof.selectedRouteProofReviewStatus || "",
     readyForNextRoute: Boolean(proof.readyForNextRoute),
     blockers,
     counts: {
@@ -99,7 +99,7 @@ export function buildRejectedWorkflowProofCheck(status, detail, checkedAt = new 
     route: String(proof?.route || ""),
     routeInput: String(proof?.routeInput || proof?.route || ""),
     proofStatus: proof?.proofStatus || "",
-    proofImportStatus: proof?.proofImportStatus || "",
+    selectedRouteProofReviewStatus: proof?.selectedRouteProofReviewStatus || "",
     readyForNextRoute: Boolean(proof?.readyForNextRoute),
     blockers: [{ id: status, label: "Workflow proof rejected", detail }],
     counts: {
@@ -122,7 +122,9 @@ function buildWorkflowProofBlockers(proof = {}) {
   if (proof.unsafeRuntime) add("unsafe-runtime", "Unsafe runtime", "Workflow proof reports visible write capability or unsafe runtime state.");
   if (proof.status !== "workflow-proven") add("status", "Status not proven", `Expected workflow-proven, received ${proof.status || "missing"}.`);
   if (proof.proofStatus !== "proof-complete") add("post-run-proof-complete", "Post-run proof incomplete", `Expected proof-complete, received ${proof.proofStatus || "missing"}.`);
-  if (proof.proofImportStatus !== "import-complete") add("selected-route-proof-import", "Proof import incomplete", `Expected import-complete, received ${proof.proofImportStatus || "missing"}.`);
+  if (proof.selectedRouteProofReviewStatus !== "review-complete") {
+    add("selected-route-proof-reviewed", "Selected-route proof review incomplete", `Expected review-complete, received ${proof.selectedRouteProofReviewStatus || "missing"}.`);
+  }
   if (proof.readyForNextRoute !== true) add("next-route-clearance", "Next route blocked", "Workflow proof must explicitly set readyForNextRoute=true.");
   if (Number(proof.counts?.ledgerEntries || 0) < 1) add("execution-ledger", "Ledger missing", "At least one selected-route execution ledger entry is required.");
   if (Number(proof.counts?.matchedRows || 0) < 1) add("post-run-rescan", "Matched rescan missing", "At least one matched post-run rescan row is required.");

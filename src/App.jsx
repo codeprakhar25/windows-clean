@@ -1812,8 +1812,8 @@ function buildSelectedRouteProofPacket({ candidate, executionRecord, postRunProo
       reclaimedBytes: Number(executionRecord.bytes || 0)
     },
     volumeProof: normalizeProofVolumeProof(executionRecord.volumeProof),
-    validationImport: {
-      status: postRunProof.matched ? "import-complete" : "needs-review",
+    selectedRouteProofReview: {
+      status: postRunProof.matched ? "review-complete" : "needs-review",
       complete: postRunProof.matched,
       evidencePath: `.\\${PROOF_PACKET_FILE}`,
       reviewer: "local-operator",
@@ -1870,14 +1870,14 @@ function buildRealWorkflowProofPacket({ selectedRouteProof, generatedAt }) {
   const volumeCaptured = selectedRouteProof.volumeProof?.status === "measured" || selectedRouteProof.volumeProof?.measured === true;
   const ready = Boolean(
     selectedRouteProof.status === "proof-complete" &&
-      selectedRouteProof.validationImport?.complete &&
+      selectedRouteProof.selectedRouteProofReview?.complete &&
       Number(selectedRouteProof.counts?.reclaimedBytes || 0) > 0 &&
       volumeCaptured
   );
   const rows = [
     { id: "native-scan-current", label: "Native scan current", passed: true, detail: "The workflow used native scan evidence." },
     { id: "post-run-proof-complete", label: "Post-run proof complete", passed: selectedRouteProof.status === "proof-complete", detail: selectedRouteProof.primary },
-    { id: "selected-route-proof-import", label: "Selected-route proof import", passed: selectedRouteProof.validationImport?.complete === true, detail: selectedRouteProof.validationImport?.detail || "" },
+    { id: "selected-route-proof-reviewed", label: "Selected-route proof reviewed", passed: selectedRouteProof.selectedRouteProofReview?.complete === true, detail: selectedRouteProof.selectedRouteProofReview?.detail || "" },
     { id: "selected-route-proof-export", label: "Selected-route proof export", passed: true, detail: `${PROOF_PACKET_FILE} exported.` },
     { id: "reclaimed-bytes", label: "Positive recovered bytes", passed: Number(selectedRouteProof.counts?.reclaimedBytes || 0) > 0, detail: `${formatBytes(selectedRouteProof.counts?.reclaimedBytes || 0)} recovered.` },
     { id: "native-volume-proof", label: "Native volume proof", passed: volumeCaptured, detail: selectedRouteProof.volumeProof?.note || "Measured native volume proof captured." },
@@ -1893,7 +1893,7 @@ function buildRealWorkflowProofPacket({ selectedRouteProof, generatedAt }) {
     title: selectedRouteProof.title,
     workflowStatus: ready ? "next-route-ready" : "proof-review-required",
     proofStatus: selectedRouteProof.status,
-    proofImportStatus: selectedRouteProof.validationImport?.status || "not-imported",
+    selectedRouteProofReviewStatus: selectedRouteProof.selectedRouteProofReview?.status || "not-reviewed",
     appCloseContract: buildAppCloseContract(selectedRouteProof.route),
     readyForNextRoute: ready,
     nativeScanCurrent: true,
@@ -1917,7 +1917,7 @@ function buildAppCloseContract(route = "") {
   const common = [
     "post-run-rescan-matched",
     "selected-route-proof-packet-exported",
-    "selected-route-proof-import-complete",
+    "selected-route-proof-reviewed",
     "spaceguard-real-workflow-proof-exported"
   ];
   return {

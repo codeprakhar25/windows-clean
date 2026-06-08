@@ -126,6 +126,7 @@ export function buildOpenAIAgentContext({
   consentReceipt,
   executionProofHandoff,
   rescanComparison,
+  workflowProofCheck,
   planSnapshot,
   liveValidationManifest,
   scopedExecutorCommandFlow,
@@ -434,6 +435,15 @@ export function buildOpenAIAgentContext({
     canRunPostRunRescan: Boolean(executionProofHandoff?.canRunRescan),
     rescanComparisonStatus: rescanComparison?.status || "not-run",
     postRunScanEvidence: Boolean(rescanComparison?.postRunScanEvidence),
+    workflowProofCheckStatus: workflowProofCheck?.status || "not-run",
+    workflowProofCheckCanAccept: Boolean(workflowProofCheck?.canAccept),
+    workflowProofCheckBlockers: Array.isArray(workflowProofCheck?.blockers)
+      ? workflowProofCheck.blockers.map((blocker) => ({
+          id: blocker.id || "",
+          label: blocker.label || "",
+          detail: blocker.detail || ""
+        }))
+      : [],
     selectedExecutorRoutes: executableRows.map((row) => ({
       id: row.id,
       route: row.route,
@@ -538,7 +548,7 @@ export function buildOpenAIAgentContext({
     wslCompactionWorkOrder,
     driveInventoryRows,
     customRootRows,
-    candidateSamples: (candidateSafetyManifest?.rows || []).slice(0, 12).map((row) => ({
+    candidatePreviewRows: (candidateSafetyManifest?.rows || []).slice(0, 12).map((row) => ({
       id: row.id,
       title: row.title,
       route: row.route,
@@ -547,7 +557,7 @@ export function buildOpenAIAgentContext({
       candidateBytes: Number(row.candidateBytes || 0),
       candidateCount: Number(row.candidateCount || 0),
       skippedCount: Number(row.skippedCount || 0),
-      sampleNames: row.sampleNames || []
+      previewNames: row.previewNames || []
     }))
   };
 }
@@ -651,9 +661,9 @@ function buildOpenAILiveRouteValidationManifestFromFlow(flow = null) {
       "native-write-volume-proof",
       "post-run-rescan-comparison",
       "selected-route-proof-packet",
-      "selected-route-proof-import",
       "real-workflow-proof",
-      "workflow-proof-check-output"
+      "workflow-proof-check-output",
+      "support-bundle"
     ],
     nativeBoundary: {
       ...nativeBoundary,
@@ -852,7 +862,7 @@ function buildOpenAIAgentTaskQueue({
 } = {}) {
   const rows = [
     ...buildOpenAIProofRescanTaskRows(execution),
-    ...buildOpenAIProofImportTaskRows(execution),
+    ...buildOpenAIProofBundleTaskRows(execution),
     ...buildOpenAIExecutorTaskRows("run-temp-executor", executableRows.filter((row) => row.route === "known-temp-delete"), runtime, execution, liveRouteValidation),
     ...buildOpenAIExecutorTaskRows("run-downloads-cleanup-executor", reviewedDownloadsTargets, runtime, execution, liveRouteValidation),
     ...buildOpenAIExecutorTaskRows("run-large-file-archive-executor", largeFileArchiveTargets, runtime, execution, liveRouteValidation),
@@ -961,32 +971,34 @@ function buildOpenAIProofRescanTaskRows(execution = {}) {
   ];
 }
 
-function buildOpenAIProofImportTaskRows(execution = {}) {
+function buildOpenAIProofBundleTaskRows(execution = {}) {
   const proofComplete = execution.proofStatus === "proof-complete";
   const rescanMatched = execution.rescanComparisonStatus === "matched";
   const postRunScanEvidence = Boolean(execution.postRunScanEvidence);
-  if (!proofComplete || !rescanMatched || !postRunScanEvidence) return [];
+  const proofCheckAccepted = Boolean(execution.workflowProofCheckCanAccept);
+  if (!proofComplete || !rescanMatched || !postRunScanEvidence || !proofCheckAccepted) return [];
   return [
     {
-      id: "task-selected-route-proof-import",
-      source: "selected-route-proof-import",
+      id: "task-support-bundle",
+      source: "support-bundle",
       actionType: "manual-only",
-      targetId: "selected-route-proof-import",
-      route: "validation-evidence",
-      title: "Import selected route proof into validation evidence",
+      targetId: "spaceguard-support-bundle",
+      route: "support-bundle",
+      title: "Capture support bundle before another route",
       bytes: 0,
       priority: "high",
       status: "needs-user-review",
       canExecuteNow: false,
       manualOnly: true,
       executorFlag: "",
-      buttonLabel: "Open validation evidence",
-      reason: "Post-run proof is complete; attach the selected-route proof packet to ledger-rescan-parity with reviewer and artifact detail.",
-      blocker: "reviewer-artifact-required",
+      buttonLabel: "Run support bundle",
+      reason: "Post-run proof and in-app workflow proof check are complete; capture spaceguard-support-bundle.md before enabling another route.",
+      blocker: "support-bundle-required",
       checks: [
         buildBrokerCheck("proof-complete", "Proof complete", proofComplete, `proof=${execution.proofStatus || "unknown"}`),
         buildBrokerCheck("rescan-matched", "Rescan matched", rescanMatched, `rescan=${execution.rescanComparisonStatus || "unknown"}`),
-        buildBrokerCheck("post-run-scan", "Post-run scan evidence", postRunScanEvidence, postRunScanEvidence ? "post-run native scan captured" : "missing post-run native scan")
+        buildBrokerCheck("post-run-scan", "Post-run scan evidence", postRunScanEvidence, postRunScanEvidence ? "post-run native scan captured" : "missing post-run native scan"),
+        buildBrokerCheck("workflow-proof-check", "Workflow proof check", proofCheckAccepted, proofCheckAccepted ? "in-app verifier accepted workflow proof" : "workflow proof check has not accepted")
       ]
     }
   ];
@@ -1175,7 +1187,7 @@ function compareOpenAITaskRows(left, right) {
 
 function getOpenAITaskCriticality(row = {}) {
   if (row.source === "post-run-proof" || row.targetId === "post-run-rescan") return 3;
-  if (row.source === "selected-route-proof-import" || row.targetId === "selected-route-proof-import") return 2;
+  if (row.source === "support-bundle" || row.targetId === "spaceguard-support-bundle") return 2;
   if (row.source === "scoped-executor") return 1;
   return 0;
 }
@@ -1637,7 +1649,7 @@ function getManualRecommendationPanel(row = {}) {
   const route = String(row.route || "").toLowerCase();
   if (targetId.startsWith("custom-root") || route.includes("custom-root")) return "custom-root-triage-panel";
   if (targetId.startsWith("drive-") || route.includes("drive-inventory")) return "drive-inventory-panel";
-  if (targetId.includes("selected-route-proof") || route.includes("validation-evidence")) return "validation-evidence-panel";
+  if (targetId.includes("spaceguard-support-bundle") || route.includes("support-bundle")) return "real-cleanup-command-flow-panel";
   if (targetId.includes("installed-app") || route.includes("manual-app-uninstall")) return "app-uninstall-work-order-panel";
   if (targetId.includes("wsl") || route.includes("advanced-checklist")) return "wsl-compaction-work-order-panel";
   return "item-review-panel";
@@ -1766,7 +1778,7 @@ function compactOpenAIAgentRunContext(context = null, planSnapshot = null) {
       driveInventoryRows: Array.isArray(context?.driveInventoryRows) ? context.driveInventoryRows.length : 0,
       customRootRows: Array.isArray(context?.customRootRows) ? context.customRootRows.length : 0,
       agentTaskQueueRows: Array.isArray(context?.agentTaskQueue?.rows) ? context.agentTaskQueue.rows.length : 0,
-      candidateSamples: Array.isArray(context?.candidateSamples) ? context.candidateSamples.length : 0
+      candidatePreviewRows: Array.isArray(context?.candidatePreviewRows) ? context.candidatePreviewRows.length : 0
     },
     selectedActionIds: selectedActions.map((action) => action.id).filter(Boolean).slice(0, 24),
     actionTypes: Array.from(new Set(selectedActions.map((action) => action.route || action.gate || action.risk).filter(Boolean))).slice(0, 12),

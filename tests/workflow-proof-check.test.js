@@ -24,7 +24,7 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
         "native-volume-proof-captured",
         "post-run-rescan-matched",
         "selected-route-proof-packet-exported",
-        "selected-route-proof-import-complete",
+        "selected-route-proof-reviewed",
         "spaceguard-real-workflow-proof-exported"
       ]
     },
@@ -36,7 +36,7 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
       entries: 1
     },
     proofStatus: "proof-complete",
-    proofImportStatus: "import-complete",
+    selectedRouteProofReviewStatus: "review-complete",
     readyForNextRoute: true,
     unsafeRuntime: false,
     counts: {
@@ -47,7 +47,7 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
     rows: [
       { id: "native-scan-current", passed: true },
       { id: "post-run-proof-complete", passed: true },
-      { id: "selected-route-proof-import", passed: true },
+      { id: "selected-route-proof-reviewed", passed: true },
       { id: "selected-route-proof-export", passed: true },
       { id: "native-volume-proof", passed: true },
       { id: "next-route-clearance", passed: true }
@@ -98,15 +98,15 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
 
   const blockedPacket = {
     ...provenPacket,
-    status: "proof-import-required",
-    proofImportStatus: "needs-import",
+    status: "proof-review-required",
+    selectedRouteProofReviewStatus: "needs-review",
     readyForNextRoute: false,
-    rows: provenPacket.rows.map((row) => row.id === "selected-route-proof-import" ? { ...row, passed: false } : row)
+    rows: provenPacket.rows.map((row) => row.id === "selected-route-proof-reviewed" ? { ...row, passed: false } : row)
   };
   const blocked = verifier.buildWorkflowProofCheck({ evidenceObject: blockedPacket });
   assert.strictEqual(blocked.status, "blocked", "incomplete workflow proof should block");
   assert.strictEqual(blocked.canAccept, false, "incomplete workflow proof must not be accepted");
-  assert(blocked.blockers.some((blocker) => blocker.id === "selected-route-proof-import"), "blocked workflow proof should name missing proof import");
+  assert(blocked.blockers.some((blocker) => blocker.id === "selected-route-proof-reviewed"), "blocked workflow proof should name missing selected-route proof review");
 
   const zeroBytePacket = {
     ...provenPacket,

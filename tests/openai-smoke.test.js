@@ -7,6 +7,7 @@ const script = path.join(root, "scripts", "run-openai-advisor-smoke.mjs");
 
 (async () => {
   const smoke = await import(pathToFileURL(script).href);
+  const agent = await import(pathToFileURL(path.join(root, "src", "openai-agent.mjs")).href);
 
   const pnpmRoute = smoke.resolveSmokeRoute("pnpm-store");
   assert.strictEqual(pnpmRoute.requiredRecommendation.actionType, "run-pnpm-store-executor", "pnpm smoke should require the pnpm executor");
@@ -105,6 +106,26 @@ const script = path.join(root, "scripts", "run-openai-advisor-smoke.mjs");
     }
   });
   assert.strictEqual(appQueueReadyBroker.rows[0].status, "ready", "app-shaped OpenAI broker should route the recommendation after deterministic app gates pass");
+
+  const proofCompleteContext = agent.buildOpenAIAgentContext({
+    executionProofHandoff: {
+      status: "proof-complete",
+      canRunRescan: true
+    },
+    rescanComparison: {
+      status: "matched",
+      postRunScanEvidence: true
+    },
+    workflowProofCheck: {
+      status: "accepted",
+      canAccept: true,
+      blockers: []
+    }
+  });
+  const supportBundleTask = proofCompleteContext.agentTaskQueue.rows.find((row) => row.source === "support-bundle");
+  assert(supportBundleTask, "proof-complete OpenAI context should expose support bundle capture task");
+  assert.strictEqual(supportBundleTask.targetId, "spaceguard-support-bundle", "support bundle task should target the handoff bundle");
+  assert(!proofCompleteContext.agentTaskQueue.rows.some((row) => row.source === "selected-route-proof-import"), "proof-complete OpenAI context should not expose obsolete proof import task");
 
   const mismatchedLiveRouteValidation = smoke.validateSmokeAdvice({
     context: {
