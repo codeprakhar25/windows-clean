@@ -228,7 +228,9 @@ const path = require("path");
             reason: "Manual uninstall candidate",
             signals: [
               { label: "usage proof", value: "not proven", tone: "restricted" },
-              { label: "uninstall entry", value: "present", tone: "safe" }
+              { label: "uninstall entry", value: "present", tone: "safe" },
+              { label: "UninstallString", value: "MsiExec.exe /I{OLD-IDE}", tone: "restricted" },
+              { label: "QuietUninstallString", value: "C:\\Program Files\\Old IDE 2023\\uninstall.exe /quiet", tone: "restricted" }
             ]
           },
           {
@@ -322,6 +324,9 @@ const path = require("path");
   assert.strictEqual(appFinding.evidenceSummary.userAssistMatched, 1, "native app finding should summarize UserAssist matches");
   assert.strictEqual(appFinding.evidenceSummary.usageProofMissing, 1, "native app finding should summarize missing usage proof");
   assert.strictEqual(appFinding.evidenceSummary.canCreateExecutor, false, "native app finding evidence summary must not imply executor authority");
+  const appSensitiveSignals = appFinding.items[0].signals.filter((signal) => /uninstallstring|quietuninstallstring|msiexec|uninstall\.exe/i.test(`${signal.label} ${signal.value}`));
+  assert.deepStrictEqual(appSensitiveSignals, [], "native app finding normalization must drop uninstall command strings from item signals");
+  assert(appFinding.items[0].signals.some((signal) => signal.label === "uninstall entry" && signal.value === "present"), "native app finding should preserve uninstall-entry availability without the command string");
 
   const scanCoverage = guard.buildScanCoverageSummary({
     actionList: merged,

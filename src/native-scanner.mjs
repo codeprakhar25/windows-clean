@@ -1083,8 +1083,18 @@ function normalizeNativeReviewSignals(value = []) {
           tone: normalizeSignalTone(signal?.tone || signal?.status || "")
         }))
         .filter((signal) => signal.label || signal.value)
+        .filter((signal) => !isSensitiveUninstallSignal(signal))
         .slice(0, 12)
     : [];
+}
+
+function isSensitiveUninstallSignal(signal = {}) {
+  const label = String(signal.label || "").toLowerCase().replace(/[\s_-]+/g, "");
+  const value = String(signal.value || "").toLowerCase();
+  if (label === "uninstallstring" || label === "quietuninstallstring") return true;
+  if (label.includes("uninstallcommand") || label.includes("uninstallcmd")) return true;
+  if (label.includes("uninstall") && /msiexec|uninstall\.exe|quietuninstall|\/quiet|\/x\s*\{/.test(value)) return true;
+  return false;
 }
 
 function normalizeSignalTone(value = "") {
