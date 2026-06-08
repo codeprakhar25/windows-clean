@@ -25,6 +25,9 @@ const windowsSetup = fs.readFileSync(path.join(root, "WINDOWS_REAL_DATA_SETUP.md
   assert(runner.includes("-SelectedRoute $SelectedRoute"), "V1 proof coordinator should pass the selected route into host preflight");
   assert(runner.includes("npm run proof:first-route:windows -- -Route temp-fixture"), "V1 proof coordinator should run the seeded first route");
   assert(runner.includes("first-route-completion-check.json"), "V1 proof coordinator should require the first-route completion artifact");
+  assert(runner.includes("Assert-CompletionProofCounts"), "V1 proof coordinator should assert child completion parity counts before summary");
+  assert(runner.includes('Assert-CompletionProofCounts -Proof $proof -Prefix "first-route"'), "V1 proof coordinator should fail early on weak first-route completion parity");
+  assert(runner.includes('Assert-CompletionProofCounts -Proof $proof -Prefix "selected-route"'), "V1 proof coordinator should fail early on weak selected-route completion parity");
   assert(runner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"), "V1 proof coordinator should bind first-route completion for selected routes");
   assert(runner.includes("archived-first-route-root-exports"), "V1 proof coordinator should archive first-route root exports before selected-route launch");
   assert(runner.includes("npm run proof:route:windows -- -Route $SelectedRoute"), "V1 proof coordinator should run the selected real-data route");

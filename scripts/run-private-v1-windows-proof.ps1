@@ -108,6 +108,7 @@ try {
     if ($proof.status -ne "accepted" -or $proof.canStartNextRoute -ne $true -or $proof.route -ne "known-temp-delete") {
       throw "first-route-completion-blocked: first route must be accepted before selected-route proof."
     }
+    Assert-CompletionProofCounts -Proof $proof -Prefix "first-route" -Label "First-route"
     if ([int64]$proof.counts.reclaimedBytes -le 0) {
       throw "first-route-completion-empty: first route must prove positive reclaimed bytes."
     }
@@ -129,8 +130,52 @@ try {
     if ($proof.status -ne "accepted" -or $proof.canStartNextRoute -ne $true) {
       throw "selected-route-completion-blocked: selected route must be accepted for private V1 proof."
     }
+    Assert-CompletionProofCounts -Proof $proof -Prefix "selected-route" -Label "Selected-route"
 
     return $proof
+  }
+
+  function Assert-CompletionProofCounts {
+    param(
+      [Parameter(Mandatory = $true)]$Proof,
+      [Parameter(Mandatory = $true)][string]$Prefix,
+      [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    if ($null -eq $Proof.counts) {
+      throw "$Prefix-completion-parity-missing: $Label completion must include counts."
+    }
+
+    $requiredCounts = @(
+      "reclaimedBytes",
+      "selectedRouteProofPacketReclaimedBytes",
+      "ledgerReclaimedBytes",
+      "rescanExpectedBytes",
+      "rescanActualRemainingBytes"
+    )
+
+    $values = @{}
+    foreach ($name in $requiredCounts) {
+      $property = $Proof.counts.PSObject.Properties[$name]
+      if ($null -eq $property -or $null -eq $property.Value) {
+        throw "$Prefix-completion-parity-missing: $Label completion must include counts.$name."
+      }
+      $values[$name] = [int64]$property.Value
+    }
+
+    if ($values.reclaimedBytes -le 0) {
+      throw "$Prefix-completion-parity-empty: $Label completion must prove positive reclaimed bytes."
+    }
+
+    foreach ($name in @("selectedRouteProofPacketReclaimedBytes", "ledgerReclaimedBytes", "rescanExpectedBytes")) {
+      if ($values[$name] -ne $values.reclaimedBytes) {
+        throw "$Prefix-completion-parity: $Label completion counts.$name must match counts.reclaimedBytes."
+      }
+    }
+
+    if ($values.rescanActualRemainingBytes -lt 0) {
+      throw "$Prefix-completion-parity: $Label completion counts.rescanActualRemainingBytes must be non-negative."
+    }
   }
 
   function Archive-FirstRouteRootExports {
