@@ -108,6 +108,13 @@ export function buildPrivateDemoReadinessSummary({
       detail: "Route setup and Windows validation packets must exist before selected-route launch."
     }),
     buildCheck({
+      id: "native-executor-coverage",
+      label: "Native executor coverage",
+      passed: scriptIncludes(packageJson, "native:executor-coverage", "run-native-executor-coverage.mjs") &&
+        fileExists(root, "scripts", "run-native-executor-coverage.mjs"),
+      detail: "Private demo readiness must expose native route boundary and Rust unit-test coverage for real cleanup executors."
+    }),
+    buildCheck({
       id: "workflow-proof-validation",
       label: "Workflow proof validation",
       passed: scriptIncludes(packageJson, "validate:workflow-proof", "run-workflow-proof-check.mjs") &&

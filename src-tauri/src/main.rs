@@ -12494,6 +12494,54 @@ mod tests {
     }
 
     #[test]
+    fn docker_build_cache_target_validation_accepts_only_inventory_marker() {
+        assert_eq!(
+            docker_build_cache_target_reject_code("Docker Desktop build cache"),
+            None,
+            "Docker build-cache executor should accept only the native inventory marker"
+        );
+        assert_eq!(
+            docker_build_cache_target_reject_code("docker system prune"),
+            Some("target-forbidden"),
+            "arbitrary Docker prune commands must stay outside the executor target"
+        );
+        assert_eq!(
+            docker_build_cache_target_reject_code("C:\\Users\\demo\\.docker"),
+            Some("target-not-docker-build-cache"),
+            "Docker filesystem paths must not pass through the build-cache command executor"
+        );
+        assert_eq!(
+            docker_build_cache_target_reject_code(""),
+            Some("target-missing"),
+            "empty Docker build-cache targets should be rejected before execution"
+        );
+    }
+
+    #[test]
+    fn recycle_bin_target_validation_accepts_only_drive_recycle_bin_root() {
+        assert_eq!(
+            recycle_bin_target_reject_code("C:\\$Recycle.Bin"),
+            None,
+            "Recycle Bin executor should accept only the selected drive recycle-bin root"
+        );
+        assert_eq!(
+            recycle_bin_target_reject_code("C:\\Users\\demo\\Downloads"),
+            Some("target-forbidden"),
+            "Recycle Bin executor must reject ordinary user folders"
+        );
+        assert_eq!(
+            recycle_bin_target_reject_code("C:\\Windows"),
+            Some("target-forbidden"),
+            "Recycle Bin executor must reject protected system folders"
+        );
+        assert_eq!(
+            recycle_bin_target_reject_code("Recycle Bin"),
+            Some("target-not-recycle-bin"),
+            "Recycle Bin labels without a drive root are not enough for native execution"
+        );
+    }
+
+    #[test]
     fn large_file_archive_target_validation_accepts_only_old_large_reviewed_files() {
         let user_profile = unique_test_dir("large-file-target-proof");
         let videos = user_profile.join("Videos");
