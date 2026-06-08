@@ -153,6 +153,88 @@ const assert = require("assert");
   assert(inAppBundleMarkdown.includes("spaceguard-workflow-proof-check.json"), "in-app support bundle markdown should list workflow proof check");
   assert(inAppBundleMarkdown.includes("Workflow proof for npm-cache is accepted."), "in-app support bundle markdown should include proof summary");
 
+  const queueCandidate = {
+    id: "npm-cache:C:\\Users\\LocalUser\\AppData\\Local\\npm-cache\\_cacache",
+    title: "npm cache",
+    route: "bounded-npm-cache-delete",
+    routeInput: "npm-cache",
+    actionType: "run-npm-cache-executor",
+    targetId: "npm-cache:C:\\Users\\LocalUser\\AppData\\Local\\npm-cache\\_cacache",
+    bytes: 512 * 1024 * 1024,
+    canExecute: true,
+    envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
+    blockedReason: ""
+  };
+  const readyAgentQueue = workflow.buildAppAgentTaskQueue({
+    cleanupQueue: [queueCandidate],
+    execution: {
+      proofStatus: "waiting-for-execution",
+      proofAllowsNextExecutor: true,
+      consentMatchesPlan: true,
+      scanFingerprintPresent: true
+    }
+  });
+  assert.strictEqual(readyAgentQueue.schemaVersion, "spaceguard-app-agent-task-queue/v1", "app agent task queue should expose a stable schema");
+  assert(readyAgentQueue.rows.some((row) => row.source === "scoped-executor" && row.status === "ready"), "app agent task queue should expose ready executor rows only after current consent exists");
+
+  const preConsentAgentQueue = workflow.buildAppAgentTaskQueue({
+    cleanupQueue: [queueCandidate],
+    execution: {
+      proofStatus: "waiting-for-execution",
+      proofAllowsNextExecutor: true,
+      consentMatchesPlan: false,
+      scanFingerprintPresent: true
+    }
+  });
+  const preConsentExecutor = preConsentAgentQueue.rows.find((row) => row.source === "scoped-executor");
+  assert.strictEqual(preConsentExecutor.status, "blocked", "app agent task queue should not mark executor rows ready before current consent");
+  assert.strictEqual(preConsentExecutor.blocker, "consent", "pre-consent executor rows should name consent as the blocker");
+
+  const rescanAgentQueue = workflow.buildAppAgentTaskQueue({
+    cleanupQueue: [queueCandidate],
+    execution: {
+      accepted: true,
+      proofStatus: "needs-rescan",
+      proofAllowsNextExecutor: false,
+      canRunPostRunRescan: true,
+      rescanComparisonStatus: "needs-rescan",
+      postRunScanEvidence: false
+    }
+  });
+  assert(rescanAgentQueue.rows.some((row) => row.source === "post-run-proof" && row.actionType === "rescan"), "app agent task queue should prioritize post-run rescan while proof is pending");
+  assert(!rescanAgentQueue.rows.some((row) => row.source === "scoped-executor" && row.status === "ready"), "app agent task queue should not expose ready executor rows before proof handoff is complete");
+
+  const supportAgentQueue = workflow.buildAppAgentTaskQueue({
+    cleanupQueue: [queueCandidate],
+    execution: {
+      accepted: true,
+      proofStatus: "proof-complete",
+      proofAllowsNextExecutor: false,
+      workflowProofCheckCanAccept: true,
+      supportBundleWritten: false,
+      rescanComparisonStatus: "matched",
+      postRunScanEvidence: true
+    }
+  });
+  assert(supportAgentQueue.rows.some((row) => row.source === "support-bundle" && row.targetId === "spaceguard-support-bundle"), "app agent task queue should prioritize support bundle capture after accepted proof");
+  assert(!supportAgentQueue.rows.some((row) => row.source === "scoped-executor" && row.status === "ready"), "support-bundle handoff should block ready executor rows");
+
+  const handedOffAgentQueue = workflow.buildAppAgentTaskQueue({
+    cleanupQueue: [queueCandidate],
+    execution: {
+      accepted: true,
+      proofStatus: "proof-complete",
+      proofAllowsNextExecutor: true,
+      workflowProofCheckCanAccept: true,
+      supportBundleWritten: true,
+      rescanComparisonStatus: "matched",
+      postRunScanEvidence: true,
+      consentMatchesPlan: true,
+      scanFingerprintPresent: true
+    }
+  });
+  assert(handedOffAgentQueue.rows.some((row) => row.source === "scoped-executor" && row.status === "ready"), "app agent task queue should restore executor rows after support bundle handoff");
+
   const stillPresent = workflow.buildPostRunProof({
     candidate: selectedInstaller,
     executionRecord: {

@@ -103,6 +103,7 @@ for (const marker of [
 assert(app.includes("requestOpenAIAgentAdvice"), "OpenAI advisor should be wired into the real desktop shell");
 assert(app.includes("buildOpenAIAgentRecommendationBroker"), "OpenAI advisor should broker model recommendations through deterministic app gates");
 assert(app.includes("./real-workflow.mjs"), "app should import tested real workflow helpers");
+assert(app.includes("buildAppAgentTaskQueue"), "app should build a deterministic task queue for OpenAI advisor context");
 assert(app.includes("buildRouteReadiness"), "app should use tested route readiness guardrails");
 assert(app.includes("buildExecutionPrerequisites"), "app should use tested route-specific execution prerequisites");
 assert(app.includes("buildRouteSetupChecklist"), "app should use tested route setup checklist guardrails");
@@ -122,6 +123,7 @@ assert(app.includes("renderInAppSupportBundleMarkdown"), "proof export should re
 assert(app.includes("supportBundleWritten"), "cleanup queue should keep next route locked until support bundle capture succeeds");
 assert(app.includes("supportBundleWritten: Boolean(supportBundleWritten)"), "OpenAI context should receive support bundle completion state");
 assert(app.includes("proofAllowsNextExecutor: !executionRecord || supportBundleWritten"), "OpenAI context should not allow another executor until support bundle capture succeeds");
+assert(app.includes("agentTaskQueue"), "OpenAI context should include the app task queue that the advisor instructions require");
 assert(app.includes("selected-route-proof-reviewed"), "app workflow proof should require reviewed selected-route proof export");
 assert(!app.includes("selected-route-proof-import"), "app workflow proof should not require obsolete selected-route proof import");
 assert(app.includes("Export proof, let the in-app verifier accept it, and capture the support bundle before selecting another cleanup target."), "cleanup queue should explain the workflow proof and support bundle lock");

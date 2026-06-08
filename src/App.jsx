@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, formatBytes, renderInAppSupportBundleMarkdown } from "./real-workflow.mjs";
+import { buildAppAgentTaskQueue, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, formatBytes, renderInAppSupportBundleMarkdown } from "./real-workflow.mjs";
 import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -2009,6 +2009,50 @@ function buildAgentContext({
     targetPath: redactPath(candidate.targetPath || "")
   }));
   const targetsForRoute = (route) => cleanupQueue.filter((candidate) => candidate.route === route);
+  const execution = executionRecord ? {
+    planId,
+    scanFingerprint,
+    scanFingerprintPresent: Boolean(scanFingerprint),
+    consentPlanId,
+    consentMatchesPlan: Boolean(planId && consentPlanId && consentPlanId === planId),
+    route: executionRecord.route,
+    accepted: executionRecord.accepted,
+    reclaimedBytes: executionRecord.bytes,
+    proofStatus: getAgentProofStatus(executionRecord, postRunProof, workflowProofAccepted),
+    proofAllowsNextExecutor: !executionRecord || supportBundleWritten,
+    workflowProofCheckStatus: workflowProofCheck?.status || "not-run",
+    workflowProofCheckCanAccept: Boolean(workflowProofCheck?.canAccept),
+    supportBundleWritten: Boolean(supportBundleWritten),
+    workflowProofCheckBlockers: Array.isArray(workflowProofCheck?.blockers)
+      ? workflowProofCheck.blockers.map((blocker) => ({
+          id: blocker.id || "",
+          label: blocker.label || "",
+          detail: blocker.detail || ""
+        }))
+      : [],
+    canRunPostRunRescan: Boolean(executionRecord),
+    rescanComparisonStatus: postRunProof.status,
+    postRunScanEvidence: Boolean(postRunProof.scanGeneratedAt),
+    largeFileArchiveDestination: String(archiveDestination || "").trim(),
+    archiveDestinationReady: Boolean(String(archiveDestination || "").trim()),
+    permanentRemovalConfirmed: Boolean(permanentRemovalConfirmed)
+  } : {
+    planId,
+    scanFingerprint,
+    scanFingerprintPresent: Boolean(scanFingerprint),
+    consentPlanId,
+    consentMatchesPlan: Boolean(planId && consentPlanId && consentPlanId === planId),
+    proofStatus: "waiting-for-execution",
+    proofAllowsNextExecutor: true,
+    supportBundleWritten: Boolean(supportBundleWritten),
+    canRunPostRunRescan: false,
+    rescanComparisonStatus: "not-run",
+    postRunScanEvidence: false,
+    largeFileArchiveDestination: String(archiveDestination || "").trim(),
+    archiveDestinationReady: Boolean(String(archiveDestination || "").trim()),
+    permanentRemovalConfirmed: Boolean(permanentRemovalConfirmed)
+  };
+  const agentTaskQueue = buildAppAgentTaskQueue({ cleanupQueue, execution });
   return {
     schemaVersion: "spaceguard-openai-agent-context/v1",
     productSurface: "real-windows-desktop-app",
@@ -2052,6 +2096,7 @@ function buildAgentContext({
     npmCacheTargets: targetsForRoute("bounded-npm-cache-delete"),
     pnpmStoreTargets: targetsForRoute("bounded-pnpm-store-delete"),
     recycleBinTargets: targetsForRoute("shell-recycle-bin"),
+    agentTaskQueue,
     selected: selectedCandidate ? {
       id: selectedCandidate.id,
       route: selectedCandidate.route,
@@ -2059,49 +2104,7 @@ function buildAgentContext({
       canExecute: selectedCandidate.canExecute,
       bytes: selectedCandidate.bytes
     } : null,
-    execution: executionRecord ? {
-      planId,
-      scanFingerprint,
-      scanFingerprintPresent: Boolean(scanFingerprint),
-      consentPlanId,
-      consentMatchesPlan: Boolean(planId && consentPlanId && consentPlanId === planId),
-      route: executionRecord.route,
-      accepted: executionRecord.accepted,
-      reclaimedBytes: executionRecord.bytes,
-      proofStatus: getAgentProofStatus(executionRecord, postRunProof, workflowProofAccepted),
-      proofAllowsNextExecutor: !executionRecord || supportBundleWritten,
-      workflowProofCheckStatus: workflowProofCheck?.status || "not-run",
-      workflowProofCheckCanAccept: Boolean(workflowProofCheck?.canAccept),
-      supportBundleWritten: Boolean(supportBundleWritten),
-      workflowProofCheckBlockers: Array.isArray(workflowProofCheck?.blockers)
-        ? workflowProofCheck.blockers.map((blocker) => ({
-            id: blocker.id || "",
-            label: blocker.label || "",
-            detail: blocker.detail || ""
-          }))
-        : [],
-      canRunPostRunRescan: Boolean(executionRecord),
-      rescanComparisonStatus: postRunProof.status,
-      postRunScanEvidence: Boolean(postRunProof.scanGeneratedAt),
-      largeFileArchiveDestination: String(archiveDestination || "").trim(),
-      archiveDestinationReady: Boolean(String(archiveDestination || "").trim()),
-      permanentRemovalConfirmed: Boolean(permanentRemovalConfirmed)
-    } : {
-      planId,
-      scanFingerprint,
-      scanFingerprintPresent: Boolean(scanFingerprint),
-      consentPlanId,
-      consentMatchesPlan: Boolean(planId && consentPlanId && consentPlanId === planId),
-      proofStatus: "waiting-for-execution",
-      proofAllowsNextExecutor: true,
-      supportBundleWritten: Boolean(supportBundleWritten),
-      canRunPostRunRescan: false,
-      rescanComparisonStatus: "not-run",
-      postRunScanEvidence: false,
-      largeFileArchiveDestination: String(archiveDestination || "").trim(),
-      archiveDestinationReady: Boolean(String(archiveDestination || "").trim()),
-      permanentRemovalConfirmed: Boolean(permanentRemovalConfirmed)
-    }
+    execution
   };
 }
 

@@ -715,6 +715,142 @@ function buildInAppSupportBundleNextStep({ requiredWritten, accepted }) {
   return "You can archive this bundle with the three proof artifacts before enabling another cleanup route.";
 }
 
+export function buildAppAgentTaskQueue({
+  cleanupQueue = [],
+  execution = {}
+} = {}) {
+  const rows = [];
+  if (execution?.accepted && execution.rescanComparisonStatus !== "matched") {
+    const canRun = Boolean(execution.canRunPostRunRescan);
+    rows.push({
+      id: "task-post-run-rescan",
+      source: "post-run-proof",
+      actionType: "rescan",
+      targetId: "post-run-rescan",
+      route: "post-run-proof",
+      title: "Run post-run rescan before another executor",
+      bytes: 0,
+      priority: "high",
+      status: canRun ? "ready" : "blocked",
+      canExecuteNow: canRun,
+      manualOnly: false,
+      executorFlag: "",
+      buttonLabel: "Run post-run rescan",
+      reason: canRun
+        ? "A scoped executor has ledger evidence; capture the post-run native scan before any other executor."
+        : "Post-run native rescan is required before any other executor.",
+      blocker: canRun ? "" : "post-run-rescan-unavailable",
+      checks: [
+        appTaskCheck("execution-ledger", "Execution ledger", true, "Native execution ledger exists."),
+        appTaskCheck("post-run-rescan", "Post-run rescan", canRun, canRun ? "Post-run rescan can run." : "Post-run rescan is unavailable.")
+      ]
+    });
+  }
+
+  if (
+    execution?.accepted &&
+    execution.proofStatus === "proof-complete" &&
+    execution.workflowProofCheckCanAccept &&
+    !execution.supportBundleWritten
+  ) {
+    rows.push({
+      id: "task-support-bundle",
+      source: "support-bundle",
+      actionType: "manual-only",
+      targetId: "spaceguard-support-bundle",
+      route: "support-bundle",
+      title: "Capture support bundle before another route",
+      bytes: 0,
+      priority: "high",
+      status: "needs-user-review",
+      canExecuteNow: false,
+      manualOnly: true,
+      executorFlag: "",
+      buttonLabel: "Export proof packet",
+      reason: "Workflow proof is accepted; write spaceguard-support-bundle.md before another cleanup route.",
+      blocker: "support-bundle-required",
+      checks: [
+        appTaskCheck("workflow-proof-check", "Workflow proof check", true, "In-app workflow verifier accepted the proof."),
+        appTaskCheck("support-bundle", "Support bundle", false, "spaceguard-support-bundle.md has not been written yet.")
+      ]
+    });
+  }
+
+  if (execution?.proofAllowsNextExecutor) {
+    for (const candidate of cleanupQueue.slice(0, 12)) {
+      const candidateReady = Boolean(candidate.canExecute);
+      const consentReady = Boolean(execution.consentMatchesPlan);
+      const scanReady = Boolean(execution.scanFingerprintPresent);
+      const canExecute = Boolean(candidateReady && consentReady && scanReady);
+      const blocker = canExecute
+        ? ""
+        : !candidateReady
+          ? "route-readiness-blocked"
+          : !consentReady
+            ? "consent"
+            : "scan-fingerprint";
+      const blockedReason = !candidateReady
+        ? candidate.blockedReason || "Route readiness blocks this cleanup target."
+        : !consentReady
+          ? "Current-plan consent is required before recommending the executor button."
+          : "Current scan fingerprint is required before recommending the executor button.";
+      rows.push({
+        id: `task-${candidate.actionType || "run-executor"}-${candidate.targetId || candidate.id || candidate.routeInput || "target"}`,
+        source: "scoped-executor",
+        actionType: candidate.actionType || "run-scoped-executor",
+        targetId: candidate.targetId || candidate.id || "",
+        route: candidate.route || "",
+        title: candidate.title || candidate.routeInput || "Cleanup target",
+        bytes: Number(candidate.bytes || 0),
+        priority: appTaskPriority(candidate.bytes, canExecute ? "ready" : "blocked"),
+        status: canExecute ? "ready" : "blocked",
+        canExecuteNow: canExecute,
+        manualOnly: false,
+        executorFlag: candidate.envVar || "",
+        buttonLabel: "Execute selected cleanup",
+        reason: canExecute
+          ? "All app-visible route and consent gates are ready for this selected cleanup target."
+          : blockedReason,
+        blocker,
+        checks: [
+          appTaskCheck("target-ready", "Target ready", candidateReady, candidateReady ? "Target route readiness passed." : candidate.blockedReason || "Target is blocked."),
+          appTaskCheck("consent", "Current consent", consentReady, consentReady ? "Consent matches the current plan." : "Current-plan consent is missing."),
+          appTaskCheck("scan-fingerprint", "Scan fingerprint", scanReady, scanReady ? "Current scan fingerprint is present." : "Current scan fingerprint is missing.")
+        ]
+      });
+    }
+  }
+
+  return {
+    schemaVersion: "spaceguard-app-agent-task-queue/v1",
+    status: rows.some((row) => row.status === "ready") ? "ready" : rows.length ? "needs-user-review" : "empty",
+    rows,
+    counts: {
+      total: rows.length,
+      ready: rows.filter((row) => row.status === "ready").length,
+      blocked: rows.filter((row) => row.status === "blocked").length,
+      manual: rows.filter((row) => row.manualOnly).length
+    }
+  };
+}
+
+function appTaskCheck(id, label, passed, detail) {
+  return {
+    id,
+    label,
+    passed: Boolean(passed),
+    detail
+  };
+}
+
+function appTaskPriority(bytes = 0, status = "") {
+  const size = Number(bytes || 0);
+  if (status === "ready") return "high";
+  if (size >= 5 * 1024 ** 3) return "high";
+  if (size >= 1024 ** 3) return "medium";
+  return "low";
+}
+
 function guardrailRow({ id, label, passed, detail }) {
   return {
     id,
