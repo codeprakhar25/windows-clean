@@ -88,7 +88,7 @@ $env:SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR="1"
 npm run proof:route:windows -- -Route npm-cache
 ```
 
-The selected-route runner still owns the final process environment: it forces every other scoped executor flag off before launching the app. In the app, run the native scan, select only the scanned npm `_cacache` target, arm consent, optionally use OpenAI cleanup agent only for ranking and brokered follow-through, click the npm scoped executor, capture native volume proof, run the post-run rescan, export `spaceguard-selected-route-proof-packet.md`, complete Selected route proof import, re-export the selected-route proof packet, and export `spaceguard-real-workflow-proof.md`. Do not close the app until native volume proof, selected-route proof import, and workflow proof export are complete.
+The selected-route runner still owns the final process environment: it forces every other scoped executor flag off before launching the app. In the app, run the native scan, select only the scanned npm `_cacache` target, arm consent, optionally use OpenAI cleanup agent only for ranking and brokered follow-through, click the npm scoped executor, capture native volume proof, run the post-run rescan, export `spaceguard-selected-route-proof-packet.md`, complete Selected route proof import, re-export the selected-route proof packet, and export `spaceguard-real-workflow-proof.md`. Do not close the app until native volume proof, selected-route proof packet export, selected-route proof import, and workflow proof export are complete.
 
 If selected-route proof export/import is corrected after the desktop session closes, resume only selected-route post-app finalization against the existing evidence folder:
 

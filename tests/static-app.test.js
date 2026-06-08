@@ -553,6 +553,7 @@ assert(realDataGuide.includes("npm run validate:route -- --route npm-cache"), "W
 assert(realDataGuide.includes("Windows validation packet post-run proof checklist"), "Windows setup guide should document validation packet post-run proof checklist");
 assert(realDataGuide.includes("post-run rescan, proof export, Selected route proof import"), "Windows setup guide should document proof export before selected-route proof import in the compact workflow");
 assert(realDataGuide.includes("Selected route proof import"), "Windows setup guide should document selected route proof import");
+assert(realDataGuide.includes("Do not close the app until native volume proof, selected-route proof packet export, selected-route proof import, and workflow proof export are complete"), "Windows setup guide should keep the app-close stop condition aligned with the runner");
 assert(realDataGuide.includes("multi-flag-blocked"), "Windows setup guide should document multi-flag setup blocking");
 assert(realDataGuide.includes("realWorkflow"), "Windows setup guide should document setup doctor's compact real workflow");
 assert(realDataGuide.includes("npm run validate:workflow-proof -- --file"), "Windows setup guide should document workflow proof verifier usage");
