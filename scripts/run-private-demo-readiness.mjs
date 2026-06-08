@@ -27,6 +27,11 @@ export function buildPrivateDemoReadinessSummary({
   const workflowProofCheck = readText(path.join(root, "scripts", "run-workflow-proof-check.mjs"));
   const firstRouteCompletionCheck = readText(path.join(root, "scripts", "run-first-route-completion-check.mjs"));
   const selectedRouteCompletionCheck = readText(path.join(root, "scripts", "run-route-completion-check.mjs"));
+  const openAiSmokeRunner = readText(path.join(root, "scripts", "run-openai-advisor-smoke.mjs"));
+  const envExample = readText(path.join(root, ".env.example"));
+  const readme = readText(path.join(root, "README.md"));
+  const windowsSetup = readText(path.join(root, "WINDOWS_REAL_DATA_SETUP.md"));
+  const agentDesign = readText(path.join(root, "AGENT_DESIGN.md"));
 
   const checks = [
     buildCheck({
@@ -88,8 +93,24 @@ export function buildPrivateDemoReadinessSummary({
       label: "OpenAI fixture smoke",
       passed: scriptIncludes(packageJson, "openai:smoke:fixture", "--fixture-only") &&
         fileExists(root, "scripts", "run-openai-advisor-smoke.mjs") &&
-        readText(path.join(root, "scripts", "run-openai-advisor-smoke.mjs")).includes("liveRouteValidation"),
+        openAiSmokeRunner.includes("liveRouteValidation"),
       detail: "The deterministic OpenAI broker smoke must validate the selected live route contract."
+    }),
+    buildCheck({
+      id: "openai-live-smoke",
+      label: "OpenAI live smoke",
+      passed: scriptIncludes(packageJson, "openai:smoke", "run-openai-advisor-smoke.mjs") &&
+        !scriptIncludes(packageJson, "openai:smoke", "--fixture-only") &&
+        openAiSmokeRunner.includes("OPENAI_API_KEY is missing") &&
+        openAiSmokeRunner.includes("getOpenAIAgentConfig(env)") &&
+        openAiSmokeRunner.includes("requestOpenAIAgentAdvice") &&
+        envExample.includes("OPENAI_API_KEY=") &&
+        envExample.includes("OPENAI_MODEL=") &&
+        envExample.includes("OPENAI_REASONING_EFFORT=") &&
+        readme.includes("npm run openai:smoke -- --route npm-cache") &&
+        windowsSetup.includes("npm run openai:smoke -- --route npm-cache") &&
+        agentDesign.includes("The OpenAI integration is advisory, not an executor."),
+      detail: "The live OpenAI smoke must use .env/API-key mode, keep fixture-only separate, and document advisory-only authority before the private demo."
     }),
     buildCheck({
       id: "setup-doctor",
@@ -190,6 +211,8 @@ export function buildPrivateDemoReadinessSummary({
       "npm test",
       "npm run build",
       "npm run demo:private-readiness",
+      "npm run openai:smoke:fixture -- --route npm-cache",
+      "npm run openai:smoke -- --route npm-cache",
       "npm run demo:private-windows-preflight",
       "npm run native:build",
       "npm run proof:first-route:windows -- -Route temp-fixture",

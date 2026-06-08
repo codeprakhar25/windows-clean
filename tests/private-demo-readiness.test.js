@@ -38,6 +38,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
   assertReadyCheck(summary, "selected-route-windows-runner");
   assertReadyCheck(summary, "exact-proof-import-artifact");
   assertReadyCheck(summary, "openai-fixture-smoke");
+  assertReadyCheck(summary, "openai-live-smoke");
   assertReadyCheck(summary, "setup-doctor");
   assertReadyCheck(summary, "route-setup-validation");
   assertReadyCheck(summary, "native-executor-coverage");
@@ -47,6 +48,10 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
   assert(summary.nextCommands.includes("npm test"), "readiness verifier should require tests before the compiled demo");
   assert(summary.nextCommands.includes("npm run build"), "readiness verifier should require web build before native build");
   assert(summary.nextCommands.includes("npm run native:build"), "readiness verifier should include the native build command");
+  assert(
+    summary.nextCommands.includes("npm run openai:smoke -- --route npm-cache"),
+    "readiness verifier should include the live OpenAI smoke command for the selected route"
+  );
   assert(
     summary.nextCommands.some((command) => command.includes("proof:first-route:windows")),
     "readiness verifier should include the first-route Windows proof command"
