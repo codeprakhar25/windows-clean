@@ -7269,6 +7269,10 @@ fn user_cache_file_forbidden(path: &Path) -> bool {
 }
 
 fn delete_android_cache_target(root: &Path) -> AndroidCacheDeleteResult {
+    delete_android_cache_target_at(root, SystemTime::now())
+}
+
+fn delete_android_cache_target_at(root: &Path, now: SystemTime) -> AndroidCacheDeleteResult {
     let mut result = AndroidCacheDeleteResult::default();
     if android_cache_target_reject_code(&path_to_string(root)).is_some() {
         result.skipped_count += 1;
@@ -7294,7 +7298,7 @@ fn delete_android_cache_target(root: &Path) -> AndroidCacheDeleteResult {
             continue;
         }
         if metadata.is_file() {
-            delete_single_android_cache_file(&path, &metadata, &mut result);
+            delete_single_android_cache_file_at(&path, &metadata, now, &mut result);
             continue;
         }
         if metadata.is_dir() {
@@ -7333,7 +7337,18 @@ fn delete_single_android_cache_file(
     metadata: &fs::Metadata,
     result: &mut AndroidCacheDeleteResult,
 ) {
-    if !file_old_enough_for_android_cache_delete(metadata) || android_cache_file_forbidden(path) {
+    delete_single_android_cache_file_at(path, metadata, SystemTime::now(), result);
+}
+
+fn delete_single_android_cache_file_at(
+    path: &Path,
+    metadata: &fs::Metadata,
+    now: SystemTime,
+    result: &mut AndroidCacheDeleteResult,
+) {
+    if !file_old_enough_for_android_cache_delete_at(metadata, now)
+        || android_cache_file_forbidden(path)
+    {
         result.skipped_count += 1;
         return;
     }
@@ -7348,10 +7363,14 @@ fn delete_single_android_cache_file(
 }
 
 fn file_old_enough_for_android_cache_delete(metadata: &fs::Metadata) -> bool {
+    file_old_enough_for_android_cache_delete_at(metadata, SystemTime::now())
+}
+
+fn file_old_enough_for_android_cache_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
     let Ok(modified) = metadata.modified() else {
         return false;
     };
-    let Ok(age) = SystemTime::now().duration_since(modified) else {
+    let Ok(age) = now.duration_since(modified) else {
         return false;
     };
     age.as_secs() >= 30 * 24 * 60 * 60
@@ -12158,6 +12177,70 @@ mod tests {
         let _ = fs::remove_dir(root.join("config"));
         let _ = fs::remove_dir(root.join("sessions"));
         let _ = fs::remove_dir(&root);
+        let _ = fs::remove_dir(&user_profile);
+    }
+
+    #[test]
+    fn android_cache_deleter_removes_only_old_cache_files() {
+        let user_profile = unique_test_dir("android-cache-delete-proof");
+        let root = user_profile.join(".android").join("build-cache");
+        let old_blob = root.join("tool").join("blob.bin");
+        let old_temp = root.join("tool").join("tmp").join("scratch.bin");
+        let json_metadata = root.join("tool").join("metadata.json");
+        let config_file = root.join("config").join("state.bin");
+        let blob_bytes = b"delete-android-cache";
+        let temp_bytes = b"delete-android-temp";
+
+        fs::create_dir_all(old_blob.parent().expect("old blob parent"))
+            .expect("create old Android blob dir");
+        fs::create_dir_all(old_temp.parent().expect("old temp parent"))
+            .expect("create old Android temp dir");
+        fs::create_dir_all(config_file.parent().expect("config parent"))
+            .expect("create Android config dir");
+        fs::write(&old_blob, blob_bytes).expect("write old Android cache blob");
+        fs::write(&old_temp, temp_bytes).expect("write old Android cache temp");
+        fs::write(&json_metadata, b"keep-json").expect("write Android json metadata");
+        fs::write(&config_file, b"keep-config").expect("write Android config file");
+
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _restore_profile = EnvRestore::set("USERPROFILE", &user_profile);
+        let _restore_home = EnvRestore::set("HOME", &user_profile);
+        let old_enough_now = SystemTime::now() + Duration::from_secs(31 * 24 * 60 * 60);
+
+        let result = delete_android_cache_target_at(&root, old_enough_now);
+
+        assert_eq!(
+            result.deleted_files, 2,
+            "old Android cache files should be deleted"
+        );
+        assert_eq!(
+            result.deleted_bytes,
+            (blob_bytes.len() + temp_bytes.len()) as u64,
+            "deleted bytes should match removed Android cache file lengths"
+        );
+        assert!(
+            !old_blob.exists(),
+            "old Android cache blob should be removed"
+        );
+        assert!(
+            !old_temp.exists(),
+            "old Android cache temp file should be removed"
+        );
+        assert!(
+            json_metadata.exists(),
+            "Android cache json metadata must survive"
+        );
+        assert!(
+            config_file.exists(),
+            "Android cache config dirs must survive"
+        );
+
+        let _ = fs::remove_file(&json_metadata);
+        let _ = fs::remove_file(&config_file);
+        let _ = fs::remove_dir(root.join("tool"));
+        let _ = fs::remove_dir(root.join("config"));
+        let _ = fs::remove_dir(&root);
+        let _ = fs::remove_dir(user_profile.join(".android"));
         let _ = fs::remove_dir(&user_profile);
     }
 
