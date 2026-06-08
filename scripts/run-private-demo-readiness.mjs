@@ -183,6 +183,8 @@ export function buildPrivateDemoReadinessSummary({
         privateV1Runner.includes("[System.Diagnostics.ProcessStartInfo]::new()") &&
         privateV1Runner.includes("stderrPath") &&
         privateV1Runner.includes("private-v1-openai-live-required") &&
+        privateV1Runner.includes("private-v1-openai-key-required") &&
+        privateV1Runner.includes("Import-SpaceGuardDotEnv") &&
         privateV1Runner.includes("Assert-KnownSelectedRoute") &&
         privateV1Runner.includes("selected-route-setup.json") &&
         privateV1Runner.includes("selected-route-unknown") &&

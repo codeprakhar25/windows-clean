@@ -24,6 +24,50 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $RepoRoot
 
 try {
+  function Import-SpaceGuardDotEnv {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+      return
+    }
+
+    foreach ($line in Get-Content -LiteralPath $Path) {
+      $clean = $line.Trim()
+      if (-not $clean -or $clean.StartsWith("#")) {
+        continue
+      }
+
+      if ($clean.StartsWith("export ")) {
+        $clean = $clean.Substring("export ".Length).Trim()
+      }
+
+      $separator = $clean.IndexOf("=")
+      if ($separator -lt 1) {
+        continue
+      }
+
+      $name = $clean.Substring(0, $separator).Trim()
+      $value = $clean.Substring($separator + 1).Trim()
+      if (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+        $value = $value.Substring(1, $value.Length - 2)
+      }
+
+      if ($name -and -not [System.Environment]::GetEnvironmentVariable($name, "Process")) {
+        [System.Environment]::SetEnvironmentVariable($name, $value, "Process")
+      }
+    }
+  }
+
+  function Assert-PrivateV1OpenAIKey {
+    $apiKey = [System.Environment]::GetEnvironmentVariable("OPENAI_API_KEY", "Process")
+    if ([string]::IsNullOrWhiteSpace($apiKey)) {
+      throw "private-v1-openai-key-required: private V1 acceptance requires OPENAI_API_KEY in .env or the process environment before any cleanup proof starts."
+    }
+  }
+
+  Import-SpaceGuardDotEnv -Path (Join-Path $RepoRoot ".env")
+  Assert-PrivateV1OpenAIKey
+
   $RunStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
   $RouteSlug = ($SelectedRoute.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim("-")
   if ([string]::IsNullOrWhiteSpace($RouteSlug)) {
