@@ -1944,11 +1944,17 @@ export default function App() {
     setNativeWriteBoundary({ status: "idle", result: null, error: "" });
     setNativeRealExecution({ status: "idle", result: null, error: "" });
     setNativeProjectDependencyExecution({ status: "idle", result: null, error: "" });
+    setNativeDownloadsExecution({ status: "idle", result: null, error: "" });
+    setNativeLargeFileArchiveExecution({ status: "idle", result: null, error: "" });
     setNativeBrowserCacheExecution({ status: "idle", result: null, error: "" });
     setNativeGradleCacheExecution({ status: "idle", result: null, error: "" });
+    setNativeUserCacheExecution({ status: "idle", result: null, error: "" });
+    setNativeAndroidCacheExecution({ status: "idle", result: null, error: "" });
+    setNativeShaderCacheExecution({ status: "idle", result: null, error: "" });
     setNativePipCacheExecution({ status: "idle", result: null, error: "" });
     setNativeDockerBuildCacheExecution({ status: "idle", result: null, error: "" });
     setNativeNpmCacheExecution({ status: "idle", result: null, error: "" });
+    setNativePnpmStoreExecution({ status: "idle", result: null, error: "" });
     setNativeRecycleBinExecution({ status: "idle", result: null, error: "" });
     setExecutionConsent({ accepted: false, planId: "", acceptedAt: "" });
   }

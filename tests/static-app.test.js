@@ -995,6 +995,27 @@ assert(app.includes("Volume proof"), "execution ledger should make native volume
 assert(app.includes("nativeVolumeProof"), "execution ledger should preserve structured native volume proof");
 assert(app.includes("Native volume proof"), "execution proof handoff should show native volume proof details");
 assert(model.includes("buildNativeVolumeProofHandoffSummary"), "model should summarize native volume proof for execution handoff");
+const clearExecutionStateStart = app.indexOf("function clearExecutionState()");
+const clearExecutionStateEnd = app.indexOf("\n  function updateScanSetting", clearExecutionStateStart);
+const clearExecutionStateBlock = app.slice(clearExecutionStateStart, clearExecutionStateEnd);
+for (const setter of [
+  "setNativeRealExecution",
+  "setNativeProjectDependencyExecution",
+  "setNativeDownloadsExecution",
+  "setNativeLargeFileArchiveExecution",
+  "setNativeBrowserCacheExecution",
+  "setNativeGradleCacheExecution",
+  "setNativeUserCacheExecution",
+  "setNativeAndroidCacheExecution",
+  "setNativeShaderCacheExecution",
+  "setNativePipCacheExecution",
+  "setNativeDockerBuildCacheExecution",
+  "setNativeNpmCacheExecution",
+  "setNativePnpmStoreExecution",
+  "setNativeRecycleBinExecution"
+]) {
+  assert(clearExecutionStateBlock.includes(`${setter}({ status: "idle", result: null, error: "" })`), `clearExecutionState should reset ${setter}`);
+}
 assert(app.includes("buildOpenAIAgentHandoffRecord"), "OpenAI recommendations should create first-class handoff records");
 assert(app.includes("openAiAgentHandoff"), "OpenAI handoff state should survive through executor dispatch");
 assert(app.includes("OpenAI handoff"), "native execution ledger should record OpenAI-brokered handoffs");
