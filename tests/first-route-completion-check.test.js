@@ -186,6 +186,7 @@ function createFirstRouteEvidence(patch = {}) {
       { id: "native-scan-current", passed: true },
       { id: "post-run-proof-complete", passed: true },
       { id: "selected-route-proof-import", passed: true },
+      { id: "selected-route-proof-export", passed: true },
       { id: "next-route-clearance", passed: true }
     ]
   };

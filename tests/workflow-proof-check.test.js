@@ -40,6 +40,7 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
       { id: "native-scan-current", passed: true },
       { id: "post-run-proof-complete", passed: true },
       { id: "selected-route-proof-import", passed: true },
+      { id: "selected-route-proof-export", passed: true },
       { id: "next-route-clearance", passed: true }
     ]
   };
@@ -48,6 +49,14 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
   assert.strictEqual(accepted.status, "accepted", "workflow-proven packet should be accepted");
   assert.strictEqual(accepted.canAccept, true, "workflow-proven packet should be accepted for route handoff");
   assert.strictEqual(accepted.readyForNextRoute, true, "workflow-proven packet should preserve next-route clearance");
+  const missingProofExportRow = verifier.buildWorkflowProofCheck({
+    evidenceObject: {
+      ...provenPacket,
+      rows: provenPacket.rows.filter((row) => row.id !== "selected-route-proof-export")
+    }
+  });
+  assert.strictEqual(missingProofExportRow.status, "blocked", "workflow proof without final selected-route proof export row should block");
+  assert(missingProofExportRow.blockers.some((blocker) => blocker.id === "selected-route-proof-export"), "missing selected-route proof export row blocker should be surfaced");
 
   const selectedRoutePacket = {
     ...provenPacket,

@@ -29,6 +29,7 @@ const requiredRowIds = [
   "native-scan-current",
   "post-run-proof-complete",
   "selected-route-proof-import",
+  "selected-route-proof-export",
   "next-route-clearance"
 ];
 
