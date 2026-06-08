@@ -115,6 +115,13 @@ export function buildPrivateDemoReadinessSummary({
       detail: "Private demo readiness must expose native route boundary and Rust unit-test coverage for real cleanup executors."
     }),
     buildCheck({
+      id: "windows-private-preflight-runner",
+      label: "Windows private preflight runner",
+      passed: scriptIncludes(packageJson, "demo:private-windows-preflight", "run-private-demo-windows-preflight.ps1") &&
+        fileExists(root, "scripts", "run-private-demo-windows-preflight.ps1"),
+      detail: "Private demo readiness must provide one Windows host preflight command before fixture and npm-cache proof runs."
+    }),
+    buildCheck({
       id: "workflow-proof-validation",
       label: "Workflow proof validation",
       passed: scriptIncludes(packageJson, "validate:workflow-proof", "run-workflow-proof-check.mjs") &&
@@ -183,6 +190,7 @@ export function buildPrivateDemoReadinessSummary({
       "npm test",
       "npm run build",
       "npm run demo:private-readiness",
+      "npm run demo:private-windows-preflight",
       "npm run native:build",
       "npm run proof:first-route:windows -- -Route temp-fixture",
       "npm run proof:route:windows -- -Route npm-cache"
