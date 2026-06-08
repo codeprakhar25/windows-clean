@@ -321,6 +321,12 @@ function App() {
     }),
     [selectedCandidate, archiveDestination, permanentRemovalConfirmed]
   );
+  const canExportProof = Boolean(postRunProof.status === "matched" && proofReviewed && executionRecord?.accepted);
+  const supportBundleWritten = Boolean(workflowProofAccepted && supportBundleWrite?.written);
+  const workflowLocks = useMemo(
+    () => buildWorkflowLocks({ executionRecord, workflowProofAccepted, supportBundleWritten }),
+    [executionRecord, workflowProofAccepted, supportBundleWritten]
+  );
   const executionGate = useMemo(
     () => buildExecutionGate({
       candidate: selectedCandidate,
@@ -329,17 +335,12 @@ function App() {
       expectedConfirmation,
       executionPrerequisites,
       scanFingerprint,
-      executionStatus
+      executionStatus,
+      workflowLocks
     }),
-    [selectedCandidate, consentChecked, confirmationText, expectedConfirmation, executionPrerequisites, scanFingerprint, executionStatus]
+    [selectedCandidate, consentChecked, confirmationText, expectedConfirmation, executionPrerequisites, scanFingerprint, executionStatus, workflowLocks]
   );
   const canExecute = executionGate.ready;
-  const canExportProof = Boolean(postRunProof.status === "matched" && proofReviewed && executionRecord?.accepted);
-  const supportBundleWritten = Boolean(workflowProofAccepted && supportBundleWrite?.written);
-  const workflowLocks = useMemo(
-    () => buildWorkflowLocks({ executionRecord, workflowProofAccepted, supportBundleWritten }),
-    [executionRecord, workflowProofAccepted, supportBundleWritten]
-  );
   const targetSwitchLocked = workflowLocks.targetSwitchLocked;
   const routeSetupLocked = workflowLocks.routeSetupLocked;
   const agentContext = useMemo(
@@ -446,7 +447,8 @@ function App() {
       expectedConfirmation,
       executionPrerequisites,
       scanFingerprint,
-      executionStatus
+      executionStatus,
+      workflowLocks
     });
     if (!currentExecutionGate.ready) {
       setExecutionStatus("error");

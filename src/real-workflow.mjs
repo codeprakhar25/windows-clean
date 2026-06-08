@@ -631,7 +631,8 @@ export function buildExecutionGate({
   expectedConfirmation = "",
   executionPrerequisites = { ready: true, blockers: [] },
   scanFingerprint = "",
-  executionStatus = "idle"
+  executionStatus = "idle",
+  workflowLocks = { proofAllowsNextExecutor: true }
 } = {}) {
   const expected = String(expectedConfirmation || "").trim();
   const actual = String(confirmationText || "").trim();
@@ -676,6 +677,14 @@ export function buildExecutionGate({
       detail: executionPrerequisites?.ready !== false
         ? "Route-specific execution prerequisites are satisfied."
         : `Resolve ${prerequisiteBlockers.length || 1} route-specific prerequisite blocker(s).`
+    }),
+    guardrailRow({
+      id: "proof-handoff",
+      label: "Proof handoff",
+      passed: workflowLocks?.proofAllowsNextExecutor !== false,
+      detail: workflowLocks?.proofAllowsNextExecutor !== false
+        ? "Workflow lock policy allows executor dispatch."
+        : "Export proof and capture the support bundle before another executor dispatch."
     }),
     guardrailRow({
       id: "executor-not-running",

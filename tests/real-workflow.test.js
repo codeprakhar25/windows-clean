@@ -266,6 +266,31 @@ const assert = require("assert");
   assert.strictEqual(readyExecutionGate.schemaVersion, "spaceguard-execution-gate/v1", "execution gate should expose a stable schema");
   assert.strictEqual(readyExecutionGate.ready, true, "execution gate should pass only when all dispatch prerequisites are ready");
 
+  const repeatDuringProofHandoffGate = workflow.buildExecutionGate({
+    candidate: gateCandidate,
+    consentChecked: true,
+    confirmationText: "RUN npm-cache",
+    expectedConfirmation: "RUN npm-cache",
+    executionPrerequisites: { ready: true },
+    scanFingerprint: "scan-123",
+    executionStatus: "complete",
+    workflowLocks: positiveExecutionLocks
+  });
+  assert.strictEqual(repeatDuringProofHandoffGate.ready, false, "execution gate should block repeat dispatch while proof handoff is required");
+  assert(repeatDuringProofHandoffGate.rows.some((row) => row.id === "proof-handoff" && !row.passed), "execution gate should expose proof handoff as the repeat-dispatch blocker");
+
+  const noOpRepeatGate = workflow.buildExecutionGate({
+    candidate: gateCandidate,
+    consentChecked: true,
+    confirmationText: "RUN npm-cache",
+    expectedConfirmation: "RUN npm-cache",
+    executionPrerequisites: { ready: true },
+    scanFingerprint: "scan-123",
+    executionStatus: "complete",
+    workflowLocks: zeroByteNoOpLocks
+  });
+  assert.strictEqual(noOpRepeatGate.ready, true, "execution gate should allow dispatch after accepted no-op handoff");
+
   const inAppBundle = workflow.buildInAppSupportBundleReport({
     generatedAt: "2026-06-08T19:30:00.000Z",
     routeInput: "npm-cache",
