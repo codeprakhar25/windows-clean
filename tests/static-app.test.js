@@ -383,6 +383,7 @@ assert(openAiAgent.includes("body.reasoning"), "OpenAI adapter should send confi
 assert(openAiAgent.includes("openai_agent_advice"), "OpenAI adapter should prefer the native Tauri advisor command");
 assert(openAiAgent.includes("getNativeOpenAIAgentCapability"), "OpenAI adapter should expose native advisor capability detection");
 assert(rustScanner.includes('"select-action"'), "native OpenAI schema should allow brokered UI selection recommendations");
+assert(rustScanner.includes("When context.liveRouteValidation is present"), "native OpenAI advisor should honor the selected live route contract");
 assert(!viteConfig.includes('envPrefix: ["VITE_", "OPENAI_"]'), "Vite must not expose OPENAI_* secrets to the renderer");
 assert(viteConfig.includes("loadEnv(mode, process.cwd(), \"\")"), "Vite should load normal .env keys on the server side");
 assert(viteConfig.includes("spaceguardOpenAIAgentProxy"), "Vite should install the local OpenAI agent proxy");
