@@ -13,6 +13,36 @@ const gitignore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
 const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const windowsSetup = fs.readFileSync(path.join(root, "WINDOWS_REAL_DATA_SETUP.md"), "utf8");
 
+const NPM_ROUTE = {
+  routeInput: "npm-cache",
+  route: "bounded-npm-cache-delete",
+  aliases: ["npm-cache", "npm", "bounded-npm-cache-delete"],
+  title: "npm cache cleanup",
+  envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
+  requestMode: "execute-npm-cache",
+  panelId: "npm-cache-executor-panel",
+  actionLabel: "Run npm cache cleanup",
+  requiredAction: "run-npm-cache-executor",
+  target: "npm-cache"
+};
+
+const GRADLE_ROUTE = {
+  routeInput: "gradle-cache",
+  route: "bounded-cache-delete",
+  aliases: ["gradle", "gradle-cache", "bounded-cache-delete"],
+  title: "Gradle cache cleanup",
+  envVar: "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR",
+  requestMode: "execute-gradle-cache",
+  panelId: "gradle-cache-executor-panel",
+  actionLabel: "Run Gradle cache cleanup",
+  requiredAction: "run-gradle-cache-executor",
+  target: "gradle-cache"
+};
+
+function routeSlug(routeInput) {
+  return String(routeInput || "selected-route").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "selected-route";
+}
+
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(value, null, 2));
@@ -25,22 +55,25 @@ function writeNdjson(file, records) {
 
 function createPrivateV1Evidence(patch = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "spaceguard-private-v1-"));
+  const selectedRoute = { ...NPM_ROUTE, ...(patch.selectedRoute || {}) };
+  const selectedRouteSlug = routeSlug(selectedRoute.routeInput);
   const selectedRouteSetupPath = path.join(dir, "selected-route-setup.json");
   const preflightPath = path.join(dir, "private-demo-preflight", "private-demo-preflight.json");
   const firstRouteCompletionPath = path.join(dir, "first-route-proof", "first-route-completion-check.json");
-  const selectedRouteCompletionPath = path.join(dir, "selected-route-proof-npm-cache", "selected-route-completion-check.json");
+  const selectedRouteProofDir = path.join(dir, `selected-route-proof-${selectedRouteSlug}`);
+  const selectedRouteCompletionPath = path.join(selectedRouteProofDir, "selected-route-completion-check.json");
   const commandLogPath = path.join(dir, "commands.ndjson");
   const proofPath = path.join(dir, "private-v1-proof.json");
   const archivedProofPath = path.join(dir, "archived-first-route-root-exports", "spaceguard-real-workflow-proof.md");
   const privatePreflightCommandLogPath = path.join(dir, "private-demo-preflight", "commands.ndjson");
   const firstRouteCommandLogPath = path.join(dir, "first-route-proof", "commands.ndjson");
-  const selectedRouteCommandLogPath = path.join(dir, "selected-route-proof-npm-cache", "commands.ndjson");
+  const selectedRouteCommandLogPath = path.join(selectedRouteProofDir, "commands.ndjson");
   const firstRouteFixtureSmokePath = path.join(dir, "first-route-proof", "openai-fixture-smoke.txt");
   const firstRouteLiveSmokePath = path.join(dir, "first-route-proof", "openai-live-smoke.txt");
   const privatePreflightFixtureSmokePath = path.join(dir, "private-demo-preflight", "openai-fixture-smoke.txt");
   const privatePreflightLiveSmokePath = path.join(dir, "private-demo-preflight", "openai-live-smoke.txt");
-  const selectedRouteFixtureSmokePath = path.join(dir, "selected-route-proof-npm-cache", "openai-fixture-smoke.txt");
-  const selectedRouteLiveSmokePath = path.join(dir, "selected-route-proof-npm-cache", "openai-live-smoke.txt");
+  const selectedRouteFixtureSmokePath = path.join(selectedRouteProofDir, "openai-fixture-smoke.txt");
+  const selectedRouteLiveSmokePath = path.join(selectedRouteProofDir, "openai-live-smoke.txt");
   const bundleArtifactPath = path.join(dir, "private-demo-preflight", "src-tauri", "target", "release", "bundle", "nsis", "SpaceGuard_0.1.0_x64-setup.exe");
   const bundleEvidencePath = path.join(dir, "private-demo-preflight", "native-bundle-artifacts", "SpaceGuard_0.1.0_x64-setup.exe");
   const bundleBytes = Buffer.from("spaceguard-native-bundle-fixture");
@@ -49,13 +82,13 @@ function createPrivateV1Evidence(patch = {}) {
   const preflight = {
     schemaVersion: "spaceguard-private-demo-windows-preflight/v1",
     status: "passed",
-    selectedRoute: "npm-cache",
+    selectedRoute: selectedRoute.routeInput,
     evidenceRoot: path.join(dir, "private-demo-preflight"),
     commandLogPath: privatePreflightCommandLogPath,
     commands: {
       nativeBuild: "npm run native:build",
       nextFirstRoute: "npm run proof:first-route:windows -- -Route temp-fixture",
-      nextSelectedRoute: "npm run proof:route:windows -- -Route npm-cache"
+      nextSelectedRoute: `npm run proof:route:windows -- -Route ${selectedRoute.routeInput}`
     },
     nativeBundleArtifacts: [
       {
@@ -73,16 +106,16 @@ function createPrivateV1Evidence(patch = {}) {
   const selectedRouteSetup = {
     schemaVersion: "spaceguard-route-setup-packet/v1",
     status: "flag-disabled",
-    routeInput: "npm-cache",
-    route: "bounded-npm-cache-delete",
+    routeInput: selectedRoute.routeInput,
+    route: selectedRoute.route,
     selected: {
-      route: "bounded-npm-cache-delete",
-      aliases: ["npm-cache", "npm", "bounded-npm-cache-delete"],
-      title: "npm cache cleanup",
-      envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
-      requestMode: "execute-npm-cache",
-      panelId: "npm-cache-executor-panel",
-      actionLabel: "Run npm cache cleanup",
+      route: selectedRoute.route,
+      aliases: selectedRoute.aliases,
+      title: selectedRoute.title,
+      envVar: selectedRoute.envVar,
+      requestMode: selectedRoute.requestMode,
+      panelId: selectedRoute.panelId,
+      actionLabel: selectedRoute.actionLabel,
       enabled: false
     },
     ...patch.selectedRouteSetup
@@ -106,8 +139,8 @@ function createPrivateV1Evidence(patch = {}) {
     schemaVersion: "spaceguard-selected-route-completion-check/v1",
     status: "accepted",
     canStartNextRoute: true,
-    route: "bounded-npm-cache-delete",
-    routeInput: "npm-cache",
+    route: selectedRoute.route,
+    routeInput: selectedRoute.routeInput,
     commandLogPath: selectedRouteCommandLogPath,
     counts: {
       reclaimedBytes: 1048576,
@@ -122,12 +155,12 @@ function createPrivateV1Evidence(patch = {}) {
   const firstRouteProofOutputPath = path.join(dir, "first-route-proof.txt");
   const selectedRouteProofOutputPath = path.join(dir, "selected-route-proof.txt");
   const commands = [
-    { id: "selected-route-setup", command: "node scripts\\run-setup-route.mjs --route \"npm-cache\"", outputPath: selectedRouteSetupPath, exitCode: 0 },
+    { id: "selected-route-setup", command: `node scripts\\run-setup-route.mjs --route "${selectedRoute.routeInput}"`, outputPath: selectedRouteSetupPath, exitCode: 0 },
     { id: "private-windows-preflight", command: "npm run demo:private-windows-preflight", outputPath: privatePreflightOutputPath, stderrPath: `${privatePreflightOutputPath}.stderr.txt`, exitCode: 0 },
     { id: "first-route-proof", command: "npm run proof:first-route:windows -- -Route temp-fixture", outputPath: firstRouteProofOutputPath, stderrPath: `${firstRouteProofOutputPath}.stderr.txt`, exitCode: 0 },
     { id: "bind-first-route-completion", command: "set SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK", outputPath: firstRouteCompletionPath, exitCode: 0 },
     { id: "archive-first-route-root-exports", command: "archive first-route repo-root proof exports", outputPath: path.dirname(archivedProofPath), exitCode: 0 },
-    { id: "selected-route-proof", command: "npm run proof:route:windows -- -Route npm-cache", outputPath: selectedRouteProofOutputPath, stderrPath: `${selectedRouteProofOutputPath}.stderr.txt`, exitCode: 0 },
+    { id: "selected-route-proof", command: `npm run proof:route:windows -- -Route ${selectedRoute.routeInput}`, outputPath: selectedRouteProofOutputPath, stderrPath: `${selectedRouteProofOutputPath}.stderr.txt`, exitCode: 0 },
     ...(patch.commands || [])
   ];
   const privatePreflightCommands = patch.privatePreflightCommands || [
@@ -136,8 +169,8 @@ function createPrivateV1Evidence(patch = {}) {
     { id: "rust-tests", command: "cargo test --manifest-path src-tauri\\Cargo.toml", outputPath: path.join(dir, "private-demo-preflight", "cargo-test.txt"), exitCode: 0 },
     { id: "web-build", command: "npm run build", outputPath: path.join(dir, "private-demo-preflight", "npm-build.txt"), exitCode: 0 },
     { id: "private-demo-readiness", command: "npm run demo:private-readiness", outputPath: path.join(dir, "private-demo-preflight", "private-demo-readiness.json"), exitCode: 0 },
-    { id: "openai-fixture-smoke", command: "npm run openai:smoke:fixture -- --route npm-cache", outputPath: privatePreflightFixtureSmokePath, exitCode: 0 },
-    { id: "openai-live-smoke", command: "npm run openai:smoke -- --route npm-cache", outputPath: privatePreflightLiveSmokePath, exitCode: 0 },
+    { id: "openai-fixture-smoke", command: `npm run openai:smoke:fixture -- --route ${selectedRoute.routeInput}`, outputPath: privatePreflightFixtureSmokePath, exitCode: 0 },
+    { id: "openai-live-smoke", command: `npm run openai:smoke -- --route ${selectedRoute.routeInput}`, outputPath: privatePreflightLiveSmokePath, exitCode: 0 },
     { id: "native-build", command: "npm run native:build", outputPath: path.join(dir, "private-demo-preflight", "native-build.txt"), exitCode: 0 }
   ];
   const firstRouteCommands = [
@@ -146,8 +179,8 @@ function createPrivateV1Evidence(patch = {}) {
     ...(patch.firstRouteCommands || [])
   ];
   const selectedRouteCommands = [
-    { id: "openai-fixture-smoke", command: "npm run openai:smoke:fixture -- --route npm-cache", outputPath: selectedRouteFixtureSmokePath, stderrPath: `${selectedRouteFixtureSmokePath}.stderr.txt`, exitCode: 0 },
-    { id: "openai-live-smoke", command: "npm run openai:smoke -- --route npm-cache", outputPath: selectedRouteLiveSmokePath, stderrPath: `${selectedRouteLiveSmokePath}.stderr.txt`, exitCode: 0 },
+    { id: "openai-fixture-smoke", command: `npm run openai:smoke:fixture -- --route ${selectedRoute.routeInput}`, outputPath: selectedRouteFixtureSmokePath, stderrPath: `${selectedRouteFixtureSmokePath}.stderr.txt`, exitCode: 0 },
+    { id: "openai-live-smoke", command: `npm run openai:smoke -- --route ${selectedRoute.routeInput}`, outputPath: selectedRouteLiveSmokePath, stderrPath: `${selectedRouteLiveSmokePath}.stderr.txt`, exitCode: 0 },
     ...(patch.selectedRouteCommands || [])
   ];
   const proof = {
@@ -155,7 +188,7 @@ function createPrivateV1Evidence(patch = {}) {
     generatedAt: "2026-06-08T11:00:00.000Z",
     startedAt: "2026-06-08T10:00:00.000Z",
     status: "accepted",
-    selectedRoute: "npm-cache",
+    selectedRoute: selectedRoute.routeInput,
     evidenceRoot: dir,
     commandLogPath,
     destructiveCommands: false,
@@ -172,9 +205,9 @@ function createPrivateV1Evidence(patch = {}) {
     routes: {
       firstRoute: "temp-fixture",
       firstRouteStatus: "accepted",
-      selectedRoute: "npm-cache",
+      selectedRoute: selectedRoute.routeInput,
       selectedRouteSetupStatus: "flag-disabled",
-      selectedRouteCanonical: "bounded-npm-cache-delete",
+      selectedRouteCanonical: selectedRoute.route,
       selectedRouteStatus: "accepted"
     },
     firstRouteCompletion: {
@@ -190,7 +223,7 @@ function createPrivateV1Evidence(patch = {}) {
       path: selectedRouteCompletionPath,
       status: "accepted",
       canStartNextRoute: true,
-      route: "bounded-npm-cache-delete",
+      route: selectedRoute.route,
       reclaimedBytes: 1048576,
       ledgerReclaimedBytes: 1048576,
       rescanExpectedBytes: 1048576,
@@ -198,10 +231,10 @@ function createPrivateV1Evidence(patch = {}) {
     },
     archivedRootExports: [{ source: path.join(dir, "spaceguard-real-workflow-proof.md"), destination: archivedProofPath }],
     commands: {
-      selectedRouteSetup: "node scripts\\run-setup-route.mjs --route \"npm-cache\"",
+      selectedRouteSetup: `node scripts\\run-setup-route.mjs --route "${selectedRoute.routeInput}"`,
       privateWindowsPreflight: "npm run demo:private-windows-preflight",
       firstRouteProof: "npm run proof:first-route:windows -- -Route temp-fixture",
-      selectedRouteProof: "npm run proof:route:windows -- -Route npm-cache"
+      selectedRouteProof: `npm run proof:route:windows -- -Route ${selectedRoute.routeInput}`
     },
     ...patch.proof
   };
@@ -216,12 +249,12 @@ function createPrivateV1Evidence(patch = {}) {
       fs.writeFileSync(command.stderrPath, "");
     }
   }
-  writeOpenAiSmokeEvidence(privatePreflightFixtureSmokePath, { routeInput: "npm-cache", route: "bounded-npm-cache-delete", transport: "fixture-only" });
-  writeOpenAiSmokeEvidence(privatePreflightLiveSmokePath, { routeInput: "npm-cache", route: "bounded-npm-cache-delete", transport: "openai" });
-  writeOpenAiSmokeEvidence(firstRouteFixtureSmokePath, { routeInput: "temp-fixture", route: "known-temp-delete", transport: "fixture-only" });
-  writeOpenAiSmokeEvidence(firstRouteLiveSmokePath, { routeInput: "temp-fixture", route: "known-temp-delete", transport: "openai" });
-  writeOpenAiSmokeEvidence(selectedRouteFixtureSmokePath, { routeInput: "npm-cache", route: "bounded-npm-cache-delete", transport: "fixture-only" });
-  writeOpenAiSmokeEvidence(selectedRouteLiveSmokePath, { routeInput: "npm-cache", route: "bounded-npm-cache-delete", transport: "openai" });
+  writeOpenAiSmokeEvidence(privatePreflightFixtureSmokePath, { ...selectedRoute, transport: "fixture-only" });
+  writeOpenAiSmokeEvidence(privatePreflightLiveSmokePath, { ...selectedRoute, transport: "openai" });
+  writeOpenAiSmokeEvidence(firstRouteFixtureSmokePath, { routeInput: "temp-fixture", route: "known-temp-delete", transport: "fixture-only", requiredAction: "run-temp-executor", target: "temp-fixture" });
+  writeOpenAiSmokeEvidence(firstRouteLiveSmokePath, { routeInput: "temp-fixture", route: "known-temp-delete", transport: "openai", requiredAction: "run-temp-executor", target: "temp-fixture" });
+  writeOpenAiSmokeEvidence(selectedRouteFixtureSmokePath, { ...selectedRoute, transport: "fixture-only" });
+  writeOpenAiSmokeEvidence(selectedRouteLiveSmokePath, { ...selectedRoute, transport: "openai" });
   for (const command of [...firstRouteCommands, ...selectedRouteCommands]) {
     if (command.stderrPath) {
       fs.mkdirSync(path.dirname(command.stderrPath), { recursive: true });
@@ -243,14 +276,20 @@ function createPrivateV1Evidence(patch = {}) {
   return { dir, proofPath, commandLogPath, selectedRouteSetupPath, firstRouteCompletionPath, selectedRouteCompletionPath, privatePreflightCommandLogPath, privatePreflightFixtureSmokePath, privatePreflightLiveSmokePath, firstRouteCommandLogPath, selectedRouteCommandLogPath };
 }
 
-function writeOpenAiSmokeEvidence(filePath, { routeInput, route, transport }) {
+function writeOpenAiSmokeEvidence(filePath, {
+  routeInput,
+  route,
+  transport,
+  requiredAction = "run-npm-cache-executor",
+  target = routeInput
+}) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, [
     "run-openai-advisor-smoke: OpenAI advisor smoke complete",
     "No local filesystem scan was performed; this used fixture data only.",
     `provider=openai model=gpt-5.2 transport=${transport}`,
     `routeInput=${routeInput} route=${route} title=Fixture route`,
-    `required=run-npm-cache-executor route=${route} target=npm-cache`,
+    `required=${requiredAction} route=${route} target=${target}`,
     "taskStatus=ready expected=ready",
     "validation=broker-ready",
     "summary=Fixture advice is broker ready."
@@ -283,6 +322,15 @@ function writeOpenAiSmokeEvidence(filePath, { routeInput, route, transport }) {
   assert.strictEqual(accepted.counts.openAiSmokeArtifacts, 4, "verifier should count required child OpenAI smoke artifacts");
   assert.strictEqual(accepted.counts.commandRecords, 6, "verifier should count command ledger records");
   assert.strictEqual(accepted.blockers.length, 0, "accepted V1 proof should not have blockers");
+
+  const acceptedGradleEvidence = createPrivateV1Evidence({ selectedRoute: GRADLE_ROUTE });
+  const acceptedGradle = verifier.buildPrivateV1ProofCheck({
+    proofPath: acceptedGradleEvidence.proofPath,
+    checkedAt: "2026-06-08T11:08:00.000Z"
+  });
+  assert.strictEqual(acceptedGradle.status, "accepted", "complete Gradle private V1 proof should be accepted");
+  assert.strictEqual(acceptedGradle.selectedRoute, "gradle-cache", "verifier should preserve the Gradle selected route alias");
+  assert.strictEqual(acceptedGradle.blockers.length, 0, "accepted Gradle V1 proof should not have blockers");
 
   const reusedPreflight = createPrivateV1Evidence();
   const reusedPreflightRecords = fs.readFileSync(reusedPreflight.commandLogPath, "utf8")
