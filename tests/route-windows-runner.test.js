@@ -71,6 +71,10 @@ assert(runner.includes("validate-selected-route-preflight"), "runner should log 
 assert(runner.includes("validate-selected-route-completion"), "runner should log selected-route completion validation");
 assert(runner.includes("run-route-completion-check.mjs"), "runner should invoke the selected-route completion verifier");
 assert(runner.includes("selected-route-workflow-proof-required"), "runner should keep selected routes blocked until workflow proof validates");
+assert(
+  runner.includes("Import artifact path must be spaceguard-selected-route-proof-packet.md"),
+  "runner handoff should tell the operator the exact selected-route proof import artifact path"
+);
 
 assert(!/\bRemove-Item\b/i.test(runner), "runner must not delete files directly");
 assert(!/\bClear-RecycleBin\b/i.test(runner), "runner must not empty Recycle Bin");

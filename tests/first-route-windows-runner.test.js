@@ -59,6 +59,10 @@ assert(runner.includes("operator-preflight-check.json"), "runner should write a 
 assert(runner.includes("operator-app-handoff.md"), "runner should write an app handoff file before launch");
 assert(runner.includes("Write-OperatorAppHandoff"), "runner should generate the operator app handoff markdown");
 assert(runner.includes("spaceguard-selected-route-proof-packet.md"), "runner handoff should name the selected-route proof export");
+assert(
+  runner.includes("Import artifact path must be spaceguard-selected-route-proof-packet.md"),
+  "runner handoff should tell the operator the exact selected-route proof import artifact path"
+);
 assert(runner.includes("spaceguard-real-workflow-proof.md"), "runner handoff should name the workflow proof export");
 assert(runner.includes("proof:first-route:windows:finalize"), "runner handoff should name the finalize-only command");
 assert(runner.includes("run-first-route-preflight-check.mjs"), "runner should validate preflight evidence before app launch");

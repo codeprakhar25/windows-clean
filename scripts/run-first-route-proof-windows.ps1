@@ -278,7 +278,7 @@ try {
       "4. Run Real temp cleanup from the first-safe temp executor panel.",
       "5. Run post-run rescan.",
       "6. Export spaceguard-selected-route-proof-packet.md to the repo root.",
-      "7. Complete Selected route proof import with reviewer and artifact path.",
+      "7. Complete Selected route proof import with reviewer. Import artifact path must be spaceguard-selected-route-proof-packet.md.",
       "8. Re-export spaceguard-selected-route-proof-packet.md to the repo root after import complete.",
       "9. Export spaceguard-real-workflow-proof.md to the repo root before closing the app.",
       "",

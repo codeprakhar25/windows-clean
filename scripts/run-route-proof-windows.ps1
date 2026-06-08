@@ -365,7 +365,7 @@ try {
       "6. Confirm native volume proof is present on the write response.",
       "7. Run post-run rescan.",
       "8. Export spaceguard-selected-route-proof-packet.md to the repo root.",
-      "9. Complete Selected route proof import with reviewer and artifact path.",
+      "9. Complete Selected route proof import with reviewer. Import artifact path must be spaceguard-selected-route-proof-packet.md.",
       "10. Re-export spaceguard-selected-route-proof-packet.md to the repo root after import complete.",
       "11. Export spaceguard-real-workflow-proof.md to the repo root before closing the app.",
       "12. Do not close the app until native volume proof, selected-route proof packet export, selected-route proof import, and workflow proof export are complete.",
