@@ -5298,6 +5298,8 @@ function ScopedExecutorCommandFlowPanel({ flow, selectedRouteProofExported = fal
   const launchPacket = flow.launchPacket || null;
   const proofPacket = flow.proofPacket || null;
   const proofPacketComplete = Boolean(proofPacket && proofPacket.status === "proof-complete");
+  const primaryProofExportRequired = Boolean(next.type === "prepare-validation-import" && proofPacketComplete && !selectedRouteProofExported);
+  const primaryActionLabel = primaryProofExportRequired ? "Export proof packet" : next.label || "Open route";
   const launchChecks = (launchPacket?.checks || []).slice(0, 6);
   const proofLedgerRows = (proofPacket?.ledgerEntries || []).slice(0, 3);
   const proofRescanRows = (proofPacket?.rescanRows || []).slice(0, 3);
@@ -5570,9 +5572,9 @@ function ScopedExecutorCommandFlowPanel({ flow, selectedRouteProofExported = fal
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" onClick={() => onAction(next)} disabled={flow.scanning || next.disabled}>
+          <Button type="button" size="sm" onClick={() => (primaryProofExportRequired ? onExportProofPacket?.() : onAction(next))} disabled={flow.scanning || (!primaryProofExportRequired && next.disabled)}>
             {flow.scanning ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            {flow.scanning ? "Scanning" : next.label || "Open route"}
+            {flow.scanning ? "Scanning" : primaryActionLabel}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => onAskAgent(agentPrompt)} disabled={agent.running || !agent.configured}>
             {agent.running ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
