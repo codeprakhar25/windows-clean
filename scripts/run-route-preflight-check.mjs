@@ -111,6 +111,7 @@ export function buildSelectedRoutePreflightCheck({
   validateRoutePacket(validateRoute, routeSpec, add);
   validateOpenAiFixtureSmoke(openAiFixtureSmoke, routeSpec, add);
   validateOperatorAppHandoff(operatorAppHandoff, routeSpec, add);
+  validateRouteSpecificRequirements({ routeSpec, validateRoute, preflight, operatorAppHandoff, add });
 
   const requiredArtifactCount = [
     "commandLog",
@@ -463,6 +464,34 @@ function validateOperatorAppHandoff(text, routeSpec, add) {
   if (missing.length) {
     add("operator-app-handoff", "Operator app handoff incomplete", `Handoff is missing required marker(s): ${missing.join(", ")}.`);
   }
+}
+
+function validateRouteSpecificRequirements({ routeSpec, validateRoute, preflight, operatorAppHandoff, add } = {}) {
+  const requirements = collectRouteSpecificRequirements(routeSpec, validateRoute);
+  if (!requirements.length) return;
+
+  const userStepsText = Array.isArray(preflight?.userGatedAppSteps)
+    ? preflight.userGatedAppSteps.map((step) => String(step || "")).join("\n")
+    : "";
+  const handoffText = String(operatorAppHandoff || "");
+  const missingFromSteps = requirements.filter((requirement) => !userStepsText.includes(requirement));
+  const missingFromHandoff = requirements.filter((requirement) => !handoffText.includes(requirement));
+
+  if (missingFromSteps.length || missingFromHandoff.length) {
+    add(
+      "route-specific-requirements",
+      "Route-specific requirements missing from handoff",
+      `Preflight must carry route-specific requirement(s) into user-gated app steps and operator handoff: ${[...new Set([...missingFromSteps, ...missingFromHandoff])].join(" ")}`
+    );
+  }
+}
+
+function collectRouteSpecificRequirements(routeSpec, validateRoute) {
+  const values = [
+    ...(Array.isArray(routeSpec?.requirements) ? routeSpec.requirements : []),
+    ...(Array.isArray(validateRoute?.liveValidationManifest?.routeRequirements) ? validateRoute.liveValidationManifest.routeRequirements : [])
+  ];
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
 function validateAppCloseContract(contract, baseDir, add) {

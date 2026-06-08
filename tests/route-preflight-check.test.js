@@ -7,6 +7,16 @@ const { pathToFileURL } = require("url");
 const root = path.resolve(__dirname, "..");
 const script = path.join(root, "scripts", "run-route-preflight-check.mjs");
 
+const LARGE_FILE_ARCHIVE_ROUTE = {
+  routeInput: "large-files",
+  route: "item-review-large-files",
+  routeAlias: "large-files",
+  requestMode: "execute-large-file-archive",
+  panelId: "large-file-archive-executor-panel",
+  envVar: "SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR",
+  requirement: "Archive destination must be selected in the app."
+};
+
 function writeJson(file, value, { npmWrapped = false } = {}) {
   const text = JSON.stringify(value, null, 2);
   fs.writeFileSync(
@@ -288,8 +298,107 @@ function createEvidenceFolder(patch = {}) {
   assert.strictEqual(missingHandoff.status, "blocked", "missing selected-route handoff should block preflight");
   assert(missingHandoff.blockers.some((blocker) => blocker.id === "operator-app-handoff"), "missing handoff blocker should name operator app handoff");
 
+  const missingRouteRequirementsFolder = createLargeFileArchiveEvidenceFolder({ includeRequirementInHandoff: false });
+  const missingRouteRequirements = verifier.buildSelectedRoutePreflightCheck({ preflightPath: missingRouteRequirementsFolder.preflightPath });
+  assert.strictEqual(missingRouteRequirements.status, "blocked", "missing route-specific requirement handoff should block selected-route preflight");
+  assert(
+    missingRouteRequirements.blockers.some((blocker) => blocker.id === "route-specific-requirements"),
+    "route-specific requirements blocker should be explicit"
+  );
+
+  const acceptedLargeArchiveFolder = createLargeFileArchiveEvidenceFolder();
+  const acceptedLargeArchive = verifier.buildSelectedRoutePreflightCheck({ preflightPath: acceptedLargeArchiveFolder.preflightPath });
+  assert.strictEqual(acceptedLargeArchive.status, "accepted", "large-file archive preflight should pass when route-specific requirements are carried into the handoff");
+  assert.strictEqual(acceptedLargeArchive.route, LARGE_FILE_ARCHIVE_ROUTE.route, "accepted large-file archive preflight should preserve the native route");
+
   console.log("route preflight check ok");
 })().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+function createLargeFileArchiveEvidenceFolder({ includeRequirementInHandoff = true } = {}) {
+  const folder = createEvidenceFolder({
+    preflight: {
+      routeInput: LARGE_FILE_ARCHIVE_ROUTE.routeInput,
+      route: LARGE_FILE_ARCHIVE_ROUTE.route,
+      routeAlias: LARGE_FILE_ARCHIVE_ROUTE.routeAlias,
+      requestMode: LARGE_FILE_ARCHIVE_ROUTE.requestMode,
+      panelId: LARGE_FILE_ARCHIVE_ROUTE.panelId,
+      scopedExecutor: {
+        enabledFlag: LARGE_FILE_ARCHIVE_ROUTE.envVar,
+        enabledValue: "1",
+        dotenvExecutorFlagsIgnored: "1",
+        siblingFlagsForcedOff: true
+      },
+      userGatedAppSteps: [
+        "Run real scan in the Tauri desktop app.",
+        includeRequirementInHandoff ? LARGE_FILE_ARCHIVE_ROUTE.requirement : "Run selected route setup.",
+        "Run post-run rescan."
+      ]
+    },
+    selectedRouteSetup: {
+      routeInput: LARGE_FILE_ARCHIVE_ROUTE.routeInput,
+      route: LARGE_FILE_ARCHIVE_ROUTE.route,
+      selected: {
+        route: LARGE_FILE_ARCHIVE_ROUTE.route,
+        aliases: [LARGE_FILE_ARCHIVE_ROUTE.routeInput, "archive", LARGE_FILE_ARCHIVE_ROUTE.route],
+        envVar: LARGE_FILE_ARCHIVE_ROUTE.envVar,
+        enabled: false,
+        requestMode: LARGE_FILE_ARCHIVE_ROUTE.requestMode,
+        panelId: LARGE_FILE_ARCHIVE_ROUTE.panelId
+      }
+    },
+    setupRoute: {
+      routeInput: LARGE_FILE_ARCHIVE_ROUTE.routeInput,
+      route: LARGE_FILE_ARCHIVE_ROUTE.route,
+      selected: {
+        envVar: LARGE_FILE_ARCHIVE_ROUTE.envVar,
+        enabled: true,
+        requestMode: LARGE_FILE_ARCHIVE_ROUTE.requestMode,
+        panelId: LARGE_FILE_ARCHIVE_ROUTE.panelId
+      }
+    },
+    setupDoctor: {
+      scopedExecutors: {
+        enabledCount: 1,
+        selectedFlag: LARGE_FILE_ARCHIVE_ROUTE.envVar,
+        selectedRoute: { routeInput: LARGE_FILE_ARCHIVE_ROUTE.routeInput, route: LARGE_FILE_ARCHIVE_ROUTE.route },
+        validationStatus: "one-route-ready",
+        safeToLaunchWriteMode: true,
+        firstRouteProof: { status: "accepted", accepted: true }
+      }
+    },
+    validateRoute: {
+      routeInput: LARGE_FILE_ARCHIVE_ROUTE.routeInput,
+      route: LARGE_FILE_ARCHIVE_ROUTE.route,
+      selected: {
+        envVar: LARGE_FILE_ARCHIVE_ROUTE.envVar,
+        requestMode: LARGE_FILE_ARCHIVE_ROUTE.requestMode,
+        panelId: LARGE_FILE_ARCHIVE_ROUTE.panelId
+      },
+      enabledFlags: [LARGE_FILE_ARCHIVE_ROUTE.envVar],
+      liveValidationManifest: {
+        route: LARGE_FILE_ARCHIVE_ROUTE.route,
+        status: "ready",
+        routeRequirements: [LARGE_FILE_ARCHIVE_ROUTE.requirement],
+        runtime: { routeFlagReady: true, canAttemptWindowsValidation: true, canExecuteWithoutAppEvidence: false },
+        requiredAppEvidence: ["current-native-scan-fingerprint", "current-plan-consent-receipt", "native-scanned-target"],
+        requiredPostRunProof: ["workflow-proof-check-output"]
+      }
+    },
+    openAiFixtureSmoke: `routeInput=${LARGE_FILE_ARCHIVE_ROUTE.routeInput} route=${LARGE_FILE_ARCHIVE_ROUTE.route} title=large file archive\nvalidation=broker-ready\n`,
+    operatorAppHandoff: [
+      "# SpaceGuard Selected-Route App Handoff",
+      "",
+      "Route: large-files",
+      `Required flag: ${LARGE_FILE_ARCHIVE_ROUTE.envVar}`,
+      includeRequirementInHandoff ? LARGE_FILE_ARCHIVE_ROUTE.requirement : "Continue without route-specific evidence.",
+      "Export spaceguard-selected-route-proof-packet.md.",
+      "Complete Selected route proof import with reviewer and artifact path.",
+      "Export spaceguard-real-workflow-proof.md to the repo root.",
+      "Resume with npm run proof:route:windows:finalize -- -Route large-files -EvidenceRoot evidence\\route-proof-large-files-YYYYMMDD-HHMMSS."
+    ].join("\n")
+  });
+  return folder;
+}

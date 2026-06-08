@@ -142,6 +142,15 @@ try {
     if ($packet.selected.aliases -and $packet.selected.aliases.Count -gt 0) {
       $alias = [string]$packet.selected.aliases[0]
     }
+    $requirements = @()
+    if ($packet.selected.PSObject.Properties["requirements"]) {
+      foreach ($requirement in @($packet.selected.requirements)) {
+        $cleanRequirement = [string]$requirement
+        if (-not [string]::IsNullOrWhiteSpace($cleanRequirement)) {
+          $requirements += $cleanRequirement
+        }
+      }
+    }
 
     return [PSCustomObject]@{
       alias = $alias
@@ -149,6 +158,7 @@ try {
       envVar = [string]$packet.selected.envVar
       requestMode = [string]$packet.selected.requestMode
       panelId = [string]$packet.selected.panelId
+      requirements = $requirements
     }
   }
 
@@ -412,6 +422,17 @@ try {
       $ValidateWorkflowProofCommand,
       $ValidateCompletionCommand
     )
+    if ($RouteSpec.requirements -and $RouteSpec.requirements.Count -gt 0) {
+      $requirementLines = @("", "## Route-specific requirements") + @($RouteSpec.requirements | ForEach-Object { "- $_" })
+      $insertIndex = [Array]::IndexOf($lines, "## Resume validation")
+      if ($insertIndex -lt 0) {
+        $lines = $lines + $requirementLines
+      } elseif ($insertIndex -eq 0) {
+        $lines = $requirementLines + $lines
+      } else {
+        $lines = @($lines[0..($insertIndex - 1)]) + $requirementLines + @($lines[$insertIndex..($lines.Count - 1)])
+      }
+    }
     Set-Content -LiteralPath $OperatorAppHandoffPath -Value $lines -Encoding UTF8
   }
 
@@ -475,6 +496,7 @@ try {
     routeAlias = $RouteSpec.alias
     requestMode = $RouteSpec.requestMode
     panelId = $RouteSpec.panelId
+    routeRequirements = $RouteSpec.requirements
     evidenceRoot = $EvidenceRoot
     firstRouteCompletionCheck = $FirstRouteCompletionPath
     destructiveCommands = $false
@@ -524,6 +546,7 @@ try {
       "Run real scan in the Tauri desktop app.",
       "Select only the scanned target(s) for $Route.",
       "Arm consent for the current plan and scan fingerprint.",
+      @($RouteSpec.requirements),
       "Run the selected scoped executor from $($RouteSpec.panelId).",
       "Confirm native volume proof is present.",
       "Run post-run rescan.",
