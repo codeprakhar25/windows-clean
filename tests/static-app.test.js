@@ -97,6 +97,9 @@ assert(app.includes("./real-workflow.mjs"), "app should import tested real workf
 assert(app.includes("buildRouteReadiness"), "app should use tested route readiness guardrails");
 assert(app.includes("buildRouteSetupChecklist"), "app should use tested route setup checklist guardrails");
 assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
+assert(app.includes("Selected .env block"), "route setup panel should render a copyable selected .env block");
+assert(app.includes("copyEnvBlock"), "route setup panel should expose a copy action for selected .env content");
+assert(app.includes("navigator.clipboard.writeText(checklist.envBlock.content)"), "route setup copy action should copy the tested env block");
 assert(app.includes("function ConnectionRequired({ runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist })"), "browser-only setup state should accept route setup wizard props");
 assert(/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup state should render the route setup wizard");
 assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context should keep a stable schema");

@@ -825,6 +825,21 @@ function RuntimePanel({ runtime }) {
 }
 
 function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, checklist }) {
+  const [copyStatus, setCopyStatus] = useState("idle");
+
+  useEffect(() => {
+    setCopyStatus("idle");
+  }, [selectedRouteInput]);
+
+  async function copyEnvBlock() {
+    try {
+      await navigator.clipboard.writeText(checklist.envBlock.content);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("failed");
+    }
+  }
+
   return (
     <Card className="rounded-md">
       <CardHeader>
@@ -855,6 +870,24 @@ function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, ch
           <Badge variant={checklist.requiresFirstRouteProof ? "review" : "outline"}>
             {checklist.requiresFirstRouteProof ? "requires first proof" : "first proof route"}
           </Badge>
+        </div>
+        <div className="rounded-md border bg-background">
+          <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Selected .env block</p>
+              <p className="truncate text-xs text-muted-foreground">{checklist.envBlock.selectedEnvVar}=1</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={copyEnvBlock}>
+              <ClipboardCheck className="h-4 w-4" />
+              {copyStatus === "copied" ? "Copied" : "Copy"}
+            </Button>
+          </div>
+          <pre className="max-h-72 overflow-auto p-3 text-xs leading-5">
+            <code>{checklist.envBlock.content}</code>
+          </pre>
+          {copyStatus === "failed" ? (
+            <p className="border-t px-3 py-2 text-xs text-red-600">Copy failed. Select the block manually.</p>
+          ) : null}
         </div>
         <div className="grid gap-2">
           {checklist.steps.map((step) => (

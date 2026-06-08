@@ -217,6 +217,19 @@ const assert = require("assert");
   assert(npmSetup.steps.some((step) => step.command === "npm run v1:windows -- -SelectedRoute npm-cache"), "setup should show full V1 proof command");
   assert(npmSetup.blockers.some((blocker) => blocker.id === "route-flag"), "missing route flag should be a blocker");
   assert(npmSetup.blockers.some((blocker) => blocker.id === "first-route-proof"), "missing first-route proof should be a blocker");
+  assert.strictEqual(npmSetup.envBlock.schemaVersion, "spaceguard-route-env-block/v1", "route setup should expose a stable selected .env block schema");
+  assert.strictEqual(npmSetup.envBlock.fileName, ".env", "route setup env block should target .env");
+  assert.strictEqual(npmSetup.envBlock.selectedEnvVar, "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "route setup env block should mark the selected route flag");
+  assert(npmSetup.envBlock.content.includes("OPENAI_API_KEY=sk-..."), "route setup env block should include the OpenAI placeholder");
+  assert(npmSetup.envBlock.content.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1"), "route setup env block should enable the selected route");
+  assert(npmSetup.envBlock.content.includes("SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=0"), "route setup env block should disable competing route flags");
+  assert(npmSetup.envBlock.content.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK=C:\\path\\to\\first-route-completion-check.json"), "real-data route env block should show first-route proof path placeholder");
+  assert.strictEqual(
+    npmSetup.envBlock.executorFlagLines.filter((line) => line.endsWith("=1")).length,
+    1,
+    "route setup env block should enable exactly one executor flag"
+  );
+  assert(npmSetup.steps.some((step) => step.id === "env-block" && step.command === "Copy selected .env block into .env"), "setup should include a copy-env step before launch");
 
   const tempSetup = workflow.buildRouteSetupChecklist({
     route: {
@@ -236,6 +249,8 @@ const assert = require("assert");
 
   assert.strictEqual(tempSetup.requiresFirstRouteProof, false, "known-temp setup should not require prior first-route proof");
   assert(tempSetup.steps.find((step) => step.id === "first-route-proof").status === "not-required", "known-temp first proof step should be not-required");
+  assert(tempSetup.envBlock.content.includes("SPACEGUARD_ENABLE_TEMP_EXECUTOR=1"), "known-temp env block should enable the temp route");
+  assert(tempSetup.envBlock.content.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK="), "known-temp env block should keep first-route proof empty");
 
   const multiFlagSetup = workflow.buildRouteSetupChecklist({
     route: {

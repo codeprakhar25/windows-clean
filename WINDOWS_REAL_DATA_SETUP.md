@@ -25,6 +25,7 @@ SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1
 ```
 
 Keep only one `SPACEGUARD_ENABLE_*_EXECUTOR` flag enabled while testing a route.
+The route setup wizard in the app shows a copyable selected `.env` block for the route you pick.
 
 ## Launch
 

@@ -1,5 +1,24 @@
 export const MB = 1024 ** 2;
 export const RESCAN_TOLERANCE_BYTES = 64 * MB;
+const DEFAULT_OPENAI_MODEL = "gpt-5.2";
+const DEFAULT_OPENAI_REASONING_EFFORT = "low";
+const FIRST_ROUTE_PROOF_PLACEHOLDER = "C:\\path\\to\\first-route-completion-check.json";
+const EXECUTOR_ENV_VARS = [
+  "SPACEGUARD_ENABLE_TEMP_EXECUTOR",
+  "SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR",
+  "SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR",
+  "SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR",
+  "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR",
+  "SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR",
+  "SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR",
+  "SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR",
+  "SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR",
+  "SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS",
+  "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
+  "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR",
+  "SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR",
+  "SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR"
+];
 
 export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
   const routeInput = route.routeInput || route.route || "";
@@ -15,8 +34,21 @@ export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
   const selectedRouteProofCommand = route.route === "known-temp-delete"
     ? "npm run proof:first-route:windows -- -Route temp-fixture"
     : `npm run v1:windows -- -SelectedRoute ${routeInput}`;
+  const envBlock = buildRouteEnvBlock({
+    route,
+    firstRouteProofPath: firstRouteAccepted ? runtime?.firstRouteProof?.path : ""
+  });
 
   const steps = [
+    setupStep({
+      id: "env-block",
+      label: "Copy selected .env block",
+      status: routeFlagEnabled && !multipleFlags ? "passed" : "instruction",
+      command: "Copy selected .env block into .env",
+      detail: routeFlagEnabled && !multipleFlags
+        ? "The selected route flag is active and no competing route flag is detected."
+        : "Paste the generated block into .env, then restart the desktop app."
+    }),
     setupStep({
       id: "native-desktop",
       label: "Start desktop app",
@@ -96,10 +128,42 @@ export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
     route: route.route || "",
     label: route.label || routeInput,
     envVar,
+    envBlock,
     ready: blockers.length === 0,
     requiresFirstRouteProof,
     steps,
     blockers
+  };
+}
+
+export function buildRouteEnvBlock({ route = {}, firstRouteProofPath = "" } = {}) {
+  const routeInput = route.routeInput || route.route || "";
+  const selectedEnvVar = route.envVar || "";
+  const requiresFirstRouteProof = route.route !== "known-temp-delete";
+  const firstRouteProofValue = requiresFirstRouteProof
+    ? (firstRouteProofPath || FIRST_ROUTE_PROOF_PLACEHOLDER)
+    : "";
+  const executorFlagLines = EXECUTOR_ENV_VARS.map((envVar) => `${envVar}=${envVar === selectedEnvVar ? "1" : "0"}`);
+  const lines = [
+    `# SpaceGuard selected route: ${routeInput}`,
+    "OPENAI_API_KEY=sk-...",
+    `OPENAI_MODEL=${DEFAULT_OPENAI_MODEL}`,
+    `OPENAI_REASONING_EFFORT=${DEFAULT_OPENAI_REASONING_EFFORT}`,
+    "",
+    `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK=${firstRouteProofValue}`,
+    "",
+    ...executorFlagLines
+  ];
+
+  return {
+    schemaVersion: "spaceguard-route-env-block/v1",
+    fileName: ".env",
+    routeInput,
+    route: route.route || "",
+    selectedEnvVar,
+    requiresFirstRouteProof,
+    executorFlagLines,
+    content: lines.join("\n")
   };
 }
 

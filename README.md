@@ -17,6 +17,8 @@ Set `OPENAI_API_KEY` in `.env` before using the OpenAI cleanup advisor. Enable e
 SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1
 ```
 
+The app's route setup wizard also shows a copyable selected `.env` block for each route. Use that block to avoid accidentally enabling multiple executor flags.
+
 Inside the desktop app:
 
 1. Run real scan.
