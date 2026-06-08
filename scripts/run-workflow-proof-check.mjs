@@ -5,13 +5,26 @@ import process from "node:process";
 const SCRIPT_ID = "spaceguard-workflow-proof-check";
 const PROOF_SCHEMA = "spaceguard-real-workflow-proof/v1";
 const CHECK_SCHEMA = "spaceguard-workflow-proof-check/v1";
-const APP_CLOSE_CONTRACT_SCHEMA = "spaceguard-first-route-app-close-contract/v1";
-const REQUIRED_APP_CLOSE_REQUIREMENTS = [
+const FIRST_ROUTE_APP_CLOSE_CONTRACT_SCHEMA = "spaceguard-first-route-app-close-contract/v1";
+const SELECTED_ROUTE_APP_CLOSE_CONTRACT_SCHEMA = "spaceguard-selected-route-app-close-contract/v1";
+const COMMON_APP_CLOSE_REQUIREMENTS = [
   "post-run-rescan-matched",
   "selected-route-proof-packet-exported",
   "selected-route-proof-import-complete",
   "spaceguard-real-workflow-proof-exported"
 ];
+const appCloseContracts = {
+  [FIRST_ROUTE_APP_CLOSE_CONTRACT_SCHEMA]: {
+    nextRouteBlockedUntil: "validate:first-route-completion accepted",
+    nextRouteDetail: "App-close contract must keep next route blocked until first-route completion is accepted.",
+    requiredBeforeClosingApp: COMMON_APP_CLOSE_REQUIREMENTS
+  },
+  [SELECTED_ROUTE_APP_CLOSE_CONTRACT_SCHEMA]: {
+    nextRouteBlockedUntil: "validate:workflow-proof accepted",
+    nextRouteDetail: "App-close contract must keep next route blocked until workflow proof is accepted.",
+    requiredBeforeClosingApp: ["native-volume-proof-captured", ...COMMON_APP_CLOSE_REQUIREMENTS]
+  }
+};
 const requiredRowIds = [
   "native-scan-current",
   "post-run-proof-complete",
@@ -150,8 +163,14 @@ function validateAppCloseContract(contract, add) {
     return;
   }
 
-  if (contract.schemaVersion !== APP_CLOSE_CONTRACT_SCHEMA) {
-    add("app-close-contract", "App-close contract schema mismatch", `Expected ${APP_CLOSE_CONTRACT_SCHEMA}.`);
+  const schemaVersion = String(contract.schemaVersion || "");
+  const expectedContract = appCloseContracts[schemaVersion];
+  if (!expectedContract) {
+    add(
+      "app-close-contract",
+      "App-close contract schema mismatch",
+      `Expected ${Object.keys(appCloseContracts).join(" or ")}.`
+    );
   }
   if (String(contract.workflowProofPath || "") !== ".\\spaceguard-real-workflow-proof.md") {
     add("app-close-contract", "Workflow proof export path mismatch", "App-close contract must point to .\\spaceguard-real-workflow-proof.md.");
@@ -165,14 +184,14 @@ function validateAppCloseContract(contract, add) {
   if (Number(contract.minimumReclaimedBytes || 0) < 1) {
     add("app-close-contract", "Recovered-byte minimum missing", "App-close contract must require positive reclaimed bytes.");
   }
-  if (String(contract.nextRouteBlockedUntil || "") !== "validate:first-route-completion accepted") {
-    add("app-close-contract", "Next-route gate missing", "App-close contract must keep next route blocked until first-route completion is accepted.");
+  if (expectedContract && String(contract.nextRouteBlockedUntil || "") !== expectedContract.nextRouteBlockedUntil) {
+    add("app-close-contract", "Next-route gate missing", expectedContract.nextRouteDetail);
   }
 
   const requirements = Array.isArray(contract.requiredBeforeClosingApp)
     ? contract.requiredBeforeClosingApp.map((item) => String(item || ""))
     : [];
-  const missing = REQUIRED_APP_CLOSE_REQUIREMENTS.filter((item) => !requirements.includes(item));
+  const missing = (expectedContract?.requiredBeforeClosingApp || COMMON_APP_CLOSE_REQUIREMENTS).filter((item) => !requirements.includes(item));
   if (missing.length) {
     add("app-close-contract", "Before-close requirements missing", `Missing app-close requirement(s): ${missing.join(", ")}.`);
   }

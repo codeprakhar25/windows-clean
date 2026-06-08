@@ -22,6 +22,10 @@ assert(
   packageJson.scripts["validate:route-preflight"]?.includes("run-route-preflight-check.mjs"),
   "package.json should expose the selected-route preflight verifier"
 );
+assert(
+  packageJson.scripts["validate:route-completion"]?.includes("run-route-completion-check.mjs"),
+  "package.json should expose the selected-route completion verifier"
+);
 assert(runner.includes("spaceguard-selected-route-windows-operator/v1"), "runner should write a stable selected-route operator schema");
 assert(runner.includes("[System.PlatformID]::Win32NT"), "runner should refuse non-Windows execution");
 assert(runner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"), "runner should require accepted first-route completion proof");
@@ -50,11 +54,14 @@ assert(runner.includes("spaceguard-selected-route-proof-packet.md"), "runner han
 assert(runner.includes("spaceguard-real-workflow-proof.md"), "runner handoff should name the workflow proof export");
 assert(runner.includes("proof:route:windows:finalize"), "runner handoff should name the selected-route finalize command");
 assert(runner.includes("workflow-proof-check.json"), "runner should write workflow proof check output after app exit");
+assert(runner.includes("selected-route-completion-check.json"), "runner should write selected-route completion check output after app exit");
 assert(runner.includes("post-app-finalization.json"), "runner should write post-app finalization summary");
 assert(runner.includes("native-dev-exit.json"), "runner should write native app exit evidence");
 assert(runner.includes("$LASTEXITCODE"), "runner should capture npm run native:dev exit code");
 assert(runner.includes("native-dev-failed"), "runner should skip post-app proof validation when native app launch fails");
 assert(runner.includes("validate-selected-route-preflight"), "runner should log selected-route preflight validation");
+assert(runner.includes("validate-selected-route-completion"), "runner should log selected-route completion validation");
+assert(runner.includes("run-route-completion-check.mjs"), "runner should invoke the selected-route completion verifier");
 assert(runner.includes("selected-route-workflow-proof-required"), "runner should keep selected routes blocked until workflow proof validates");
 
 assert(!/\bRemove-Item\b/i.test(runner), "runner must not delete files directly");

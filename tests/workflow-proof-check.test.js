@@ -49,6 +49,30 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
   assert.strictEqual(accepted.canAccept, true, "workflow-proven packet should be accepted for route handoff");
   assert.strictEqual(accepted.readyForNextRoute, true, "workflow-proven packet should preserve next-route clearance");
 
+  const selectedRoutePacket = {
+    ...provenPacket,
+    route: "bounded-npm-cache-delete",
+    routeInput: "npm-cache",
+    appCloseContract: {
+      schemaVersion: "spaceguard-selected-route-app-close-contract/v1",
+      workflowProofPath: ".\\spaceguard-real-workflow-proof.md",
+      selectedRouteProofPacketPath: ".\\spaceguard-selected-route-proof-packet.md",
+      expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
+      minimumReclaimedBytes: 1,
+      nextRouteBlockedUntil: "validate:workflow-proof accepted",
+      requiredBeforeClosingApp: [
+        "native-volume-proof-captured",
+        "post-run-rescan-matched",
+        "selected-route-proof-packet-exported",
+        "selected-route-proof-import-complete",
+        "spaceguard-real-workflow-proof-exported"
+      ]
+    }
+  };
+  const acceptedSelectedRoute = verifier.buildWorkflowProofCheck({ evidenceObject: selectedRoutePacket });
+  assert.strictEqual(acceptedSelectedRoute.status, "accepted", "selected-route workflow proof contract should be accepted");
+  assert.strictEqual(acceptedSelectedRoute.canAccept, true, "selected-route workflow proof should clear the selected route handoff");
+
   const markdown = [
     "# SpaceGuard Real Workflow Proof",
     "",
@@ -103,6 +127,18 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
   });
   assert.strictEqual(missingSelectedRouteProofPacketPath.status, "blocked", "workflow proof without selected-route proof packet path should block");
   assert(missingSelectedRouteProofPacketPath.blockers.some((blocker) => blocker.id === "app-close-contract"), "missing selected-route proof packet path should be an app-close contract blocker");
+
+  const missingSelectedRouteVolumeProof = verifier.buildWorkflowProofCheck({
+    evidenceObject: {
+      ...selectedRoutePacket,
+      appCloseContract: {
+        ...selectedRoutePacket.appCloseContract,
+        requiredBeforeClosingApp: selectedRoutePacket.appCloseContract.requiredBeforeClosingApp.filter((item) => item !== "native-volume-proof-captured")
+      }
+    }
+  });
+  assert.strictEqual(missingSelectedRouteVolumeProof.status, "blocked", "selected-route workflow proof without native volume proof requirement should block");
+  assert(missingSelectedRouteVolumeProof.blockers.some((blocker) => blocker.id === "app-close-contract"), "missing selected-route native volume requirement should be an app-close contract blocker");
 
   const wrongSchema = verifier.buildWorkflowProofCheck({ evidenceObject: { schemaVersion: "wrong" } });
   assert.strictEqual(wrongSchema.status, "schema-mismatch", "wrong schema should be rejected");

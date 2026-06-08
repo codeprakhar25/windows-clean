@@ -88,7 +88,7 @@ For every route after the seeded temp fixture, `setup:route` stays at `first-rou
 
 When the completion verifier accepts that evidence, keep the generated first-route completion check JSON and set `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to that path before enabling `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR`, `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR`, or another non-temp route flag.
 
-After first-route proof is accepted, `npm run proof:route:windows -- -Route npm-cache` is the fastest selected-route proof path. It runs only on Windows, loads `.env`, requires `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to point at an accepted `spaceguard-first-route-completion-check/v1` file, forces all scoped executor flags off except the selected route flag, runs setup doctor, route-specific OpenAI fixture smoke, live OpenAI smoke when configured, route setup, route validation, writes `operator-preflight.json`, validates it into `operator-preflight-check.json`, writes `operator-app-handoff.md` and `commands.ndjson`, then launches `npm run native:dev`. It does not run cleanup itself; deletion still requires the desktop app's real scan, target selection, consent, executor button, native volume proof, post-run rescan, selected-route proof import, and workflow proof export.
+After first-route proof is accepted, `npm run proof:route:windows -- -Route npm-cache` is the fastest selected-route proof path. It runs only on Windows, loads `.env`, requires `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to point at an accepted `spaceguard-first-route-completion-check/v1` file, forces all scoped executor flags off except the selected route flag, runs setup doctor, route-specific OpenAI fixture smoke, live OpenAI smoke when configured, route setup, route validation, writes `operator-preflight.json`, validates it into `operator-preflight-check.json`, writes `operator-app-handoff.md` and `commands.ndjson`, then launches `npm run native:dev`. It does not run cleanup itself; deletion still requires the desktop app's real scan, target selection, consent, executor button, native volume proof, post-run rescan, selected-route proof import, and workflow proof export. After the app exits cleanly, the runner validates the workflow proof and writes `selected-route-completion-check.json`; that completion artifact is the selected-route handoff for starting the next cleanup route.
 
 If the app proof export is fixed after the selected-route desktop session closes, rerun only the post-app finalization against the existing evidence root:
 
@@ -121,6 +121,14 @@ npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md
 ```
 
 The verifier accepts only `spaceguard-real-workflow-proof/v1` packets that are `workflow-proven`, have `readyForNextRoute=true`, include completed selected-route proof import, retain ledger plus matched rescan evidence, and carry the app-close proof contract exported by the desktop app.
+
+For a selected route after `known-temp-delete`, validate the whole route completion chain:
+
+```bash
+npm run validate:route-completion -- --preflight evidence/route-proof-npm-cache-YYYYMMDD-HHMMSS/operator-preflight.json --native-exit evidence/route-proof-npm-cache-YYYYMMDD-HHMMSS/native-dev-exit.json --workflow-proof spaceguard-real-workflow-proof.md
+```
+
+This completion verifier reads the selected-route preflight bundle, `commands.ndjson`, native app exit evidence, selected-route proof packet, and workflow proof. It requires successful records for `validate-selected-route-preflight`, `native-dev-launch`, `native-dev-exit`, `finalize-after-app`, and `workflow-proof-check`, then reports whether the next route may start.
 
 For the seeded first route, also validate the whole preflight plus after-cleanup fixture plus workflow proof chain:
 

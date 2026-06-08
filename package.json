@@ -19,6 +19,7 @@
     "setup:route": "node scripts/run-setup-route.mjs",
     "validate:route": "node scripts/run-windows-validation-packet.mjs",
     "validate:route-preflight": "node scripts/run-route-preflight-check.mjs",
+    "validate:route-completion": "node scripts/run-route-completion-check.mjs",
     "validate:route-contracts": "node scripts/run-route-contract-audit.mjs",
     "validate:first-route-preflight": "node scripts/run-first-route-preflight-check.mjs",
     "validate:first-route-completion": "node scripts/run-first-route-completion-check.mjs",
@@ -28,7 +29,7 @@
     "proof:first-route:windows:finalize": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-first-route-proof-windows.ps1 -FinalizeOnly",
     "proof:route:windows": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-route-proof-windows.ps1",
     "proof:route:windows:finalize": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-route-proof-windows.ps1 -FinalizeOnly",
-    "test": "node tests/guardrails.test.js && node tests/native-scanner.test.js && node tests/route-boundary-contracts.test.js && node tests/route-contract-audit.test.js && node tests/first-route-proof.test.js && node tests/first-route-windows-runner.test.js && node tests/route-windows-runner.test.js && node tests/route-preflight-check.test.js && node tests/first-route-preflight-check.test.js && node tests/first-route-completion-check.test.js && node tests/openai-agent.test.js && node tests/openai-smoke.test.js && node tests/setup-route.test.js && node tests/setup-doctor.test.js && node tests/windows-validation-packet.test.js && node tests/workflow-proof-check.test.js && node tests/demo-rehearsal.test.js && node tests/native-readonly-rehearsal.test.js && node tests/static-app.test.js",
+    "test": "node tests/guardrails.test.js && node tests/native-scanner.test.js && node tests/route-boundary-contracts.test.js && node tests/route-contract-audit.test.js && node tests/first-route-proof.test.js && node tests/first-route-windows-runner.test.js && node tests/route-windows-runner.test.js && node tests/route-preflight-check.test.js && node tests/route-completion-check.test.js && node tests/first-route-preflight-check.test.js && node tests/first-route-completion-check.test.js && node tests/openai-agent.test.js && node tests/openai-smoke.test.js && node tests/setup-route.test.js && node tests/setup-doctor.test.js && node tests/windows-validation-packet.test.js && node tests/workflow-proof-check.test.js && node tests/demo-rehearsal.test.js && node tests/native-readonly-rehearsal.test.js && node tests/static-app.test.js",
     "check": "npm run build"
   },
   "dependencies": {

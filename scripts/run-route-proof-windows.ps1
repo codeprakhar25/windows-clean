@@ -52,6 +52,7 @@ try {
   $SelectedRouteProofPacketPath = Join-Path $RepoRoot "spaceguard-selected-route-proof-packet.md"
   $WorkflowProofPath = Join-Path $RepoRoot "spaceguard-real-workflow-proof.md"
   $WorkflowProofCheckPath = Join-Path $EvidenceRoot "workflow-proof-check.json"
+  $CompletionCheckPath = Join-Path $EvidenceRoot "selected-route-completion-check.json"
   $PostAppFinalizationPath = Join-Path $EvidenceRoot "post-app-finalization.json"
   $NativeDevExitPath = Join-Path $EvidenceRoot "native-dev-exit.json"
 
@@ -270,9 +271,11 @@ try {
       skipped = $false
       commands = [PSCustomObject]@{
         validateWorkflowProof = "node scripts\run-workflow-proof-check.mjs --file `"$WorkflowProofPath`""
+        validateSelectedRouteCompletion = "node scripts\run-route-completion-check.mjs --preflight `"$PreflightPath`" --native-exit `"$NativeDevExitPath`" --workflow-proof `"$WorkflowProofPath`""
       }
       artifacts = [PSCustomObject]@{
         workflowProofCheck = $WorkflowProofCheckPath
+        selectedRouteCompletionCheck = $CompletionCheckPath
         finalization = $PostAppFinalizationPath
         nativeDevExit = $NativeDevExitPath
       }
@@ -312,13 +315,16 @@ try {
       })
 
     Invoke-LoggedCommand -Id "workflow-proof-check" -CommandLine $summary.commands.validateWorkflowProof -OutputPath $WorkflowProofCheckPath | Out-Null
-    $summary.status = "selected-route-workflow-proof-accepted"
+    Invoke-LoggedCommand -Id "validate-selected-route-completion" -CommandLine $summary.commands.validateSelectedRouteCompletion -OutputPath $CompletionCheckPath | Out-Null
+    $summary.status = "selected-route-completion-accepted"
     $summary.workflowProofCheckPath = $WorkflowProofCheckPath
+    $summary.selectedRouteCompletionCheckPath = $CompletionCheckPath
     Write-JsonFile -Value $summary -Path $PostAppFinalizationPath
   }
 
   function Write-OperatorAppHandoff {
     $ValidateWorkflowProofCommand = "npm run validate:workflow-proof -- --file .\spaceguard-real-workflow-proof.md"
+    $ValidateCompletionCommand = "npm run validate:route-completion -- --preflight `"$PreflightPath`" --native-exit `"$NativeDevExitPath`" --workflow-proof .\spaceguard-real-workflow-proof.md"
     $lines = @(
       "# SpaceGuard Selected-Route App Handoff",
       "",
@@ -344,7 +350,8 @@ try {
       "npm run proof:route:windows:finalize -- -Route $Route -EvidenceRoot `"$EvidenceRoot`"",
       "",
       "## Expected final check",
-      $ValidateWorkflowProofCommand
+      $ValidateWorkflowProofCommand,
+      $ValidateCompletionCommand
     )
     Set-Content -LiteralPath $OperatorAppHandoffPath -Value $lines -Encoding UTF8
   }
@@ -360,6 +367,7 @@ try {
     Write-Host ""
     Write-Host "Finalized existing selected-route evidence root: $EvidenceRoot"
     Write-Host "Workflow proof check: $WorkflowProofCheckPath"
+    Write-Host "Selected-route completion check: $CompletionCheckPath"
     return
   }
 
@@ -432,6 +440,7 @@ try {
       selectedRouteProofPacket = $SelectedRouteProofPacketPath
       workflowProof = $WorkflowProofPath
       workflowProofCheck = $WorkflowProofCheckPath
+      selectedRouteCompletionCheck = $CompletionCheckPath
     }
     appCloseContract = [PSCustomObject]@{
       schemaVersion = "spaceguard-selected-route-app-close-contract/v1"
@@ -460,6 +469,7 @@ try {
     )
     afterAppCommands = [PSCustomObject]@{
       validateWorkflowProof = "npm run validate:workflow-proof -- --file .\spaceguard-real-workflow-proof.md"
+      validateSelectedRouteCompletion = "npm run validate:route-completion -- --preflight `"$PreflightPath`" --native-exit `"$NativeDevExitPath`" --workflow-proof .\spaceguard-real-workflow-proof.md"
     }
   }
 
@@ -488,6 +498,7 @@ try {
   Write-Host ""
   Write-Host "After the app run:"
   Write-Host " - $($preflight.afterAppCommands.validateWorkflowProof)"
+  Write-Host " - $($preflight.afterAppCommands.validateSelectedRouteCompletion)"
 
   if (-not $SkipLaunch) {
     Write-CommandRecord -Record ([PSCustomObject]@{

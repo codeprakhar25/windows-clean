@@ -1,0 +1,376 @@
+#!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
+import process from "node:process";
+
+import { buildSelectedRoutePreflightCheck } from "./run-route-preflight-check.mjs";
+import { buildWorkflowProofCheck } from "./run-workflow-proof-check.mjs";
+
+const SCRIPT_ID = "spaceguard-selected-route-completion-check";
+const CHECK_SCHEMA = "spaceguard-selected-route-completion-check/v1";
+const NATIVE_DEV_EXIT_SCHEMA = "spaceguard-native-dev-exit/v1";
+const SELECTED_ROUTE_PROOF_PACKET_SCHEMA = "spaceguard-selected-route-proof-packet/v1";
+const REQUIRED_ROUTE_COMMANDS = [
+  "validate-selected-route-preflight",
+  "native-dev-launch",
+  "native-dev-exit",
+  "finalize-after-app",
+  "workflow-proof-check"
+];
+
+function parseArgs(argv = []) {
+  const args = { preflight: "", workflowProof: "", nativeExit: "", allowIncomplete: false };
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
+    if (value === "--preflight") args.preflight = argv[index + 1] || "";
+    if (value.startsWith("--preflight=")) args.preflight = value.slice("--preflight=".length);
+    if (value === "--workflow-proof") args.workflowProof = argv[index + 1] || "";
+    if (value.startsWith("--workflow-proof=")) args.workflowProof = value.slice("--workflow-proof=".length);
+    if (value === "--native-exit") args.nativeExit = argv[index + 1] || "";
+    if (value.startsWith("--native-exit=")) args.nativeExit = value.slice("--native-exit=".length);
+    if (value === "--allow-incomplete") args.allowIncomplete = true;
+  }
+  return args;
+}
+
+export function buildSelectedRouteCompletionCheck({
+  preflightPath = "",
+  workflowProofPath = "",
+  nativeExitPath = "",
+  checkedAt = new Date().toISOString()
+} = {}) {
+  const blockers = [];
+  const add = (id, label, detail) => {
+    if (!blockers.some((blocker) => blocker.id === id)) blockers.push({ id, label, detail });
+  };
+
+  const resolvedPreflightPath = preflightPath ? path.resolve(preflightPath) : "";
+  const preflightCheck = buildSelectedRoutePreflightCheck({ preflightPath: resolvedPreflightPath, checkedAt });
+  if (!preflightCheck.canLaunchApp) {
+    add("preflight", "Preflight not accepted", preflightCheck.primary || "Selected-route preflight check is not accepted.");
+  }
+
+  const preflightObject = readOptionalJsonArtifact("preflight", resolvedPreflightPath, add);
+  const baseDir = resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd();
+  const artifacts = preflightObject?.artifacts || {};
+  const artifactCommandLogPath = normalizeArtifactPath(artifacts.commandLog || "", baseDir);
+  const artifactNativeExitPath = normalizeArtifactPath(nativeExitPath || artifacts.nativeDevExit || "", baseDir);
+  const artifactSelectedRouteProofPacketPath = normalizeArtifactPath(artifacts.selectedRouteProofPacket || "", baseDir);
+  const contractSelectedRouteProofPacketPath = normalizeArtifactPath(preflightObject?.appCloseContract?.selectedRouteProofPacketPath || "", baseDir);
+  const resolvedSelectedRouteProofPacketPath =
+    artifactSelectedRouteProofPacketPath ||
+    contractSelectedRouteProofPacketPath ||
+    normalizeArtifactPath("spaceguard-selected-route-proof-packet.md", baseDir);
+  const contractWorkflowProofPath = normalizeArtifactPath(preflightObject?.appCloseContract?.workflowProofPath || "", baseDir);
+  const resolvedWorkflowProofPath = workflowProofPath
+    ? path.resolve(workflowProofPath)
+    : contractWorkflowProofPath || normalizeArtifactPath("spaceguard-real-workflow-proof.md", baseDir);
+  validateWorkflowProofPath(resolvedWorkflowProofPath, contractWorkflowProofPath, add);
+
+  const commandRecords = readCommandRecords(artifactCommandLogPath, add);
+  const commandSummary = validateRouteCommandRecords(commandRecords, add);
+  const nativeExit = readOptionalJsonArtifact("native-exit", artifactNativeExitPath, add);
+  const selectedRouteProofPacket = readOptionalJsonArtifact("selected-route-proof-packet", resolvedSelectedRouteProofPacketPath, add);
+  const workflowProofText = readOptionalTextArtifact("workflow-proof", resolvedWorkflowProofPath, add);
+  const workflowProof = workflowProofText
+    ? buildWorkflowProofCheck({ evidenceText: workflowProofText, checkedAt })
+    : buildWorkflowProofCheck({ evidenceObject: { schemaVersion: "" }, checkedAt });
+
+  const expectedRoute = String(preflightObject?.route || preflightCheck.route || "");
+  const expectedRouteInput = String(preflightObject?.routeInput || preflightCheck.routeInput || expectedRoute);
+  validateNativeExitEvidence(nativeExit, add);
+  validateSelectedRouteProofPacket(selectedRouteProofPacket, expectedRoute, expectedRouteInput, add);
+  validateWorkflowProof(workflowProof, expectedRoute, add);
+
+  const reclaimedBytes = Number(workflowProof.counts?.reclaimedBytes || 0);
+  const selectedRouteProofPacketReclaimedBytes = Number(selectedRouteProofPacket?.counts?.reclaimedBytes || 0);
+  const nativeExitCode = Number.isFinite(Number(nativeExit?.exitCode)) ? Number(nativeExit.exitCode) : null;
+  const canStartNextRoute = blockers.length === 0;
+  return {
+    schemaVersion: CHECK_SCHEMA,
+    tool: SCRIPT_ID,
+    checkedAt,
+    status: canStartNextRoute ? "accepted" : "blocked",
+    canStartNextRoute,
+    route: expectedRoute,
+    routeInput: expectedRouteInput,
+    preflightPath: resolvedPreflightPath,
+    commandLogPath: artifactCommandLogPath,
+    nativeExitPath: artifactNativeExitPath,
+    selectedRouteProofPacketPath: resolvedSelectedRouteProofPacketPath,
+    workflowProofPath: resolvedWorkflowProofPath,
+    blockers,
+    counts: {
+      blockers: blockers.length,
+      reclaimedBytes,
+      selectedRouteProofPacketReclaimedBytes,
+      nativeExitCode,
+      commandRecords: commandRecords.length,
+      requiredRouteCommands: REQUIRED_ROUTE_COMMANDS.length,
+      routeCommandsPassed: commandSummary.requiredPassed,
+      preflightBlockers: Number(preflightCheck.counts?.blockers || 0),
+      workflowProofBlockers: Number(workflowProof.counts?.blockers || 0)
+    },
+    primary: canStartNextRoute
+      ? `Selected-route cleanup for ${expectedRouteInput || expectedRoute || "route"} is proven and the next route may be considered.`
+      : `Selected-route completion is blocked by ${blockers.length} issue(s).`
+  };
+}
+
+function normalizeArtifactPath(value = "", baseDir = process.cwd()) {
+  const clean = String(value || "");
+  if (!clean) return "";
+  return path.isAbsolute(clean) ? clean : path.resolve(baseDir, clean);
+}
+
+function validateWorkflowProofPath(actualPath, contractPath, add) {
+  if (!contractPath) return;
+  if (normalizeComparablePath(actualPath) !== normalizeComparablePath(contractPath)) {
+    add(
+      "workflow-proof-path",
+      "Workflow proof path mismatch",
+      `Workflow proof must match the app-close contract path: ${contractPath}`
+    );
+  }
+}
+
+function normalizeComparablePath(filePath = "") {
+  const normalized = path.normalize(path.resolve(String(filePath || "")));
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function readOptionalJsonArtifact(id, filePath, add) {
+  if (!filePath) {
+    add(id, "Artifact missing", `${id} artifact path is missing.`);
+    return null;
+  }
+  if (!fs.existsSync(filePath)) {
+    add(id, "Artifact missing", `${id} artifact does not exist: ${filePath}`);
+    return null;
+  }
+  try {
+    return parseJsonObject(fs.readFileSync(filePath, "utf8"), filePath);
+  } catch (error) {
+    add(id, "Artifact parse failed", error instanceof Error ? error.message : `${id} artifact could not be parsed.`);
+    return null;
+  }
+}
+
+function readOptionalTextArtifact(id, filePath, add) {
+  if (!filePath) {
+    add(id, "Artifact missing", `${id} artifact path is missing.`);
+    return "";
+  }
+  if (!fs.existsSync(filePath)) {
+    add(id, "Artifact missing", `${id} artifact does not exist: ${filePath}`);
+    return "";
+  }
+  return fs.readFileSync(filePath, "utf8");
+}
+
+function readCommandRecords(commandLogPath, add) {
+  if (!commandLogPath) {
+    add("artifact-command-log", "Command log missing", "Command log artifact path is missing.");
+    return [];
+  }
+  if (!fs.existsSync(commandLogPath)) {
+    add("artifact-command-log", "Command log missing", `Command log does not exist: ${commandLogPath}`);
+    return [];
+  }
+  const records = [];
+  for (const [index, line] of fs.readFileSync(commandLogPath, "utf8").split(/\r?\n/).entries()) {
+    const clean = line.trim();
+    if (!clean) continue;
+    try {
+      const parsed = JSON.parse(clean);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) records.push(parsed);
+    } catch {
+      add("command-log-parse", "Command log parse failed", `commands.ndjson line ${index + 1} is not JSON.`);
+    }
+  }
+  return records;
+}
+
+function parseJsonObject(text = "", label = "artifact") {
+  const clean = String(text || "").trim();
+  if (!clean) throw new Error(`${label} is empty.`);
+  const candidates = [clean, ...extractJsonObjectCandidates(clean)];
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+    } catch {
+      // Continue through npm wrapper, markdown, and embedded JSON candidates.
+    }
+  }
+  throw new Error(`${label} could not be parsed as JSON.`);
+}
+
+function extractJsonObjectCandidates(text = "") {
+  const candidates = [];
+  for (let start = text.indexOf("{"); start !== -1; start = text.indexOf("{", start + 1)) {
+    const candidate = balancedJsonObjectCandidate(text, start);
+    if (candidate) candidates.push(candidate);
+  }
+  return candidates;
+}
+
+function balancedJsonObjectCandidate(text, start) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === "\"") {
+      inString = true;
+    } else if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
+    }
+  }
+  return "";
+}
+
+function validateRouteCommandRecords(records = [], add) {
+  let requiredPassed = 0;
+  for (const id of REQUIRED_ROUTE_COMMANDS) {
+    const record = findLatestCommandRecord(records, id);
+    if (!record) {
+      add(`command-${id}`, "Command missing", `${id} command record is missing.`);
+      continue;
+    }
+
+    if (id === "native-dev-launch") {
+      if (record.userGated !== true) {
+        add(`command-${id}`, "Command not user-gated", "native-dev-launch must be recorded as userGated=true.");
+        continue;
+      }
+      requiredPassed += 1;
+      continue;
+    }
+
+    if (id === "finalize-after-app") {
+      if (record.skipped === true) {
+        add(`command-${id}`, "Command skipped", `finalize-after-app was skipped: ${record.reason || "missing reason"}.`);
+        continue;
+      }
+      if (record.userGated !== true) {
+        add(`command-${id}`, "Command not user-gated", "finalize-after-app must be recorded as userGated=true.");
+        continue;
+      }
+      requiredPassed += 1;
+      continue;
+    }
+
+    if (!isExitCodeZero(record.exitCode)) {
+      add(`command-${id}`, "Command failed", `${id} exited with ${record.exitCode ?? "missing"}.`);
+      continue;
+    }
+    requiredPassed += 1;
+  }
+  return { requiredPassed };
+}
+
+function findLatestCommandRecord(records = [], id = "") {
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    if (records[index]?.id === id) return records[index];
+  }
+  return null;
+}
+
+function isExitCodeZero(value) {
+  return value === 0 || value === "0";
+}
+
+function validateNativeExitEvidence(evidence, add) {
+  if (!evidence) return;
+  if (evidence.schemaVersion !== NATIVE_DEV_EXIT_SCHEMA) {
+    add("native-exit", "Native app exit schema mismatch", `Expected ${NATIVE_DEV_EXIT_SCHEMA}.`);
+  }
+  if (String(evidence.command || "") !== "npm run native:dev") {
+    add("native-exit", "Native app command mismatch", "Native app exit evidence must come from npm run native:dev.");
+  }
+
+  const exitCode = Number(evidence.exitCode);
+  if (evidence.success !== true || !Number.isFinite(exitCode) || exitCode !== 0) {
+    add(
+      "native-exit",
+      "Native app exit blocked",
+      `Native desktop workflow must exit successfully before completion; observed exit code ${Number.isFinite(exitCode) ? exitCode : "missing"}.`
+    );
+  }
+}
+
+function validateSelectedRouteProofPacket(packet, expectedRoute, expectedRouteInput, add) {
+  if (!packet) return;
+  if (packet.schemaVersion !== SELECTED_ROUTE_PROOF_PACKET_SCHEMA) {
+    add("selected-route-proof-packet", "Selected-route proof schema mismatch", `Expected ${SELECTED_ROUTE_PROOF_PACKET_SCHEMA}.`);
+  }
+  if (String(packet.route || "") !== expectedRoute) {
+    add("selected-route-proof-packet", "Selected-route proof route mismatch", `Selected-route proof packet must bind to ${expectedRoute}.`);
+  }
+  if (expectedRouteInput && String(packet.routeInput || "") !== expectedRouteInput) {
+    add("selected-route-proof-packet", "Selected-route proof route input mismatch", `Selected-route proof packet must preserve route input ${expectedRouteInput}.`);
+  }
+  if (packet.status !== "proof-complete") {
+    add("selected-route-proof-packet", "Selected-route proof incomplete", `Expected proof-complete, received ${packet.status || "missing"}.`);
+  }
+  if (packet.rescanStatus !== "matched" || packet.postRunScanEvidence !== true) {
+    add("selected-route-proof-packet", "Selected-route rescan proof missing", "Selected-route proof packet must include matched post-run native rescan evidence.");
+  }
+  if (packet.scopedNativeExecution !== true) {
+    add("selected-route-proof-packet", "Scoped native execution missing", "Selected-route proof packet must prove the scoped native executor produced the ledger row.");
+  }
+  if (packet.readyForNextRoute !== true || packet.validationImport?.status !== "import-complete" || packet.validationImport?.complete !== true) {
+    add("selected-route-proof-packet", "Selected-route proof import incomplete", "Selected-route proof packet must be re-exported after validation import is complete.");
+  }
+  if (
+    Number(packet.counts?.ledgerEntries || 0) < 1 ||
+    Number(packet.counts?.matchedRows || 0) < 1 ||
+    Number(packet.counts?.reclaimedBytes || 0) <= 0
+  ) {
+    add("selected-route-proof-packet", "Selected-route proof counts invalid", "Selected-route proof packet must include ledger, matched rescan, and positive recovered bytes.");
+  }
+  if (packet.volumeProof?.status !== "measured") {
+    add("selected-route-proof-packet", "Selected-route volume proof missing", "Selected-route proof packet must include measured native volume proof.");
+  }
+}
+
+function validateWorkflowProof(proofCheck, expectedRoute, add) {
+  if (!proofCheck?.canAccept) {
+    add("workflow-proof", "Workflow proof not accepted", proofCheck?.primary || "Workflow proof verifier did not accept the proof.");
+    return;
+  }
+  if (proofCheck.route !== expectedRoute) {
+    add("workflow-proof", "Workflow route mismatch", `Workflow proof must be for ${expectedRoute}.`);
+  }
+  if (Number(proofCheck.counts?.reclaimedBytes || 0) <= 0) {
+    add("workflow-proof", "Recovered bytes missing", "Workflow proof must include positive reclaimed bytes.");
+  }
+  if (proofCheck.readyForNextRoute !== true) {
+    add("workflow-proof", "Next route not cleared", "Workflow proof must explicitly clear next-route handoff.");
+  }
+}
+
+if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"))) {
+  const args = parseArgs(process.argv.slice(2));
+  const result = buildSelectedRouteCompletionCheck({
+    preflightPath: args.preflight,
+    workflowProofPath: args.workflowProof,
+    nativeExitPath: args.nativeExit
+  });
+  console.log(JSON.stringify(result, null, 2));
+  if (!result.canStartNextRoute && !args.allowIncomplete) process.exitCode = 1;
+}
