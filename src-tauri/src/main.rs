@@ -852,7 +852,9 @@ fn write_proof_artifact(request: Option<ProofArtifactWriteRequest>) -> ProofArti
 fn allowed_proof_artifact_file_name(file_name: &str) -> bool {
     matches!(
         file_name,
-        "spaceguard-selected-route-proof-packet.md" | "spaceguard-real-workflow-proof.md"
+        "spaceguard-selected-route-proof-packet.md"
+            | "spaceguard-real-workflow-proof.md"
+            | "spaceguard-workflow-proof-check.json"
     )
 }
 
@@ -861,7 +863,11 @@ fn proof_artifact_write_warnings(request: &ProofArtifactWriteRequest) -> Vec<Str
         "Native proof artifact writes are restricted to the proof runner working directory."
             .to_string(),
     ];
-    if let Some(route) = request.route.as_ref().filter(|value| !value.trim().is_empty()) {
+    if let Some(route) = request
+        .route
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    {
         warnings.push(format!("Route binding: {route}."));
     }
     if let Some(proof_kind) = request

@@ -11,6 +11,7 @@ src-tauri/bundle/
 # Generated local proof and support artifacts
 evidence/
 spaceguard-real-workflow-proof.md
+spaceguard-workflow-proof-check.json
 spaceguard-selected-route-proof-packet.md
 spaceguard-selected-route-launch-packet.md
 spaceguard-executor-smoke-run-packet.md
@@ -23,7 +24,6 @@ selected-route-completion-check.json
 operator-preflight.json
 operator-preflight-check.json
 native-dev-exit.json
-workflow-proof-check.json
 commands.ndjson
 
 # Local environment and secrets

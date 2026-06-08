@@ -165,9 +165,9 @@ export function buildWindowsRealTestRunbook({ route = {}, envBlock = buildRouteE
     }),
     runbookCommand({
       id: "verify-proof",
-      label: "Verify exported proof",
+      label: "Audit exported proof",
       command: "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md",
-      expected: "Workflow proof status is accepted before testing another route."
+      expected: "Optional audit matches the in-app verifier and prints accepted before testing another route."
     })
   ];
   const appSteps = [
@@ -176,14 +176,14 @@ export function buildWindowsRealTestRunbook({ route = {}, envBlock = buildRouteE
     runbookStep("consent", "Review and consent", "Check the consent box and type the exact confirmation phrase."),
     runbookStep("execute-route", "Execute selected cleanup", "Run the scoped native executor from the app, not from a shell command."),
     runbookStep("post-run-rescan", "Run post-run rescan", "Capture the newer native scan and compare the selected target."),
-    runbookStep("export-proof", "Export proof", "Export both selected-route proof and real workflow proof from the app.")
+    runbookStep("export-proof", "Export proof", "Export selected-route proof, real workflow proof, and spaceguard-workflow-proof-check.json from the app.")
   ];
   const guardrails = [
     runbookGuardrail("one-route", "Keep exactly one route flag enabled before launch."),
     runbookGuardrail("desktop-only", "Do not scan or clean from a normal browser session."),
     runbookGuardrail("user-consent", "Do not execute until the app shows current-plan consent and route readiness."),
     runbookGuardrail("manual-only", "Do not delete installed app folders, custom roots, or broad inventory rows directly."),
-    runbookGuardrail("proof-before-next-route", "Do not enable another route until workflow proof validation accepts the export.")
+    runbookGuardrail("proof-before-next-route", "Do not enable another route until the in-app workflow proof verifier accepts the export.")
   ];
   const content = buildWindowsRealTestRunbookMarkdown({
     routeInput,

@@ -26,7 +26,9 @@ Inside the desktop app:
 3. Review the target, check the consent box, and type the exact confirmation phrase.
 4. Execute selected cleanup.
 5. Run post-run rescan.
-6. Export `spaceguard-selected-route-proof-packet.md` and `spaceguard-real-workflow-proof.md`.
+6. Export `spaceguard-selected-route-proof-packet.md`, `spaceguard-real-workflow-proof.md`, and `spaceguard-workflow-proof-check.json`.
+
+The app runs the workflow proof verifier during export. The CLI verifier below remains useful as an external audit.
 
 If the app opens in a normal browser, it will only show connection/setup steps. It will not scan local folders or run cleanup.
 

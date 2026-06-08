@@ -50,9 +50,9 @@ Then in the app:
 3. Review the target and confirmation phrase.
 4. Execute selected cleanup.
 5. Run post-run rescan.
-6. Export proof.
+6. Export proof. The app writes `spaceguard-selected-route-proof-packet.md`, `spaceguard-real-workflow-proof.md`, and `spaceguard-workflow-proof-check.json`.
 
-Verify the exported workflow proof:
+The app runs the workflow proof verifier during export. Use the CLI verifier as an external audit if needed:
 
 ```powershell
 npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md

@@ -45,7 +45,8 @@ const requiredAppMarkers = [
   "OpenAI cleanup agent",
   "Manual review findings",
   "spaceguard-selected-route-proof-packet.md",
-  "spaceguard-real-workflow-proof.md"
+  "spaceguard-real-workflow-proof.md",
+  "spaceguard-workflow-proof-check.json"
 ];
 
 for (const marker of requiredAppMarkers) {
@@ -109,7 +110,8 @@ assert(app.includes("workflowProofAccepted"), "cleanup queue should require acce
 assert(app.includes("buildWorkflowProofCheck"), "proof export should run the shared workflow proof verifier inside the app");
 assert(app.includes("workflowProofCheck"), "proof panel should render workflow proof validation output from the app");
 assert(app.includes("Workflow proof accepted by in-app verifier."), "proof export should report accepted in-app workflow proof validation");
-assert(app.includes("Run workflow proof verifier and mark accepted before selecting another cleanup target."), "cleanup queue should explain the workflow proof validation lock");
+assert(app.includes("proofKind: \"workflow-proof-check\""), "proof export should persist the in-app verifier output as a restricted artifact");
+assert(app.includes("Export proof and let the in-app verifier accept it before selecting another cleanup target."), "cleanup queue should explain the workflow proof validation lock");
 assert(app.includes("disabled={targetSwitchLocked && candidate.id !== selectedId}"), "cleanup queue should disable other targets while proof export is pending");
 assert(!app.includes("npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted"), "proof panel should not rely on a manual CLI acceptance checkbox");
 assert(
@@ -150,6 +152,7 @@ assert(nativeAdapter.includes("runNativeNpmCacheExecutor"), "native adapter shou
 assert(rustScanner.includes("fn write_proof_artifact"), "Rust backend should expose a restricted proof artifact writer");
 assert(rustScanner.includes("spaceguard-real-workflow-proof.md"), "Rust proof artifact writer should allow workflow proof export");
 assert(rustScanner.includes("spaceguard-selected-route-proof-packet.md"), "Rust proof artifact writer should allow selected-route proof export");
+assert(rustScanner.includes("spaceguard-workflow-proof-check.json"), "Rust proof artifact writer should allow workflow proof check export");
 assert(rustScanner.includes("execute_cleanup_plan"), "Rust backend should expose the guarded executor command");
 assert(rustScanner.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "Rust backend should gate npm cleanup behind a route flag");
 assert(!rustScanner.includes("first-route-proof-required"), "Rust backend should not reject real-data routes behind seeded proof ceremony");
@@ -183,6 +186,7 @@ for (const removedScript of [
 assert(gitignore.includes("evidence/"), ".gitignore should exclude generated Windows proof evidence folders");
 assert(gitignore.includes("spaceguard-real-workflow-proof.md"), ".gitignore should exclude exported workflow proof artifacts");
 assert(gitignore.includes("spaceguard-selected-route-proof-packet.md"), ".gitignore should exclude selected-route proof packet exports");
+assert(gitignore.includes("spaceguard-workflow-proof-check.json"), ".gitignore should exclude workflow proof check exports");
 assert(gitignore.includes("commands.ndjson"), ".gitignore should exclude copied command ledgers");
 
 assert(setupDoctorScript.includes("OPENAI_API_KEY"), "setup doctor should check OpenAI key configuration");
@@ -244,8 +248,10 @@ for (const removedPath of [
 assert(readme.includes("npm run native:dev"), "README should document the desktop shell");
 assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");
 assert(readme.includes("npm run validate:workflow-proof -- --file"), "README should document workflow proof verifier usage");
+assert(readme.includes("spaceguard-workflow-proof-check.json"), "README should document persisted workflow proof check output");
 assert(realDataGuide.includes("npm run native:dev"), "Windows setup guide should document the desktop shell");
 assert(realDataGuide.includes("OPENAI_API_KEY"), "Windows setup guide should document OpenAI key setup");
 assert(realDataGuide.includes("npm run validate:workflow-proof -- --file"), "Windows setup guide should document workflow proof verifier usage");
+assert(realDataGuide.includes("spaceguard-workflow-proof-check.json"), "Windows setup guide should document persisted workflow proof check output");
 
 console.log("static app ok");

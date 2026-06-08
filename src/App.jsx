@@ -63,6 +63,7 @@ const DEFAULT_SCAN_REQUEST = {
 };
 const PROOF_PACKET_FILE = "spaceguard-selected-route-proof-packet.md";
 const WORKFLOW_PROOF_FILE = "spaceguard-real-workflow-proof.md";
+const WORKFLOW_PROOF_CHECK_FILE = "spaceguard-workflow-proof-check.json";
 const CONFIRM_PREFIX = "RUN";
 
 const EXECUTOR_RECIPES = {
@@ -508,13 +509,17 @@ function App() {
         evidenceObject: workflowProof,
         checkedAt: new Date().toISOString()
       });
+      const proofCheckWrite = await writeProofFile(WORKFLOW_PROOF_CHECK_FILE, JSON.stringify(acceptedCheck, null, 2), {
+        route: selectedCandidate.route,
+        proofKind: "workflow-proof-check"
+      });
       setWorkflowProofCheck(acceptedCheck);
       setWorkflowProofAccepted(Boolean(acceptedCheck.canAccept));
       setProofExportStatus("complete");
       setProofExportMessage(
         acceptedCheck.canAccept
-          ? `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE} and ${workflowWrite.fileName || WORKFLOW_PROOF_FILE} into the runner working directory. Workflow proof accepted by in-app verifier.`
-          : `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE} and ${workflowWrite.fileName || WORKFLOW_PROOF_FILE} into the runner working directory. Workflow proof blocked by in-app verifier: ${acceptedCheck.blockers.length} blocker(s).`
+          ? `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE}, ${workflowWrite.fileName || WORKFLOW_PROOF_FILE}, and ${proofCheckWrite.fileName || WORKFLOW_PROOF_CHECK_FILE} into the runner working directory. Workflow proof accepted by in-app verifier.`
+          : `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE}, ${workflowWrite.fileName || WORKFLOW_PROOF_FILE}, and ${proofCheckWrite.fileName || WORKFLOW_PROOF_CHECK_FILE} into the runner working directory. Workflow proof blocked by in-app verifier: ${acceptedCheck.blockers.length} blocker(s).`
       );
     } catch (error) {
       setProofExportStatus("error");
@@ -1130,7 +1135,7 @@ function CleanupQueue({ candidates, selectedId, setSelectedId, scan, targetSwitc
         ) : candidates.length ? (
           <div className="grid gap-3">
             {targetSwitchLocked ? (
-              <Notice tone="review" icon={Lock} text="Run workflow proof verifier and mark accepted before selecting another cleanup target." />
+              <Notice tone="review" icon={Lock} text="Export proof and let the in-app verifier accept it before selecting another cleanup target." />
             ) : null}
             {candidates.map((candidate) => (
               <button
