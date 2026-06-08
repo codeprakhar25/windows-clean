@@ -4218,7 +4218,8 @@ const assert = require("assert");
     releaseGate: { readyForRealRun: false },
     preferredRoute: "known-temp-delete",
     executionProofHandoff: { status: "proof-complete" },
-    scopedExecutorCommandFlow: importedRouteProofFlow
+    scopedExecutorCommandFlow: importedRouteProofFlow,
+    selectedRouteProofExported: true
   });
   const completeWorkflowProof = guard.buildRealWorkflowProofPacket({
     windowsSetupAssistant: completeWorkflowSetupAssistant,
@@ -4229,6 +4230,7 @@ const assert = require("assert");
   });
   assert.strictEqual(completeWorkflowProof.status, "workflow-proven", "imported selected-route proof should complete the real workflow proof");
   assert.strictEqual(completeWorkflowProof.readyForNextRoute, true, "complete workflow proof should unlock another route");
+  assert(completeWorkflowProof.rows.some((row) => row.id === "selected-route-proof-export" && row.passed), "complete workflow proof should include final selected-route proof export evidence");
   assert.strictEqual(completeWorkflowProof.route, "known-temp-delete", "workflow proof should retain the selected route");
   assert.strictEqual(completeWorkflowProof.appCloseContract.schemaVersion, "spaceguard-first-route-app-close-contract/v1", "workflow proof should retain the app-close contract");
   assert.strictEqual(completeWorkflowProof.appCloseContract.selectedRouteProofPacketPath, ".\\spaceguard-selected-route-proof-packet.md", "workflow proof app-close contract should name the selected-route proof packet export");
@@ -4237,6 +4239,31 @@ const assert = require("assert");
   assert(completeWorkflowProof.rows.some((row) => row.id === "reclaimed-bytes" && row.passed), "complete workflow proof should include positive recovered-byte evidence");
   assert(guard.buildRealWorkflowProofPacketMarkdown(completeWorkflowProof).includes("Status: workflow-proven"), "workflow proof markdown should include final status");
   assert(guard.buildRealWorkflowProofPacketMarkdown(completeWorkflowProof).includes("App-close contract: spaceguard-first-route-app-close-contract/v1"), "workflow proof markdown should include app-close contract status");
+  const staleWorkflowProofExportSetupAssistant = guard.buildWindowsSetupAssistant({
+    nativeCapability: { available: true },
+    runtimeCapabilities: { available: true, platform: "windows", scanKnownRoots: true, realRunEnabled: false, destructiveCommands: false },
+    scanMode: "native-readonly",
+    scanSession: currentScanSession,
+    scanCoverage: { confidenceScore: 80 },
+    privacyBoundary: { cloudDisabled: true, telemetryDisabled: true, exportOnly: true },
+    publicBetaReadiness: { readyForNativeBeta: false },
+    validationPack: { readyForRealRun: false },
+    releaseGate: { readyForRealRun: false },
+    preferredRoute: "known-temp-delete",
+    executionProofHandoff: { status: "proof-complete" },
+    scopedExecutorCommandFlow: importedRouteProofFlow,
+    selectedRouteProofExported: false
+  });
+  const staleWorkflowProofExport = guard.buildRealWorkflowProofPacket({
+    windowsSetupAssistant: staleWorkflowProofExportSetupAssistant,
+    scopedExecutorCommandFlow: importedRouteProofFlow,
+    executionProofHandoff: { status: "proof-complete" },
+    scanSession: currentScanSession,
+    generatedAt: "2026-06-05T02:21:00.000Z"
+  });
+  assert.strictEqual(staleWorkflowProofExport.status, "proof-export-required", "workflow proof should block until selected-route proof packet is re-exported after import");
+  assert.strictEqual(staleWorkflowProofExport.readyForNextRoute, false, "stale workflow proof export should not unlock another route");
+  assert(staleWorkflowProofExport.rows.some((row) => row.id === "selected-route-proof-export" && !row.passed), "workflow proof should name the missing final selected-route proof export");
   const selectedRouteWorkflowProof = guard.buildRealWorkflowProofPacket({
     windowsSetupAssistant: {
       destructiveCommands: false,

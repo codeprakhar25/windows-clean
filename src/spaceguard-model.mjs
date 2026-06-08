@@ -8774,6 +8774,7 @@ export function buildRealWorkflowProofPacket({
   const nativeScanCurrent = Boolean(scanSession?.readyForPlanning && scanSession?.nativeEvidence);
   const proofComplete = Boolean(proofPacket.status === "proof-complete" || executionProofHandoff?.status === "proof-complete");
   const importComplete = Boolean(validationImport.complete);
+  const finalProofExported = workflow.status === "next-route-ready";
   const reclaimedBytes = Number(proofPacket.counts?.reclaimedBytes || 0);
   const positiveRecoveredBytes = reclaimedBytes > 0;
   const unsafeRuntime = Boolean(windowsSetupAssistant?.destructiveCommands || windowsSetupAssistant?.status === "unsafe-runtime");
@@ -8785,7 +8786,7 @@ export function buildRealWorkflowProofPacket({
       proofPacket.volumeProof?.status === "measured" ||
       proofPacket.volumeProof?.measured === true
   );
-  const readyForNextRoute = Boolean(proofPacket.readyForNextRoute && importComplete && positiveRecoveredBytes && nativeVolumeProofCaptured);
+  const readyForNextRoute = Boolean(proofPacket.readyForNextRoute && importComplete && finalProofExported && positiveRecoveredBytes && nativeVolumeProofCaptured);
   const rows = [
     buildRealWorkflowProofRow({
       id: "native-scan-current",
@@ -8810,6 +8811,14 @@ export function buildRealWorkflowProofPacket({
       detail: importComplete
         ? validationImport.detail || "Selected-route proof is imported into validation evidence."
         : validationImport.detail || "Import selected-route proof into validation evidence with reviewer and artifact path."
+    }),
+    buildRealWorkflowProofRow({
+      id: "selected-route-proof-export",
+      label: "Selected-route proof export",
+      passed: finalProofExported,
+      detail: finalProofExported
+        ? "Final selected-route proof packet was exported after validation import."
+        : "Re-export the selected-route proof packet after validation import before workflow proof."
     }),
     buildRealWorkflowProofRow({
       id: "reclaimed-bytes",
@@ -8853,6 +8862,8 @@ export function buildRealWorkflowProofPacket({
           ? "recovered-bytes-required"
         : !nativeVolumeProofCaptured
           ? "native-volume-proof-required"
+        : !finalProofExported
+          ? "proof-export-required"
           : !readyForNextRoute
             ? "next-route-blocked"
             : "workflow-proven";
@@ -8930,6 +8941,7 @@ function getRealWorkflowProofPrimary(status, { routeInput = "unknown", blockedRo
   if (status === "native-scan-required") return "A current native read-only scan is required before workflow proof.";
   if (status === "post-run-proof-required") return "Run post-run native rescan and build selected-route proof.";
   if (status === "proof-import-required") return "Import selected-route proof into validation evidence before accepting workflow proof.";
+  if (status === "proof-export-required") return "Re-export selected-route proof packet after validation import before accepting workflow proof.";
   if (status === "recovered-bytes-required") return "Selected-route proof is imported, but no positive recovered bytes are recorded.";
   if (status === "native-volume-proof-required") return "Selected-route proof is imported, but measured native volume proof is missing.";
   if (status === "next-route-blocked") return "Selected-route proof exists, but next-route clearance is still blocked.";
