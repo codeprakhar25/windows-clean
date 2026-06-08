@@ -435,6 +435,7 @@ export default function App() {
   const [routeProofImportReviewer, setRouteProofImportReviewer] = useState("");
   const [routeProofImportArtifact, setRouteProofImportArtifact] = useState("");
   const [routeProofImportResult, setRouteProofImportResult] = useState(null);
+  const [selectedRouteProofExportReceipt, setSelectedRouteProofExportReceipt] = useState(null);
   const [nativeBetaImportText, setNativeBetaImportText] = useState("");
   const [nativeBetaImportResult, setNativeBetaImportResult] = useState(null);
   const [localEvidenceBackupImportText, setLocalEvidenceBackupImportText] = useState("");
@@ -1958,6 +1959,7 @@ export default function App() {
     setNativePnpmStoreExecution({ status: "idle", result: null, error: "" });
     setNativeRecycleBinExecution({ status: "idle", result: null, error: "" });
     setExecutionConsent({ accepted: false, planId: "", acceptedAt: "" });
+    setSelectedRouteProofExportReceipt(null);
   }
 
   function updateScanSetting(key, value) {
@@ -3978,6 +3980,34 @@ export default function App() {
     downloadTextFile("spaceguard-selected-route-launch-packet.md", body, "text/markdown;charset=utf-8");
   }
 
+  function getSelectedRouteProofExportKey(proofPacket = scopedExecutorCommandFlow.proofPacket) {
+    if (!proofPacket) return "";
+    const counts = proofPacket.counts || {};
+    const volumeProof = proofPacket.volumeProof || {};
+    return [
+      proofPacket.route || "",
+      proofPacket.status || "",
+      proofPacket.latestExecutionAt || "",
+      proofPacket.scanGeneratedAt || "",
+      counts.ledgerEntries || 0,
+      counts.matchedRows || 0,
+      counts.mismatchRows || 0,
+      counts.waitingRows || 0,
+      counts.reclaimedBytes || 0,
+      volumeProof.measured ? "volume-measured" : "volume-missing",
+      volumeProof.freeBytesDelta || 0
+    ].join("::");
+  }
+
+  function selectedRouteProofExportedForCurrentPacket(proofPacket = scopedExecutorCommandFlow.proofPacket) {
+    const proofKey = getSelectedRouteProofExportKey(proofPacket);
+    return Boolean(
+      proofKey &&
+        selectedRouteProofExportReceipt?.proofKey === proofKey &&
+        selectedRouteProofExportReceipt?.fileName === "spaceguard-selected-route-proof-packet.md"
+    );
+  }
+
   function exportSelectedRouteProofPacket() {
     const proofPacket = scopedExecutorCommandFlow.proofPacket;
     if (!proofPacket || proofPacket.status !== "proof-complete") {
@@ -3998,6 +4028,13 @@ export default function App() {
       "```"
     ].join("\n");
     downloadTextFile("spaceguard-selected-route-proof-packet.md", body, "text/markdown;charset=utf-8");
+    setSelectedRouteProofExportReceipt({
+      proofKey: getSelectedRouteProofExportKey(exportedPacket),
+      route: exportedPacket.route || "",
+      status: exportedPacket.status || "",
+      exportedAt: exportedPacket.generatedAt,
+      fileName: "spaceguard-selected-route-proof-packet.md"
+    });
     return true;
   }
 
@@ -4035,7 +4072,11 @@ export default function App() {
       focusWorkflowPanel("validation-evidence-panel");
       return false;
     }
-    const generatedAt = new Date().toISOString();
+    if (!selectedRouteProofExportedForCurrentPacket(proofPacket)) {
+      focusWorkflowPanel("scoped-executor-command-flow-panel");
+      return false;
+    }
+    const generatedAt = selectedRouteProofExportReceipt?.exportedAt || new Date().toISOString();
     const exportedPacket = { ...proofPacket, generatedAt };
     setRouteProofImportText(JSON.stringify(exportedPacket, null, 2));
     setRouteProofImportArtifact(`selected-route-proof:${exportedPacket.route || "route"}:${generatedAt}`);
@@ -4331,6 +4372,7 @@ export default function App() {
 
             <ScopedExecutorCommandFlowPanel
               flow={scopedExecutorCommandFlow}
+              selectedRouteProofExported={selectedRouteProofExportedForCurrentPacket(scopedExecutorCommandFlow.proofPacket)}
               agent={{
                 configured: openAiConfig.configured || openAiAgentContext.runtime.openAiAdvisorConfigured,
                 keySource: openAiAgentContext.runtime.openAiAdvisorConfigured ? openAiAgentContext.runtime.openAiKeySource : openAiConfig.keySource,
@@ -5237,7 +5279,7 @@ function RealDataLaunchRoadmapPanel({ roadmap }) {
   );
 }
 
-function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRoute, onAskAgent, onAgentAction, onExportSmokePacket, onExportLaunchPacket, onExportProofPacket, onPrepareProofImport }) {
+function ScopedExecutorCommandFlowPanel({ flow, selectedRouteProofExported = false, agent = {}, onAction, onSelectRoute, onAskAgent, onAgentAction, onExportSmokePacket, onExportLaunchPacket, onExportProofPacket, onPrepareProofImport }) {
   const next = flow.nextAction || {};
   const routeOptions = flow.routeOptions || [];
   const result = agent.result || null;
@@ -5393,6 +5435,7 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
             <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
               <span className="font-medium">Selected route proof packet</span>
               <Badge variant={proofPacket.tone || "review"}>{proofPacket.status}</Badge>
+              <Badge variant={selectedRouteProofExported ? "safe" : "review"}>{selectedRouteProofExported ? "proof exported" : "export proof first"}</Badge>
               <Badge variant={proofPacket.readyForNextRoute ? "safe" : "review"}>{proofPacket.readyForNextRoute ? "next route clear" : "next route blocked"}</Badge>
               {validationImport ? <Badge variant={validationImport.complete ? "safe" : "review"}>{validationImport.status}</Badge> : null}
               {proofPacket.rescanStatus ? <Badge variant="outline">{proofPacket.rescanStatus}</Badge> : null}
@@ -5541,7 +5584,7 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
             <Download className="h-4 w-4" />
             Export proof packet
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={onPrepareProofImport} disabled={!proofPacketComplete}>
+          <Button type="button" variant="outline" size="sm" onClick={onPrepareProofImport} disabled={!proofPacketComplete || !selectedRouteProofExported}>
             <ClipboardList className="h-4 w-4" />
             Prepare validation import
           </Button>

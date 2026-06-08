@@ -405,6 +405,12 @@ assert(app.includes("prepareSelectedRouteProofImport"), "command flow should pre
 assert(app.includes('if (!proofPacket || proofPacket.status !== "proof-complete")'), "selected-route proof packet export should require a completed proof packet");
 assert(app.includes('disabled={!proofPacketComplete}'), "selected-route proof packet export button should stay disabled until proof is complete");
 assert(app.includes('proofPacket.status !== "proof-complete"'), "selected-route proof import preparation should require a completed proof packet");
+assert(app.includes("selectedRouteProofExportReceipt"), "selected-route proof import should track the exported proof receipt");
+assert(app.includes("selectedRouteProofExportedForCurrentPacket"), "selected-route proof import should require the current proof packet to be exported first");
+assert(app.includes('fileName: "spaceguard-selected-route-proof-packet.md"'), "selected-route proof receipt should bind to the exported proof packet file");
+assert(app.includes("!proofPacketComplete || !selectedRouteProofExported"), "selected-route validation import should stay disabled until proof is exported");
+assert(app.includes("export proof first"), "selected-route proof UI should explain that export must happen before validation import");
+assert(app.includes("setSelectedRouteProofExportReceipt(null)"), "execution state resets should clear selected-route proof export receipts");
 assert(app.includes("Prepare validation import"), "command flow UI should preload proof into validation import");
 assert(app.includes("proofPacket?.validationImport"), "command flow UI should display selected-route proof validation import status");
 assert(openAiAgent.includes("directDeleteAuthority"), "OpenAI context should deny direct delete authority");
