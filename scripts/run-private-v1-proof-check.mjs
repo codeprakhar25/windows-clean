@@ -251,6 +251,7 @@ function validateChildOpenAiSmokeEvidence(completion, idPrefix, label, completio
   const commandLogPath = normalizeArtifactPath(completion.commandLogPath || "", baseDir);
   const commandRecords = readChildCommandRecords(`${idPrefix}-command-log`, commandLogPath, add);
   if (!commandRecords.length) return 0;
+  validateChildCommandRecords(commandRecords, idPrefix, label, add);
 
   const commandLogDir = path.dirname(commandLogPath);
   const expectedRoute = String(completion.route || "");
@@ -341,6 +342,13 @@ function validateOpenAiSmokeCommand(commandRecords, {
     return 0;
   }
   return 1;
+}
+
+function validateChildCommandRecords(commandRecords, idPrefix, label, add) {
+  const directCommand = commandRecords.find((row) => hasDirectCleanupCommand(row.command));
+  if (directCommand) {
+    add(`${idPrefix}-command-direct-cleanup`, "Direct cleanup command found", `${label} child command ledger contains direct cleanup command: ${directCommand.command}`);
+  }
 }
 
 function findLatestCommandRecord(records = [], id = "") {

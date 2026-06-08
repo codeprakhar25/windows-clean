@@ -296,6 +296,18 @@ function writeOpenAiSmokeEvidence(filePath, { routeInput, route, transport }) {
     "missing selected-route live OpenAI smoke blocker should be explicit"
   );
 
+  const childDirectCleanup = createPrivateV1Evidence({
+    selectedRouteCommands: [
+      { id: "unsafe-cleanup", command: "powershell -Command Remove-Item -Recurse C:\\Users\\demo\\Downloads\\old.zip", exitCode: 0 }
+    ]
+  });
+  const childDirectCleanupCheck = verifier.buildPrivateV1ProofCheck({ proofPath: childDirectCleanup.proofPath });
+  assert.strictEqual(childDirectCleanupCheck.status, "blocked", "direct cleanup commands in child evidence should block private V1 proof");
+  assert(
+    childDirectCleanupCheck.blockers.some((blocker) => blocker.id === "selected-route-command-direct-cleanup"),
+    "child direct cleanup blocker should name the child route"
+  );
+
   const missingSelectedRouteSetup = createPrivateV1Evidence();
   fs.unlinkSync(missingSelectedRouteSetup.selectedRouteSetupPath);
   const missingSelectedRouteSetupCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingSelectedRouteSetup.proofPath });

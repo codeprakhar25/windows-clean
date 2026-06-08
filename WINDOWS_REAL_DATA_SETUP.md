@@ -96,7 +96,7 @@ The coordinator also writes `private-v1-proof-check.json` by running:
 npm run validate:private-v1-proof -- --file evidence/private-v1-proof-npm-cache-YYYYMMDD-HHMMSS/private-v1-proof.json
 ```
 
-That verifier checks the final V1 proof schema, command ledger, selected-route setup artifact, Windows preflight artifact, required child command stderr artifacts, child OpenAI smoke artifacts with `validation=broker-ready`, first-route completion artifact, selected-route completion artifact, accepted status, positive reclaimed bytes, child completion route/rescan parity counts, and the absence of direct cleanup command authority.
+That verifier checks the final V1 proof schema, command ledger, selected-route setup artifact, Windows preflight artifact, required child command stderr artifacts, child OpenAI smoke artifacts with `validation=broker-ready`, first-route completion artifact, selected-route completion artifact, accepted status, positive reclaimed bytes, child completion route/rescan parity counts, and the absence of direct cleanup command authority in top-level and child command ledgers.
 
 ## First npm real-data proof checklist
 
