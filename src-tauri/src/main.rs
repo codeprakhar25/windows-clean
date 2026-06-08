@@ -6987,6 +6987,10 @@ fn file_old_enough_for_browser_cache_delete(metadata: &fs::Metadata) -> bool {
 }
 
 fn delete_gradle_cache_target(root: &Path) -> GradleCacheDeleteResult {
+    delete_gradle_cache_target_at(root, SystemTime::now())
+}
+
+fn delete_gradle_cache_target_at(root: &Path, now: SystemTime) -> GradleCacheDeleteResult {
     let mut result = GradleCacheDeleteResult::default();
     if gradle_cache_target_reject_code(&path_to_string(root)).is_some() {
         result.skipped_count += 1;
@@ -7012,7 +7016,7 @@ fn delete_gradle_cache_target(root: &Path) -> GradleCacheDeleteResult {
             continue;
         }
         if metadata.is_file() {
-            delete_single_gradle_cache_file(&path, &metadata, &mut result);
+            delete_single_gradle_cache_file_at(&path, &metadata, now, &mut result);
             continue;
         }
         if metadata.is_dir() {
@@ -7047,7 +7051,18 @@ fn delete_single_gradle_cache_file(
     metadata: &fs::Metadata,
     result: &mut GradleCacheDeleteResult,
 ) {
-    if !file_old_enough_for_gradle_cache_delete(metadata) || gradle_cache_file_forbidden(path) {
+    delete_single_gradle_cache_file_at(path, metadata, SystemTime::now(), result);
+}
+
+fn delete_single_gradle_cache_file_at(
+    path: &Path,
+    metadata: &fs::Metadata,
+    now: SystemTime,
+    result: &mut GradleCacheDeleteResult,
+) {
+    if !file_old_enough_for_gradle_cache_delete_at(metadata, now)
+        || gradle_cache_file_forbidden(path)
+    {
         result.skipped_count += 1;
         return;
     }
@@ -7062,10 +7077,14 @@ fn delete_single_gradle_cache_file(
 }
 
 fn file_old_enough_for_gradle_cache_delete(metadata: &fs::Metadata) -> bool {
+    file_old_enough_for_gradle_cache_delete_at(metadata, SystemTime::now())
+}
+
+fn file_old_enough_for_gradle_cache_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
     let Ok(modified) = metadata.modified() else {
         return false;
     };
-    let Ok(age) = SystemTime::now().duration_since(modified) else {
+    let Ok(age) = now.duration_since(modified) else {
         return false;
     };
     age.as_secs() >= 30 * 24 * 60 * 60
@@ -11929,6 +11948,73 @@ mod tests {
             npm_cache_file_forbidden(&root.join("tmp").join("cache.lock")),
             "lock files should never be deleted by the npm cache executor"
         );
+    }
+
+    #[test]
+    fn gradle_cache_deleter_removes_only_old_cache_files() {
+        let user_profile = unique_test_dir("gradle-delete-proof");
+        let root = user_profile.join(".gradle").join("caches");
+        let old_artifact = root
+            .join("modules-2")
+            .join("files-2.1")
+            .join("group")
+            .join("module")
+            .join("1.0.0")
+            .join("artifact.jar");
+        let old_transform = root
+            .join("transforms-3")
+            .join("hash")
+            .join("transformed")
+            .join("classes.bin");
+        let lock_file = root.join("modules-2").join("metadata.lock");
+        let gc_properties = root.join("gc.properties");
+
+        fs::create_dir_all(old_artifact.parent().expect("old artifact parent"))
+            .expect("create old artifact dir");
+        fs::create_dir_all(old_transform.parent().expect("old transform parent"))
+            .expect("create old transform dir");
+        fs::create_dir_all(lock_file.parent().expect("lock parent")).expect("create lock dir");
+        fs::write(&old_artifact, b"delete-artifact").expect("write old artifact");
+        fs::write(&old_transform, b"delete-transform").expect("write old transform");
+        fs::write(&lock_file, b"keep-lock").expect("write lock");
+        fs::write(&gc_properties, b"keep-gc").expect("write gc properties");
+
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _restore_profile = EnvRestore::set("USERPROFILE", &user_profile);
+        let _restore_home = EnvRestore::set("HOME", &user_profile);
+        let old_enough_now = SystemTime::now() + Duration::from_secs(31 * 24 * 60 * 60);
+
+        let result = delete_gradle_cache_target_at(&root, old_enough_now);
+
+        assert_eq!(
+            result.deleted_files, 2,
+            "old Gradle cache files should be deleted"
+        );
+        assert_eq!(
+            result.deleted_bytes, 31,
+            "deleted bytes should match removed Gradle file lengths"
+        );
+        assert!(
+            !old_artifact.exists(),
+            "old Gradle artifact should be removed"
+        );
+        assert!(
+            !old_transform.exists(),
+            "old Gradle transform should be removed"
+        );
+        assert!(lock_file.exists(), "Gradle lock files must survive");
+        assert!(gc_properties.exists(), "Gradle gc.properties must survive");
+
+        let _ = fs::remove_file(&lock_file);
+        let _ = fs::remove_file(&gc_properties);
+        let _ = fs::remove_dir(lock_file.parent().expect("lock parent"));
+        let _ = fs::remove_dir(root.join("modules-2"));
+        let _ = fs::remove_dir(root.join("transforms-3").join("hash").join("transformed"));
+        let _ = fs::remove_dir(root.join("transforms-3").join("hash"));
+        let _ = fs::remove_dir(root.join("transforms-3"));
+        let _ = fs::remove_dir(&root);
+        let _ = fs::remove_dir(user_profile.join(".gradle"));
+        let _ = fs::remove_dir(&user_profile);
     }
 
     #[test]
