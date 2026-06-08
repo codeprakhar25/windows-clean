@@ -7604,6 +7604,10 @@ fn shader_cache_path_is_under_current_user_root(path: &Path) -> bool {
 }
 
 fn delete_pip_cache_target(root: &Path) -> PipCacheDeleteResult {
+    delete_pip_cache_target_at(root, SystemTime::now())
+}
+
+fn delete_pip_cache_target_at(root: &Path, now: SystemTime) -> PipCacheDeleteResult {
     let mut result = PipCacheDeleteResult::default();
     if pip_cache_target_reject_code(&path_to_string(root)).is_some() {
         result.skipped_count += 1;
@@ -7629,7 +7633,7 @@ fn delete_pip_cache_target(root: &Path) -> PipCacheDeleteResult {
             continue;
         }
         if metadata.is_file() {
-            delete_single_pip_cache_file(&path, &metadata, &mut result);
+            delete_single_pip_cache_file_at(&path, &metadata, now, &mut result);
             continue;
         }
         if metadata.is_dir() {
@@ -7668,7 +7672,16 @@ fn delete_single_pip_cache_file(
     metadata: &fs::Metadata,
     result: &mut PipCacheDeleteResult,
 ) {
-    if !file_old_enough_for_pip_cache_delete(metadata) || pip_cache_file_forbidden(path) {
+    delete_single_pip_cache_file_at(path, metadata, SystemTime::now(), result);
+}
+
+fn delete_single_pip_cache_file_at(
+    path: &Path,
+    metadata: &fs::Metadata,
+    now: SystemTime,
+    result: &mut PipCacheDeleteResult,
+) {
+    if !file_old_enough_for_pip_cache_delete_at(metadata, now) || pip_cache_file_forbidden(path) {
         result.skipped_count += 1;
         return;
     }
@@ -7683,10 +7696,14 @@ fn delete_single_pip_cache_file(
 }
 
 fn file_old_enough_for_pip_cache_delete(metadata: &fs::Metadata) -> bool {
+    file_old_enough_for_pip_cache_delete_at(metadata, SystemTime::now())
+}
+
+fn file_old_enough_for_pip_cache_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
     let Ok(modified) = metadata.modified() else {
         return false;
     };
-    let Ok(age) = SystemTime::now().duration_since(modified) else {
+    let Ok(age) = now.duration_since(modified) else {
         return false;
     };
     age.as_secs() >= 14 * 24 * 60 * 60
@@ -12320,6 +12337,59 @@ mod tests {
         let _ = fs::remove_dir(root.join("pipeline"));
         let _ = fs::remove_dir(root.join("config"));
         let _ = fs::remove_dir(&root);
+        let _ = fs::remove_dir(&local_app_data);
+    }
+
+    #[test]
+    fn pip_cache_deleter_removes_only_old_cache_files() {
+        let local_app_data = unique_test_dir("pip-cache-delete-proof");
+        let root = local_app_data.join("pip").join("Cache");
+        let old_wheel = root.join("http").join("package.whl");
+        let old_body = root.join("http-v2").join("ab").join("body");
+        let selfcheck_file = root.join("selfcheck").join("state.bin");
+        let config_file = root.join("pip.conf");
+        let wheel_bytes = b"delete-pip-wheel";
+        let body_bytes = b"delete-pip-body";
+
+        fs::create_dir_all(old_wheel.parent().expect("old wheel parent"))
+            .expect("create pip wheel dir");
+        fs::create_dir_all(old_body.parent().expect("old body parent"))
+            .expect("create pip body dir");
+        fs::create_dir_all(selfcheck_file.parent().expect("selfcheck parent"))
+            .expect("create pip selfcheck dir");
+        fs::write(&old_wheel, wheel_bytes).expect("write old pip wheel");
+        fs::write(&old_body, body_bytes).expect("write old pip body");
+        fs::write(&selfcheck_file, b"keep-selfcheck").expect("write pip selfcheck file");
+        fs::write(&config_file, b"keep-config").expect("write pip config file");
+
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _restore_local = EnvRestore::set("LOCALAPPDATA", &local_app_data);
+        let old_enough_now = SystemTime::now() + Duration::from_secs(15 * 24 * 60 * 60);
+
+        let result = delete_pip_cache_target_at(&root, old_enough_now);
+
+        assert_eq!(
+            result.deleted_files, 2,
+            "old pip cache files should be deleted"
+        );
+        assert_eq!(
+            result.deleted_bytes,
+            (wheel_bytes.len() + body_bytes.len()) as u64,
+            "deleted bytes should match removed pip cache file lengths"
+        );
+        assert!(!old_wheel.exists(), "old pip wheel cache should be removed");
+        assert!(!old_body.exists(), "old pip body cache should be removed");
+        assert!(selfcheck_file.exists(), "pip selfcheck files must survive");
+        assert!(config_file.exists(), "pip config files must survive");
+
+        let _ = fs::remove_file(&selfcheck_file);
+        let _ = fs::remove_file(&config_file);
+        let _ = fs::remove_dir(root.join("http"));
+        let _ = fs::remove_dir(root.join("http-v2").join("ab"));
+        let _ = fs::remove_dir(root.join("http-v2"));
+        let _ = fs::remove_dir(root.join("selfcheck"));
+        let _ = fs::remove_dir(&root);
+        let _ = fs::remove_dir(local_app_data.join("pip"));
         let _ = fs::remove_dir(&local_app_data);
     }
 
