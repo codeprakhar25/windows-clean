@@ -92,6 +92,7 @@ export function buildSetupDoctorReport({
   const routeSetupCommand = `npm run setup:route -- --route ${routeInput}`;
   const routeValidationCommand = `npm run validate:route -- --route ${routeInput}`;
   const workflowProofValidationCommand = "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md";
+  const routeCompletionValidationCommand = `npm run validate:route-completion -- --preflight evidence/route-proof-${routeInput}-YYYYMMDD-HHMMSS/operator-preflight.json --native-exit evidence/route-proof-${routeInput}-YYYYMMDD-HHMMSS/native-dev-exit.json --workflow-proof spaceguard-real-workflow-proof.md`;
   const openAiFixtureSmokeCommand = `npm run openai:smoke:fixture -- --route ${routeInput}`;
   const openAiSmokeCommand = `npm run openai:smoke -- --route ${routeInput}`;
 
@@ -137,7 +138,8 @@ export function buildSetupDoctorReport({
       enabledFlags,
       validationStatus,
       openAiConfigured: openAiKey.source !== "missing",
-      workflowProofValidationCommand
+      workflowProofValidationCommand,
+      routeCompletionValidationCommand
     }),
     commands: {
       install: "npm install",
@@ -148,6 +150,7 @@ export function buildSetupDoctorReport({
       routeSetup: routeSetupCommand,
       routeValidation: routeValidationCommand,
       workflowProofValidation: workflowProofValidationCommand,
+      routeCompletionValidation: routeCompletionValidationCommand,
       nativeDev: "npm run native:dev"
     },
     nextSteps: buildNextSteps({ openAiConfigured: openAiKey.source !== "missing", enabledFlags, routeInput })
@@ -188,7 +191,8 @@ function buildRealWorkflow({
   enabledFlags = [],
   validationStatus = "",
   openAiConfigured = false,
-  workflowProofValidationCommand = "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md"
+  workflowProofValidationCommand = "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md",
+  routeCompletionValidationCommand = "npm run validate:route-completion -- --preflight evidence/route-proof-ROUTE-YYYYMMDD-HHMMSS/operator-preflight.json --native-exit evidence/route-proof-ROUTE-YYYYMMDD-HHMMSS/native-dev-exit.json --workflow-proof spaceguard-real-workflow-proof.md"
 } = {}) {
   const ready = validationStatus === "one-route-ready";
   const route = selectedRoute?.route || "";
@@ -269,9 +273,15 @@ function buildRealWorkflow({
         detail: "Export spaceguard-real-workflow-proof.md and accept it with the workflow proof verifier before another route is considered."
       },
       {
+        id: "route-completion-check",
+        command: routeCompletionValidationCommand,
+        panel: "operator-terminal",
+        detail: "Accept the selected-route completion check so preflight, command log, native exit, proof packet, and workflow proof are bound into one next-route handoff."
+      },
+      {
         id: "next-route",
         command: "Return to setup:doctor",
-        detail: "Only after proof import and workflow proof verification are complete should another scoped executor flag or route be considered."
+        detail: "Only after route completion verification is accepted should another scoped executor flag or route be considered."
       }
     ]
   };
@@ -294,7 +304,7 @@ function buildNextSteps({ openAiConfigured, enabledFlags, routeInput = "npm-cach
     steps.push("Run npm run native:dev for read-only scanning, or enable exactly one scoped executor flag for Windows fixture validation.");
   } else if (enabledFlags.length === 1) {
     steps.push("If this is not the temp fixture route, set SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK to the accepted first-route completion check before real-data validation.");
-    steps.push(`Launch npm run native:dev with ${enabledFlags[0]} enabled, export spaceguard-real-workflow-proof.md, then run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md before enabling another route.`);
+    steps.push(`Launch npm run native:dev with ${enabledFlags[0]} enabled, export spaceguard-real-workflow-proof.md, then run npm run validate:route-completion -- --preflight evidence/route-proof-${routeInput}-YYYYMMDD-HHMMSS/operator-preflight.json --native-exit evidence/route-proof-${routeInput}-YYYYMMDD-HHMMSS/native-dev-exit.json --workflow-proof spaceguard-real-workflow-proof.md before enabling another route.`);
   } else {
     steps.push("Turn off all but one scoped executor flag before real cleanup validation.");
   }

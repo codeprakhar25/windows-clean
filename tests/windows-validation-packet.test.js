@@ -49,6 +49,7 @@ function writeAcceptedFirstRouteCompletion() {
   assert(blocked.commands.openAiFixtureSmoke.includes("npm run openai:smoke:fixture -- --route npm-cache"), "validation packet should point to route-specific fixture smoke");
   assert(blocked.commands.openAiSmoke.includes("npm run openai:smoke -- --route npm-cache"), "validation packet should point to route-specific OpenAI smoke");
   assert(blocked.commands.workflowProofValidation.includes("npm run validate:workflow-proof -- --file"), "validation packet should point to workflow proof verifier");
+  assert(blocked.commands.routeCompletionValidation.includes("npm run validate:route-completion -- --preflight"), "validation packet should point to route completion verifier");
   assert(blocked.commands.enablePowerShell.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "validation packet should print the PowerShell flag command");
   assert(blocked.preRunChecklist.some((row) => row.id === "single-scoped-flag" && row.status === "blocked"), "disabled route should block the single-flag preflight");
   assert(blocked.postRunProofChecklist.some((row) => row.id === "native-volume-proof" && row.status === "blocked"), "disabled route should block native volume proof capture");
@@ -58,6 +59,7 @@ function writeAcceptedFirstRouteCompletion() {
   assert(blocked.captureArtifacts.includes("selected-route-proof-import"), "validation packet should require selected-route proof import evidence");
   assert(blocked.captureArtifacts.includes("real-workflow-proof"), "validation packet should require real workflow proof export");
   assert(blocked.captureArtifacts.includes("workflow-proof-check-output"), "validation packet should require workflow proof verifier output");
+  assert(blocked.captureArtifacts.includes("selected-route-completion-check-output"), "validation packet should require selected-route completion verifier output");
   assert(blocked.captureArtifacts.includes("live-validation-manifest"), "validation packet should require the live route manifest");
   assert(blocked.captureArtifacts.includes("native-write-volume-proof"), "validation packet should require native volume proof evidence");
   assert(blocked.forbiddenActions.includes("enable-second-executor-flag"), "validation packet should forbid multi-route validation");
@@ -65,6 +67,7 @@ function writeAcceptedFirstRouteCompletion() {
   assert.strictEqual(blocked.liveValidationManifest.route, "bounded-npm-cache-delete", "live manifest should identify the selected route");
   assert.strictEqual(blocked.liveValidationManifest.contract.requestMode, "execute-npm-cache", "live manifest should expose the native request mode");
   assert.strictEqual(blocked.liveValidationManifest.contract.panelId, "npm-cache-executor-panel", "live manifest should expose the UI executor panel");
+  assert(blocked.liveValidationManifest.contract.routeCompletionCommand.includes("validate:route-completion"), "live manifest should expose the route completion verifier command");
   assert.strictEqual(blocked.liveValidationManifest.runtime.routeFlagReady, false, "disabled manifest should not be route-flag ready");
   assert.strictEqual(blocked.liveValidationManifest.runtime.canExecuteWithoutAppEvidence, false, "manifest must not claim direct execution outside app evidence");
   assert(blocked.liveValidationManifest.nativeBoundary.tauriCommand === "execute_cleanup_plan", "live manifest should name the native Tauri executor command");
@@ -98,11 +101,13 @@ function writeAcceptedFirstRouteCompletion() {
   assert(ready.postRunProofChecklist.some((row) => row.id === "selected-route-proof-import"), "ready validation should require selected-route proof import");
   assert(ready.postRunProofChecklist.some((row) => row.id === "real-workflow-proof-check"), "ready validation should require workflow proof verifier output");
   assert(ready.postRunProofChecklist.some((row) => row.id === "real-workflow-proof-check" && row.detail.includes("positive recovered bytes")), "workflow proof checklist should require positive recovered bytes");
+  assert(ready.postRunProofChecklist.some((row) => row.id === "selected-route-completion-check"), "ready validation should require selected-route completion verifier output");
   assert(ready.operatorSteps.some((step) => step.includes("Run real scan")), "ready validation should include native scan workflow");
   assert(ready.operatorSteps.some((step) => step.includes("post-run rescan")), "ready validation should include post-run proof workflow");
   assert(ready.operatorSteps.some((step) => step.includes("native volume proof")), "ready validation should include native volume proof capture");
   assert(ready.operatorSteps.some((step) => step.includes("import it into Validation evidence")), "ready validation should include route proof import workflow");
   assert(ready.operatorSteps.some((step) => step.includes("validate:workflow-proof")), "ready validation should include workflow proof verifier workflow");
+  assert(ready.operatorSteps.some((step) => step.includes("validate:route-completion")), "ready validation should include route completion verifier workflow");
   assert(!ready.operatorSteps.some((step) => step.includes("Run Run")), "operator steps should not duplicate command verbs");
   assert(!ready.postRunProofChecklist.some((row) => row.detail.includes("After Run ")), "post-run proof copy should not duplicate command verbs");
   assert.strictEqual(ready.liveValidationManifest.runtime.routeFlagReady, true, "ready manifest should mark the route flag ready");
@@ -112,6 +117,7 @@ function writeAcceptedFirstRouteCompletion() {
   assert(ready.liveValidationManifest.requiredAppEvidence.includes("current-plan-consent-receipt"), "ready manifest should require current consent evidence");
   assert(ready.liveValidationManifest.requiredAppEvidence.includes("native-scanned-target"), "ready manifest should require concrete target evidence");
   assert(ready.liveValidationManifest.requiredPostRunProof.includes("workflow-proof-check-output"), "ready manifest should require workflow proof verifier output after execution");
+  assert(ready.liveValidationManifest.requiredPostRunProof.includes("selected-route-completion-check-output"), "ready manifest should require route completion verifier output after execution");
 
   const pnpmBlocked = validation.buildWindowsValidationPacket({
     routeInput: "pnpm-store",

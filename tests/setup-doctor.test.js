@@ -67,15 +67,17 @@ const script = path.join(root, "scripts", "run-setup-doctor.mjs");
   assert.strictEqual(oneFlag.scopedExecutors.selectedRoute.routeInput, "npm-cache", "setup doctor should map the selected flag to its route alias");
   assert(oneFlag.commands.routeValidation.includes("npm run validate:route -- --route npm-cache"), "setup doctor should expose route validation command");
   assert(oneFlag.commands.workflowProofValidation.includes("npm run validate:workflow-proof -- --file"), "setup doctor should expose workflow proof validation command");
+  assert(oneFlag.commands.routeCompletionValidation.includes("npm run validate:route-completion -- --preflight"), "setup doctor should expose route completion validation command");
   assert.strictEqual(oneFlag.realWorkflow.routeInput, "npm-cache", "setup doctor should expose the selected route workflow alias");
   assert.strictEqual(oneFlag.realWorkflow.ready, true, "one-route setup should make the compact real workflow ready");
   assert.deepStrictEqual(
     oneFlag.realWorkflow.steps.map((step) => step.id),
-    ["fixture-openai-smoke", "openai-smoke", "route-setup", "route-validation", "native-scan", "arm-consent", "execute-route", "post-run-rescan", "proof-import", "workflow-proof-check", "next-route"],
+    ["fixture-openai-smoke", "openai-smoke", "route-setup", "route-validation", "native-scan", "arm-consent", "execute-route", "post-run-rescan", "proof-import", "workflow-proof-check", "route-completion-check", "next-route"],
     "setup doctor should emit the compact real cleanup workflow in order"
   );
   assert(oneFlag.realWorkflow.steps.find((step) => step.id === "proof-import").detail.includes("Selected route proof import"), "compact workflow should include proof import before next route");
   assert(oneFlag.realWorkflow.steps.find((step) => step.id === "workflow-proof-check").command.includes("validate:workflow-proof"), "compact workflow should validate the exported workflow proof before next route");
+  assert(oneFlag.realWorkflow.steps.find((step) => step.id === "route-completion-check").command.includes("validate:route-completion"), "compact workflow should validate selected-route completion before next route");
 
   const pnpmFlag = runDoctor({
     SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR: "1",
@@ -87,6 +89,7 @@ const script = path.join(root, "scripts", "run-setup-doctor.mjs");
   assert(pnpmFlag.commands.routeValidation.includes("npm run validate:route -- --route pnpm-store"), "setup doctor should expose selected pnpm validation command");
   assert(pnpmFlag.commands.openAiFixtureSmoke.includes("npm run openai:smoke:fixture -- --route pnpm-store"), "setup doctor should expose selected pnpm fixture smoke command");
   assert(pnpmFlag.commands.openAiSmoke.includes("npm run openai:smoke -- --route pnpm-store"), "setup doctor should expose selected pnpm OpenAI smoke command");
+  assert(pnpmFlag.commands.routeCompletionValidation.includes("validate:route-completion"), "setup doctor should expose selected pnpm completion validation command");
   assert(pnpmFlag.openAi.fixtureSmokeCommand.includes("--route pnpm-store"), "setup doctor OpenAI summary should be route-specific");
   assert(pnpmFlag.openAi.fixtureSmokeValidates.includes("live-route-contract"), "setup doctor should document live route contract validation in fixture smoke");
   assert(pnpmFlag.realWorkflow.steps.find((step) => step.id === "fixture-openai-smoke").detail.includes("live route contract"), "real workflow should explain fixture smoke route-contract proof");

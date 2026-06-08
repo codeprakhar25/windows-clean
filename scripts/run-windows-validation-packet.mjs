@@ -95,6 +95,7 @@ function buildCommands(selected) {
     setupRoute: `npm run setup:route -- --route ${routeInput}`,
     validateRoute: `npm run validate:route -- --route ${routeInput}`,
     workflowProofValidation: "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md",
+    routeCompletionValidation: `npm run validate:route-completion -- --preflight evidence/route-proof-${routeInput}-YYYYMMDD-HHMMSS/operator-preflight.json --native-exit evidence/route-proof-${routeInput}-YYYYMMDD-HHMMSS/native-dev-exit.json --workflow-proof spaceguard-real-workflow-proof.md`,
     enablePowerShell: `$env:${selected.envVar}="1"`,
     disablePowerShell: `$env:${selected.envVar}="0"`,
     openAiFixtureSmoke: `npm run openai:smoke:fixture -- --route ${routeInput}`,
@@ -188,6 +189,12 @@ function buildPostRunProofChecklist(routePacket) {
       detail: "Export spaceguard-real-workflow-proof.md and run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md; acceptance requires positive recovered bytes before any next-route handoff."
     },
     {
+      id: "selected-route-completion-check",
+      label: "Selected-route completion check",
+      status: ready ? "pending" : "blocked",
+      detail: `Run npm run validate:route-completion with the selected-route preflight, native exit, and workflow proof; acceptance is required before another ${selected.envVar || "scoped executor"} route.`
+    },
+    {
       id: "post-run-rescan-parity",
       label: "Post-run rescan parity",
       status: ready ? "pending" : "blocked",
@@ -220,6 +227,7 @@ function buildCaptureArtifacts(selected) {
     "selected-route-proof-import",
     "real-workflow-proof",
     "workflow-proof-check-output",
+    "selected-route-completion-check-output",
     "live-validation-manifest",
     "openai-handoff-if-used",
     "support-bundle-if-any-warning"
@@ -244,6 +252,7 @@ function buildLiveValidationManifest(selected, status) {
       setupCommand: `npm run setup:route -- --route ${routeInput}`,
       validationCommand: `npm run validate:route -- --route ${routeInput}`,
       workflowProofCommand: "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md",
+      routeCompletionCommand: `npm run validate:route-completion -- --preflight evidence/route-proof-${routeInput}-YYYYMMDD-HHMMSS/operator-preflight.json --native-exit evidence/route-proof-${routeInput}-YYYYMMDD-HHMMSS/native-dev-exit.json --workflow-proof spaceguard-real-workflow-proof.md`,
       nativeDevCommand: "npm run native:dev"
     },
     runtime: {
@@ -274,7 +283,8 @@ function buildLiveValidationManifest(selected, status) {
       "selected-route-proof-packet",
       "selected-route-proof-import",
       "real-workflow-proof",
-      "workflow-proof-check-output"
+      "workflow-proof-check-output",
+      "selected-route-completion-check-output"
     ],
     nativeBoundary: buildRouteNativeBoundary(selected)
   };
@@ -305,7 +315,7 @@ function buildOperatorSteps(selected, status) {
     `Open ${selected.panelId} and verify route ${selected.route} with requestMode ${selected.requestMode}.`,
     `${actionLabel} only if the app preflight is ready.`,
     "Capture execution ledger and native volume proof, then run post-run rescan.",
-    "Export selected-route proof packet, import it into Validation evidence, export spaceguard-real-workflow-proof.md, and run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md before enabling another executor."
+    `Export selected-route proof packet, import it into Validation evidence, export spaceguard-real-workflow-proof.md, run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md, then run npm run validate:route-completion -- --preflight evidence/route-proof-${selected.aliases?.[0] || selected.route}-YYYYMMDD-HHMMSS/operator-preflight.json --native-exit evidence/route-proof-${selected.aliases?.[0] || selected.route}-YYYYMMDD-HHMMSS/native-dev-exit.json --workflow-proof spaceguard-real-workflow-proof.md before enabling another executor.`
   ];
   if (status !== "ready") {
     return [`Fix validation status ${status} before Windows execution.`, ...steps.slice(0, 4)];
@@ -323,7 +333,7 @@ function buildNextSteps(routePacket, selected) {
     return [
       `Validate route ${selected.route} on Windows with exactly one scoped flag.`,
       "Capture before scan, consent, execution ledger, native volume proof, selected-route proof packet, selected route proof import, real workflow proof, workflow proof verifier output, and post-run rescan comparison.",
-      "Run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md and keep the accepted output with the validation packet.",
+      "Run npm run validate:route-completion with the selected-route preflight, native exit, and workflow proof; keep the accepted completion output with the validation packet.",
       "Turn off the route flag before validating another executor."
     ];
   }
