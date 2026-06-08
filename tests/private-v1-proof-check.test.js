@@ -37,6 +37,8 @@ function createPrivateV1Evidence(patch = {}) {
   const selectedRouteCommandLogPath = path.join(dir, "selected-route-proof-npm-cache", "commands.ndjson");
   const firstRouteFixtureSmokePath = path.join(dir, "first-route-proof", "openai-fixture-smoke.txt");
   const firstRouteLiveSmokePath = path.join(dir, "first-route-proof", "openai-live-smoke.txt");
+  const privatePreflightFixtureSmokePath = path.join(dir, "private-demo-preflight", "openai-fixture-smoke.txt");
+  const privatePreflightLiveSmokePath = path.join(dir, "private-demo-preflight", "openai-live-smoke.txt");
   const selectedRouteFixtureSmokePath = path.join(dir, "selected-route-proof-npm-cache", "openai-fixture-smoke.txt");
   const selectedRouteLiveSmokePath = path.join(dir, "selected-route-proof-npm-cache", "openai-live-smoke.txt");
   const bundleArtifactPath = path.join(dir, "private-demo-preflight", "src-tauri", "target", "release", "bundle", "nsis", "SpaceGuard_0.1.0_x64-setup.exe");
@@ -134,8 +136,8 @@ function createPrivateV1Evidence(patch = {}) {
     { id: "rust-tests", command: "cargo test --manifest-path src-tauri\\Cargo.toml", outputPath: path.join(dir, "private-demo-preflight", "cargo-test.txt"), exitCode: 0 },
     { id: "web-build", command: "npm run build", outputPath: path.join(dir, "private-demo-preflight", "npm-build.txt"), exitCode: 0 },
     { id: "private-demo-readiness", command: "npm run demo:private-readiness", outputPath: path.join(dir, "private-demo-preflight", "private-demo-readiness.json"), exitCode: 0 },
-    { id: "openai-fixture-smoke", command: "npm run openai:smoke:fixture -- --route npm-cache", outputPath: path.join(dir, "private-demo-preflight", "openai-fixture-smoke.txt"), exitCode: 0 },
-    { id: "openai-live-smoke", command: "npm run openai:smoke -- --route npm-cache", outputPath: path.join(dir, "private-demo-preflight", "openai-live-smoke.txt"), exitCode: 0 },
+    { id: "openai-fixture-smoke", command: "npm run openai:smoke:fixture -- --route npm-cache", outputPath: privatePreflightFixtureSmokePath, exitCode: 0 },
+    { id: "openai-live-smoke", command: "npm run openai:smoke -- --route npm-cache", outputPath: privatePreflightLiveSmokePath, exitCode: 0 },
     { id: "native-build", command: "npm run native:build", outputPath: path.join(dir, "private-demo-preflight", "native-build.txt"), exitCode: 0 }
   ];
   const firstRouteCommands = [
@@ -214,6 +216,8 @@ function createPrivateV1Evidence(patch = {}) {
       fs.writeFileSync(command.stderrPath, "");
     }
   }
+  writeOpenAiSmokeEvidence(privatePreflightFixtureSmokePath, { routeInput: "npm-cache", route: "bounded-npm-cache-delete", transport: "fixture-only" });
+  writeOpenAiSmokeEvidence(privatePreflightLiveSmokePath, { routeInput: "npm-cache", route: "bounded-npm-cache-delete", transport: "openai" });
   writeOpenAiSmokeEvidence(firstRouteFixtureSmokePath, { routeInput: "temp-fixture", route: "known-temp-delete", transport: "fixture-only" });
   writeOpenAiSmokeEvidence(firstRouteLiveSmokePath, { routeInput: "temp-fixture", route: "known-temp-delete", transport: "openai" });
   writeOpenAiSmokeEvidence(selectedRouteFixtureSmokePath, { routeInput: "npm-cache", route: "bounded-npm-cache-delete", transport: "fixture-only" });
@@ -236,7 +240,7 @@ function createPrivateV1Evidence(patch = {}) {
   fs.mkdirSync(path.dirname(bundleEvidencePath), { recursive: true });
   fs.writeFileSync(bundleEvidencePath, bundleBytes);
 
-  return { dir, proofPath, commandLogPath, selectedRouteSetupPath, firstRouteCompletionPath, selectedRouteCompletionPath, privatePreflightCommandLogPath, firstRouteCommandLogPath, selectedRouteCommandLogPath };
+  return { dir, proofPath, commandLogPath, selectedRouteSetupPath, firstRouteCompletionPath, selectedRouteCompletionPath, privatePreflightCommandLogPath, privatePreflightFixtureSmokePath, privatePreflightLiveSmokePath, firstRouteCommandLogPath, selectedRouteCommandLogPath };
 }
 
 function writeOpenAiSmokeEvidence(filePath, { routeInput, route, transport }) {
@@ -367,6 +371,30 @@ function writeOpenAiSmokeEvidence(filePath, { routeInput, route, transport }) {
   assert(
     missingPreflightLiveOpenAiCheck.blockers.some((blocker) => blocker.id === "private-preflight-command-openai-live-smoke"),
     "missing private preflight live OpenAI smoke blocker should be explicit"
+  );
+
+  const mismatchedPreflightOpenAiRoute = createPrivateV1Evidence();
+  writeOpenAiSmokeEvidence(mismatchedPreflightOpenAiRoute.privatePreflightLiveSmokePath, { routeInput: "gradle-cache", route: "bounded-cache-delete", transport: "openai" });
+  const mismatchedPreflightOpenAiRouteCheck = verifier.buildPrivateV1ProofCheck({ proofPath: mismatchedPreflightOpenAiRoute.proofPath });
+  assert.strictEqual(mismatchedPreflightOpenAiRouteCheck.status, "blocked", "private preflight OpenAI smoke evidence from another route should block private V1 proof");
+  assert(
+    mismatchedPreflightOpenAiRouteCheck.blockers.some((blocker) => blocker.id === "private-preflight-openai-live-smoke"),
+    "private preflight OpenAI route mismatch blocker should be explicit"
+  );
+
+  const mismatchedSelectedRouteProofCommand = createPrivateV1Evidence();
+  const mismatchedSelectedRouteProofCommandRecords = fs.readFileSync(mismatchedSelectedRouteProofCommand.commandLogPath, "utf8")
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => JSON.parse(line));
+  const selectedRouteProofCommand = mismatchedSelectedRouteProofCommandRecords.find((record) => record.id === "selected-route-proof");
+  selectedRouteProofCommand.command = "npm run proof:route:windows -- -Route gradle-cache";
+  writeNdjson(mismatchedSelectedRouteProofCommand.commandLogPath, mismatchedSelectedRouteProofCommandRecords);
+  const mismatchedSelectedRouteProofCommandCheck = verifier.buildPrivateV1ProofCheck({ proofPath: mismatchedSelectedRouteProofCommand.proofPath });
+  assert.strictEqual(mismatchedSelectedRouteProofCommandCheck.status, "blocked", "selected-route proof command for another route should block private V1 proof");
+  assert(
+    mismatchedSelectedRouteProofCommandCheck.blockers.some((blocker) => blocker.id === "command-route-selected-route-proof"),
+    "selected-route proof command route mismatch blocker should be explicit"
   );
 
   const missingSelectedRouteSetup = createPrivateV1Evidence();

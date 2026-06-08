@@ -222,6 +222,8 @@ export function buildPrivateDemoReadinessSummary({
         privateV1ProofCheck.includes("validation=broker-ready") &&
         privateV1ProofCheck.includes("validateChildCommandRecords") &&
         privateV1ProofCheck.includes("validatePrivatePreflightCommandRecords") &&
+        privateV1ProofCheck.includes("validatePrivatePreflightOpenAiSmokeEvidence") &&
+        privateV1ProofCheck.includes("command-route-selected-route-proof") &&
         privateV1ProofCheck.includes("REQUIRED_PRIVATE_PREFLIGHT_COMMANDS") &&
         privateV1ProofCheck.includes("rust-tests") &&
         privateV1ProofCheck.includes("native-build") &&

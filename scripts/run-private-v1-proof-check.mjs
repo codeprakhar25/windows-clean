@@ -78,8 +78,14 @@ export function buildPrivateV1ProofCheck({
   const selectedRouteCompletion = readJsonArtifact("selected-route-completion", resolvedSelectedRouteCompletionPath, add);
 
   validateSelectedRouteSetup(selectedRouteSetup, proof, selectedRouteCompletion, add);
+  validateTopLevelSelectedRouteCommandRecords(commandRecords, proof, selectedRouteSetup, selectedRouteCompletion, add);
   validatePreflight(preflight, proof, selectedRouteSetup, selectedRouteCompletion, add);
-  const privatePreflightCommandCount = validatePrivatePreflightCommandRecords(preflight, resolvedPreflightPath, add);
+  const privatePreflightCommandCount = validatePrivatePreflightCommandRecords(preflight, resolvedPreflightPath, {
+    proof,
+    selectedRouteSetup,
+    selectedRouteCompletion,
+    add
+  });
   const nativeBundleArtifactCount = validateNativeBundleArtifacts(preflight, add);
   const firstRouteProofCounts = validateFirstRouteCompletion(firstRouteCompletion, proof, resolvedFirstRouteCompletionPath, add);
   const selectedRouteProofCounts = validateSelectedRouteCompletion(selectedRouteCompletion, proof, resolvedSelectedRouteCompletionPath, add);
@@ -294,11 +300,13 @@ function validateChildOpenAiSmokeEvidence(completion, idPrefix, label, completio
 
   const commandLogDir = path.dirname(commandLogPath);
   const expectedRoute = String(completion.route || "");
+  const expectedRouteInput = String(completion.routeInput || "");
   return validateOpenAiSmokeCommand(commandRecords, {
     idPrefix,
     label,
     commandId: "openai-fixture-smoke",
     expectedRoute,
+    expectedRouteInput,
     commandLogDir,
     requireLive: false,
     add
@@ -307,6 +315,7 @@ function validateChildOpenAiSmokeEvidence(completion, idPrefix, label, completio
     label,
     commandId: "openai-live-smoke",
     expectedRoute,
+    expectedRouteInput,
     commandLogDir,
     requireLive: true,
     add
@@ -342,6 +351,7 @@ function validateOpenAiSmokeCommand(commandRecords, {
   label,
   commandId,
   expectedRoute,
+  expectedRouteInput,
   commandLogDir,
   requireLive,
   add
@@ -380,6 +390,10 @@ function validateOpenAiSmokeCommand(commandRecords, {
     add(blockerId, `${smokeLabel} route mismatch`, `${label} ${commandId} output must bind to route=${expectedRoute}.`);
     return 0;
   }
+  if (expectedRouteInput && !new RegExp(`\\brouteInput=${escapeRegExp(expectedRouteInput)}\\b`).test(output)) {
+    add(blockerId, `${smokeLabel} route input mismatch`, `${label} ${commandId} output must bind to routeInput=${expectedRouteInput}.`);
+    return 0;
+  }
   return 1;
 }
 
@@ -390,7 +404,24 @@ function validateChildCommandRecords(commandRecords, idPrefix, label, add) {
   }
 }
 
-function validatePrivatePreflightCommandRecords(preflight, preflightPath, add) {
+function validateTopLevelSelectedRouteCommandRecords(commandRecords, proof, selectedRouteSetup, selectedRouteCompletion, add) {
+  const expectedRouteInput = String(
+    proof?.selectedRoute || selectedRouteSetup?.routeInput || selectedRouteCompletion?.routeInput || ""
+  ).trim();
+  if (!expectedRouteInput) return;
+  const selectedRouteProof = findLatestCommandRecord(commandRecords, "selected-route-proof");
+  if (!selectedRouteProof?.command) return;
+  if (!commandContainsRouteArgument(selectedRouteProof.command, expectedRouteInput)) {
+    add("command-route-selected-route-proof", "Selected-route proof command route mismatch", `selected-route-proof command must run -Route ${expectedRouteInput}.`);
+  }
+}
+
+function validatePrivatePreflightCommandRecords(preflight, preflightPath, {
+  proof = null,
+  selectedRouteSetup = null,
+  selectedRouteCompletion = null,
+  add
+} = {}) {
   if (!preflight) return 0;
   const baseDir = preflightPath ? path.dirname(preflightPath) : process.cwd();
   const commandLogPath = normalizeArtifactPath(preflight.commandLogPath || "", baseDir);
@@ -413,7 +444,52 @@ function validatePrivatePreflightCommandRecords(preflight, preflightPath, add) {
   if (directCommand) {
     add("private-preflight-command-direct-cleanup", "Direct cleanup command found", `Private preflight command ledger contains direct cleanup command: ${directCommand.command}`);
   }
+  validatePrivatePreflightOpenAiSmokeEvidence(records, {
+    proof,
+    preflight,
+    selectedRouteSetup,
+    selectedRouteCompletion,
+    commandLogPath,
+    add
+  });
   return records.length;
+}
+
+function validatePrivatePreflightOpenAiSmokeEvidence(records, {
+  proof = null,
+  preflight = null,
+  selectedRouteSetup = null,
+  selectedRouteCompletion = null,
+  commandLogPath = "",
+  add
+} = {}) {
+  const commandLogDir = commandLogPath ? path.dirname(commandLogPath) : process.cwd();
+  const expectedRoute = String(
+    selectedRouteSetup?.route || selectedRouteCompletion?.route || proof?.routes?.selectedRouteCanonical || ""
+  ).trim();
+  const expectedRouteInput = String(
+    proof?.selectedRoute || selectedRouteSetup?.routeInput || selectedRouteCompletion?.routeInput || preflight?.selectedRoute || ""
+  ).trim();
+  validateOpenAiSmokeCommand(records, {
+    idPrefix: "private-preflight",
+    label: "Private preflight",
+    commandId: "openai-fixture-smoke",
+    expectedRoute,
+    expectedRouteInput,
+    commandLogDir,
+    requireLive: false,
+    add
+  });
+  validateOpenAiSmokeCommand(records, {
+    idPrefix: "private-preflight",
+    label: "Private preflight",
+    commandId: "openai-live-smoke",
+    expectedRoute,
+    expectedRouteInput,
+    commandLogDir,
+    requireLive: true,
+    add
+  });
 }
 
 function findLatestCommandRecord(records = [], id = "") {
@@ -429,6 +505,12 @@ function isExitCodeZero(value) {
 
 function escapeRegExp(value = "") {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function commandContainsRouteArgument(command = "", routeInput = "") {
+  const expected = String(routeInput || "").trim();
+  if (!expected) return false;
+  return new RegExp(`(?:^|\\s)(?:--?[Rr]oute)(?:\\s+|=)["']?${escapeRegExp(expected)}["']?(?=\\s|$)`).test(String(command || ""));
 }
 
 function hasDirectCleanupCommand(command = "") {
