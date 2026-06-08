@@ -56,6 +56,7 @@ export function buildPrivateV1ProofCheck({
   const selectedRouteCompletion = readJsonArtifact("selected-route-completion", resolvedSelectedRouteCompletionPath, add);
 
   validatePreflight(preflight, add);
+  const nativeBundleArtifactCount = validateNativeBundleArtifacts(preflight, add);
   validateFirstRouteCompletion(firstRouteCompletion, proof, resolvedFirstRouteCompletionPath, add);
   validateSelectedRouteCompletion(selectedRouteCompletion, proof, resolvedSelectedRouteCompletionPath, add);
   validateArchivedRootExports(proof, add);
@@ -84,6 +85,7 @@ export function buildPrivateV1ProofCheck({
       commandRecords: commandRecords.length,
       requiredCommands: REQUIRED_COMMANDS.length,
       requiredCommandsPassed: commandSummary.requiredPassed,
+      nativeBundleArtifacts: nativeBundleArtifactCount,
       firstRouteReclaimedBytes,
       selectedRouteReclaimedBytes,
       reclaimedBytes: selectedRouteReclaimedBytes
@@ -217,6 +219,41 @@ function validatePreflight(preflight, add) {
   if (preflight.status !== "passed") {
     add("private-windows-preflight", "Private Windows preflight not passed", "Private Windows preflight must pass before private V1 proof acceptance.");
   }
+}
+
+function validateNativeBundleArtifacts(preflight, add) {
+  const artifacts = Array.isArray(preflight?.nativeBundleArtifacts) ? preflight.nativeBundleArtifacts : [];
+  if (artifacts.length < 1) {
+    add("native-bundle-artifacts", "Native bundle artifacts missing", "Private Windows preflight must capture at least one native bundle artifact after npm run native:build.");
+    return 0;
+  }
+
+  const supportedExtensions = new Set([".exe", ".msi", ".msix", ".zip"]);
+  let validCount = 0;
+  for (const [index, artifact] of artifacts.entries()) {
+    const artifactPath = String(artifact?.path || "");
+    const extension = String(artifact?.extension || path.extname(artifactPath)).toLowerCase();
+    const bytes = Number(artifact?.bytes || 0);
+    if (!artifactPath) {
+      add("native-bundle-artifact-path", "Native bundle artifact path missing", `Native bundle artifact ${index + 1} has no path.`);
+      continue;
+    }
+    if (!supportedExtensions.has(extension)) {
+      add("native-bundle-artifact-extension", "Native bundle artifact extension unsupported", `Native bundle artifact ${index + 1} has unsupported extension: ${extension || "missing"}.`);
+      continue;
+    }
+    if (bytes <= 0) {
+      add("native-bundle-artifact-bytes", "Native bundle artifact byte count missing", `Native bundle artifact ${index + 1} must report positive bytes.`);
+      continue;
+    }
+    if (!fs.existsSync(artifactPath)) {
+      add("native-bundle-artifact-file", "Native bundle artifact file missing", `Native bundle artifact does not exist: ${artifactPath}`);
+      continue;
+    }
+    validCount += 1;
+  }
+
+  return validCount;
 }
 
 function validateFirstRouteCompletion(completion, proof, resolvedPath, add) {

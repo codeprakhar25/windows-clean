@@ -26,6 +26,9 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
   assert(runner.includes("npm run openai:smoke:fixture -- --route npm-cache"), "preflight runner should run selected-route OpenAI fixture smoke");
   assert(runner.includes("npm run openai:smoke -- --route npm-cache"), "preflight runner should run selected-route live OpenAI smoke");
   assert(runner.includes("npm run native:build"), "preflight runner should produce the native bundle");
+  assert(runner.includes("Get-NativeBundleArtifacts"), "preflight runner should enumerate native bundle artifacts");
+  assert(runner.includes("src-tauri\\target\\release\\bundle"), "preflight runner should inspect the Tauri bundle output folder");
+  assert(runner.includes("nativeBundleArtifacts"), "preflight runner should write native bundle artifact evidence");
   assert(runner.includes("proof:first-route:windows -- -Route temp-fixture"), "preflight runner should print the first-route proof as the next command");
   assert(runner.includes("proof:route:windows -- -Route npm-cache"), "preflight runner should print npm-cache as the selected real-data route command");
   assert(runner.includes("commands.ndjson"), "preflight runner should keep a command ledger");

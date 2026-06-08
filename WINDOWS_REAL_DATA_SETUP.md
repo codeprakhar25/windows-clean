@@ -86,7 +86,7 @@ For the fastest private V1 proof on a prepared Windows host, run:
 npm run demo:private-v1-windows -- -SelectedRoute npm-cache
 ```
 
-This coordinator runs the host preflight, launches the seeded first-route proof, verifies the accepted `first-route-completion-check.json`, sets `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` for the current process, archives the first-route root proof exports into evidence, then launches the selected real-data route proof. It writes `private-v1-proof.json` only after both route completions are accepted. It does not add a new cleanup authority path; cleanup remains inside the desktop app's scoped executor, consent, proof export, and completion verifier workflow.
+This coordinator runs the host preflight, captures native bundle artifact evidence after `npm run native:build`, launches the seeded first-route proof, verifies the accepted `first-route-completion-check.json`, sets `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` for the current process, archives the first-route root proof exports into evidence, then launches the selected real-data route proof. It writes `private-v1-proof.json` only after both route completions are accepted. It does not add a new cleanup authority path; cleanup remains inside the desktop app's scoped executor, consent, proof export, and completion verifier workflow.
 
 The coordinator also writes `private-v1-proof-check.json` by running:
 

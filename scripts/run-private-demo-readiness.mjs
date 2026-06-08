@@ -33,6 +33,7 @@ export function buildPrivateDemoReadinessSummary({
   const openAiSmokeRunner = readText(path.join(root, "scripts", "run-openai-advisor-smoke.mjs"));
   const openAiAgent = readText(path.join(root, "src", "openai-agent.mjs"));
   const nativeOpenAiAgent = readText(path.join(root, "src-tauri", "src", "main.rs"));
+  const privateWindowsPreflightRunner = readText(path.join(root, "scripts", "run-private-demo-windows-preflight.ps1"));
   const envExample = readText(path.join(root, ".env.example"));
   const readme = readText(path.join(root, "README.md"));
   const windowsSetup = readText(path.join(root, "WINDOWS_REAL_DATA_SETUP.md"));
@@ -159,8 +160,10 @@ export function buildPrivateDemoReadinessSummary({
       id: "windows-private-preflight-runner",
       label: "Windows private preflight runner",
       passed: scriptIncludes(packageJson, "demo:private-windows-preflight", "run-private-demo-windows-preflight.ps1") &&
-        fileExists(root, "scripts", "run-private-demo-windows-preflight.ps1"),
-      detail: "Private demo readiness must provide one Windows host preflight command before fixture and npm-cache proof runs."
+        fileReady(privateWindowsPreflightRunner) &&
+        privateWindowsPreflightRunner.includes("Get-NativeBundleArtifacts") &&
+        privateWindowsPreflightRunner.includes("nativeBundleArtifacts"),
+      detail: "Private demo readiness must provide one Windows host preflight command that captures native bundle artifacts before fixture and npm-cache proof runs."
     }),
     buildCheck({
       id: "windows-private-v1-proof-runner",

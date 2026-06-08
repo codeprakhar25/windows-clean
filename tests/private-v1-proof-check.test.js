@@ -30,6 +30,7 @@ function createPrivateV1Evidence(patch = {}) {
   const commandLogPath = path.join(dir, "commands.ndjson");
   const proofPath = path.join(dir, "private-v1-proof.json");
   const archivedProofPath = path.join(dir, "archived-first-route-root-exports", "spaceguard-real-workflow-proof.md");
+  const bundleArtifactPath = path.join(dir, "private-demo-preflight", "src-tauri", "target", "release", "bundle", "nsis", "SpaceGuard_0.1.0_x64-setup.exe");
 
   const preflight = {
     schemaVersion: "spaceguard-private-demo-windows-preflight/v1",
@@ -41,6 +42,15 @@ function createPrivateV1Evidence(patch = {}) {
       nextFirstRoute: "npm run proof:first-route:windows -- -Route temp-fixture",
       nextSelectedRoute: "npm run proof:route:windows -- -Route npm-cache"
     },
+    nativeBundleArtifacts: [
+      {
+        path: bundleArtifactPath,
+        fileName: "SpaceGuard_0.1.0_x64-setup.exe",
+        extension: ".exe",
+        bytes: 10485760,
+        modifiedAt: "2026-06-08T10:00:00.000Z"
+      }
+    ],
     ...patch.preflight
   };
   const firstRouteCompletion = {
@@ -121,6 +131,8 @@ function createPrivateV1Evidence(patch = {}) {
   writeJson(proofPath, proof);
   fs.mkdirSync(path.dirname(archivedProofPath), { recursive: true });
   fs.writeFileSync(archivedProofPath, "# archived first route proof\n");
+  fs.mkdirSync(path.dirname(bundleArtifactPath), { recursive: true });
+  fs.writeFileSync(bundleArtifactPath, Buffer.alloc(1024));
 
   return { dir, proofPath, commandLogPath, firstRouteCompletionPath, selectedRouteCompletionPath };
 }
@@ -143,6 +155,7 @@ function createPrivateV1Evidence(patch = {}) {
   assert.strictEqual(accepted.canAcceptPrivateV1Proof, true, "accepted private V1 proof should be marked usable");
   assert.strictEqual(accepted.selectedRoute, "npm-cache", "verifier should preserve the selected route alias");
   assert.strictEqual(accepted.counts.reclaimedBytes, 1048576, "verifier should report selected-route reclaimed bytes");
+  assert.strictEqual(accepted.counts.nativeBundleArtifacts, 1, "verifier should count native bundle artifacts");
   assert.strictEqual(accepted.counts.commandRecords, 5, "verifier should count command ledger records");
   assert.strictEqual(accepted.blockers.length, 0, "accepted V1 proof should not have blockers");
 
@@ -181,12 +194,22 @@ function createPrivateV1Evidence(patch = {}) {
     "selected-route completion blocker should be explicit"
   );
 
+  const missingBundle = createPrivateV1Evidence({ preflight: { nativeBundleArtifacts: [] } });
+  const missingBundleCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingBundle.proofPath });
+  assert.strictEqual(missingBundleCheck.status, "blocked", "missing native bundle artifact evidence should block private V1 proof");
+  assert(
+    missingBundleCheck.blockers.some((blocker) => blocker.id === "native-bundle-artifacts"),
+    "native bundle artifact blocker should be explicit"
+  );
+
   const coordinator = fs.readFileSync(coordinatorPath, "utf8");
   assert(coordinator.includes("private-v1-proof-check.json"), "V1 coordinator should write private V1 proof verifier output");
   assert(coordinator.includes("run-private-v1-proof-check.mjs --file"), "V1 coordinator should invoke the independent private V1 proof verifier");
   assert(gitignore.includes("private-v1-proof-check.json"), ".gitignore should exclude copied private V1 proof check artifacts");
   assert(readme.includes("npm run validate:private-v1-proof -- --file"), "README should document private V1 proof validation");
   assert(windowsSetup.includes("npm run validate:private-v1-proof -- --file"), "Windows setup guide should document private V1 proof validation");
+  assert(readme.includes("native bundle artifact"), "README should mention native bundle artifact evidence in the V1 proof");
+  assert(windowsSetup.includes("native bundle artifact"), "Windows setup guide should mention native bundle artifact evidence in the V1 proof");
 
   console.log("private v1 proof check ok");
 })().catch((error) => {

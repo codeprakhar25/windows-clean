@@ -24,6 +24,7 @@ try {
   $NativeCoveragePath = Join-Path $EvidenceRoot "native-executor-coverage.json"
   $OpenAiFixtureSmokePath = Join-Path $EvidenceRoot "openai-fixture-smoke.txt"
   $OpenAiLiveSmokePath = Join-Path $EvidenceRoot "openai-live-smoke.txt"
+  $NativeBundleRoot = Join-Path $RepoRoot "src-tauri\target\release\bundle"
 
   New-Item -ItemType Directory -Path $EvidenceRoot -Force | Out-Null
 
@@ -91,6 +92,27 @@ try {
     return $record
   }
 
+  function Get-NativeBundleArtifacts {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    if (-not (Test-Path -LiteralPath $Root)) {
+      return @()
+    }
+
+    $supportedExtensions = @(".exe", ".msi", ".msix", ".zip")
+    return @(Get-ChildItem -LiteralPath $Root -Recurse -File | Where-Object {
+        $supportedExtensions -contains $_.Extension.ToLowerInvariant()
+      } | Sort-Object FullName | ForEach-Object {
+        [PSCustomObject]@{
+          path = $_.FullName
+          fileName = $_.Name
+          extension = $_.Extension.ToLowerInvariant()
+          bytes = [int64]$_.Length
+          modifiedAt = $_.LastWriteTimeUtc.ToString("o")
+        }
+      })
+  }
+
   $startedAt = (Get-Date).ToUniversalTime().ToString("o")
   $commands = [PSCustomObject]@{
     jsTests = "npm test"
@@ -113,6 +135,10 @@ try {
   Invoke-LoggedCommand -Id "openai-fixture-smoke" -CommandLine $commands.openAiFixtureSmoke -OutputPath $OpenAiFixtureSmokePath | Out-Null
   Invoke-LoggedCommand -Id "openai-live-smoke" -CommandLine $commands.openAiLiveSmoke -OutputPath $OpenAiLiveSmokePath | Out-Null
   Invoke-LoggedCommand -Id "native-build" -CommandLine $commands.nativeBuild -OutputPath (Join-Path $EvidenceRoot "native-build.txt") | Out-Null
+  $nativeBundleArtifacts = Get-NativeBundleArtifacts -Root $NativeBundleRoot
+  if ($nativeBundleArtifacts.Count -lt 1) {
+    throw "native-bundle-artifacts-missing: npm run native:build completed but no supported bundle artifacts were found under $NativeBundleRoot"
+  }
 
   $summary = [PSCustomObject]@{
     schemaVersion = "spaceguard-private-demo-windows-preflight/v1"
@@ -127,7 +153,9 @@ try {
       nativeExecutorCoverage = $NativeCoveragePath
       openAiFixtureSmoke = $OpenAiFixtureSmokePath
       openAiLiveSmoke = $OpenAiLiveSmokePath
+      nativeBundleRoot = $NativeBundleRoot
     }
+    nativeBundleArtifacts = $nativeBundleArtifacts
     commands = $commands
     nextCommands = @(
       $commands.nextFirstRoute,
