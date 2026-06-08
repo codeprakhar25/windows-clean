@@ -222,6 +222,21 @@ function createEvidenceFolder(patch = {}) {
   assert.strictEqual(missingExitCode.status, "blocked", "missing command exit code should block preflight");
   assert(missingExitCode.blockers.some((blocker) => blocker.id === "command-validate-route"), "missing exit-code blocker should name validate-route");
 
+  const skippedConfiguredLiveOpenAiFolder = createEvidenceFolder({
+    preflight: {
+      openAi: {
+        liveSmokeConfigured: true,
+        liveSmokeSkipped: true
+      }
+    }
+  });
+  const skippedConfiguredLiveOpenAi = verifier.buildFirstRoutePreflightCheck({ preflightPath: skippedConfiguredLiveOpenAiFolder.preflightPath });
+  assert.strictEqual(skippedConfiguredLiveOpenAi.status, "blocked", "configured live OpenAI smoke must not be skipped");
+  assert(
+    skippedConfiguredLiveOpenAi.blockers.some((blocker) => blocker.id === "command-openai-live-smoke"),
+    "configured live OpenAI skip blocker should name the live smoke command"
+  );
+
   const unsafeFolder = createEvidenceFolder({
     preflight: {
       route: "bounded-npm-cache-delete",

@@ -99,7 +99,7 @@ export function buildFirstRoutePreflightCheck({
   const appCloseContract = validateAppCloseContract(preflight?.appCloseContract, baseDir, add);
 
   const commandRecords = readCommandRecords(artifactPaths.commandLog, add);
-  const commandSummary = validateCommandRecords(commandRecords, add);
+  const commandSummary = validateCommandRecords(commandRecords, preflight?.openAi, add);
   const firstRouteProof = readOptionalJsonArtifact("first-route-proof", artifactPaths.firstRouteProofPacket, add);
   const fixtureBefore = readOptionalJsonArtifact("fixture-before-cleanup", artifactPaths.fixtureBeforeCleanup, add);
   const setupDoctor = readOptionalJsonArtifact("setup-doctor", artifactPaths.setupDoctor, add);
@@ -273,7 +273,7 @@ function readCommandRecords(commandLogPath, add) {
   return records;
 }
 
-function validateCommandRecords(records = [], add) {
+function validateCommandRecords(records = [], openAi = {}, add) {
   let requiredPassed = 0;
   for (const id of REQUIRED_COMMANDS) {
     const record = records.find((item) => item?.id === id);
@@ -289,7 +289,17 @@ function validateCommandRecords(records = [], add) {
   }
 
   const liveSmoke = records.find((item) => item?.id === "openai-live-smoke");
-  if (liveSmoke && !isExitCodeZero(liveSmoke.exitCode) && liveSmoke.skipped !== true) {
+  const liveSmokeConfigured = openAi?.liveSmokeConfigured === true;
+  const liveSmokeSkipped = openAi?.liveSmokeSkipped === true || liveSmoke?.skipped === true;
+  if (liveSmokeConfigured) {
+    if (!liveSmoke) {
+      add("command-openai-live-smoke", "Live OpenAI smoke missing", "Preflight recorded OPENAI_API_KEY as configured, so the live OpenAI smoke command record is required.");
+    } else if (liveSmokeSkipped) {
+      add("command-openai-live-smoke", "Live OpenAI smoke skipped", "Preflight recorded OPENAI_API_KEY as configured, so live OpenAI smoke must run before app launch.");
+    } else if (!isExitCodeZero(liveSmoke.exitCode)) {
+      add("command-openai-live-smoke", "Live OpenAI smoke failed", `Live OpenAI smoke exited with ${liveSmoke.exitCode ?? "missing"}.`);
+    }
+  } else if (liveSmoke && !isExitCodeZero(liveSmoke.exitCode) && liveSmoke.skipped !== true) {
     add("command-openai-live-smoke", "Live OpenAI smoke failed", "Live OpenAI smoke must pass or be explicitly skipped.");
   }
 

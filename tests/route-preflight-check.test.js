@@ -203,6 +203,21 @@ function createEvidenceFolder(patch = {}) {
   assert.strictEqual(failedCommand.status, "blocked", "failed route validation command should block selected-route preflight");
   assert(failedCommand.blockers.some((blocker) => blocker.id === "command-validate-route"), "failed command blocker should name validate-route");
 
+  const skippedConfiguredLiveOpenAiFolder = createEvidenceFolder({
+    preflight: {
+      openAi: {
+        liveSmokeConfigured: true,
+        liveSmokeSkipped: true
+      }
+    }
+  });
+  const skippedConfiguredLiveOpenAi = verifier.buildSelectedRoutePreflightCheck({ preflightPath: skippedConfiguredLiveOpenAiFolder.preflightPath });
+  assert.strictEqual(skippedConfiguredLiveOpenAi.status, "blocked", "configured live OpenAI smoke must not be skipped");
+  assert(
+    skippedConfiguredLiveOpenAi.blockers.some((blocker) => blocker.id === "command-openai-live-smoke"),
+    "configured live OpenAI skip blocker should name the live smoke command"
+  );
+
   const missingProofFolder = createEvidenceFolder();
   fs.unlinkSync(missingProofFolder.firstRouteCompletionCheck);
   const missingProof = verifier.buildSelectedRoutePreflightCheck({ preflightPath: missingProofFolder.preflightPath });
