@@ -632,13 +632,24 @@ export function buildExecutionGate({
   executionPrerequisites = { ready: true, blockers: [] },
   scanFingerprint = "",
   executionStatus = "idle",
-  workflowLocks = { proofAllowsNextExecutor: true }
+  workflowLocks = { proofAllowsNextExecutor: true },
+  executionRecord = null,
+  activeScanGeneratedAt = ""
 } = {}) {
   const expected = String(expectedConfirmation || "").trim();
   const actual = String(confirmationText || "").trim();
   const prerequisiteBlockers = Array.isArray(executionPrerequisites?.blockers)
     ? executionPrerequisites.blockers
     : [];
+  const acceptedPositiveExecution = Boolean(executionRecord?.accepted && Number(executionRecord?.bytes || 0) > 0);
+  const baselineRequired = Boolean(acceptedPositiveExecution && workflowLocks?.proofAllowsNextExecutor !== false);
+  const activeScanTime = Date.parse(activeScanGeneratedAt || "");
+  const executionTime = Date.parse(executionRecord?.executedAt || "");
+  const baselineCurrent = !baselineRequired || (
+    Number.isFinite(activeScanTime) &&
+    Number.isFinite(executionTime) &&
+    activeScanTime >= executionTime
+  );
   const rows = [
     guardrailRow({
       id: "selected-target",
@@ -685,6 +696,16 @@ export function buildExecutionGate({
       detail: workflowLocks?.proofAllowsNextExecutor !== false
         ? "Workflow lock policy allows executor dispatch."
         : "Export proof and capture the support bundle before another executor dispatch."
+    }),
+    guardrailRow({
+      id: "baseline-scan-current",
+      label: "Active scan baseline",
+      passed: baselineCurrent,
+      detail: baselineCurrent
+        ? baselineRequired
+          ? "Active cleanup queue scan is newer than the accepted execution."
+          : "No post-execution baseline refresh is required for this dispatch."
+        : "Run a fresh real scan so the cleanup queue uses post-execution evidence before another executor dispatch."
     }),
     guardrailRow({
       id: "executor-not-running",

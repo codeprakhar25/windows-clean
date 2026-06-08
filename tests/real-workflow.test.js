@@ -291,6 +291,43 @@ const assert = require("assert");
   });
   assert.strictEqual(noOpRepeatGate.ready, true, "execution gate should allow dispatch after accepted no-op handoff");
 
+  const staleBaselineAfterHandoffGate = workflow.buildExecutionGate({
+    candidate: gateCandidate,
+    consentChecked: true,
+    confirmationText: "RUN npm-cache",
+    expectedConfirmation: "RUN npm-cache",
+    executionPrerequisites: { ready: true },
+    scanFingerprint: "scan-before-execution",
+    executionStatus: "complete",
+    workflowLocks: handedOffLocks,
+    executionRecord: {
+      accepted: true,
+      bytes: 1024,
+      executedAt
+    },
+    activeScanGeneratedAt: "2026-06-08T14:59:00.000Z"
+  });
+  assert.strictEqual(staleBaselineAfterHandoffGate.ready, false, "execution gate should block next dispatch when the active scan baseline predates the accepted execution");
+  assert(staleBaselineAfterHandoffGate.rows.some((row) => row.id === "baseline-scan-current" && !row.passed), "execution gate should expose stale active scan baseline as the blocker");
+
+  const currentBaselineAfterHandoffGate = workflow.buildExecutionGate({
+    candidate: gateCandidate,
+    consentChecked: true,
+    confirmationText: "RUN npm-cache",
+    expectedConfirmation: "RUN npm-cache",
+    executionPrerequisites: { ready: true },
+    scanFingerprint: "scan-after-execution",
+    executionStatus: "complete",
+    workflowLocks: handedOffLocks,
+    executionRecord: {
+      accepted: true,
+      bytes: 1024,
+      executedAt
+    },
+    activeScanGeneratedAt: postRunGeneratedAt
+  });
+  assert.strictEqual(currentBaselineAfterHandoffGate.ready, true, "execution gate should allow next dispatch after the active scan baseline is newer than the accepted execution");
+
   const inAppBundle = workflow.buildInAppSupportBundleReport({
     generatedAt: "2026-06-08T19:30:00.000Z",
     routeInput: "npm-cache",

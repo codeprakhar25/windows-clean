@@ -336,9 +336,11 @@ function App() {
       executionPrerequisites,
       scanFingerprint,
       executionStatus,
-      workflowLocks
+      workflowLocks,
+      executionRecord,
+      activeScanGeneratedAt: scan?.generatedAt || ""
     }),
-    [selectedCandidate, consentChecked, confirmationText, expectedConfirmation, executionPrerequisites, scanFingerprint, executionStatus, workflowLocks]
+    [selectedCandidate, consentChecked, confirmationText, expectedConfirmation, executionPrerequisites, scanFingerprint, executionStatus, workflowLocks, executionRecord, scan]
   );
   const canExecute = executionGate.ready;
   const targetSwitchLocked = workflowLocks.targetSwitchLocked;
@@ -448,7 +450,9 @@ function App() {
       executionPrerequisites,
       scanFingerprint,
       executionStatus,
-      workflowLocks
+      workflowLocks,
+      executionRecord,
+      activeScanGeneratedAt: scan?.generatedAt || ""
     });
     if (!currentExecutionGate.ready) {
       setExecutionStatus("error");

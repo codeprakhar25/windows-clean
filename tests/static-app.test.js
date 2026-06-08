@@ -116,6 +116,7 @@ assert(app.includes("const canExecute = executionGate.ready"), "execute button s
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
 assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
 assert(app.includes("workflowLocks"), "execution gate should receive workflow lock state for proof handoff repeat-dispatch blocking");
+assert(app.includes("activeScanGeneratedAt: scan?.generatedAt || \"\""), "execution gate should receive active scan timestamp for stale-baseline blocking");
 assert(app.includes("executionRecord?.accepted"), "proof export should require an accepted native execution record");
 assert(app.includes("targetSwitchLocked"), "cleanup queue should lock target switching after accepted execution until proof export completes");
 assert(app.includes("routeSetupLocked"), "route setup should share the proof handoff lock after accepted execution");
@@ -239,6 +240,7 @@ assert(realWorkflow.includes("single-route-scope"), "real workflow helper should
 assert(realWorkflow.includes("selected-route-setup"), "real workflow helper should expose selected route setup as an execution guardrail");
 assert(realWorkflow.includes("spaceguard-execution-gate/v1"), "real workflow helper should expose a stable execution gate schema");
 assert(realWorkflow.includes("proof-handoff"), "execution gate should expose proof handoff as a dispatch guardrail");
+assert(realWorkflow.includes("baseline-scan-current"), "execution gate should expose active scan freshness as a dispatch guardrail");
 assert(realWorkflow.includes("spaceguard-workflow-locks/v1"), "real workflow helper should expose a stable workflow lock schema");
 assert(!realWorkflow.includes("temp-fixture"), "real workflow helper must not point app setup at seeded fixture routes");
 assert(!realWorkflow.includes("first-route-proof"), "real workflow helper must not block real routes behind seeded first-route proof rows");
