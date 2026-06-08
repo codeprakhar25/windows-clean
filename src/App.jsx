@@ -492,9 +492,7 @@ function App() {
       });
       setProofExportStatus("complete");
       setProofExportMessage(
-        selectedWrite.written && workflowWrite.written
-          ? `Wrote ${PROOF_PACKET_FILE} and ${WORKFLOW_PROOF_FILE} into the runner working directory.`
-          : `Exported proof files. If the desktop writer was unavailable, browser downloads were used.`
+        `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE} and ${workflowWrite.fileName || WORKFLOW_PROOF_FILE} into the runner working directory.`
       );
     } catch (error) {
       setProofExportStatus("error");
@@ -2027,20 +2025,10 @@ function toProofMarkdown(title, packet) {
 async function writeProofFile(fileName, content, metadata) {
   const result = await writeNativeProofArtifact(fileName, content, metadata);
   if (!result?.written) {
-    downloadTextFile(fileName, content);
+    const reason = result?.reason || "Native proof artifact writer is required for real workflow handoff.";
+    throw new Error(`Native proof artifact writer is required before proof export can complete: ${reason}`);
   }
-  return result || { written: false, fileName };
-}
-
-function downloadTextFile(fileName, content) {
-  if (typeof document === "undefined") return;
-  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  URL.revokeObjectURL(url);
+  return result;
 }
 
 function buildScanFingerprint(scan) {

@@ -132,6 +132,8 @@ assert(app.includes("agentBroker.rows"), "OpenAI panel should render broker rows
 assert(app.includes("row.blockedReason"), "OpenAI panel should expose broker blockers");
 assert(app.includes("redactPath"), "OpenAI context should redact local paths before provider calls");
 assert(app.includes("No local folders are scanned from this browser session."), "browser-only state should be setup-only");
+assert(app.includes("Native proof artifact writer is required"), "proof export should block when the native artifact writer does not write proof files");
+assert(!app.includes("downloadTextFile(fileName, content)"), "proof export must not silently fall back to browser downloads");
 
 assert(nativeAdapter.includes("writeNativeProofArtifact"), "native adapter should expose a restricted proof artifact writer");
 assert(nativeAdapter.includes("runNativeReadonlyScan"), "native adapter should expose the read-only native scanner");
