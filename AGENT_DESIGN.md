@@ -16,7 +16,7 @@ The OpenAI integration is advisory, not an executor.
 1. Native scan measures known cleanup roots and manual-review findings.
 2. Renderer builds a real cleanup queue from native findings only.
 3. User selects one ready route.
-4. App checks native runtime capability, scoped feature flag state, first-route proof requirements, and consent.
+4. App checks native runtime capability, single scoped feature flag state, current scan evidence, and consent.
 5. Native executor runs the selected route.
 6. User runs a post-run rescan.
 7. App exports selected-route and workflow proof packets.

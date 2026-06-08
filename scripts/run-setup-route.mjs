@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 const SCRIPT_ID = "spaceguard-route-setup";
 const scriptPath = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(scriptPath), "..");
-const FIRST_ROUTE_COMPLETION_ENV = "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK";
 
 export const routeSpecs = [
   {
@@ -217,7 +216,6 @@ export function buildPacket({ routeInput = "", env = {} } = {}) {
 
   const selectedEnabled = flagEnabled(env[selected.envVar]);
   const otherEnabled = enabledFlags.filter((flag) => flag !== selected.envVar);
-  const firstRouteProof = buildFirstRouteProofGate(selected, env);
   const status = otherEnabled.length
     ? "multiple-flags"
     : selectedEnabled
@@ -233,7 +231,6 @@ export function buildPacket({ routeInput = "", env = {} } = {}) {
       ...selected,
       enabled: selectedEnabled
     },
-    firstRouteProof,
     enabledFlags,
     conflictingFlags: otherEnabled,
     commands: {
@@ -278,20 +275,6 @@ function buildNextSteps({ status, selected, otherEnabled = [] }) {
     `PowerShell: $env:${selected.envVar}="1"`,
     "Run setup:route again, then launch npm run native:dev."
   ];
-}
-
-export function buildFirstRouteProofGate(selected = null) {
-  return {
-    required: false,
-    status: "not-required",
-    accepted: true,
-    envVar: FIRST_ROUTE_COMPLETION_ENV,
-    path: "",
-    route: selected?.route || "",
-    detail: selected?.route
-      ? "Route setup uses direct one-route native executor guardrails; no prior route proof is required."
-      : "No route selected."
-  };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath) {

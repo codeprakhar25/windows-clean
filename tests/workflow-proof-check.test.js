@@ -14,18 +14,26 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
     route: "bounded-npm-cache-delete",
     routeInput: "npm-cache",
     appCloseContract: {
-      schemaVersion: "spaceguard-first-route-app-close-contract/v1",
+      schemaVersion: "spaceguard-selected-route-app-close-contract/v1",
       workflowProofPath: ".\\spaceguard-real-workflow-proof.md",
       selectedRouteProofPacketPath: ".\\spaceguard-selected-route-proof-packet.md",
       expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
       minimumReclaimedBytes: 1,
-      nextRouteBlockedUntil: "validate:first-route-completion accepted",
+      nextRouteBlockedUntil: "validate:workflow-proof accepted",
       requiredBeforeClosingApp: [
+        "native-volume-proof-captured",
         "post-run-rescan-matched",
         "selected-route-proof-packet-exported",
         "selected-route-proof-import-complete",
         "spaceguard-real-workflow-proof-exported"
       ]
+    },
+    volumeProof: {
+      status: "measured",
+      measured: true,
+      driveLabel: "C:",
+      freeBytesDelta: 1024,
+      entries: 1
     },
     proofStatus: "proof-complete",
     proofImportStatus: "import-complete",
@@ -41,6 +49,7 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
       { id: "post-run-proof-complete", passed: true },
       { id: "selected-route-proof-import", passed: true },
       { id: "selected-route-proof-export", passed: true },
+      { id: "native-volume-proof", passed: true },
       { id: "next-route-clearance", passed: true }
     ]
   };
@@ -61,33 +70,7 @@ const script = path.join(root, "scripts", "run-workflow-proof-check.mjs");
   const selectedRoutePacket = {
     ...provenPacket,
     route: "bounded-npm-cache-delete",
-    routeInput: "npm-cache",
-    volumeProof: {
-      status: "measured",
-      measured: true,
-      driveLabel: "C:",
-      freeBytesDelta: 1024,
-      entries: 1
-    },
-    appCloseContract: {
-      schemaVersion: "spaceguard-selected-route-app-close-contract/v1",
-      workflowProofPath: ".\\spaceguard-real-workflow-proof.md",
-      selectedRouteProofPacketPath: ".\\spaceguard-selected-route-proof-packet.md",
-      expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
-      minimumReclaimedBytes: 1,
-      nextRouteBlockedUntil: "validate:workflow-proof accepted",
-      requiredBeforeClosingApp: [
-        "native-volume-proof-captured",
-        "post-run-rescan-matched",
-        "selected-route-proof-packet-exported",
-        "selected-route-proof-import-complete",
-        "spaceguard-real-workflow-proof-exported"
-      ]
-    },
-    rows: [
-      ...provenPacket.rows,
-      { id: "native-volume-proof", passed: true }
-    ]
+    routeInput: "npm-cache"
   };
   const acceptedSelectedRoute = verifier.buildWorkflowProofCheck({ evidenceObject: selectedRoutePacket });
   assert.strictEqual(acceptedSelectedRoute.status, "accepted", "selected-route workflow proof contract should be accepted");

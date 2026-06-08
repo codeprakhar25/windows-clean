@@ -19,17 +19,16 @@ const scriptPath = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(scriptPath), "..");
 const defaultRouteInput = "npm-cache";
 
-const smokeRouteFixtures = {
+const routeContracts = {
   "known-temp-delete": {
     actionType: "run-temp-executor",
-    targetId: "temp-cleanup",
-    actionId: "temp-cleanup",
-    title: "Known temp cleanup",
+    targetId: "windows-temp",
+    actionId: "windows-temp",
     actionTitle: "Known temp files",
-    targetPath: "%TEMP%\\SpaceGuardFixture",
+    targetPath: "%TEMP%",
     bytesGb: 1.2,
     risk: "low",
-    consequence: "Deletes old files from known temp roots only.",
+    consequence: "Deletes old files from allowlisted temp roots only.",
     flag: "tempCleanupExecutor",
     expectedTaskStatus: "ready"
   },
@@ -37,9 +36,8 @@ const smokeRouteFixtures = {
     actionType: "run-downloads-cleanup-executor",
     targetId: "downloads-installer-1",
     actionId: "downloads-installers",
-    title: "Reviewed Downloads installer",
     actionTitle: "Old installers in Downloads",
-    targetPath: "%UserProfile%\\Downloads\\old-installer.exe",
+    targetPath: "%UserProfile%\\Downloads\\reviewed-installer.exe",
     bytesGb: 1.7,
     risk: "review",
     consequence: "Moves only reviewed Downloads items to Recycle Bin.",
@@ -51,9 +49,8 @@ const smokeRouteFixtures = {
     actionType: "run-large-file-archive-executor",
     targetId: "large-file-archive-1",
     actionId: "large-user-files",
-    title: "Reviewed large media archive",
     actionTitle: "Large user files",
-    targetPath: "%UserProfile%\\Videos\\capture-old.mov",
+    targetPath: "%UserProfile%\\Videos\\reviewed-archive.mov",
     bytesGb: 8.4,
     risk: "review",
     consequence: "Moves only reviewed large files to the configured archive destination.",
@@ -68,9 +65,8 @@ const smokeRouteFixtures = {
     actionType: "run-project-deps-executor",
     targetId: "project-deps-1",
     actionId: "node-modules-old",
-    title: "Reviewed old node_modules folder",
     actionTitle: "Old project dependency folders",
-    targetPath: "%UserProfile%\\Code\\old-app\\node_modules",
+    targetPath: "%UserProfile%\\Code\\reviewed-app\\node_modules",
     bytesGb: 3.6,
     risk: "review",
     consequence: "Deletes only reviewed rebuildable project dependency folders.",
@@ -82,10 +78,9 @@ const smokeRouteFixtures = {
     actionType: "run-browser-cache-executor",
     targetId: "browser-cache-1",
     actionId: "browser-cache-1",
-    title: "Browser cache root",
     actionTitle: "Browser cache cleanup",
     recipeId: "browser-cache",
-    targetPath: "%LocalAppData%\\Google\\Chrome\\User Data\\Default\\Cache",
+    targetPath: "%LocalAppData%\\Browser\\Profile\\Cache",
     bytesGb: 2.8,
     risk: "low",
     consequence: "Rebuildable browser cache; websites may reload assets.",
@@ -96,7 +91,6 @@ const smokeRouteFixtures = {
     actionType: "run-gradle-cache-executor",
     targetId: "gradle-cache",
     actionId: "gradle-cache",
-    title: "Gradle dependency and build cache",
     actionTitle: "Gradle cache cleanup",
     recipeId: "gradle-cache",
     targetPath: "%UserProfile%\\.gradle\\caches",
@@ -110,7 +104,6 @@ const smokeRouteFixtures = {
     actionType: "run-user-cache-executor",
     targetId: "user-cache",
     actionId: "user-cache",
-    title: "User .cache folder",
     actionTitle: "User .cache cleanup",
     recipeId: "user-cache",
     targetPath: "%UserProfile%\\.cache",
@@ -124,10 +117,9 @@ const smokeRouteFixtures = {
     actionType: "run-android-cache-executor",
     targetId: "android-cache-1",
     actionId: "android-cache-1",
-    title: "Android Studio cache folder",
     actionTitle: "Android cache cleanup",
     recipeId: "android-cache",
-    targetPath: "%UserProfile%\\.android\\cache",
+    targetPath: "%LocalAppData%\\Google\\AndroidStudio\\caches",
     bytesGb: 2.2,
     risk: "low",
     consequence: "Android tooling can rebuild cache contents later.",
@@ -138,13 +130,12 @@ const smokeRouteFixtures = {
     actionType: "run-shader-cache-executor",
     targetId: "shader-cache-1",
     actionId: "shader-cache-1",
-    title: "Graphics shader cache folder",
     actionTitle: "Shader cache cleanup",
     recipeId: "steam-shader-cache",
-    targetPath: "%ProgramFiles(x86)%\\Steam\\steamapps\\shadercache",
+    targetPath: "%LocalAppData%\\NVIDIA\\DXCache",
     bytesGb: 3.3,
     risk: "low",
-    consequence: "Games may rebuild shader caches on next launch.",
+    consequence: "Games or graphics apps may rebuild shader caches on next launch.",
     flag: "shaderCacheExecutor",
     expectedTaskStatus: "ready"
   },
@@ -152,7 +143,6 @@ const smokeRouteFixtures = {
     actionType: "run-pip-cache-executor",
     targetId: "pip-cache",
     actionId: "pip-cache",
-    title: "pip package cache",
     actionTitle: "pip cache cleanup",
     recipeId: "pip-cache",
     targetPath: "%LocalAppData%\\pip\\Cache",
@@ -166,7 +156,6 @@ const smokeRouteFixtures = {
     actionType: "run-docker-build-cache-executor",
     targetId: "docker-build-cache",
     actionId: "docker-build-cache",
-    title: "Docker build cache",
     actionTitle: "Docker build-cache cleanup",
     recipeId: "docker-build-cache",
     targetPath: "docker-builder-cache://local",
@@ -180,7 +169,6 @@ const smokeRouteFixtures = {
     actionType: "run-npm-cache-executor",
     targetId: "npm-cache",
     actionId: "npm-cache",
-    title: "npm package cache",
     actionTitle: "npm cache cleanup",
     recipeId: "npm-cache",
     targetPath: "%LocalAppData%\\npm-cache\\_cacache",
@@ -194,7 +182,6 @@ const smokeRouteFixtures = {
     actionType: "run-pnpm-store-executor",
     targetId: "pnpm-store",
     actionId: "pnpm-store",
-    title: "pnpm global store",
     actionTitle: "pnpm store cleanup",
     recipeId: "pnpm-store",
     targetPath: "%LocalAppData%\\pnpm\\store",
@@ -208,7 +195,6 @@ const smokeRouteFixtures = {
     actionType: "run-recycle-bin-executor",
     targetId: "recycle-bin",
     actionId: "recycle-bin",
-    title: "Recycle Bin",
     actionTitle: "Recycle Bin cleanup",
     recipeId: "recycle-bin",
     targetPath: "shell:RecycleBinFolder",
@@ -226,8 +212,7 @@ const smokeRouteFixtures = {
 function readDotEnv(filePath) {
   if (!fs.existsSync(filePath)) return {};
   const env = {};
-  const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
-  for (const line of lines) {
+  for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
     const withoutExport = trimmed.startsWith("export ") ? trimmed.slice("export ".length) : trimmed;
@@ -250,40 +235,38 @@ function resolveRouteSpec(routeInput = defaultRouteInput) {
 
 export function listSupportedSmokeRoutes() {
   return routeSpecs
-    .filter((spec) => smokeRouteFixtures[spec.route])
-    .map((spec) => ({
-      route: spec.route,
-      aliases: spec.aliases,
-      title: spec.title,
-      envVar: spec.envVar,
-      actionType: smokeRouteFixtures[spec.route].actionType,
-      targetId: smokeRouteFixtures[spec.route].targetId,
-      expectedTaskStatus: smokeRouteFixtures[spec.route].expectedTaskStatus
-    }));
+    .filter((spec) => routeContracts[spec.route])
+    .map((spec) => {
+      const contract = routeContracts[spec.route];
+      return {
+        route: spec.route,
+        aliases: spec.aliases,
+        title: spec.title,
+        envVar: spec.envVar,
+        actionType: contract.actionType,
+        targetId: contract.targetId,
+        expectedTaskStatus: contract.expectedTaskStatus
+      };
+    });
 }
 
 export function resolveSmokeRoute(routeInput = defaultRouteInput) {
   const spec = resolveRouteSpec(routeInput);
-  if (!spec) {
+  if (!spec || !routeContracts[spec.route]) {
     const supported = listSupportedSmokeRoutes().flatMap((route) => route.aliases).join(", ");
     throw new Error(`Unknown OpenAI smoke route "${routeInput || ""}". Supported route aliases: ${supported}.`);
   }
-  const fixture = smokeRouteFixtures[spec.route];
-  if (!fixture) {
-    const supported = listSupportedSmokeRoutes().flatMap((route) => route.aliases).join(", ");
-    throw new Error(`OpenAI smoke route "${spec.route}" has no fixture. Supported route aliases: ${supported}.`);
-  }
-  const targetId = fixture.targetId;
+  const contract = routeContracts[spec.route];
   return {
-    ...fixture,
+    ...contract,
     spec,
     route: spec.route,
     routeInput: spec.aliases[0] || spec.route,
     requiredRecommendation: {
-      actionType: fixture.actionType,
-      targetId,
+      actionType: contract.actionType,
+      targetId: contract.targetId,
       route: spec.route,
-      expectedTaskStatus: fixture.expectedTaskStatus || "ready"
+      expectedTaskStatus: contract.expectedTaskStatus || "ready"
     }
   };
 }
@@ -291,71 +274,57 @@ export function resolveSmokeRoute(routeInput = defaultRouteInput) {
 function buildReviewTarget(route) {
   const base = {
     id: route.targetId,
-    name: route.title,
-    title: route.title,
+    name: route.spec.title,
+    title: route.spec.title,
     route: route.route,
     path: route.targetPath,
     bytes: route.bytes,
     ageDays: 120,
-    reason: "Fixture target already passed deterministic user review.",
-    signals: ["fixture-reviewed", "scoped-route"]
+    reason: "User-reviewed target selected in the desktop app.",
+    signals: ["reviewed-target", "scoped-route"]
   };
-  if (route.reviewTarget === "downloads") {
-    return {
-      ...base,
-      kind: "reviewed Downloads file"
-    };
-  }
-  if (route.reviewTarget === "project") {
-    return {
-      ...base,
-      kind: "project dependency folder"
-    };
-  }
+  if (route.reviewTarget === "downloads") return { ...base, kind: "reviewed Downloads file" };
+  if (route.reviewTarget === "project") return { ...base, kind: "project dependency folder" };
   return base;
 }
 
 function buildArchiveTarget(route) {
   return {
     id: route.targetId,
-    name: route.title,
-    title: route.title,
+    name: route.spec.title,
+    title: route.spec.title,
     route: route.route,
     path: route.targetPath,
     bytes: route.bytes,
     ageDays: 180,
     kind: "large user file",
     decision: "archive",
-    reason: "Fixture target has a configured archive destination.",
-    signals: ["fixture-reviewed", "archive-destination-present"]
+    reason: "User-reviewed archive target with a configured destination.",
+    signals: ["reviewed-target", "archive-destination-present"]
   };
 }
 
-function buildFixtureExecutorRows(route) {
+function buildExecutorRows(route) {
   const row = {
     id: route.actionId || route.targetId,
-    title: route.actionTitle || route.title,
+    title: route.actionTitle || route.spec.title,
     route: route.route,
     bytes: route.bytes,
     targetPath: route.targetPath,
     canExecute: true,
     canSimulate: true
   };
-  if (route.reviewTarget) {
-    row.reviewTargets = [buildReviewTarget(route)];
-  }
-  if (route.archiveTarget) {
-    row.archiveTargets = [buildArchiveTarget(route)];
-  }
+  if (route.reviewTarget) row.reviewTargets = [buildReviewTarget(route)];
+  if (route.archiveTarget) row.archiveTargets = [buildArchiveTarget(route)];
   return [row];
 }
 
-function buildFixtureFindings(route) {
+function buildFindings(route) {
   if (!route.recipeId) return [];
   return [
     {
       recipeId: route.recipeId,
-      title: route.title,
+      title: route.spec.title,
       path: route.targetPath,
       bytes: route.bytes,
       status: "measured"
@@ -363,28 +332,23 @@ function buildFixtureFindings(route) {
   ];
 }
 
-function buildFixtureScopedExecutorCommandFlow(route) {
-  const panelId = route.spec.panelId || "";
-  const requestMode = route.spec.requestMode || "";
-  const envVar = route.spec.envVar || "";
-  const actionLabel = route.spec.actionLabel || "Run scoped executor";
-  const title = route.spec.title || route.title;
+function buildScopedExecutorCommandFlow(route) {
   const targetEvidence = route.recipeId ? "1 scanned native target(s)" : route.targetPath;
   return {
     schemaVersion: "spaceguard-scoped-executor-command-flow/v1",
     status: "ready-to-execute",
     route: route.route,
     selectedRoute: route.route,
-    title,
-    panelId,
-    actionLabel,
+    title: route.spec.title,
+    panelId: route.spec.panelId,
+    actionLabel: route.spec.actionLabel,
     nativeAvailable: true,
     setupCommands: {
       routeInput: route.routeInput,
-      envVar,
-      enableEnv: `${envVar}=1`,
-      requestMode,
-      panelId
+      envVar: route.spec.envVar,
+      enableEnv: `${route.spec.envVar}=1`,
+      requestMode: route.spec.requestMode,
+      panelId: route.spec.panelId
     },
     launchPacket: {
       schemaVersion: "spaceguard-selected-route-launch-packet/v1",
@@ -392,9 +356,9 @@ function buildFixtureScopedExecutorCommandFlow(route) {
       ready: true,
       route: route.route,
       routeInput: route.routeInput,
-      title,
-      panelId,
-      actionLabel,
+      title: route.spec.title,
+      panelId: route.spec.panelId,
+      actionLabel: route.spec.actionLabel,
       proofStatus: "waiting-for-execution",
       proofAllowsExecution: true,
       targetEvidence,
@@ -402,66 +366,33 @@ function buildFixtureScopedExecutorCommandFlow(route) {
       expectedBytes: Number(route.bytes || 0),
       setupCommands: {
         routeInput: route.routeInput,
-        envVar,
-        requestMode,
-        panelId
-      },
-      checks: [
-        { id: "native-runtime", label: "Native Windows runtime", passed: true, detail: "fixture Windows runtime" },
-        { id: "feature-flag", label: "Route feature flag", passed: true, detail: `${envVar}=1` },
-        { id: "scan-fingerprint", label: "Current native scan", passed: true, detail: `fixture-openai-smoke-scan:${route.route}` },
-        { id: "consent", label: "Current consent receipt", passed: true, detail: "consent=plan-openai-smoke" },
-        { id: "route-targets", label: "Route target evidence", passed: true, detail: targetEvidence }
-      ]
+        envVar: route.spec.envVar,
+        requestMode: route.spec.requestMode,
+        panelId: route.spec.panelId
+      }
     },
     primaryRow: {
       id: route.actionId || route.targetId,
-      title,
+      title: route.spec.title,
       route: route.route,
       status: "ready",
       bytes: Number(route.bytes || 0),
-      envVar,
+      envVar: route.spec.envVar,
       flagEnabled: true,
-      requestMode,
-      panelId,
-      actionLabel,
+      requestMode: route.spec.requestMode,
+      panelId: route.spec.panelId,
+      actionLabel: route.spec.actionLabel,
       targetCount: 1,
-      targetEvidence,
-      checks: [
-        { id: "native-runtime", label: "Native Windows runtime", passed: true, detail: "fixture Windows runtime" },
-        { id: "feature-flag", label: "Route feature flag", passed: true, detail: `${envVar}=1` },
-        { id: "scan-fingerprint", label: "Current native scan", passed: true, detail: `fixture-openai-smoke-scan:${route.route}` },
-        { id: "consent", label: "Current consent receipt", passed: true, detail: "consent=plan-openai-smoke" },
-        { id: "route-targets", label: "Route target evidence", passed: true, detail: targetEvidence }
-      ]
+      targetEvidence
     }
   };
 }
 
-export function buildFixtureContext({ routeInput = defaultRouteInput } = {}) {
+export function buildRouteContractContext({ routeInput = defaultRouteInput } = {}) {
   const route = resolveSmokeRoute(routeInput);
   const bytes = Math.round(Number(route.bytesGb || 1) * GB);
-  const fixtureRoute = { ...route, bytes };
-  const selectedActionId = fixtureRoute.actionId || fixtureRoute.targetId;
-  const actionList = [
-    {
-      id: selectedActionId,
-      title: fixtureRoute.actionTitle || fixtureRoute.title,
-      route: fixtureRoute.route,
-      bytes,
-      risk: fixtureRoute.risk || "low",
-      consequence: fixtureRoute.consequence || "Scoped fixture cleanup target."
-    },
-    {
-      id: "installed-app-footprints",
-      title: "Installed app review candidates",
-      route: "manual-app-uninstall",
-      bytes: Math.round(6.5 * GB),
-      risk: "manual",
-      consequence: "Manual uninstall guidance only; no direct folder deletion."
-    }
-  ];
-
+  const selectedRoute = { ...route, bytes };
+  const selectedActionId = selectedRoute.actionId || selectedRoute.targetId;
   return buildOpenAIAgentContext({
     profile: {
       drive: "C:",
@@ -469,12 +400,21 @@ export function buildFixtureContext({ routeInput = defaultRouteInput } = {}) {
       freeBytes: 18 * GB,
       totalBytes: 512 * GB
     },
-    scanMode: `openai-fixture-smoke:${fixtureRoute.routeInput}`,
+    scanMode: `openai-route-contract:${selectedRoute.routeInput}`,
     scanSession: {
       status: "fresh",
-      currentFingerprint: `fixture-openai-smoke-scan:${fixtureRoute.route}`
+      currentFingerprint: `route-contract-scan:${selectedRoute.route}`
     },
-    actionList,
+    actionList: [
+      {
+        id: selectedActionId,
+        title: selectedRoute.actionTitle || selectedRoute.spec.title,
+        route: selectedRoute.route,
+        bytes,
+        risk: selectedRoute.risk || "low",
+        consequence: selectedRoute.consequence || "Scoped cleanup target."
+      }
+    ],
     selectedIds: new Set([selectedActionId]),
     readiness: { status: "ready" },
     runReadiness: { status: "ready" },
@@ -484,10 +424,10 @@ export function buildFixtureContext({ routeInput = defaultRouteInput } = {}) {
     nativeEvidenceQuality: { status: "native-verified" },
     storagePressureDiagnosis: { status: "pressure-detected" },
     executorPlan: {
-      rows: buildFixtureExecutorRows(fixtureRoute)
+      rows: buildExecutorRows(selectedRoute)
     },
     nativeScan: {
-      findings: buildFixtureFindings(fixtureRoute)
+      findings: buildFindings(selectedRoute)
     },
     runtimeCapabilities: {
       available: true,
@@ -498,7 +438,7 @@ export function buildFixtureContext({ routeInput = defaultRouteInput } = {}) {
       openAiAdvisorConfigured: true,
       openAiKeySource: ".env:OPENAI_API_KEY",
       executorFlags: {
-        [fixtureRoute.flag]: true
+        [selectedRoute.flag]: true
       }
     },
     itemReviewsByAction: {},
@@ -514,46 +454,45 @@ export function buildFixtureContext({ routeInput = defaultRouteInput } = {}) {
     consentReceipt: { planId: "plan-openai-smoke" },
     executionProofHandoff: {
       status: "waiting-for-execution",
-      primary: "No executor has run in this fixture."
+      primary: "No executor has run in this smoke contract."
     },
     rescanComparison: { status: "not-run" },
     planSnapshot: {
       id: "plan-openai-smoke",
-      scanMode: "openai-fixture-smoke",
+      scanMode: "openai-route-contract",
       selectedCount: 1,
       selectedBytes: bytes,
       goalBytes: 5 * GB,
       selectedIds: [selectedActionId]
     },
-    scopedExecutorCommandFlow: buildFixtureScopedExecutorCommandFlow(fixtureRoute)
+    scopedExecutorCommandFlow: buildScopedExecutorCommandFlow(selectedRoute)
   });
 }
 
-export function buildFixtureExecutionState({ routeInput = defaultRouteInput, route = null } = {}) {
+export function buildRouteContractExecutionState({ routeInput = defaultRouteInput, route = null } = {}) {
   const selectedRoute = route?.requiredRecommendation ? route : resolveSmokeRoute(routeInput);
   return {
     planId: "plan-openai-smoke",
-    scanFingerprint: `fixture-openai-smoke-scan:${selectedRoute.route}`,
+    scanFingerprint: `route-contract-scan:${selectedRoute.route}`,
     consentPlanId: "plan-openai-smoke",
     proofStatus: "waiting-for-execution",
     ...(selectedRoute.executionState || {})
   };
 }
 
-export function buildFixtureRecommendationBroker({ context, advice, route = null, routeInput = defaultRouteInput } = {}) {
+export function buildRouteContractRecommendationBroker({ context, advice, route = null, routeInput = defaultRouteInput } = {}) {
   const selectedRoute = route?.requiredRecommendation ? route : resolveSmokeRoute(routeInput);
   return buildOpenAIAgentRecommendationBroker({
     advice,
     context,
-    executionState: buildFixtureExecutionState({ route: selectedRoute })
+    executionState: buildRouteContractExecutionState({ route: selectedRoute })
   });
 }
 
 function printAdvice(result, broker, validation, { requiredSmokeRecommendation, route }) {
   const advice = result.advice || {};
   console.log(`${SCRIPT_ID}: OpenAI advisor smoke complete`);
-  console.log("No local filesystem scan was performed; this used fixture data only.");
-  if (result.transport === "fixture-only") console.log("No OpenAI request was sent; fixture-only mode validated the local task queue and broker.");
+  console.log("No local filesystem scan was performed; this validated the selected real-route broker contract.");
   console.log(`provider=${result.provider} model=${result.model} transport=${result.transport}`);
   if (result.requestId) console.log(`requestId=${result.requestId}`);
   if (result.responseId) console.log(`responseId=${result.responseId}`);
@@ -571,15 +510,9 @@ function printAdvice(result, broker, validation, { requiredSmokeRecommendation, 
   for (const row of advice.blockedActions || []) {
     console.log(`blocked=${row.actionType} route=${row.route || "none"} reason=${row.reason}`);
   }
-  for (const question of advice.questions || []) {
-    console.log(`question=${question}`);
-  }
-  for (const warning of advice.warnings || []) {
-    console.log(`warning=${warning}`);
-  }
-  for (const failure of validation.failures || []) {
-    console.error(`failure=${failure}`);
-  }
+  for (const question of advice.questions || []) console.log(`question=${question}`);
+  for (const warning of advice.warnings || []) console.log(`warning=${warning}`);
+  for (const failure of validation.failures || []) console.error(`failure=${failure}`);
 }
 
 export function validateSmokeAdvice({ context, advice, broker, requiredRecommendation = null } = {}) {
@@ -589,7 +522,7 @@ export function validateSmokeAdvice({ context, advice, broker, requiredRecommend
   const failures = [];
   const liveRouteValidation = context?.liveRouteValidation || null;
   if (!liveRouteValidation || liveRouteValidation.schemaVersion !== "spaceguard-openai-live-route-validation/v1") {
-    failures.push("live route contract is missing from fixture context");
+    failures.push("live route contract is missing from route context");
   } else {
     if (liveRouteValidation.route !== requiredSmokeRecommendation.route) {
       failures.push(`live route contract route=${liveRouteValidation.route || "missing"}, expected ${requiredSmokeRecommendation.route}`);
@@ -610,7 +543,7 @@ export function validateSmokeAdvice({ context, advice, broker, requiredRecommend
     row.route === requiredSmokeRecommendation.route
   );
   if (!task) {
-    failures.push("required task queue row is missing from fixture context");
+    failures.push("required task queue row is missing from route context");
   } else if (task.status !== expectedTaskStatus) {
     failures.push(`required task queue row is ${task.status}, expected ${expectedTaskStatus}`);
   }
@@ -620,9 +553,7 @@ export function validateSmokeAdvice({ context, advice, broker, requiredRecommend
     row.targetId === requiredSmokeRecommendation.targetId &&
     row.route === requiredSmokeRecommendation.route
   );
-  if (!recommendation) {
-    failures.push("required recommendation was not returned by OpenAI");
-  }
+  if (!recommendation) failures.push("required recommendation was not returned by OpenAI");
 
   const brokerRow = recommendation
     ? broker.rows.find((row) => row.key === getOpenAIAgentRecommendationKey(recommendation))
@@ -642,18 +573,18 @@ export function validateSmokeAdvice({ context, advice, broker, requiredRecommend
   };
 }
 
-export function buildFixtureOnlyAdviceResult({ requiredRecommendation = null } = {}) {
+export function buildRouteContractAdviceResult({ requiredRecommendation = null } = {}) {
   const requiredSmokeRecommendation = requiredRecommendation || resolveSmokeRoute(defaultRouteInput).requiredRecommendation;
   const route = resolveSmokeRoute(requiredSmokeRecommendation.route || defaultRouteInput);
   const advice = {
-    summary: `Local fixture advice selected the broker-ready ${route.spec.title} task.`,
+    summary: `Local route-contract advice selected the broker-ready ${route.spec.title} task.`,
     nextAction: `Run the ${route.spec.title} executor only after the same deterministic gates pass in the desktop app.`,
     confidence: "high",
     recommendedActions: [
       {
         id: requiredSmokeRecommendation.targetId,
-        title: route.title,
-        reason: `The fixture task queue exposes the selected ${route.spec.title} route.`,
+        title: route.spec.title,
+        reason: `The route contract exposes the selected ${route.spec.title} task.`,
         priority: "high",
         actionType: requiredSmokeRecommendation.actionType,
         targetId: requiredSmokeRecommendation.targetId,
@@ -662,13 +593,13 @@ export function buildFixtureOnlyAdviceResult({ requiredRecommendation = null } =
     ],
     blockedActions: [],
     questions: [],
-    warnings: ["Fixture-only mode did not contact OpenAI."]
+    warnings: ["Local contract mode did not contact OpenAI."]
   };
   return {
     schemaVersion: "spaceguard-openai-agent-advice/v1",
-    provider: "local-fixture",
-    model: "fixture-only",
-    transport: "fixture-only",
+    provider: "local-contract",
+    model: "route-contract",
+    transport: "local-contract",
     requestId: "",
     responseId: "",
     createdAt: new Date().toISOString(),
@@ -679,10 +610,10 @@ export function buildFixtureOnlyAdviceResult({ requiredRecommendation = null } =
 }
 
 export function parseArgs(argv = []) {
-  const args = { fixtureOnly: false, routeInput: defaultRouteInput, listRoutes: false };
+  const args = { routeInput: defaultRouteInput, listRoutes: false, localContract: false };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
-    if (value === "--fixture-only") args.fixtureOnly = true;
+    if (value === "--local-contract") args.localContract = true;
     if (value === "--list-routes") args.listRoutes = true;
     if (value === "--route") args.routeInput = argv[index + 1] || "";
     if (value.startsWith("--route=")) args.routeInput = value.slice("--route=".length);
@@ -699,11 +630,11 @@ export async function main(argv = process.argv.slice(2)) {
 
   const route = resolveSmokeRoute(args.routeInput);
   const requiredSmokeRecommendation = route.requiredRecommendation;
-  const context = buildFixtureContext({ routeInput: args.routeInput });
+  const context = buildRouteContractContext({ routeInput: args.routeInput });
   let result = null;
 
-  if (args.fixtureOnly) {
-    result = buildFixtureOnlyAdviceResult({ requiredRecommendation: requiredSmokeRecommendation });
+  if (args.localContract) {
+    result = buildRouteContractAdviceResult({ requiredRecommendation: requiredSmokeRecommendation });
   } else {
     const env = {
       ...readDotEnv(path.join(root, ".env")),
@@ -717,13 +648,13 @@ export async function main(argv = process.argv.slice(2)) {
     }
     result = await requestOpenAIAgentAdvice({
       context,
-      userPrompt: `Use this fixture only. The required smoke task queue row is actionType=${requiredSmokeRecommendation.actionType}, targetId=${requiredSmokeRecommendation.targetId}, route=${requiredSmokeRecommendation.route}, expectedTaskStatus=${requiredSmokeRecommendation.expectedTaskStatus || "ready"}. Return it as the first recommendedAction exactly when the deterministic broker can route it, and explain any blockers.`,
+      userPrompt: `Validate this selected SpaceGuard real-route contract. Required first recommendation: actionType=${requiredSmokeRecommendation.actionType}, targetId=${requiredSmokeRecommendation.targetId}, route=${requiredSmokeRecommendation.route}, expectedTaskStatus=${requiredSmokeRecommendation.expectedTaskStatus || "ready"}. Return it only when the deterministic broker can route it, and explain blockers otherwise.`,
       config,
       host: {}
     });
   }
 
-  const broker = buildFixtureRecommendationBroker({ context, advice: result.advice, route });
+  const broker = buildRouteContractRecommendationBroker({ context, advice: result.advice, route });
   const validation = validateSmokeAdvice({ context, advice: result.advice, broker, requiredRecommendation: requiredSmokeRecommendation });
   printAdvice(result, broker, validation, { requiredSmokeRecommendation, route });
   if (!validation.passed) {

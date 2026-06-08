@@ -9,8 +9,6 @@ const GB = 1024 * MB;
   const native = await import("../src/native-scanner.mjs");
   const nativeAdapter = fs.readFileSync(path.join(__dirname, "..", "src", "native-scanner.mjs"), "utf8");
   const rustMain = fs.readFileSync(path.join(__dirname, "..", "src-tauri", "src", "main.rs"), "utf8");
-  const seedFixturesScript = fs.readFileSync(path.join(__dirname, "..", "scripts", "seed-spaceguard-fixtures.ps1"), "utf8");
-  const inspectFixturesScript = fs.readFileSync(path.join(__dirname, "..", "scripts", "inspect-spaceguard-fixtures.ps1"), "utf8");
 
   assert(!nativeAdapter.includes("simulate_cleanup_plan"), "native adapter must not expose the removed simulation command");
   assert(!nativeAdapter.includes("runNativeExecutorDryRun"), "native adapter must not expose executor simulation helpers");
@@ -18,8 +16,6 @@ const GB = 1024 * MB;
   assert(!nativeAdapter.includes("TEMP_FIXTURE_ACTION_ID"), "native adapter must not expose seeded fixture cleanup actions to the app");
   assert(!nativeAdapter.includes("spaceguard-fixture"), "native adapter must not promote seeded fixture paths into cleanup rows");
   assert(!rustMain.includes("simulate_cleanup_plan"), "Tauri backend must not expose the removed simulation command");
-  assert(!seedFixturesScript.includes("dryRunScopeCases"), "fixture seed manifest must not include obsolete dry-run scope cases");
-  assert(!inspectFixturesScript.includes("DryRunScopeEvidencePath"), "fixture inspector must not accept obsolete dry-run scope evidence");
 
   assert(rustMain.includes("fn delete_npm_cache_target_at(root: &Path, now: SystemTime)"), "native npm executor should expose a clock-injected deleter for proof tests");
   assert(rustMain.includes("delete_npm_cache_target_at(root, SystemTime::now())"), "production npm executor should use the real clock for age gating");
@@ -235,14 +231,14 @@ const GB = 1024 * MB;
         status: "measured",
         items: [
           {
-            id: "known-temp-fixture-file",
-            name: "known-temp.tmp",
-            path: "C:\\Users\\real\\AppData\\Local\\Temp\\spaceguard-fixture\\known-temp.tmp",
+            id: "old-temp-file",
+            name: "old-temp.tmp",
+            path: "C:\\Users\\real\\AppData\\Local\\Temp\\spaceguard\\old-temp.tmp",
             bytes: 5 * MB,
             age_days: 3,
-            kind: "fixture temp file",
+            kind: "temp file",
             recommendation: "review",
-            reason: "Disposable SpaceGuard fixture file"
+            reason: "Old temporary file"
           }
         ]
       },
@@ -382,7 +378,6 @@ const GB = 1024 * MB;
   const merged = native.mergeNativeScanIntoActions(actionList, scan);
   const broadTemp = merged.find((action) => action.id === "windows-temp");
   const gradle = merged.find((action) => action.id === "gradle-cache");
-  const tempFixture = merged.find((action) => action.id === "temp-fixture-cleanup");
   const docker = merged.find((action) => action.id === "docker-build-cache");
   const largeFiles = merged.find((action) => action.id === "large-user-files");
   const appFootprints = merged.find((action) => action.id === "installed-app-footprints");
@@ -391,7 +386,6 @@ const GB = 1024 * MB;
   assert.strictEqual(gradle.scanStatus, "measured", "measured findings should be marked");
   assert(gradle.path.includes("C:\\Users\\real"), "real scan path should replace placeholder path");
   assert.strictEqual(broadTemp.selectedByDefault, true, "real temp cleanup should preserve the native action metadata without fixture promotion");
-  assert.strictEqual(tempFixture, undefined, "native fixture evidence must not create a seeded cleanup action in the app");
   assert.strictEqual(docker.bytes, 0, "unsupported native findings should not keep placeholder bytes");
   assert.strictEqual(docker.scanStatus, "unsupported", "unsupported native findings should be explicit");
   assert.strictEqual(largeFiles.bytes, 3 * GB, "native large-file discovery should replace placeholder bytes");
@@ -1236,15 +1230,6 @@ const GB = 1024 * MB;
     openai_agent_advice: true,
     openai_advisor_configured: true,
     openai_key_source: ".env:OPENAI_API_KEY",
-    first_route_proof: {
-      required: true,
-      status: "accepted",
-      accepted: true,
-      env_var: "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK",
-      path: "C:\\spaceguard\\evidence\\first-route-completion-check.json",
-      route: "known-temp-delete",
-      detail: "Accepted first-route completion check clears real-data route validation."
-    },
     safe_executors_enabled: true,
     enabled_scoped_executor_flags: ["SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR"],
     enabled_scoped_executor_flag_count: 2,
@@ -1284,12 +1269,8 @@ const GB = 1024 * MB;
   assert.strictEqual(capabilities.openAiAgentAdvice, true, "native capabilities should expose OpenAI advisor availability");
   assert.strictEqual(capabilities.openAiAdvisorConfigured, true, "native capabilities should expose OpenAI key configuration without the key");
   assert.strictEqual(capabilities.openAiKeySource, ".env:OPENAI_API_KEY", "native capabilities should expose only the OpenAI key source");
-  assert.strictEqual(capabilities.firstRouteProof.required, false, "native capabilities should report prior route proof as not required");
-  assert.strictEqual(capabilities.firstRouteProof.status, "not-required", "native capabilities should normalize prior route proof state");
-  assert.strictEqual(capabilities.firstRouteProof.accepted, true, "native capabilities should keep direct route validation accepted");
-  assert.strictEqual(capabilities.firstRouteProof.envVar, "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK", "native capabilities should expose the first-route proof env var");
-  assert.strictEqual(capabilities.firstRouteProof.path, "", "native capabilities should not require proof file paths");
-  const missingFirstRouteCapability = native.normalizeNativeRuntimeCapabilities({
+  assert(!Object.prototype.hasOwnProperty.call(capabilities, "firstRouteProof"), "native capabilities should not expose prior seeded proof state");
+  const directRouteCapability = native.normalizeNativeRuntimeCapabilities({
     mode: "native-scoped-write",
     platform: "windows",
     windows: true,
@@ -1297,9 +1278,7 @@ const GB = 1024 * MB;
     destructive_commands: true,
     executor_flags: { npm_cache_executor: true }
   });
-  assert.strictEqual(missingFirstRouteCapability.firstRouteProof.required, false, "missing native first-route proof should not block direct route validation");
-  assert.strictEqual(missingFirstRouteCapability.firstRouteProof.accepted, true, "missing native first-route proof should be accepted as not required");
-  assert.strictEqual(missingFirstRouteCapability.firstRouteProof.status, "not-required", "missing native first-route proof should normalize to not-required");
+  assert(!Object.prototype.hasOwnProperty.call(directRouteCapability, "firstRouteProof"), "native direct route normalization must not synthesize proof ceremony");
   assert.deepStrictEqual(
     capabilities.executorFlags,
     {

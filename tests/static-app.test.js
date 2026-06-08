@@ -16,7 +16,7 @@ const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const realDataGuide = fs.readFileSync(path.join(root, "WINDOWS_REAL_DATA_SETUP.md"), "utf8");
 const setupDoctorScript = fs.readFileSync(path.join(root, "scripts", "run-setup-doctor.mjs"), "utf8");
 const setupRouteScript = fs.readFileSync(path.join(root, "scripts", "run-setup-route.mjs"), "utf8");
-const validationRouteScript = fs.readFileSync(path.join(root, "scripts", "run-windows-validation-packet.mjs"), "utf8");
+const openAiSmokeScript = fs.readFileSync(path.join(root, "scripts", "run-openai-advisor-smoke.mjs"), "utf8");
 const workflowProofScript = fs.readFileSync(path.join(root, "scripts", "run-workflow-proof-check.mjs"), "utf8");
 const realWorkflow = fs.readFileSync(path.join(root, "src", "real-workflow.mjs"), "utf8");
 const removedDataWord = "de" + "mo";
@@ -139,6 +139,18 @@ assert(packageJson.includes("\"openai:smoke\""), "package scripts should expose 
 assert(packageJson.includes("\"setup:doctor\""), "package scripts should expose the setup doctor command");
 assert(packageJson.includes("\"setup:route\""), "package scripts should expose route setup");
 assert(packageJson.includes("\"validate:workflow-proof\""), "package scripts should expose workflow proof validation");
+for (const removedScript of [
+  "\"openai:smoke:fixture\"",
+  "\"validate:route\"",
+  "\"validate:route-preflight\"",
+  "\"validate:route-completion\"",
+  "\"validate:route-contracts\"",
+  "\"proof:route:windows\"",
+  "\"proof:first-route\"",
+  "\"v1:windows\""
+]) {
+  assert(!packageJson.includes(removedScript), `package scripts must not expose legacy demo/proof command ${removedScript}`);
+}
 
 assert(gitignore.includes("evidence/"), ".gitignore should exclude generated Windows proof evidence folders");
 assert(gitignore.includes("spaceguard-real-workflow-proof.md"), ".gitignore should exclude exported workflow proof artifacts");
@@ -150,8 +162,6 @@ assert(setupDoctorScript.includes("multi-flag-blocked"), "setup doctor should ex
 assert(setupDoctorScript.includes("realWorkflow"), "setup doctor should expose a compact real workflow");
 assert(setupRouteScript.includes("spaceguard-route-setup-packet/v1"), "route setup script should emit a stable packet schema");
 assert(setupRouteScript.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "route setup script should know the npm cache feature flag");
-assert(validationRouteScript.includes("spaceguard-windows-validation-packet/v1"), "validation packet script should emit a stable schema");
-assert(validationRouteScript.includes("native-write-volume-proof"), "validation packet should require native write volume proof");
 assert(workflowProofScript.includes("spaceguard-workflow-proof-check/v1"), "workflow proof verifier should emit a stable schema");
 assert(workflowProofScript.includes("spaceguard-real-workflow-proof/v1"), "workflow proof verifier should require real workflow proof packets");
 assert(workflowProofScript.includes("readyForNextRoute"), "workflow proof verifier should require next-route clearance");
@@ -160,8 +170,47 @@ assert(realWorkflow.includes("reviewTarget?.path"), "real workflow helper should
 assert(realWorkflow.includes("single-route-scope"), "real workflow helper should expose single route scope guardrail rows");
 assert(!realWorkflow.includes("temp-fixture"), "real workflow helper must not point app setup at seeded fixture routes");
 assert(!realWorkflow.includes("first-route-proof"), "real workflow helper must not block real routes behind seeded first-route proof rows");
+assert(!realWorkflow.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"), "real workflow helper must not emit seeded proof env vars");
 assert(!nativeAdapter.includes("TEMP_FIXTURE_ACTION_ID"), "native scanner adapter must not expose seeded fixture cleanup action ids");
 assert(!nativeAdapter.includes("spaceguard-fixture"), "native scanner adapter must not promote seeded fixture paths into cleanup rows");
+assert(!nativeAdapter.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"), "native scanner adapter must not synthesize seeded proof env vars");
+assert(!openAiAgent.includes("first-route-proof-required"), "OpenAI broker must not preserve seeded proof route blockers");
+assert(openAiSmokeScript.includes("buildRouteContractContext"), "OpenAI smoke should validate real route contracts");
+assert(openAiSmokeScript.includes("--local-contract"), "OpenAI smoke should expose offline contract validation without fixture data");
+for (const removedSmokeMarker of [
+  "fixture",
+  "Fixture",
+  "--fixture-only",
+  "buildFixture",
+  "temp-fixture",
+  "spaceguard-fixture",
+  "first-route"
+]) {
+  assert(!openAiSmokeScript.includes(removedSmokeMarker), `OpenAI smoke must not contain removed marker ${removedSmokeMarker}`);
+}
+assert(!setupRouteScript.includes("firstRouteProof"), "setup route must not expose seeded proof fields");
+assert(!setupRouteScript.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"), "setup route must not emit seeded proof env vars");
+assert(!setupDoctorScript.includes("firstRouteProof"), "setup doctor must not expose seeded proof fields");
+assert(!setupDoctorScript.includes("validate:route"), "setup doctor must not print removed validation packet commands");
+for (const removedPath of [
+  "scripts/run-first-route-proof.mjs",
+  "scripts/run-first-route-proof-windows.ps1",
+  "scripts/run-first-route-preflight-check.mjs",
+  "scripts/run-first-route-completion-check.mjs",
+  "scripts/run-route-proof-windows.ps1",
+  "scripts/run-route-preflight-check.mjs",
+  "scripts/run-route-completion-check.mjs",
+  "scripts/run-windows-validation-packet.mjs",
+  "scripts/run-route-contract-audit.mjs",
+  "scripts/run-v1-readiness.mjs",
+  "scripts/run-v1-windows-preflight.ps1",
+  "scripts/run-v1-windows-proof.ps1",
+  "scripts/run-v1-proof-check.mjs",
+  "scripts/seed-spaceguard-fixtures.ps1",
+  "scripts/inspect-spaceguard-fixtures.ps1"
+]) {
+  assert(!fs.existsSync(path.join(root, removedPath)), `${removedPath} should be removed from the real-app repo surface`);
+}
 
 assert(readme.includes("npm run native:dev"), "README should document the desktop shell");
 assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");

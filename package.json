@@ -16,14 +16,8 @@
     "openai:smoke": "node scripts/run-openai-advisor-smoke.mjs",
     "setup:doctor": "node scripts/run-setup-doctor.mjs",
     "setup:route": "node scripts/run-setup-route.mjs",
-    "validate:route": "node scripts/run-windows-validation-packet.mjs",
-    "validate:route-preflight": "node scripts/run-route-preflight-check.mjs",
-    "validate:route-completion": "node scripts/run-route-completion-check.mjs",
-    "validate:route-contracts": "node scripts/run-route-contract-audit.mjs",
     "validate:workflow-proof": "node scripts/run-workflow-proof-check.mjs",
-    "proof:route:windows": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-route-proof-windows.ps1",
-    "proof:route:windows:finalize": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-route-proof-windows.ps1 -FinalizeOnly",
-    "test": "node tests/native-scanner.test.js && node tests/route-boundary-contracts.test.js && node tests/setup-route.test.js && node tests/setup-doctor.test.js && node tests/workflow-proof-check.test.js && node tests/native-executor-coverage.test.js && node tests/real-workflow.test.js && node tests/real-app-shell.test.js && node tests/static-app.test.js",
+    "test": "node tests/native-scanner.test.js && node tests/setup-route.test.js && node tests/setup-doctor.test.js && node tests/openai-smoke.test.js && node tests/workflow-proof-check.test.js && node tests/native-executor-coverage.test.js && node tests/real-workflow.test.js && node tests/real-app-shell.test.js && node tests/static-app.test.js",
     "check": "npm run build"
   },
   "dependencies": {

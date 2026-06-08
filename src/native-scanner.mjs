@@ -819,7 +819,6 @@ export async function getNativeRuntimeCapabilities(host = globalThis) {
       openAiAgentAdvice: false,
       openAiAdvisorConfigured: false,
       openAiKeySource: "missing",
-      firstRouteProof: normalizeRuntimeFirstRouteProof(),
       safeExecutorsEnabled: false,
       enabledScopedExecutorFlags: [],
       enabledScopedExecutorFlagCount: 0,
@@ -1145,36 +1144,12 @@ export function normalizeNativeRuntimeCapabilities(result = {}) {
     openAiAgentAdvice: Boolean(result.openAiAgentAdvice || result.openaiAgentAdvice || result.openai_agent_advice),
     openAiAdvisorConfigured: Boolean(result.openAiAdvisorConfigured || result.openaiAdvisorConfigured || result.openai_advisor_configured),
     openAiKeySource: result.openAiKeySource || result.openaiKeySource || result.openai_key_source || "missing",
-    firstRouteProof: normalizeRuntimeFirstRouteProof(result.firstRouteProof || result.first_route_proof),
     safeExecutorsEnabled: Boolean(result.safeExecutorsEnabled || result.safe_executors_enabled) && !multiScopedFlagBlock,
     enabledScopedExecutorFlags,
     enabledScopedExecutorFlagCount,
     executorScopeStatus,
     executorFlags,
     reason: result.reason || ""
-  };
-}
-
-function normalizeRuntimeFirstRouteProof(value = null) {
-  if (!value || typeof value !== "object") {
-    return {
-      required: false,
-      status: "not-required",
-      accepted: true,
-      envVar: "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK",
-      path: "",
-      route: "",
-      detail: "Direct one-route executor validation is active; no prior route proof is required."
-    };
-  }
-  return {
-    required: false,
-    status: "not-required",
-    accepted: true,
-    envVar: value.envVar || value.env_var || "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK",
-    path: "",
-    route: value.route || "",
-    detail: value.detail || "Direct one-route executor validation is active; no prior route proof is required."
   };
 }
 

@@ -104,7 +104,6 @@ export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
     envVar,
     envBlock,
     ready: blockers.length === 0,
-    requiresFirstRouteProof: false,
     steps,
     blockers
   };
@@ -120,8 +119,6 @@ export function buildRouteEnvBlock({ route = {} } = {}) {
     `OPENAI_MODEL=${DEFAULT_OPENAI_MODEL}`,
     `OPENAI_REASONING_EFFORT=${DEFAULT_OPENAI_REASONING_EFFORT}`,
     "",
-    "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK=",
-    "",
     ...executorFlagLines
   ];
 
@@ -131,7 +128,6 @@ export function buildRouteEnvBlock({ route = {} } = {}) {
     routeInput,
     route: route.route || "",
     selectedEnvVar,
-    requiresFirstRouteProof: false,
     executorFlagLines,
     content: lines.join("\n")
   };

@@ -5,7 +5,6 @@ import process from "node:process";
 const SCRIPT_ID = "spaceguard-workflow-proof-check";
 const PROOF_SCHEMA = "spaceguard-real-workflow-proof/v1";
 const CHECK_SCHEMA = "spaceguard-workflow-proof-check/v1";
-const FIRST_ROUTE_APP_CLOSE_CONTRACT_SCHEMA = "spaceguard-first-route-app-close-contract/v1";
 const SELECTED_ROUTE_APP_CLOSE_CONTRACT_SCHEMA = "spaceguard-selected-route-app-close-contract/v1";
 const COMMON_APP_CLOSE_REQUIREMENTS = [
   "post-run-rescan-matched",
@@ -14,11 +13,6 @@ const COMMON_APP_CLOSE_REQUIREMENTS = [
   "spaceguard-real-workflow-proof-exported"
 ];
 const appCloseContracts = {
-  [FIRST_ROUTE_APP_CLOSE_CONTRACT_SCHEMA]: {
-    nextRouteBlockedUntil: "validate:first-route-completion accepted",
-    nextRouteDetail: "App-close contract must keep next route blocked until first-route completion is accepted.",
-    requiredBeforeClosingApp: COMMON_APP_CLOSE_REQUIREMENTS
-  },
   [SELECTED_ROUTE_APP_CLOSE_CONTRACT_SCHEMA]: {
     nextRouteBlockedUntil: "validate:workflow-proof accepted",
     nextRouteDetail: "App-close contract must keep next route blocked until workflow proof is accepted.",
@@ -150,9 +144,8 @@ function buildWorkflowProofBlockers(proof = {}) {
   if (Number(proof.counts?.reclaimedBytes || 0) <= 0) add("reclaimed-bytes", "Recovered bytes missing", "Workflow proof must report positive reclaimed bytes before next-route handoff is accepted.");
   validateAppCloseContract(proof.appCloseContract, add);
 
-  const selectedRouteContract = proof.appCloseContract?.schemaVersion === SELECTED_ROUTE_APP_CLOSE_CONTRACT_SCHEMA;
-  const effectiveRequiredRowIds = selectedRouteContract ? [...requiredRowIds, "native-volume-proof"] : requiredRowIds;
-  if (selectedRouteContract && proof.volumeProof?.status !== "measured" && proof.volumeProof?.measured !== true) {
+  const effectiveRequiredRowIds = [...requiredRowIds, "native-volume-proof"];
+  if (proof.volumeProof?.status !== "measured" && proof.volumeProof?.measured !== true) {
     add("native-volume-proof", "Native volume proof missing", "Selected-route workflow proof must include measured native volume proof.");
   }
 
@@ -176,7 +169,7 @@ function validateAppCloseContract(contract, add) {
     add(
       "app-close-contract",
       "App-close contract schema mismatch",
-      `Expected ${Object.keys(appCloseContracts).join(" or ")}.`
+      `Expected ${SELECTED_ROUTE_APP_CLOSE_CONTRACT_SCHEMA}.`
     );
   }
   if (String(contract.workflowProofPath || "") !== ".\\spaceguard-real-workflow-proof.md") {

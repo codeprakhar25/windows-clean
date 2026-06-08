@@ -24,7 +24,7 @@ const ROUTE_NATIVE_BOUNDARIES = {
     ],
     targetAllowlist: [
       "allowlisted Windows temp roots only",
-      "current user's temp fixture root",
+      "current user's allowlisted temp child roots",
       "target must be a real directory, not a symlink"
     ],
     targetRejects: [

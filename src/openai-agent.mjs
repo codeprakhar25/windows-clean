@@ -1480,14 +1480,6 @@ function buildLiveRouteValidationBrokerCheck(policy = null, liveRouteValidation 
     (routeReady
       ? `live route validation ready for ${route}`
       : `live route validation status=${status || "unknown"}`);
-  if (status === "first-route-proof-required") {
-    return buildBrokerCheck(
-      "first-route-proof",
-      "First-route proof",
-      false,
-      detail || "Accepted first-route completion proof is required before real-data executor recommendations can run."
-    );
-  }
   return buildBrokerCheck(
     "live-route-validation",
     "Live route validation",

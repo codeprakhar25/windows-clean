@@ -1,6 +1,4 @@
 const assert = require("assert");
-const fs = require("fs");
-const os = require("os");
 const path = require("path");
 const { pathToFileURL } = require("url");
 
@@ -15,21 +13,6 @@ function cleanEnv(extra = {}) {
     SPACEGUARD_ROUTE_SETUP_IGNORE_DOTENV: "1",
     ...extra
   };
-}
-
-function writeAcceptedFirstRouteCompletion() {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "spaceguard-first-route-gate-")), "first-route-completion-check.json");
-  fs.writeFileSync(file, JSON.stringify({
-    schemaVersion: "spaceguard-first-route-completion-check/v1",
-    status: "accepted",
-    canStartNextRoute: true,
-    route: "known-temp-delete",
-    counts: {
-      reclaimedBytes: 1,
-      selectedRouteProofPacketReclaimedBytes: 1
-    }
-  }, null, 2));
-  return file;
 }
 
 function runPacket(args = [], env = {}) {
@@ -56,21 +39,20 @@ let routeSetup;
   assert(disabledPacket.commands.openAiSmoke.includes("npm run openai:smoke -- --route npm-cache"), "route setup should print route-specific OpenAI smoke command");
 
   const blockedWithoutFirstProof = runPacket(["--route", "npm-cache"], { SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1" });
-  assert.strictEqual(blockedWithoutFirstProof.status, "ready", "enabled real-data route should be ready without seeded first-route proof");
-  assert.strictEqual(blockedWithoutFirstProof.firstRouteProof.required, false, "real-data route should not require seeded first-route proof");
-  assert(!blockedWithoutFirstProof.nextSteps.some((step) => step.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK")), "real-data route setup must not point to seeded proof artifacts");
+  assert.strictEqual(blockedWithoutFirstProof.status, "ready", "enabled real-data route should be ready with only the selected route flag");
+  assert(!Object.prototype.hasOwnProperty.call(blockedWithoutFirstProof, "firstRouteProof"), "route setup must not expose seeded proof fields");
+  assert(!blockedWithoutFirstProof.nextSteps.some((step) => /first-route|fixture|SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK/i.test(step)), "real-data route setup must not point to seeded proof artifacts");
 
   const readyPacket = runPacket(["--route", "npm-cache"], {
     SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1"
   });
   assert.strictEqual(readyPacket.status, "ready", "enabled npm route should be ready for native dev launch");
   assert.strictEqual(readyPacket.enabledFlags.length, 1, "ready packet should record the single enabled flag");
-  assert.strictEqual(readyPacket.firstRouteProof.status, "not-required", "ready real-data route should not expose seeded first-route proof");
   assert(readyPacket.nextSteps.some((step) => step.includes("npm run native:dev")), "ready packet should route to native dev launch");
 
   const tempReadyPacket = runPacket(["--route", "known-temp-delete"], { SPACEGUARD_ENABLE_TEMP_EXECUTOR: "1" });
   assert.strictEqual(tempReadyPacket.status, "ready", "known temp cleanup should remain launchable as a real route");
-  assert.strictEqual(tempReadyPacket.firstRouteProof.required, false, "known temp cleanup should not require prior first-route proof");
+  assert(!Object.prototype.hasOwnProperty.call(tempReadyPacket, "firstRouteProof"), "known temp setup must not expose prior proof ceremony");
 
   const multiplePacket = runPacket(["--route", "npm-cache"], {
     SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1",

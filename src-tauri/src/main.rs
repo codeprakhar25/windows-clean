@@ -13,7 +13,6 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const DEFAULT_OPENAI_MODEL: &str = "gpt-5.2";
 const DEFAULT_OPENAI_ENDPOINT: &str = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_REASONING_EFFORT: &str = "low";
-const FIRST_ROUTE_PROOF_ENV: &str = "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK";
 
 #[cfg(target_os = "windows")]
 use std::ffi::OsStr;
@@ -297,25 +296,12 @@ struct RuntimeCapabilities {
     openai_agent_advice: bool,
     openai_advisor_configured: bool,
     openai_key_source: String,
-    first_route_proof: FirstRouteProofGate,
     safe_executors_enabled: bool,
     enabled_scoped_executor_flags: Vec<&'static str>,
     enabled_scoped_executor_flag_count: usize,
     executor_scope_status: &'static str,
     executor_flags: ExecutorFeatureFlags,
     reason: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct FirstRouteProofGate {
-    required: bool,
-    status: String,
-    accepted: bool,
-    env_var: &'static str,
-    path: String,
-    route: String,
-    detail: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -8616,34 +8602,6 @@ fn unquote_env_value(value: &str) -> String {
     }
 }
 
-fn first_route_proof_gate() -> FirstRouteProofGate {
-    first_route_proof_status(
-        "not-required",
-        true,
-        "",
-        "",
-        "Direct one-route executor validation is active; no prior route proof is required.",
-    )
-}
-
-fn first_route_proof_status(
-    status: &str,
-    accepted: bool,
-    path: &str,
-    route: &str,
-    detail: &str,
-) -> FirstRouteProofGate {
-    FirstRouteProofGate {
-        required: false,
-        status: status.to_string(),
-        accepted,
-        env_var: FIRST_ROUTE_PROOF_ENV,
-        path: path.to_string(),
-        route: route.to_string(),
-        detail: detail.to_string(),
-    }
-}
-
 fn json_string_field(value: &Value, camel_case: &str, snake_case: &str) -> String {
     value
         .get(camel_case)
@@ -8714,7 +8672,6 @@ fn runtime_capabilities() -> RuntimeCapabilities {
         openai_agent_advice: true,
         openai_advisor_configured,
         openai_key_source,
-        first_route_proof: first_route_proof_gate(),
         safe_executors_enabled: real_execution_enabled,
         enabled_scoped_executor_flags,
         enabled_scoped_executor_flag_count,

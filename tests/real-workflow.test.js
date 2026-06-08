@@ -125,8 +125,7 @@ const assert = require("assert");
     executorScopeStatus: "single-scoped-flag",
     executorFlags: { npmCacheExecutor: true },
     realRunEnabled: true,
-    destructiveCommands: true,
-    firstRouteProof: { accepted: true, path: "C:\\proof\\first-route-completion-check.json" }
+    destructiveCommands: true
   };
   const readyStatus = workflow.buildRouteReadiness({
     recipe: npmRecipe,
@@ -168,28 +167,15 @@ const assert = require("assert");
   assert.strictEqual(multiFlag.canExecute, false, "multiple route flags should block execution");
   assert(multiFlag.rows.find((row) => row.id === "single-route-scope").detail.includes("SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR"), "scope row should show enabled flags");
 
-  const missingProof = workflow.buildRouteReadiness({
-    recipe: npmRecipe,
-    finding: { status: "measured" },
-    runtime: {
-      ...readyRuntime,
-      firstRouteProof: { accepted: false, status: "missing" }
-    }
-  });
-  assert.strictEqual(missingProof.canExecute, true, "real-data routes should not require a seeded first-route proof");
-  assert.strictEqual(missingProof.rows.find((row) => row.id === "first-route-proof"), undefined, "route readiness should not expose seeded first-route proof guardrails");
-
   const tempRoute = workflow.buildRouteReadiness({
     recipe: { route: "known-temp-delete", flagKey: "tempCleanupExecutor", envVar: "SPACEGUARD_ENABLE_TEMP_EXECUTOR", executor: "temp" },
     finding: { status: "measured" },
     runtime: {
       ...readyRuntime,
-      executorFlags: { tempCleanupExecutor: true },
-      firstRouteProof: { accepted: false, status: "missing" }
+      executorFlags: { tempCleanupExecutor: true }
     }
   });
   assert.strictEqual(tempRoute.canExecute, true, "known-temp-delete should not require prior first-route proof");
-  assert.strictEqual(tempRoute.rows.find((row) => row.id === "first-route-proof"), undefined, "known-temp readiness should not render first-route proof ceremony");
 
   const npmSetup = workflow.buildRouteSetupChecklist({
     route: {
@@ -202,7 +188,6 @@ const assert = require("assert");
       executorScopeStatus: "no-scoped-flags",
       executorFlags: { npmCacheExecutor: false },
       enabledScopedExecutorFlags: [],
-      firstRouteProof: { accepted: false, status: "missing" },
       openAiAdvisorConfigured: true
     }
   });
@@ -210,20 +195,19 @@ const assert = require("assert");
   assert.strictEqual(npmSetup.schemaVersion, "spaceguard-route-setup-checklist/v1", "route setup checklist should expose a stable schema");
   assert.strictEqual(npmSetup.routeInput, "npm-cache", "route setup should preserve selected route input");
   assert.strictEqual(npmSetup.ready, false, "npm setup should not be ready without the route flag");
-  assert.strictEqual(npmSetup.requiresFirstRouteProof, false, "npm setup should not require seeded first-route proof");
+  assert(!Object.prototype.hasOwnProperty.call(npmSetup, "requiresFirstRouteProof"), "route setup should not expose seeded proof requirements");
   assert(npmSetup.steps.some((step) => step.id === "route-flag" && step.command === "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1"), "setup should show exact env flag");
   assert(npmSetup.steps.some((step) => step.command === "npm run setup:route -- --route npm-cache"), "setup should show route setup command");
   assert(npmSetup.steps.some((step) => step.command === "npm run openai:smoke -- --route npm-cache"), "setup should show live OpenAI smoke command");
   assert(npmSetup.steps.some((step) => step.command.includes("validate:workflow-proof")), "setup should show app proof export validation command");
   assert(npmSetup.blockers.some((blocker) => blocker.id === "route-flag"), "missing route flag should be a blocker");
-  assert(!npmSetup.blockers.some((blocker) => blocker.id === "first-route-proof"), "seeded first-route proof must not block real route setup");
   assert.strictEqual(npmSetup.envBlock.schemaVersion, "spaceguard-route-env-block/v1", "route setup should expose a stable selected .env block schema");
   assert.strictEqual(npmSetup.envBlock.fileName, ".env", "route setup env block should target .env");
   assert.strictEqual(npmSetup.envBlock.selectedEnvVar, "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "route setup env block should mark the selected route flag");
   assert(npmSetup.envBlock.content.includes("OPENAI_API_KEY=sk-..."), "route setup env block should include the OpenAI placeholder");
   assert(npmSetup.envBlock.content.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1"), "route setup env block should enable the selected route");
   assert(npmSetup.envBlock.content.includes("SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=0"), "route setup env block should disable competing route flags");
-  assert(npmSetup.envBlock.content.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK="), "real-data route env block should leave first-route proof unset");
+  assert(!npmSetup.envBlock.content.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"), "real-data route env block must not include seeded proof env vars");
   assert(!npmSetup.envBlock.content.includes("first-route-completion-check.json"), "real-data route env block must not require seeded proof artifacts");
   assert.strictEqual(
     npmSetup.envBlock.executorFlagLines.filter((line) => line.endsWith("=1")).length,
@@ -243,15 +227,13 @@ const assert = require("assert");
       executorScopeStatus: "single-scoped-flag",
       executorFlags: { tempCleanupExecutor: true },
       enabledScopedExecutorFlags: ["SPACEGUARD_ENABLE_TEMP_EXECUTOR"],
-      firstRouteProof: { accepted: false, status: "missing" },
       openAiAdvisorConfigured: false
     }
   });
 
-  assert.strictEqual(tempSetup.requiresFirstRouteProof, false, "known-temp setup should not require prior first-route proof");
-  assert.strictEqual(tempSetup.steps.find((step) => step.id === "first-route-proof"), undefined, "known-temp setup should not render first-route proof ceremony");
+  assert(!Object.prototype.hasOwnProperty.call(tempSetup, "requiresFirstRouteProof"), "known-temp setup should not expose prior proof ceremony");
   assert(tempSetup.envBlock.content.includes("SPACEGUARD_ENABLE_TEMP_EXECUTOR=1"), "known-temp env block should enable the temp route");
-  assert(tempSetup.envBlock.content.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK="), "known-temp env block should keep first-route proof empty");
+  assert(!tempSetup.envBlock.content.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"), "known-temp env block should not include prior proof env vars");
 
   const multiFlagSetup = workflow.buildRouteSetupChecklist({
     route: {
@@ -264,7 +246,6 @@ const assert = require("assert");
       executorScopeStatus: "multiple-scoped-flags",
       enabledScopedExecutorFlags: ["SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR"],
       executorFlags: { gradleCacheExecutor: true },
-      firstRouteProof: { accepted: true, path: "C:\\proof\\first-route-completion-check.json" },
       openAiAdvisorConfigured: true
     }
   });
