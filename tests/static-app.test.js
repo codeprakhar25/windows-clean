@@ -110,6 +110,10 @@ assert(app.includes("Blocked actions"), "manual review panel should render block
 assert(app.includes("Selected .env block"), "route setup panel should render a copyable selected .env block");
 assert(app.includes("copyEnvBlock"), "route setup panel should expose a copy action for selected .env content");
 assert(app.includes("navigator.clipboard.writeText(checklist.envBlock.content)"), "route setup copy action should copy the tested env block");
+assert(app.includes("Windows test runbook"), "route setup panel should render the Windows test runbook");
+assert(app.includes("copyRunbook"), "route setup panel should expose a copy action for the Windows runbook");
+assert(app.includes("navigator.clipboard.writeText(checklist.runbook.content)"), "route setup runbook copy action should copy the tested runbook");
+assert(app.includes("npm run openai:smoke -- --local-contract --route"), "route setup panel should show offline OpenAI route-contract smoke");
 assert(app.includes("function ConnectionRequired({ runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist })"), "browser-only setup state should accept route setup wizard props");
 assert(/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup state should render the route setup wizard");
 assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context should keep a stable schema");

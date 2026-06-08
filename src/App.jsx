@@ -820,9 +820,12 @@ function RuntimePanel({ runtime }) {
 
 function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, checklist }) {
   const [copyStatus, setCopyStatus] = useState("idle");
+  const [copyRunbookStatus, setCopyRunbookStatus] = useState("idle");
+  const runbook = checklist.runbook || { commands: [], appSteps: [], guardrails: [], content: "" };
 
   useEffect(() => {
     setCopyStatus("idle");
+    setCopyRunbookStatus("idle");
   }, [selectedRouteInput]);
 
   async function copyEnvBlock() {
@@ -831,6 +834,15 @@ function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, ch
       setCopyStatus("copied");
     } catch {
       setCopyStatus("failed");
+    }
+  }
+
+  async function copyRunbook() {
+    try {
+      await navigator.clipboard.writeText(checklist.runbook.content);
+      setCopyRunbookStatus("copied");
+    } catch {
+      setCopyRunbookStatus("failed");
     }
   }
 
@@ -879,6 +891,61 @@ function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, ch
           </pre>
           {copyStatus === "failed" ? (
             <p className="border-t px-3 py-2 text-xs text-red-600">Copy failed. Select the block manually.</p>
+          ) : null}
+        </div>
+        <div className="rounded-md border bg-background">
+          <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Windows test runbook</p>
+              <p className="truncate text-xs text-muted-foreground">
+                Includes npm run openai:smoke -- --local-contract --route before desktop launch.
+              </p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={copyRunbook}>
+              <ClipboardCheck className="h-4 w-4" />
+              {copyRunbookStatus === "copied" ? "Copied" : "Copy"}
+            </Button>
+          </div>
+          <div className="max-h-[32rem] overflow-auto p-3">
+            <div className="grid gap-2">
+              {runbook.commands.map((row, index) => (
+                <div key={row.id} className="rounded-md border bg-muted/25 p-2">
+                  <div className="flex items-start gap-2">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded border bg-background text-xs font-medium">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium">{row.label}</p>
+                      <code className="mt-1 block overflow-hidden text-ellipsis rounded border bg-background px-2 py-1 text-xs">
+                        {row.command}
+                      </code>
+                      <p className="mt-1 text-xs text-muted-foreground">{row.expected}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div className="rounded-md border bg-muted/20 p-3">
+                <p className="text-xs font-medium">App steps</p>
+                <ol className="mt-2 space-y-1 text-xs text-muted-foreground">
+                  {runbook.appSteps.map((row) => (
+                    <li key={row.id}>{row.label}: {row.detail}</li>
+                  ))}
+                </ol>
+              </div>
+              <div className="rounded-md border bg-muted/20 p-3">
+                <p className="text-xs font-medium">Guardrails</p>
+                <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                  {runbook.guardrails.map((row) => (
+                    <li key={row.id}>{row.detail}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+          {copyRunbookStatus === "failed" ? (
+            <p className="border-t px-3 py-2 text-xs text-red-600">Copy failed. Select the runbook manually.</p>
           ) : null}
         </div>
         <div className="grid gap-2">

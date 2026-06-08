@@ -29,6 +29,7 @@ export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
   const routeFlagEnabled = Boolean(runtime?.executorFlags?.[flagKey] || enabledFlags.includes(envVar));
   const multipleFlags = runtime?.executorScopeStatus === "multiple-scoped-flags";
   const envBlock = buildRouteEnvBlock({ route });
+  const runbook = buildWindowsRealTestRunbook({ route, envBlock });
 
   const steps = [
     setupStep({
@@ -103,10 +104,150 @@ export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
     label: route.label || routeInput,
     envVar,
     envBlock,
+    runbook,
     ready: blockers.length === 0,
     steps,
     blockers
   };
+}
+
+export function buildWindowsRealTestRunbook({ route = {}, envBlock = buildRouteEnvBlock({ route }) } = {}) {
+  const routeInput = route.routeInput || route.route || "";
+  const selectedEnvVar = route.envVar || "";
+  const commands = [
+    runbookCommand({
+      id: "install",
+      label: "Install dependencies",
+      command: "npm install",
+      expected: "npm dependencies are installed in the project folder."
+    }),
+    runbookCommand({
+      id: "create-env",
+      label: "Create local .env",
+      command: "Copy-Item .env.example .env",
+      expected: ".env exists and is local-only."
+    }),
+    runbookCommand({
+      id: "edit-env",
+      label: "Paste selected route block",
+      command: "notepad .env",
+      expected: `${selectedEnvVar}=1 is the only enabled route flag and OPENAI_API_KEY is set.`
+    }),
+    runbookCommand({
+      id: "setup-doctor",
+      label: "Check setup",
+      command: "npm run setup:doctor",
+      expected: "Status is one-route-ready after the selected flag is enabled."
+    }),
+    runbookCommand({
+      id: "setup-route",
+      label: "Check selected route",
+      command: `npm run setup:route -- --route ${routeInput}`,
+      expected: "Route packet names the same env flag, request mode, and panel as the app."
+    }),
+    runbookCommand({
+      id: "openai-contract-smoke",
+      label: "Check local route contract",
+      command: `npm run openai:smoke -- --local-contract --route ${routeInput}`,
+      expected: "Validation prints broker-ready without contacting OpenAI."
+    }),
+    runbookCommand({
+      id: "openai-live-smoke",
+      label: "Check live OpenAI advisor",
+      command: `npm run openai:smoke -- --route ${routeInput}`,
+      expected: "With OPENAI_API_KEY set, OpenAI returns the selected route recommendation through the broker."
+    }),
+    runbookCommand({
+      id: "launch-app",
+      label: "Launch desktop app",
+      command: "npm run native:dev",
+      expected: "The app shows Windows native shell connected; browser-only setup state is not used."
+    }),
+    runbookCommand({
+      id: "verify-proof",
+      label: "Verify exported proof",
+      command: "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md",
+      expected: "Workflow proof status is accepted before testing another route."
+    })
+  ];
+  const appSteps = [
+    runbookStep("run-scan", "Run real scan", "Use the desktop app to scan C: through the native bridge."),
+    runbookStep("select-target", "Select a ready cleanup target", "Pick one measured row for the selected route."),
+    runbookStep("consent", "Review and consent", "Check the consent box and type the exact confirmation phrase."),
+    runbookStep("execute-route", "Execute selected cleanup", "Run the scoped native executor from the app, not from a shell command."),
+    runbookStep("post-run-rescan", "Run post-run rescan", "Capture the newer native scan and compare the selected target."),
+    runbookStep("export-proof", "Export proof", "Export both selected-route proof and real workflow proof from the app.")
+  ];
+  const guardrails = [
+    runbookGuardrail("one-route", "Keep exactly one route flag enabled before launch."),
+    runbookGuardrail("desktop-only", "Do not scan or clean from a normal browser session."),
+    runbookGuardrail("user-consent", "Do not execute until the app shows current-plan consent and route readiness."),
+    runbookGuardrail("manual-only", "Do not delete installed app folders, custom roots, or broad inventory rows directly."),
+    runbookGuardrail("proof-before-next-route", "Do not enable another route until workflow proof validation accepts the export.")
+  ];
+  const content = buildWindowsRealTestRunbookMarkdown({
+    routeInput,
+    selectedEnvVar,
+    envBlock,
+    commands,
+    appSteps,
+    guardrails
+  });
+
+  return {
+    schemaVersion: "spaceguard-windows-real-test-runbook/v1",
+    routeInput,
+    route: route.route || "",
+    selectedEnvVar,
+    commands,
+    appSteps,
+    guardrails,
+    content
+  };
+}
+
+function runbookCommand({ id, label, command, expected }) {
+  return { id, label, command, expected };
+}
+
+function runbookStep(id, label, detail) {
+  return { id, label, detail };
+}
+
+function runbookGuardrail(id, detail) {
+  return { id, detail };
+}
+
+function buildWindowsRealTestRunbookMarkdown({ routeInput, selectedEnvVar, envBlock, commands, appSteps, guardrails }) {
+  return [
+    `# Windows real-route test runbook: ${routeInput}`,
+    "",
+    "## Selected .env",
+    "",
+    "```dotenv",
+    envBlock.content,
+    "```",
+    "",
+    "## Terminal commands",
+    "",
+    ...commands.flatMap((row, index) => [
+      `${index + 1}. ${row.label}`,
+      "",
+      "```powershell",
+      row.command,
+      "```",
+      "",
+      `Expected: ${row.expected}`,
+      ""
+    ]),
+    "## App workflow",
+    "",
+    ...appSteps.map((row, index) => `${index + 1}. ${row.label}: ${row.detail}`),
+    "",
+    "## Guardrails",
+    "",
+    ...guardrails.map((row) => `- ${row.detail}`)
+  ].join("\n");
 }
 
 export function buildRouteEnvBlock({ route = {} } = {}) {
