@@ -69,6 +69,7 @@ export function buildPrivateV1ProofCheck({
 
   validateSelectedRouteSetup(selectedRouteSetup, proof, selectedRouteCompletion, add);
   validatePreflight(preflight, add);
+  const privatePreflightCommandCount = validatePrivatePreflightCommandRecords(preflight, resolvedPreflightPath, add);
   const nativeBundleArtifactCount = validateNativeBundleArtifacts(preflight, add);
   const firstRouteProofCounts = validateFirstRouteCompletion(firstRouteCompletion, proof, resolvedFirstRouteCompletionPath, add);
   const selectedRouteProofCounts = validateSelectedRouteCompletion(selectedRouteCompletion, proof, resolvedSelectedRouteCompletionPath, add);
@@ -102,6 +103,7 @@ export function buildPrivateV1ProofCheck({
       commandRecords: commandRecords.length,
       requiredCommands: REQUIRED_COMMANDS.length,
       requiredCommandsPassed: commandSummary.requiredPassed,
+      privatePreflightCommandRecords: privatePreflightCommandCount,
       nativeBundleArtifacts: nativeBundleArtifactCount,
       openAiSmokeArtifacts: openAiSmokeArtifactCount,
       firstRouteReclaimedBytes,
@@ -376,6 +378,18 @@ function validateChildCommandRecords(commandRecords, idPrefix, label, add) {
   if (directCommand) {
     add(`${idPrefix}-command-direct-cleanup`, "Direct cleanup command found", `${label} child command ledger contains direct cleanup command: ${directCommand.command}`);
   }
+}
+
+function validatePrivatePreflightCommandRecords(preflight, preflightPath, add) {
+  if (!preflight) return 0;
+  const baseDir = preflightPath ? path.dirname(preflightPath) : process.cwd();
+  const commandLogPath = normalizeArtifactPath(preflight.commandLogPath || "", baseDir);
+  const records = readChildCommandRecords("private-preflight-command-log", commandLogPath, add);
+  const directCommand = records.find((row) => hasDirectCleanupCommand(row.command));
+  if (directCommand) {
+    add("private-preflight-command-direct-cleanup", "Direct cleanup command found", `Private preflight command ledger contains direct cleanup command: ${directCommand.command}`);
+  }
+  return records.length;
 }
 
 function findLatestCommandRecord(records = [], id = "") {

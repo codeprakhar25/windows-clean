@@ -220,6 +220,8 @@ export function buildPrivateDemoReadinessSummary({
         privateV1ProofCheck.includes("openai-live-smoke") &&
         privateV1ProofCheck.includes("validation=broker-ready") &&
         privateV1ProofCheck.includes("validateChildCommandRecords") &&
+        privateV1ProofCheck.includes("validatePrivatePreflightCommandRecords") &&
+        privateV1ProofCheck.includes("private-preflight-command-direct-cleanup") &&
         privateV1ProofCheck.includes("command-direct-cleanup") &&
         privateV1ProofCheck.includes("completion-parity"),
       detail: "Private demo readiness must include an independent verifier for final V1 proof, child stderr artifacts, child command ledgers, OpenAI smoke evidence, and route/rescan parity counts."

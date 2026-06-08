@@ -32,6 +32,7 @@ function createPrivateV1Evidence(patch = {}) {
   const commandLogPath = path.join(dir, "commands.ndjson");
   const proofPath = path.join(dir, "private-v1-proof.json");
   const archivedProofPath = path.join(dir, "archived-first-route-root-exports", "spaceguard-real-workflow-proof.md");
+  const privatePreflightCommandLogPath = path.join(dir, "private-demo-preflight", "commands.ndjson");
   const firstRouteCommandLogPath = path.join(dir, "first-route-proof", "commands.ndjson");
   const selectedRouteCommandLogPath = path.join(dir, "selected-route-proof-npm-cache", "commands.ndjson");
   const firstRouteFixtureSmokePath = path.join(dir, "first-route-proof", "openai-fixture-smoke.txt");
@@ -47,7 +48,7 @@ function createPrivateV1Evidence(patch = {}) {
     schemaVersion: "spaceguard-private-demo-windows-preflight/v1",
     status: "passed",
     evidenceRoot: path.join(dir, "private-demo-preflight"),
-    commandLogPath: path.join(dir, "private-demo-preflight", "commands.ndjson"),
+    commandLogPath: privatePreflightCommandLogPath,
     commands: {
       nativeBuild: "npm run native:build",
       nextFirstRoute: "npm run proof:first-route:windows -- -Route temp-fixture",
@@ -125,6 +126,11 @@ function createPrivateV1Evidence(patch = {}) {
     { id: "archive-first-route-root-exports", command: "archive first-route repo-root proof exports", outputPath: path.dirname(archivedProofPath), exitCode: 0 },
     { id: "selected-route-proof", command: "npm run proof:route:windows -- -Route npm-cache", outputPath: selectedRouteProofOutputPath, stderrPath: `${selectedRouteProofOutputPath}.stderr.txt`, exitCode: 0 },
     ...(patch.commands || [])
+  ];
+  const privatePreflightCommands = [
+    { id: "js-tests", command: "npm test", outputPath: path.join(dir, "private-demo-preflight", "npm-test.txt"), exitCode: 0 },
+    { id: "native-build", command: "npm run native:build", outputPath: path.join(dir, "private-demo-preflight", "native-build.txt"), exitCode: 0 },
+    ...(patch.privatePreflightCommands || [])
   ];
   const firstRouteCommands = [
     { id: "openai-fixture-smoke", command: "npm run openai:smoke:fixture -- --route temp-fixture", outputPath: firstRouteFixtureSmokePath, stderrPath: `${firstRouteFixtureSmokePath}.stderr.txt`, exitCode: 0 },
@@ -213,6 +219,7 @@ function createPrivateV1Evidence(patch = {}) {
     }
   }
   writeNdjson(commandLogPath, commands);
+  writeNdjson(privatePreflightCommandLogPath, privatePreflightCommands);
   writeNdjson(firstRouteCommandLogPath, firstRouteCommands);
   writeNdjson(selectedRouteCommandLogPath, selectedRouteCommands);
   writeJson(proofPath, proof);
@@ -223,7 +230,7 @@ function createPrivateV1Evidence(patch = {}) {
   fs.mkdirSync(path.dirname(bundleEvidencePath), { recursive: true });
   fs.writeFileSync(bundleEvidencePath, bundleBytes);
 
-  return { dir, proofPath, commandLogPath, selectedRouteSetupPath, firstRouteCompletionPath, selectedRouteCompletionPath, firstRouteCommandLogPath, selectedRouteCommandLogPath };
+  return { dir, proofPath, commandLogPath, selectedRouteSetupPath, firstRouteCompletionPath, selectedRouteCompletionPath, privatePreflightCommandLogPath, firstRouteCommandLogPath, selectedRouteCommandLogPath };
 }
 
 function writeOpenAiSmokeEvidence(filePath, { routeInput, route, transport }) {
@@ -322,6 +329,18 @@ function writeOpenAiSmokeEvidence(filePath, { routeInput, route, transport }) {
   assert(
     childDirectCleanupCheck.blockers.some((blocker) => blocker.id === "selected-route-command-direct-cleanup"),
     "child direct cleanup blocker should name the child route"
+  );
+
+  const preflightDirectCleanup = createPrivateV1Evidence({
+    privatePreflightCommands: [
+      { id: "unsafe-preflight-cleanup", command: "cmd /c rmdir /s /q C:\\Users\\demo\\Downloads\\old", exitCode: 0 }
+    ]
+  });
+  const preflightDirectCleanupCheck = verifier.buildPrivateV1ProofCheck({ proofPath: preflightDirectCleanup.proofPath });
+  assert.strictEqual(preflightDirectCleanupCheck.status, "blocked", "direct cleanup commands in private preflight evidence should block private V1 proof");
+  assert(
+    preflightDirectCleanupCheck.blockers.some((blocker) => blocker.id === "private-preflight-command-direct-cleanup"),
+    "private preflight direct cleanup blocker should be explicit"
   );
 
   const missingSelectedRouteSetup = createPrivateV1Evidence();
