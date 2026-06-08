@@ -71,6 +71,7 @@ assert(runner.includes("validate:first-route-completion"), "runner should print 
 assert(runner.includes("workflow-proof-check.json"), "runner should write workflow proof check output after app exit");
 assert(runner.includes("first-route-completion-check.json"), "runner should write first-route completion check output after app exit");
 assert(runner.includes("post-app-finalization.json"), "runner should write post-app finalization summary");
+assert(runner.includes("postAppFinalization = $PostAppFinalizationPath"), "runner preflight should bind native exit to the first-route post-app finalization artifact");
 assert(runner.includes("native-dev-exit.json"), "runner should write native app exit evidence");
 assert(runner.includes("$LASTEXITCODE"), "runner should capture npm run native:dev exit code");
 assert(runner.includes("native-dev-exit"), "runner should log native app exit as a command record");

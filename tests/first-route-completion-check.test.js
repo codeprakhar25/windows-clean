@@ -42,7 +42,8 @@ function createFirstRouteEvidence(patch = {}) {
     openAiLiveSmoke: path.join(dir, "openai-live-smoke.txt"),
     nativeDevExit: path.join(dir, "native-dev-exit.json"),
     operatorAppHandoff: path.join(dir, "operator-app-handoff.md"),
-    selectedRouteProofPacket: path.join(dir, "spaceguard-selected-route-proof-packet.md")
+    selectedRouteProofPacket: path.join(dir, "spaceguard-selected-route-proof-packet.md"),
+    postAppFinalization: path.join(dir, "post-app-finalization.json")
   };
   const preflight = {
     schemaVersion: "spaceguard-first-route-windows-operator/v1",
@@ -214,7 +215,8 @@ function createFirstRouteEvidence(patch = {}) {
     command: "npm run native:dev",
     exitCode: 0,
     success: true,
-    evidenceRoot: dir
+    evidenceRoot: dir,
+    postAppFinalizationPath: artifacts.postAppFinalization
   };
   const commands = [
     "first-route-proof-packet",
@@ -569,6 +571,20 @@ function createFirstRouteEvidence(patch = {}) {
   });
   assert.strictEqual(failedNative.status, "blocked", "completion should block a failed native desktop session");
   assert(failedNative.blockers.some((blocker) => blocker.id === "native-exit"), "native exit blocker should be surfaced");
+
+  const mismatchedNativeExitRootEvidence = createFirstRouteEvidence({
+    nativeDevExit: {
+      evidenceRoot: path.join(os.tmpdir(), "spaceguard-stale-first-route-root"),
+      postAppFinalizationPath: path.join(os.tmpdir(), "spaceguard-stale-first-route-root", "post-app-finalization.json")
+    }
+  });
+  const mismatchedNativeExitRoot = verifier.buildFirstRouteCompletionCheck({
+    preflightPath: mismatchedNativeExitRootEvidence.preflightPath,
+    afterFixturePath: mismatchedNativeExitRootEvidence.afterFixturePath,
+    workflowProofPath: mismatchedNativeExitRootEvidence.workflowProofPath
+  });
+  assert.strictEqual(mismatchedNativeExitRoot.status, "blocked", "completion should block native exit evidence from another first-route evidence root");
+  assert(mismatchedNativeExitRoot.blockers.some((blocker) => blocker.id === "native-exit-root"), "first-route native exit root blocker should be surfaced");
 
   const missingPostAppLedgerEvidence = createFirstRouteEvidence({
     commands: [

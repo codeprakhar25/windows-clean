@@ -379,6 +379,7 @@ try {
       nativeDevExit = $NativeDevExitPath
       operatorAppHandoff = $OperatorAppHandoffPath
       selectedRouteProofPacket = $SelectedRouteProofPacketPath
+      postAppFinalization = $PostAppFinalizationPath
     }
     appCloseContract = [PSCustomObject]@{
       schemaVersion = "spaceguard-first-route-app-close-contract/v1"

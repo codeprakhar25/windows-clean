@@ -49,6 +49,7 @@ export function buildFirstRouteCompletionCheck({
   };
 
   const resolvedPreflightPath = preflightPath ? path.resolve(preflightPath) : "";
+  const preflightBaseDir = resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd();
   const preflight = buildFirstRoutePreflightCheck({ preflightPath: resolvedPreflightPath, checkedAt });
   if (!preflight.canLaunchApp) {
     add("preflight", "Preflight not accepted", preflight.primary || "First-route preflight check is not accepted.");
@@ -57,34 +58,38 @@ export function buildFirstRouteCompletionCheck({
   const preflightObject = readOptionalJsonArtifact("preflight", resolvedPreflightPath, add);
   const artifactAfterFixturePath = normalizeArtifactPath(
     afterFixturePath || preflightObject?.artifacts?.fixtureAfterCleanup || "",
-    resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
+    preflightBaseDir
   );
   const artifactCommandLogPath = normalizeArtifactPath(
     preflightObject?.artifacts?.commandLog || "",
-    resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
+    preflightBaseDir
   );
   const artifactNativeExitPath = normalizeArtifactPath(
     nativeExitPath || preflightObject?.artifacts?.nativeDevExit || "",
-    resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
+    preflightBaseDir
+  );
+  const artifactPostAppFinalizationPath = normalizeArtifactPath(
+    preflightObject?.artifacts?.postAppFinalization || "",
+    preflightBaseDir
   );
   const contractSelectedRouteProofPacketPath = normalizeArtifactPath(
     preflightObject?.appCloseContract?.selectedRouteProofPacketPath || "",
-    resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
+    preflightBaseDir
   );
   const artifactSelectedRouteProofPacketPath = normalizeArtifactPath(
     preflightObject?.artifacts?.selectedRouteProofPacket || "",
-    resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
+    preflightBaseDir
   );
   const resolvedSelectedRouteProofPacketPath =
     artifactSelectedRouteProofPacketPath ||
     contractSelectedRouteProofPacketPath ||
     normalizeArtifactPath(
       "spaceguard-selected-route-proof-packet.md",
-      resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
+      preflightBaseDir
     );
   const contractWorkflowProofPath = normalizeArtifactPath(
     preflightObject?.appCloseContract?.workflowProofPath || "",
-    resolvedPreflightPath ? path.dirname(resolvedPreflightPath) : process.cwd()
+    preflightBaseDir
   );
   const resolvedWorkflowProofPath = workflowProofPath
     ? path.resolve(workflowProofPath)
@@ -103,7 +108,10 @@ export function buildFirstRouteCompletionCheck({
     : buildWorkflowProofCheck({ evidenceObject: { schemaVersion: "" }, checkedAt });
 
   validateAfterFixtureEvidence(afterFixture, add);
-  validateNativeExitEvidence(nativeExit, add);
+  validateNativeExitEvidence(nativeExit, {
+    expectedEvidenceRoot: normalizeArtifactPath(preflightObject?.evidenceRoot || preflightBaseDir, preflightBaseDir),
+    expectedPostAppFinalizationPath: artifactPostAppFinalizationPath
+  }, add);
   const selectedRouteProofSummary = validateSelectedRouteProofPacket(selectedRouteProofPacket, resolvedSelectedRouteProofPacketPath, add);
   validateWorkflowProof(workflowProof, add);
   validateSelectedRouteProofParity(selectedRouteProofPacket, workflowProofObject, workflowProof, add);
@@ -376,7 +384,7 @@ function isExitCodeZero(value) {
   return value === 0 || value === "0";
 }
 
-function validateNativeExitEvidence(evidence, add) {
+function validateNativeExitEvidence(evidence, { expectedEvidenceRoot = "", expectedPostAppFinalizationPath = "" } = {}, add) {
   if (!evidence) return;
   if (evidence.schemaVersion !== NATIVE_DEV_EXIT_SCHEMA) {
     add("native-exit", "Native app exit schema mismatch", `Expected ${NATIVE_DEV_EXIT_SCHEMA}.`);
@@ -393,6 +401,25 @@ function validateNativeExitEvidence(evidence, add) {
       `Native desktop workflow must exit successfully before completion; observed exit code ${Number.isFinite(exitCode) ? exitCode : "missing"}.`
     );
   }
+  if (!sameOptionalPath(evidence.evidenceRoot, expectedEvidenceRoot)) {
+    add(
+      "native-exit-root",
+      "Native app exit evidence root mismatch",
+      `Native app exit evidence must bind to first-route evidence root ${expectedEvidenceRoot || "missing"}.`
+    );
+  }
+  if (!sameOptionalPath(evidence.postAppFinalizationPath, expectedPostAppFinalizationPath)) {
+    add(
+      "native-exit-finalization",
+      "Native app exit finalization path mismatch",
+      `Native app exit evidence must point at first-route post-app finalization artifact ${expectedPostAppFinalizationPath || "missing"}.`
+    );
+  }
+}
+
+function sameOptionalPath(left = "", right = "") {
+  if (!left || !right) return false;
+  return normalizeComparablePath(left) === normalizeComparablePath(right);
 }
 
 function validateSelectedRouteProofPacket(packet, expectedProofPacketPath, add) {
