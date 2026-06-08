@@ -6,8 +6,8 @@ export function getNativeScannerCapability(host = globalThis) {
   const invoke = host?.__TAURI__?.core?.invoke;
   return {
     available: typeof invoke === "function",
-    mode: typeof invoke === "function" ? NATIVE_SCAN_MODE : "browser-demo",
-    label: typeof invoke === "function" ? "Native read-only scanner" : "Browser demo",
+    mode: typeof invoke === "function" ? NATIVE_SCAN_MODE : "browser-setup",
+    label: typeof invoke === "function" ? "Native read-only scanner" : "Browser setup",
     detail:
       typeof invoke === "function"
         ? "Tauri bridge detected. Real scans can measure known local roots without write commands."
@@ -30,7 +30,7 @@ export async function runNativeReadonlyScan(request = {}, host = globalThis) {
       totalBytes: 0,
       findings: [],
       driveInventory: [],
-      warnings: ["Native scanner is not available in the browser demo."],
+      warnings: ["Native scanner is not available in the browser setup state."],
       writeCapability: false,
       destructiveCommands: false
     };
@@ -106,11 +106,11 @@ export async function runNativeExecutorDryRun(executorPlan, host = globalThis) {
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       entries: [],
-      warnings: ["Native executor dry-run is not available in the browser demo."]
+      warnings: ["Native executor dry-run is not available in the browser setup state."]
     };
   }
 
@@ -156,11 +156,11 @@ export async function runNativeDryRunScopeValidation(host = globalThis) {
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       entries: [],
-      warnings: ["Native dry-run scope validation is not available in the browser demo."]
+      warnings: ["Native dry-run scope validation is not available in the browser setup state."]
     };
   }
 
@@ -200,11 +200,11 @@ export async function runNativeWriteBoundary(boundary = {}, host = globalThis) {
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native write boundary is not available in the browser demo.",
+      reason: "Native write boundary is not available in the browser setup state.",
       entries: [],
       warnings: ["Native write execution is unavailable and real cleanup is disabled."]
     };
@@ -240,16 +240,42 @@ export async function runNativeWriteBoundary(boundary = {}, host = globalThis) {
   return normalizeNativeWriteBoundary(result);
 }
 
+export async function writeNativeProofArtifact(fileName = "", content = "", metadata = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return {
+      schemaVersion: "spaceguard-proof-artifact-write/v1",
+      available: false,
+      written: false,
+      fileName: String(fileName || ""),
+      path: "",
+      bytes: 0,
+      reason: "Native proof artifact writer is not available in the browser setup state.",
+      warnings: ["Run the Tauri desktop shell to write proof artifacts into the proof runner working directory."]
+    };
+  }
+
+  const result = await host.__TAURI__.core.invoke("write_proof_artifact", {
+    request: {
+      fileName: String(fileName || ""),
+      content: String(content || ""),
+      route: metadata?.route || "",
+      proofKind: metadata?.proofKind || ""
+    }
+  });
+  return normalizeNativeProofArtifactWrite(result, fileName);
+}
+
 export async function runNativeTempCleanupExecutor(boundary = {}, host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native temp cleanup executor is not available in the browser demo.",
+      reason: "Native temp cleanup executor is not available in the browser setup state.",
       entries: [],
       warnings: ["Run the Tauri desktop shell before executing cleanup."]
     };
@@ -291,11 +317,11 @@ export async function runNativeProjectDependencyExecutor(boundary = {}, host = g
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native project dependency executor is not available in the browser demo.",
+      reason: "Native project dependency executor is not available in the browser setup state.",
       entries: [],
       warnings: ["Run the Tauri desktop shell before executing cleanup."]
     };
@@ -338,11 +364,11 @@ export async function runNativeDownloadsCleanupExecutor(boundary = {}, host = gl
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native reviewed Downloads executor is not available in the browser demo.",
+      reason: "Native reviewed Downloads executor is not available in the browser setup state.",
       entries: [],
       warnings: ["Run the Tauri desktop shell before executing reviewed Downloads cleanup."]
     };
@@ -385,11 +411,11 @@ export async function runNativeLargeFileArchiveExecutor(boundary = {}, host = gl
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native reviewed large-file archive executor is not available in the browser demo.",
+      reason: "Native reviewed large-file archive executor is not available in the browser setup state.",
       entries: [],
       warnings: ["Run the Tauri desktop shell before archiving reviewed large files."]
     };
@@ -433,11 +459,11 @@ export async function runNativeBrowserCacheExecutor(boundary = {}, host = global
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native browser cache executor is not available in the browser demo.",
+      reason: "Native browser cache executor is not available in the browser setup state.",
       entries: [],
       warnings: ["Run the Tauri desktop shell before executing browser cache cleanup."]
     };
@@ -478,11 +504,11 @@ export async function runNativeGradleCacheExecutor(boundary = {}, host = globalT
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native Gradle cache executor is not available in the browser demo.",
+      reason: "Native Gradle cache executor is not available in the browser setup state.",
       entries: [],
       warnings: ["Run the Tauri desktop shell before executing Gradle cache cleanup."]
     };
@@ -522,11 +548,11 @@ export async function runNativeNpmCacheExecutor(boundary = {}, host = globalThis
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native npm cache executor is not available in the browser demo.",
+      reason: "Native npm cache executor is not available in the browser setup state.",
       entries: [],
       warnings: ["Run the Tauri desktop shell before executing npm cache cleanup."]
     };
@@ -566,11 +592,11 @@ export async function runNativeUserCacheExecutor(boundary = {}, host = globalThi
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native user .cache executor is not available in the browser demo.",
+      reason: "Native user .cache executor is not available in the browser setup state.",
       entries: [],
       warnings: ["Run the Tauri desktop shell before executing user .cache cleanup."]
     };
@@ -610,11 +636,11 @@ export async function runNativeAndroidCacheExecutor(boundary = {}, host = global
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native Android cache executor is not available in the browser demo.",
+      reason: "Native Android cache executor is not available in the browser setup state.",
       entries: [],
       warnings: ["Run the Tauri desktop shell before executing Android cache cleanup."]
     };
@@ -655,11 +681,11 @@ export async function runNativeShaderCacheExecutor(boundary = {}, host = globalT
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native shader cache executor is not available in the browser demo.",
+      reason: "Native shader cache executor is not available in the browser setup state.",
       entries: [],
       warnings: ["Run the Tauri desktop shell before executing shader cache cleanup."]
     };
@@ -700,11 +726,11 @@ export async function runNativePnpmStoreExecutor(boundary = {}, host = globalThi
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native pnpm store executor is not available in the browser demo.",
+      reason: "Native pnpm store executor is not available in the browser setup state.",
       entries: [],
       warnings: ["Run the Tauri desktop shell before executing pnpm store cleanup."]
     };
@@ -744,11 +770,11 @@ export async function runNativePipCacheExecutor(boundary = {}, host = globalThis
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native pip cache executor is not available in the browser demo.",
+      reason: "Native pip cache executor is not available in the browser setup state.",
       entries: [],
       warnings: ["Run the Tauri desktop shell before executing pip cache cleanup."]
     };
@@ -788,11 +814,11 @@ export async function runNativeDockerBuildCacheExecutor(boundary = {}, host = gl
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native Docker build-cache executor is not available in the browser demo.",
+      reason: "Native Docker build-cache executor is not available in the browser setup state.",
       entries: [],
       warnings: ["Run the Tauri desktop shell before executing Docker build-cache cleanup."]
     };
@@ -832,11 +858,11 @@ export async function runNativeRecycleBinExecutor(boundary = {}, host = globalTh
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       accepted: false,
-      reason: "Native Recycle Bin executor is not available in the browser demo.",
+      reason: "Native Recycle Bin executor is not available in the browser setup state.",
       entries: [],
       warnings: ["Run the Tauri desktop shell before executing Recycle Bin cleanup."]
     };
@@ -877,11 +903,11 @@ export async function getNativeRuntimeCapabilities(host = globalThis) {
   if (!capability.available) {
     return {
       available: false,
-      mode: "browser-demo",
+      mode: "browser-setup",
       platform: "browser",
       windows: false,
       elevated: false,
-      elevationSource: "browser-demo",
+      elevationSource: "browser-setup",
       realRunEnabled: false,
       destructiveCommands: false,
       scanKnownRoots: false,
@@ -896,7 +922,7 @@ export async function getNativeRuntimeCapabilities(host = globalThis) {
       enabledScopedExecutorFlagCount: 0,
       executorScopeStatus: "no-scoped-flags",
       executorFlags: defaultExecutorFlags(),
-      reason: "Browser demo cannot perform native scans or cleanup."
+      reason: "Browser setup cannot perform native scans or cleanup."
     };
   }
 
@@ -984,7 +1010,7 @@ function buildNativeTempFixtureAction(tempFindings = []) {
     consequence: "Disposable validation fixture files are removed; normal temp files stay untouched.",
     recommendation: "Run this before broad temp cleanup to prove the real executor path.",
     selectedByDefault: false,
-    executableInDemo: true,
+    executableInDesktop: true,
     scanSource: NATIVE_SCAN_MODE,
     scanStatus: limited ? "limited" : "measured",
     scanFindingCount: fixtureRows.length,
@@ -1198,6 +1224,20 @@ export function normalizeNativeWriteBoundary(result = {}) {
     executorScaffold: normalizeWriteExecutorScaffold(result.executorScaffold || result.executor_scaffold),
     volumeProof: normalizeWriteVolumeProof(result.volumeProof || result.volume_proof),
     warnings: Array.isArray(result.warnings) ? result.warnings : []
+  };
+}
+
+export function normalizeNativeProofArtifactWrite(result = {}, fallbackFileName = "") {
+  const value = result && typeof result === "object" ? result : {};
+  return {
+    schemaVersion: value.schemaVersion || value.schema_version || "spaceguard-proof-artifact-write/v1",
+    available: Boolean(value.available),
+    written: Boolean(value.written),
+    fileName: value.fileName || value.file_name || String(fallbackFileName || ""),
+    path: value.path || "",
+    bytes: Number(value.bytes || 0),
+    reason: value.reason || "",
+    warnings: Array.isArray(value.warnings) ? value.warnings : []
   };
 }
 

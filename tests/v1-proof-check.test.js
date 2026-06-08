@@ -6,8 +6,8 @@ const path = require("path");
 const { pathToFileURL } = require("url");
 
 const root = path.resolve(__dirname, "..");
-const script = path.join(root, "scripts", "run-private-v1-proof-check.mjs");
-const coordinatorPath = path.join(root, "scripts", "run-private-v1-windows-proof.ps1");
+const script = path.join(root, "scripts", "run-v1-proof-check.mjs");
+const coordinatorPath = path.join(root, "scripts", "run-v1-windows-proof.ps1");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const gitignore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
 const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
@@ -53,38 +53,38 @@ function writeNdjson(file, records) {
   fs.writeFileSync(file, records.map((record) => JSON.stringify(record)).join("\n") + "\n");
 }
 
-function createPrivateV1Evidence(patch = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "spaceguard-private-v1-"));
+function createV1Evidence(patch = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "spaceguard-v1-"));
   const selectedRoute = { ...NPM_ROUTE, ...(patch.selectedRoute || {}) };
   const selectedRouteSlug = routeSlug(selectedRoute.routeInput);
   const selectedRouteSetupPath = path.join(dir, "selected-route-setup.json");
-  const preflightPath = path.join(dir, "private-demo-preflight", "private-demo-preflight.json");
+  const preflightPath = path.join(dir, "v1-preflight", "v1-preflight.json");
   const firstRouteCompletionPath = path.join(dir, "first-route-proof", "first-route-completion-check.json");
   const selectedRouteProofDir = path.join(dir, `selected-route-proof-${selectedRouteSlug}`);
   const selectedRouteCompletionPath = path.join(selectedRouteProofDir, "selected-route-completion-check.json");
   const commandLogPath = path.join(dir, "commands.ndjson");
-  const proofPath = path.join(dir, "private-v1-proof.json");
+  const proofPath = path.join(dir, "v1-proof.json");
   const archivedProofPath = path.join(dir, "archived-first-route-root-exports", "spaceguard-real-workflow-proof.md");
-  const privatePreflightCommandLogPath = path.join(dir, "private-demo-preflight", "commands.ndjson");
+  const v1PreflightCommandLogPath = path.join(dir, "v1-preflight", "commands.ndjson");
   const firstRouteCommandLogPath = path.join(dir, "first-route-proof", "commands.ndjson");
   const selectedRouteCommandLogPath = path.join(selectedRouteProofDir, "commands.ndjson");
   const firstRouteFixtureSmokePath = path.join(dir, "first-route-proof", "openai-fixture-smoke.txt");
   const firstRouteLiveSmokePath = path.join(dir, "first-route-proof", "openai-live-smoke.txt");
-  const privatePreflightFixtureSmokePath = path.join(dir, "private-demo-preflight", "openai-fixture-smoke.txt");
-  const privatePreflightLiveSmokePath = path.join(dir, "private-demo-preflight", "openai-live-smoke.txt");
+  const v1PreflightFixtureSmokePath = path.join(dir, "v1-preflight", "openai-fixture-smoke.txt");
+  const v1PreflightLiveSmokePath = path.join(dir, "v1-preflight", "openai-live-smoke.txt");
   const selectedRouteFixtureSmokePath = path.join(selectedRouteProofDir, "openai-fixture-smoke.txt");
   const selectedRouteLiveSmokePath = path.join(selectedRouteProofDir, "openai-live-smoke.txt");
-  const bundleArtifactPath = path.join(dir, "private-demo-preflight", "src-tauri", "target", "release", "bundle", "nsis", "SpaceGuard_0.1.0_x64-setup.exe");
-  const bundleEvidencePath = path.join(dir, "private-demo-preflight", "native-bundle-artifacts", "SpaceGuard_0.1.0_x64-setup.exe");
+  const bundleArtifactPath = path.join(dir, "v1-preflight", "src-tauri", "target", "release", "bundle", "nsis", "SpaceGuard_0.1.0_x64-setup.exe");
+  const bundleEvidencePath = path.join(dir, "v1-preflight", "native-bundle-artifacts", "SpaceGuard_0.1.0_x64-setup.exe");
   const bundleBytes = Buffer.from("spaceguard-native-bundle-fixture");
   const bundleSha256 = crypto.createHash("sha256").update(bundleBytes).digest("hex");
 
   const preflight = {
-    schemaVersion: "spaceguard-private-demo-windows-preflight/v1",
+    schemaVersion: "spaceguard-v1-windows-preflight/v1",
     status: "passed",
     selectedRoute: selectedRoute.routeInput,
-    evidenceRoot: path.join(dir, "private-demo-preflight"),
-    commandLogPath: privatePreflightCommandLogPath,
+    evidenceRoot: path.join(dir, "v1-preflight"),
+    commandLogPath: v1PreflightCommandLogPath,
     commands: {
       nativeBuild: "npm run native:build",
       nextFirstRoute: "npm run proof:first-route:windows -- -Route temp-fixture",
@@ -151,27 +151,27 @@ function createPrivateV1Evidence(patch = {}) {
     },
     ...patch.selectedRouteCompletion
   };
-  const privatePreflightOutputPath = path.join(dir, "private-demo-preflight.txt");
+  const v1PreflightOutputPath = path.join(dir, "v1-preflight.txt");
   const firstRouteProofOutputPath = path.join(dir, "first-route-proof.txt");
   const selectedRouteProofOutputPath = path.join(dir, "selected-route-proof.txt");
   const commands = [
     { id: "selected-route-setup", command: `node scripts\\run-setup-route.mjs --route "${selectedRoute.routeInput}"`, outputPath: selectedRouteSetupPath, exitCode: 0 },
-    { id: "private-windows-preflight", command: "npm run demo:private-windows-preflight", outputPath: privatePreflightOutputPath, stderrPath: `${privatePreflightOutputPath}.stderr.txt`, exitCode: 0 },
+    { id: "v1-windows-preflight", command: "npm run v1:preflight", outputPath: v1PreflightOutputPath, stderrPath: `${v1PreflightOutputPath}.stderr.txt`, exitCode: 0 },
     { id: "first-route-proof", command: "npm run proof:first-route:windows -- -Route temp-fixture", outputPath: firstRouteProofOutputPath, stderrPath: `${firstRouteProofOutputPath}.stderr.txt`, exitCode: 0 },
     { id: "bind-first-route-completion", command: "set SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK", outputPath: firstRouteCompletionPath, exitCode: 0 },
     { id: "archive-first-route-root-exports", command: "archive first-route repo-root proof exports", outputPath: path.dirname(archivedProofPath), exitCode: 0 },
     { id: "selected-route-proof", command: `npm run proof:route:windows -- -Route ${selectedRoute.routeInput}`, outputPath: selectedRouteProofOutputPath, stderrPath: `${selectedRouteProofOutputPath}.stderr.txt`, exitCode: 0 },
     ...(patch.commands || [])
   ];
-  const privatePreflightCommands = patch.privatePreflightCommands || [
-    { id: "js-tests", command: "npm test", outputPath: path.join(dir, "private-demo-preflight", "npm-test.txt"), exitCode: 0 },
-    { id: "native-executor-coverage", command: "npm run native:executor-coverage", outputPath: path.join(dir, "private-demo-preflight", "native-executor-coverage.json"), exitCode: 0 },
-    { id: "rust-tests", command: "cargo test --manifest-path src-tauri\\Cargo.toml", outputPath: path.join(dir, "private-demo-preflight", "cargo-test.txt"), exitCode: 0 },
-    { id: "web-build", command: "npm run build", outputPath: path.join(dir, "private-demo-preflight", "npm-build.txt"), exitCode: 0 },
-    { id: "private-demo-readiness", command: "npm run demo:private-readiness", outputPath: path.join(dir, "private-demo-preflight", "private-demo-readiness.json"), exitCode: 0 },
-    { id: "openai-fixture-smoke", command: `npm run openai:smoke:fixture -- --route ${selectedRoute.routeInput}`, outputPath: privatePreflightFixtureSmokePath, exitCode: 0 },
-    { id: "openai-live-smoke", command: `npm run openai:smoke -- --route ${selectedRoute.routeInput}`, outputPath: privatePreflightLiveSmokePath, exitCode: 0 },
-    { id: "native-build", command: "npm run native:build", outputPath: path.join(dir, "private-demo-preflight", "native-build.txt"), exitCode: 0 }
+  const v1PreflightCommands = patch.v1PreflightCommands || [
+    { id: "js-tests", command: "npm test", outputPath: path.join(dir, "v1-preflight", "npm-test.txt"), exitCode: 0 },
+    { id: "native-executor-coverage", command: "npm run native:executor-coverage", outputPath: path.join(dir, "v1-preflight", "native-executor-coverage.json"), exitCode: 0 },
+    { id: "rust-tests", command: "cargo test --manifest-path src-tauri\\Cargo.toml", outputPath: path.join(dir, "v1-preflight", "cargo-test.txt"), exitCode: 0 },
+    { id: "web-build", command: "npm run build", outputPath: path.join(dir, "v1-preflight", "npm-build.txt"), exitCode: 0 },
+    { id: "v1-readiness", command: "npm run v1:readiness", outputPath: path.join(dir, "v1-preflight", "v1-readiness.json"), exitCode: 0 },
+    { id: "openai-fixture-smoke", command: `npm run openai:smoke:fixture -- --route ${selectedRoute.routeInput}`, outputPath: v1PreflightFixtureSmokePath, exitCode: 0 },
+    { id: "openai-live-smoke", command: `npm run openai:smoke -- --route ${selectedRoute.routeInput}`, outputPath: v1PreflightLiveSmokePath, exitCode: 0 },
+    { id: "native-build", command: "npm run native:build", outputPath: path.join(dir, "v1-preflight", "native-build.txt"), exitCode: 0 }
   ];
   const firstRouteCommands = [
     { id: "openai-fixture-smoke", command: "npm run openai:smoke:fixture -- --route temp-fixture", outputPath: firstRouteFixtureSmokePath, stderrPath: `${firstRouteFixtureSmokePath}.stderr.txt`, exitCode: 0 },
@@ -184,7 +184,7 @@ function createPrivateV1Evidence(patch = {}) {
     ...(patch.selectedRouteCommands || [])
   ];
   const proof = {
-    schemaVersion: "spaceguard-private-v1-windows-proof/v1",
+    schemaVersion: "spaceguard-v1-windows-proof/v1",
     generatedAt: "2026-06-08T11:00:00.000Z",
     startedAt: "2026-06-08T10:00:00.000Z",
     status: "accepted",
@@ -194,12 +194,12 @@ function createPrivateV1Evidence(patch = {}) {
     destructiveCommands: false,
     directCleanupCommands: false,
     artifacts: {
-      privateV1Proof: proofPath,
+      v1Proof: proofPath,
       selectedRouteSetup: selectedRouteSetupPath,
-      privateWindowsPreflight: preflightPath,
+      v1WindowsPreflight: preflightPath,
       firstRouteCompletionCheck: firstRouteCompletionPath,
       selectedRouteCompletionCheck: selectedRouteCompletionPath,
-      privateV1ProofCheck: path.join(dir, "private-v1-proof-check.json"),
+      v1ProofCheck: path.join(dir, "v1-proof-check.json"),
       archivedFirstRouteRootExports: path.dirname(archivedProofPath)
     },
     routes: {
@@ -232,7 +232,7 @@ function createPrivateV1Evidence(patch = {}) {
     archivedRootExports: [{ source: path.join(dir, "spaceguard-real-workflow-proof.md"), destination: archivedProofPath }],
     commands: {
       selectedRouteSetup: `node scripts\\run-setup-route.mjs --route "${selectedRoute.routeInput}"`,
-      privateWindowsPreflight: "npm run demo:private-windows-preflight",
+      v1WindowsPreflight: "npm run v1:preflight",
       firstRouteProof: "npm run proof:first-route:windows -- -Route temp-fixture",
       selectedRouteProof: `npm run proof:route:windows -- -Route ${selectedRoute.routeInput}`
     },
@@ -249,8 +249,8 @@ function createPrivateV1Evidence(patch = {}) {
       fs.writeFileSync(command.stderrPath, "");
     }
   }
-  writeOpenAiSmokeEvidence(privatePreflightFixtureSmokePath, { ...selectedRoute, transport: "fixture-only" });
-  writeOpenAiSmokeEvidence(privatePreflightLiveSmokePath, { ...selectedRoute, transport: "openai" });
+  writeOpenAiSmokeEvidence(v1PreflightFixtureSmokePath, { ...selectedRoute, transport: "fixture-only" });
+  writeOpenAiSmokeEvidence(v1PreflightLiveSmokePath, { ...selectedRoute, transport: "openai" });
   writeOpenAiSmokeEvidence(firstRouteFixtureSmokePath, { routeInput: "temp-fixture", route: "known-temp-delete", transport: "fixture-only", requiredAction: "run-temp-executor", target: "temp-fixture" });
   writeOpenAiSmokeEvidence(firstRouteLiveSmokePath, { routeInput: "temp-fixture", route: "known-temp-delete", transport: "openai", requiredAction: "run-temp-executor", target: "temp-fixture" });
   writeOpenAiSmokeEvidence(selectedRouteFixtureSmokePath, { ...selectedRoute, transport: "fixture-only" });
@@ -262,7 +262,7 @@ function createPrivateV1Evidence(patch = {}) {
     }
   }
   writeNdjson(commandLogPath, commands);
-  writeNdjson(privatePreflightCommandLogPath, privatePreflightCommands);
+  writeNdjson(v1PreflightCommandLogPath, v1PreflightCommands);
   writeNdjson(firstRouteCommandLogPath, firstRouteCommands);
   writeNdjson(selectedRouteCommandLogPath, selectedRouteCommands);
   writeJson(proofPath, proof);
@@ -273,7 +273,7 @@ function createPrivateV1Evidence(patch = {}) {
   fs.mkdirSync(path.dirname(bundleEvidencePath), { recursive: true });
   fs.writeFileSync(bundleEvidencePath, bundleBytes);
 
-  return { dir, proofPath, commandLogPath, selectedRouteSetupPath, firstRouteCompletionPath, selectedRouteCompletionPath, privatePreflightCommandLogPath, privatePreflightFixtureSmokePath, privatePreflightLiveSmokePath, firstRouteCommandLogPath, selectedRouteCommandLogPath };
+  return { dir, proofPath, commandLogPath, selectedRouteSetupPath, firstRouteCompletionPath, selectedRouteCompletionPath, v1PreflightCommandLogPath, v1PreflightFixtureSmokePath, v1PreflightLiveSmokePath, firstRouteCommandLogPath, selectedRouteCommandLogPath };
 }
 
 function writeOpenAiSmokeEvidence(filePath, {
@@ -297,42 +297,42 @@ function writeOpenAiSmokeEvidence(filePath, {
 }
 
 (async () => {
-  assert(fs.existsSync(script), "private V1 proof verifier should exist");
+  assert(fs.existsSync(script), "V1 proof verifier should exist");
   assert(
-    packageJson.scripts["validate:private-v1-proof"]?.includes("run-private-v1-proof-check.mjs"),
-    "package.json should expose the private V1 proof verifier"
+    packageJson.scripts["validate:v1-proof"]?.includes("run-v1-proof-check.mjs"),
+    "package.json should expose the V1 proof verifier"
   );
 
   const verifier = await import(pathToFileURL(script).href);
-  const acceptedEvidence = createPrivateV1Evidence();
-  const accepted = verifier.buildPrivateV1ProofCheck({
+  const acceptedEvidence = createV1Evidence();
+  const accepted = verifier.buildV1ProofCheck({
     proofPath: acceptedEvidence.proofPath,
     checkedAt: "2026-06-08T11:05:00.000Z"
   });
-  assert.strictEqual(accepted.schemaVersion, "spaceguard-private-v1-proof-check/v1", "verifier should expose a stable schema");
-  assert.strictEqual(accepted.status, "accepted", "complete private V1 proof should be accepted");
-  assert.strictEqual(accepted.canAcceptPrivateV1Proof, true, "accepted private V1 proof should be marked usable");
+  assert.strictEqual(accepted.schemaVersion, "spaceguard-v1-proof-check/v1", "verifier should expose a stable schema");
+  assert.strictEqual(accepted.status, "accepted", "complete V1 proof should be accepted");
+  assert.strictEqual(accepted.canAcceptV1Proof, true, "accepted V1 proof should be marked usable");
   assert.strictEqual(accepted.selectedRoute, "npm-cache", "verifier should preserve the selected route alias");
   assert.strictEqual(accepted.counts.reclaimedBytes, 1048576, "verifier should report selected-route reclaimed bytes");
   assert.strictEqual(accepted.counts.firstRouteRescanExpectedBytes, 8388608, "verifier should report first-route rescan expected bytes");
   assert.strictEqual(accepted.counts.selectedRouteRescanExpectedBytes, 1048576, "verifier should report selected-route rescan expected bytes");
   assert.strictEqual(accepted.counts.selectedRouteLedgerReclaimedBytes, 1048576, "verifier should report selected-route ledger reclaimed bytes");
-  assert.strictEqual(accepted.counts.privatePreflightCommandRecords, 8, "verifier should count private preflight command records");
+  assert.strictEqual(accepted.counts.v1PreflightCommandRecords, 8, "verifier should count V1 preflight command records");
   assert.strictEqual(accepted.counts.nativeBundleArtifacts, 1, "verifier should count native bundle artifacts");
   assert.strictEqual(accepted.counts.openAiSmokeArtifacts, 4, "verifier should count required child OpenAI smoke artifacts");
   assert.strictEqual(accepted.counts.commandRecords, 6, "verifier should count command ledger records");
   assert.strictEqual(accepted.blockers.length, 0, "accepted V1 proof should not have blockers");
 
-  const acceptedGradleEvidence = createPrivateV1Evidence({ selectedRoute: GRADLE_ROUTE });
-  const acceptedGradle = verifier.buildPrivateV1ProofCheck({
+  const acceptedGradleEvidence = createV1Evidence({ selectedRoute: GRADLE_ROUTE });
+  const acceptedGradle = verifier.buildV1ProofCheck({
     proofPath: acceptedGradleEvidence.proofPath,
     checkedAt: "2026-06-08T11:08:00.000Z"
   });
-  assert.strictEqual(acceptedGradle.status, "accepted", "complete Gradle private V1 proof should be accepted");
+  assert.strictEqual(acceptedGradle.status, "accepted", "complete Gradle V1 proof should be accepted");
   assert.strictEqual(acceptedGradle.selectedRoute, "gradle-cache", "verifier should preserve the Gradle selected route alias");
   assert.strictEqual(acceptedGradle.blockers.length, 0, "accepted Gradle V1 proof should not have blockers");
 
-  const staleFirstRouteCompletionPath = createPrivateV1Evidence();
+  const staleFirstRouteCompletionPath = createV1Evidence();
   const staleFirstRouteDir = fs.mkdtempSync(path.join(os.tmpdir(), "spaceguard-stale-first-route-completion-"));
   const copiedFirstRouteCompletionPath = path.join(staleFirstRouteDir, "first-route-completion-check.json");
   fs.copyFileSync(staleFirstRouteCompletionPath.firstRouteCompletionPath, copiedFirstRouteCompletionPath);
@@ -340,14 +340,14 @@ function writeOpenAiSmokeEvidence(filePath, {
   staleFirstRouteProof.artifacts.firstRouteCompletionCheck = copiedFirstRouteCompletionPath;
   staleFirstRouteProof.firstRouteCompletion.path = copiedFirstRouteCompletionPath;
   writeJson(staleFirstRouteCompletionPath.proofPath, staleFirstRouteProof);
-  const staleFirstRouteCompletionCheck = verifier.buildPrivateV1ProofCheck({ proofPath: staleFirstRouteCompletionPath.proofPath });
-  assert.strictEqual(staleFirstRouteCompletionCheck.status, "blocked", "private V1 proof should block first-route completion artifacts outside the private evidence root");
+  const staleFirstRouteCompletionCheck = verifier.buildV1ProofCheck({ proofPath: staleFirstRouteCompletionPath.proofPath });
+  assert.strictEqual(staleFirstRouteCompletionCheck.status, "blocked", "V1 proof should block first-route completion artifacts outside the V1 evidence root");
   assert(
     staleFirstRouteCompletionCheck.blockers.some((blocker) => blocker.id === "first-route-completion-root"),
     "first-route completion root blocker should be explicit"
   );
 
-  const staleSelectedRouteCompletionPath = createPrivateV1Evidence();
+  const staleSelectedRouteCompletionPath = createV1Evidence();
   const staleSelectedRouteDir = fs.mkdtempSync(path.join(os.tmpdir(), "spaceguard-stale-selected-route-completion-"));
   const copiedSelectedRouteCompletionPath = path.join(staleSelectedRouteDir, "selected-route-completion-check.json");
   fs.copyFileSync(staleSelectedRouteCompletionPath.selectedRouteCompletionPath, copiedSelectedRouteCompletionPath);
@@ -355,30 +355,30 @@ function writeOpenAiSmokeEvidence(filePath, {
   staleSelectedRouteProof.artifacts.selectedRouteCompletionCheck = copiedSelectedRouteCompletionPath;
   staleSelectedRouteProof.selectedRouteCompletion.path = copiedSelectedRouteCompletionPath;
   writeJson(staleSelectedRouteCompletionPath.proofPath, staleSelectedRouteProof);
-  const staleSelectedRouteCompletionCheck = verifier.buildPrivateV1ProofCheck({ proofPath: staleSelectedRouteCompletionPath.proofPath });
-  assert.strictEqual(staleSelectedRouteCompletionCheck.status, "blocked", "private V1 proof should block selected-route completion artifacts outside the private evidence root");
+  const staleSelectedRouteCompletionCheck = verifier.buildV1ProofCheck({ proofPath: staleSelectedRouteCompletionPath.proofPath });
+  assert.strictEqual(staleSelectedRouteCompletionCheck.status, "blocked", "V1 proof should block selected-route completion artifacts outside the V1 evidence root");
   assert(
     staleSelectedRouteCompletionCheck.blockers.some((blocker) => blocker.id === "selected-route-completion-root"),
     "selected-route completion root blocker should be explicit"
   );
 
-  const reusedPreflight = createPrivateV1Evidence();
+  const reusedPreflight = createV1Evidence();
   const reusedPreflightRecords = fs.readFileSync(reusedPreflight.commandLogPath, "utf8")
     .trim()
     .split(/\r?\n/)
     .map((line) => JSON.parse(line));
-  const reusedPreflightRecord = reusedPreflightRecords.find((record) => record.id === "private-windows-preflight");
+  const reusedPreflightRecord = reusedPreflightRecords.find((record) => record.id === "v1-windows-preflight");
   reusedPreflightRecord.skipped = true;
   reusedPreflightRecord.reused = true;
   reusedPreflightRecord.reason = "SkipPreflightExistingEvidence";
-  reusedPreflightRecord.outputPath = path.join(reusedPreflight.dir, "private-demo-preflight", "private-demo-preflight.json");
+  reusedPreflightRecord.outputPath = path.join(reusedPreflight.dir, "v1-preflight", "v1-preflight.json");
   delete reusedPreflightRecord.stderrPath;
   writeNdjson(reusedPreflight.commandLogPath, reusedPreflightRecords);
-  const reusedPreflightCheck = verifier.buildPrivateV1ProofCheck({ proofPath: reusedPreflight.proofPath });
-  assert.strictEqual(reusedPreflightCheck.status, "accepted", "reused passed private preflight evidence should be accepted for V1 proof");
-  assert.strictEqual(reusedPreflightCheck.counts.requiredCommandsPassed, 6, "reused private preflight should count as a satisfied required command");
+  const reusedPreflightCheck = verifier.buildV1ProofCheck({ proofPath: reusedPreflight.proofPath });
+  assert.strictEqual(reusedPreflightCheck.status, "accepted", "reused passed V1 preflight evidence should be accepted for V1 proof");
+  assert.strictEqual(reusedPreflightCheck.counts.requiredCommandsPassed, 6, "reused V1 preflight should count as a satisfied required command");
 
-  const missingChildStderr = createPrivateV1Evidence();
+  const missingChildStderr = createV1Evidence();
   const childRecords = fs.readFileSync(missingChildStderr.commandLogPath, "utf8")
     .trim()
     .split(/\r?\n/)
@@ -386,14 +386,14 @@ function writeOpenAiSmokeEvidence(filePath, {
   const firstRouteRecord = childRecords.find((record) => record.id === "first-route-proof");
   fs.unlinkSync(firstRouteRecord.stderrPath);
   writeNdjson(missingChildStderr.commandLogPath, childRecords);
-  const missingChildStderrCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingChildStderr.proofPath });
-  assert.strictEqual(missingChildStderrCheck.status, "blocked", "missing child command stderr evidence should block private V1 proof");
+  const missingChildStderrCheck = verifier.buildV1ProofCheck({ proofPath: missingChildStderr.proofPath });
+  assert.strictEqual(missingChildStderrCheck.status, "blocked", "missing child command stderr evidence should block V1 proof");
   assert(
     missingChildStderrCheck.blockers.some((blocker) => blocker.id === "command-stderr-first-route-proof"),
     "missing child command stderr blocker should name the command"
   );
 
-  const missingSelectedOpenAi = createPrivateV1Evidence();
+  const missingSelectedOpenAi = createV1Evidence();
   const selectedChildRecords = fs.readFileSync(missingSelectedOpenAi.selectedRouteCommandLogPath, "utf8")
     .trim()
     .split(/\r?\n/)
@@ -401,66 +401,66 @@ function writeOpenAiSmokeEvidence(filePath, {
   const selectedLiveOpenAiRecord = selectedChildRecords.find((record) => record.id === "openai-live-smoke");
   fs.unlinkSync(selectedLiveOpenAiRecord.outputPath);
   writeNdjson(missingSelectedOpenAi.selectedRouteCommandLogPath, selectedChildRecords);
-  const missingSelectedOpenAiCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingSelectedOpenAi.proofPath });
-  assert.strictEqual(missingSelectedOpenAiCheck.status, "blocked", "missing selected-route live OpenAI smoke evidence should block private V1 proof");
+  const missingSelectedOpenAiCheck = verifier.buildV1ProofCheck({ proofPath: missingSelectedOpenAi.proofPath });
+  assert.strictEqual(missingSelectedOpenAiCheck.status, "blocked", "missing selected-route live OpenAI smoke evidence should block V1 proof");
   assert(
     missingSelectedOpenAiCheck.blockers.some((blocker) => blocker.id === "selected-route-openai-live-smoke"),
     "missing selected-route live OpenAI smoke blocker should be explicit"
   );
 
-  const childDirectCleanup = createPrivateV1Evidence({
+  const childDirectCleanup = createV1Evidence({
     selectedRouteCommands: [
-      { id: "unsafe-cleanup", command: "powershell -Command Remove-Item -Recurse C:\\Users\\demo\\Downloads\\old.zip", exitCode: 0 }
+      { id: "unsafe-cleanup", command: "powershell -Command Remove-Item -Recurse C:\\Users\\LocalUser\\Downloads\\old.zip", exitCode: 0 }
     ]
   });
-  const childDirectCleanupCheck = verifier.buildPrivateV1ProofCheck({ proofPath: childDirectCleanup.proofPath });
-  assert.strictEqual(childDirectCleanupCheck.status, "blocked", "direct cleanup commands in child evidence should block private V1 proof");
+  const childDirectCleanupCheck = verifier.buildV1ProofCheck({ proofPath: childDirectCleanup.proofPath });
+  assert.strictEqual(childDirectCleanupCheck.status, "blocked", "direct cleanup commands in child evidence should block V1 proof");
   assert(
     childDirectCleanupCheck.blockers.some((blocker) => blocker.id === "selected-route-command-direct-cleanup"),
     "child direct cleanup blocker should name the child route"
   );
 
-  const preflightDirectCleanup = createPrivateV1Evidence({
-    privatePreflightCommands: [
+  const preflightDirectCleanup = createV1Evidence({
+    v1PreflightCommands: [
       { id: "js-tests", command: "npm test", outputPath: path.join(os.tmpdir(), "npm-test.txt"), exitCode: 0 },
-      { id: "unsafe-preflight-cleanup", command: "cmd /c rmdir /s /q C:\\Users\\demo\\Downloads\\old", exitCode: 0 }
+      { id: "unsafe-preflight-cleanup", command: "cmd /c rmdir /s /q C:\\Users\\LocalUser\\Downloads\\old", exitCode: 0 }
     ]
   });
-  const preflightDirectCleanupCheck = verifier.buildPrivateV1ProofCheck({ proofPath: preflightDirectCleanup.proofPath });
-  assert.strictEqual(preflightDirectCleanupCheck.status, "blocked", "direct cleanup commands in private preflight evidence should block private V1 proof");
+  const preflightDirectCleanupCheck = verifier.buildV1ProofCheck({ proofPath: preflightDirectCleanup.proofPath });
+  assert.strictEqual(preflightDirectCleanupCheck.status, "blocked", "direct cleanup commands in V1 preflight evidence should block V1 proof");
   assert(
-    preflightDirectCleanupCheck.blockers.some((blocker) => blocker.id === "private-preflight-command-direct-cleanup"),
-    "private preflight direct cleanup blocker should be explicit"
+    preflightDirectCleanupCheck.blockers.some((blocker) => blocker.id === "v1-preflight-command-direct-cleanup"),
+    "V1 preflight direct cleanup blocker should be explicit"
   );
 
-  const missingPreflightLiveOpenAi = createPrivateV1Evidence({
-    privatePreflightCommands: [
+  const missingPreflightLiveOpenAi = createV1Evidence({
+    v1PreflightCommands: [
       { id: "js-tests", command: "npm test", outputPath: path.join(os.tmpdir(), "npm-test.txt"), exitCode: 0 },
       { id: "native-executor-coverage", command: "npm run native:executor-coverage", outputPath: path.join(os.tmpdir(), "native-executor-coverage.json"), exitCode: 0 },
       { id: "rust-tests", command: "cargo test --manifest-path src-tauri\\Cargo.toml", outputPath: path.join(os.tmpdir(), "cargo-test.txt"), exitCode: 0 },
       { id: "web-build", command: "npm run build", outputPath: path.join(os.tmpdir(), "npm-build.txt"), exitCode: 0 },
-      { id: "private-demo-readiness", command: "npm run demo:private-readiness", outputPath: path.join(os.tmpdir(), "private-demo-readiness.json"), exitCode: 0 },
+      { id: "v1-readiness", command: "npm run v1:readiness", outputPath: path.join(os.tmpdir(), "v1-readiness.json"), exitCode: 0 },
       { id: "openai-fixture-smoke", command: "npm run openai:smoke:fixture -- --route npm-cache", outputPath: path.join(os.tmpdir(), "openai-fixture-smoke.txt"), exitCode: 0 },
       { id: "native-build", command: "npm run native:build", outputPath: path.join(os.tmpdir(), "native-build.txt"), exitCode: 0 }
     ]
   });
-  const missingPreflightLiveOpenAiCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingPreflightLiveOpenAi.proofPath });
-  assert.strictEqual(missingPreflightLiveOpenAiCheck.status, "blocked", "missing private preflight live OpenAI smoke command should block private V1 proof");
+  const missingPreflightLiveOpenAiCheck = verifier.buildV1ProofCheck({ proofPath: missingPreflightLiveOpenAi.proofPath });
+  assert.strictEqual(missingPreflightLiveOpenAiCheck.status, "blocked", "missing V1 preflight live OpenAI smoke command should block V1 proof");
   assert(
-    missingPreflightLiveOpenAiCheck.blockers.some((blocker) => blocker.id === "private-preflight-command-openai-live-smoke"),
-    "missing private preflight live OpenAI smoke blocker should be explicit"
+    missingPreflightLiveOpenAiCheck.blockers.some((blocker) => blocker.id === "v1-preflight-command-openai-live-smoke"),
+    "missing V1 preflight live OpenAI smoke blocker should be explicit"
   );
 
-  const mismatchedPreflightOpenAiRoute = createPrivateV1Evidence();
-  writeOpenAiSmokeEvidence(mismatchedPreflightOpenAiRoute.privatePreflightLiveSmokePath, { routeInput: "gradle-cache", route: "bounded-cache-delete", transport: "openai" });
-  const mismatchedPreflightOpenAiRouteCheck = verifier.buildPrivateV1ProofCheck({ proofPath: mismatchedPreflightOpenAiRoute.proofPath });
-  assert.strictEqual(mismatchedPreflightOpenAiRouteCheck.status, "blocked", "private preflight OpenAI smoke evidence from another route should block private V1 proof");
+  const mismatchedPreflightOpenAiRoute = createV1Evidence();
+  writeOpenAiSmokeEvidence(mismatchedPreflightOpenAiRoute.v1PreflightLiveSmokePath, { routeInput: "gradle-cache", route: "bounded-cache-delete", transport: "openai" });
+  const mismatchedPreflightOpenAiRouteCheck = verifier.buildV1ProofCheck({ proofPath: mismatchedPreflightOpenAiRoute.proofPath });
+  assert.strictEqual(mismatchedPreflightOpenAiRouteCheck.status, "blocked", "V1 preflight OpenAI smoke evidence from another route should block V1 proof");
   assert(
-    mismatchedPreflightOpenAiRouteCheck.blockers.some((blocker) => blocker.id === "private-preflight-openai-live-smoke"),
-    "private preflight OpenAI route mismatch blocker should be explicit"
+    mismatchedPreflightOpenAiRouteCheck.blockers.some((blocker) => blocker.id === "v1-preflight-openai-live-smoke"),
+    "V1 preflight OpenAI route mismatch blocker should be explicit"
   );
 
-  const mismatchedSelectedRouteProofCommand = createPrivateV1Evidence();
+  const mismatchedSelectedRouteProofCommand = createV1Evidence();
   const mismatchedSelectedRouteProofCommandRecords = fs.readFileSync(mismatchedSelectedRouteProofCommand.commandLogPath, "utf8")
     .trim()
     .split(/\r?\n/)
@@ -468,80 +468,80 @@ function writeOpenAiSmokeEvidence(filePath, {
   const selectedRouteProofCommand = mismatchedSelectedRouteProofCommandRecords.find((record) => record.id === "selected-route-proof");
   selectedRouteProofCommand.command = "npm run proof:route:windows -- -Route gradle-cache";
   writeNdjson(mismatchedSelectedRouteProofCommand.commandLogPath, mismatchedSelectedRouteProofCommandRecords);
-  const mismatchedSelectedRouteProofCommandCheck = verifier.buildPrivateV1ProofCheck({ proofPath: mismatchedSelectedRouteProofCommand.proofPath });
-  assert.strictEqual(mismatchedSelectedRouteProofCommandCheck.status, "blocked", "selected-route proof command for another route should block private V1 proof");
+  const mismatchedSelectedRouteProofCommandCheck = verifier.buildV1ProofCheck({ proofPath: mismatchedSelectedRouteProofCommand.proofPath });
+  assert.strictEqual(mismatchedSelectedRouteProofCommandCheck.status, "blocked", "selected-route proof command for another route should block V1 proof");
   assert(
     mismatchedSelectedRouteProofCommandCheck.blockers.some((blocker) => blocker.id === "command-route-selected-route-proof"),
     "selected-route proof command route mismatch blocker should be explicit"
   );
 
-  const missingSelectedRouteSetup = createPrivateV1Evidence();
+  const missingSelectedRouteSetup = createV1Evidence();
   fs.unlinkSync(missingSelectedRouteSetup.selectedRouteSetupPath);
-  const missingSelectedRouteSetupCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingSelectedRouteSetup.proofPath });
-  assert.strictEqual(missingSelectedRouteSetupCheck.status, "blocked", "missing selected-route setup evidence should block private V1 proof");
+  const missingSelectedRouteSetupCheck = verifier.buildV1ProofCheck({ proofPath: missingSelectedRouteSetup.proofPath });
+  assert.strictEqual(missingSelectedRouteSetupCheck.status, "blocked", "missing selected-route setup evidence should block V1 proof");
   assert(
     missingSelectedRouteSetupCheck.blockers.some((blocker) => blocker.id === "selected-route-setup"),
     "selected-route setup blocker should be explicit"
   );
 
-  const mismatchedPreflightRoute = createPrivateV1Evidence({
+  const mismatchedPreflightRoute = createV1Evidence({
     preflight: { selectedRoute: "gradle-cache" }
   });
-  const mismatchedPreflightRouteCheck = verifier.buildPrivateV1ProofCheck({ proofPath: mismatchedPreflightRoute.proofPath });
-  assert.strictEqual(mismatchedPreflightRouteCheck.status, "blocked", "private V1 proof should block preflight evidence from another selected route");
+  const mismatchedPreflightRouteCheck = verifier.buildV1ProofCheck({ proofPath: mismatchedPreflightRoute.proofPath });
+  assert.strictEqual(mismatchedPreflightRouteCheck.status, "blocked", "V1 proof should block preflight evidence from another selected route");
   assert(
-    mismatchedPreflightRouteCheck.blockers.some((blocker) => blocker.id === "private-windows-preflight-route"),
-    "private preflight selected-route mismatch blocker should be explicit"
+    mismatchedPreflightRouteCheck.blockers.some((blocker) => blocker.id === "v1-windows-preflight-route"),
+    "V1 preflight selected-route mismatch blocker should be explicit"
   );
 
-  const missingBind = createPrivateV1Evidence({
+  const missingBind = createV1Evidence({
     commands: [],
     proof: {}
   });
   writeNdjson(missingBind.commandLogPath, [
-    { id: "private-windows-preflight", command: "npm run demo:private-windows-preflight", exitCode: 0 },
+    { id: "v1-windows-preflight", command: "npm run v1:preflight", exitCode: 0 },
     { id: "first-route-proof", command: "npm run proof:first-route:windows -- -Route temp-fixture", exitCode: 0 },
     { id: "archive-first-route-root-exports", command: "archive first-route repo-root proof exports", exitCode: 0 },
     { id: "selected-route-proof", command: "npm run proof:route:windows -- -Route npm-cache", exitCode: 0 }
   ]);
-  const missingBindCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingBind.proofPath });
-  assert.strictEqual(missingBindCheck.status, "blocked", "missing first-route binding should block private V1 proof");
+  const missingBindCheck = verifier.buildV1ProofCheck({ proofPath: missingBind.proofPath });
+  assert.strictEqual(missingBindCheck.status, "blocked", "missing first-route binding should block V1 proof");
   assert(
     missingBindCheck.blockers.some((blocker) => blocker.id === "command-bind-first-route-completion"),
     "missing binding blocker should be explicit"
   );
 
-  const unsafeProof = createPrivateV1Evidence({ proof: { directCleanupCommands: true } });
-  const unsafeCheck = verifier.buildPrivateV1ProofCheck({ proofPath: unsafeProof.proofPath });
+  const unsafeProof = createV1Evidence({ proof: { directCleanupCommands: true } });
+  const unsafeCheck = verifier.buildV1ProofCheck({ proofPath: unsafeProof.proofPath });
   assert.strictEqual(unsafeCheck.status, "blocked", "direct cleanup authority in V1 proof should block acceptance");
   assert(
     unsafeCheck.blockers.some((blocker) => blocker.id === "direct-cleanup-commands"),
     "direct cleanup blocker should be explicit"
   );
 
-  const selectedBlocked = createPrivateV1Evidence({
+  const selectedBlocked = createV1Evidence({
     selectedRouteCompletion: { status: "blocked", canStartNextRoute: false, counts: { reclaimedBytes: 0 } }
   });
-  const selectedBlockedCheck = verifier.buildPrivateV1ProofCheck({ proofPath: selectedBlocked.proofPath });
-  assert.strictEqual(selectedBlockedCheck.status, "blocked", "blocked selected-route completion should block private V1 proof");
+  const selectedBlockedCheck = verifier.buildV1ProofCheck({ proofPath: selectedBlocked.proofPath });
+  assert.strictEqual(selectedBlockedCheck.status, "blocked", "blocked selected-route completion should block V1 proof");
   assert(
     selectedBlockedCheck.blockers.some((blocker) => blocker.id === "selected-route-completion"),
     "selected-route completion blocker should be explicit"
   );
 
-  const missingSelectedRouteParity = createPrivateV1Evidence({
+  const missingSelectedRouteParity = createV1Evidence({
     selectedRouteCompletion: {
       counts: { reclaimedBytes: 1048576 }
     }
   });
-  const missingSelectedRouteParityCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingSelectedRouteParity.proofPath });
-  assert.strictEqual(missingSelectedRouteParityCheck.status, "blocked", "selected-route completion without rescan parity counts should block private V1 proof");
+  const missingSelectedRouteParityCheck = verifier.buildV1ProofCheck({ proofPath: missingSelectedRouteParity.proofPath });
+  assert.strictEqual(missingSelectedRouteParityCheck.status, "blocked", "selected-route completion without rescan parity counts should block V1 proof");
   assert(
     missingSelectedRouteParityCheck.blockers.some((blocker) => blocker.id === "selected-route-completion-parity"),
     "selected-route completion parity blocker should be explicit"
   );
 
-  const mismatchedFirstRouteSummary = createPrivateV1Evidence({
+  const mismatchedFirstRouteSummary = createV1Evidence({
     proof: {
       firstRouteCompletion: {
         status: "accepted",
@@ -553,22 +553,22 @@ function writeOpenAiSmokeEvidence(filePath, {
       }
     }
   });
-  const mismatchedFirstRouteSummaryCheck = verifier.buildPrivateV1ProofCheck({ proofPath: mismatchedFirstRouteSummary.proofPath });
-  assert.strictEqual(mismatchedFirstRouteSummaryCheck.status, "blocked", "private V1 summary bytes that disagree with first-route completion should block");
+  const mismatchedFirstRouteSummaryCheck = verifier.buildV1ProofCheck({ proofPath: mismatchedFirstRouteSummary.proofPath });
+  assert.strictEqual(mismatchedFirstRouteSummaryCheck.status, "blocked", "V1 summary bytes that disagree with first-route completion should block");
   assert(
     mismatchedFirstRouteSummaryCheck.blockers.some((blocker) => blocker.id === "first-route-completion-summary"),
     "first-route completion summary parity blocker should be explicit"
   );
 
-  const missingBundle = createPrivateV1Evidence({ preflight: { nativeBundleArtifacts: [] } });
-  const missingBundleCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingBundle.proofPath });
-  assert.strictEqual(missingBundleCheck.status, "blocked", "missing native bundle artifact evidence should block private V1 proof");
+  const missingBundle = createV1Evidence({ preflight: { nativeBundleArtifacts: [] } });
+  const missingBundleCheck = verifier.buildV1ProofCheck({ proofPath: missingBundle.proofPath });
+  assert.strictEqual(missingBundleCheck.status, "blocked", "missing native bundle artifact evidence should block V1 proof");
   assert(
     missingBundleCheck.blockers.some((blocker) => blocker.id === "native-bundle-artifacts"),
     "native bundle artifact blocker should be explicit"
   );
 
-  const missingBundleEvidence = createPrivateV1Evidence({
+  const missingBundleEvidence = createV1Evidence({
     preflight: {
       nativeBundleArtifacts: [
         {
@@ -581,25 +581,25 @@ function writeOpenAiSmokeEvidence(filePath, {
       ]
     }
   });
-  const missingBundleEvidenceCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingBundleEvidence.proofPath });
-  assert.strictEqual(missingBundleEvidenceCheck.status, "blocked", "missing copied bundle artifact evidence should block private V1 proof");
+  const missingBundleEvidenceCheck = verifier.buildV1ProofCheck({ proofPath: missingBundleEvidence.proofPath });
+  assert.strictEqual(missingBundleEvidenceCheck.status, "blocked", "missing copied bundle artifact evidence should block V1 proof");
   assert(
     missingBundleEvidenceCheck.blockers.some((blocker) => blocker.id === "native-bundle-artifact-evidence"),
     "copied bundle evidence blocker should be explicit"
   );
 
   const coordinator = fs.readFileSync(coordinatorPath, "utf8");
-  assert(coordinator.includes("private-v1-proof-check.json"), "V1 coordinator should write private V1 proof verifier output");
-  assert(coordinator.includes("run-private-v1-proof-check.mjs --file"), "V1 coordinator should invoke the independent private V1 proof verifier");
-  assert(gitignore.includes("private-v1-proof-check.json"), ".gitignore should exclude copied private V1 proof check artifacts");
-  assert(readme.includes("npm run validate:private-v1-proof -- --file"), "README should document private V1 proof validation");
-  assert(windowsSetup.includes("npm run validate:private-v1-proof -- --file"), "Windows setup guide should document private V1 proof validation");
+  assert(coordinator.includes("v1-proof-check.json"), "V1 coordinator should write V1 proof verifier output");
+  assert(coordinator.includes("run-v1-proof-check.mjs --file"), "V1 coordinator should invoke the independent V1 proof verifier");
+  assert(gitignore.includes("v1-proof-check.json"), ".gitignore should exclude copied V1 proof check artifacts");
+  assert(readme.includes("npm run validate:v1-proof -- --file"), "README should document V1 proof validation");
+  assert(windowsSetup.includes("npm run validate:v1-proof -- --file"), "Windows setup guide should document V1 proof validation");
   assert(readme.includes("native bundle artifact"), "README should mention native bundle artifact evidence in the V1 proof");
   assert(windowsSetup.includes("native bundle artifact"), "Windows setup guide should mention native bundle artifact evidence in the V1 proof");
   assert(readme.includes("copied native bundle artifact") && readme.includes("SHA-256"), "README should document copied native bundle artifact hashes");
   assert(windowsSetup.includes("copied native bundle artifact") && windowsSetup.includes("SHA-256"), "Windows setup guide should document copied native bundle artifact hashes");
 
-  console.log("private v1 proof check ok");
+  console.log("v1 proof check ok");
 })().catch((error) => {
   console.error(error);
   process.exit(1);

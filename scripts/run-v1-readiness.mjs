@@ -4,14 +4,14 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const SCRIPT_ID = "spaceguard-private-demo-readiness";
-const SCHEMA_VERSION = "spaceguard-private-demo-readiness/v1";
+const SCRIPT_ID = "spaceguard-v1-readiness";
+const SCHEMA_VERSION = "spaceguard-v1-readiness/v1";
 const EXACT_PROOF_IMPORT_INSTRUCTION = "Import artifact path must be spaceguard-selected-route-proof-packet.md";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const defaultRoot = path.resolve(path.dirname(scriptPath), "..");
 
-export function buildPrivateDemoReadinessSummary({
+export function buildV1ReadinessSummary({
   rootDir = defaultRoot,
   generatedAt = new Date().toISOString(),
   hostPlatform = process.platform,
@@ -22,19 +22,19 @@ export function buildPrivateDemoReadinessSummary({
   const tauriConfig = readJson(path.join(root, "src-tauri", "tauri.conf.json"));
   const firstRouteRunnerPath = path.join(root, "scripts", "run-first-route-proof-windows.ps1");
   const selectedRouteRunnerPath = path.join(root, "scripts", "run-route-proof-windows.ps1");
-  const privateV1RunnerPath = path.join(root, "scripts", "run-private-v1-windows-proof.ps1");
+  const v1RunnerPath = path.join(root, "scripts", "run-v1-windows-proof.ps1");
   const firstRouteRunner = readText(firstRouteRunnerPath);
   const selectedRouteRunner = readText(selectedRouteRunnerPath);
-  const privateV1Runner = readText(privateV1RunnerPath);
+  const v1Runner = readText(v1RunnerPath);
   const workflowProofCheck = readText(path.join(root, "scripts", "run-workflow-proof-check.mjs"));
-  const privateV1ProofCheck = readText(path.join(root, "scripts", "run-private-v1-proof-check.mjs"));
+  const v1ProofCheck = readText(path.join(root, "scripts", "run-v1-proof-check.mjs"));
   const firstRouteCompletionCheck = readText(path.join(root, "scripts", "run-first-route-completion-check.mjs"));
   const selectedRoutePreflightCheck = readText(path.join(root, "scripts", "run-route-preflight-check.mjs"));
   const selectedRouteCompletionCheck = readText(path.join(root, "scripts", "run-route-completion-check.mjs"));
   const openAiSmokeRunner = readText(path.join(root, "scripts", "run-openai-advisor-smoke.mjs"));
   const openAiAgent = readText(path.join(root, "src", "openai-agent.mjs"));
   const nativeOpenAiAgent = readText(path.join(root, "src-tauri", "src", "main.rs"));
-  const privateWindowsPreflightRunner = readText(path.join(root, "scripts", "run-private-demo-windows-preflight.ps1"));
+  const v1WindowsPreflightRunner = readText(path.join(root, "scripts", "run-v1-windows-preflight.ps1"));
   const envExample = readText(path.join(root, ".env.example"));
   const readme = readText(path.join(root, "README.md"));
   const windowsSetup = readText(path.join(root, "WINDOWS_REAL_DATA_SETUP.md"));
@@ -51,7 +51,7 @@ export function buildPrivateDemoReadinessSummary({
       id: "tauri-native-build-script",
       label: "Native build script",
       passed: scriptIncludes(packageJson, "native:build", "tauri build"),
-      detail: "package.json must expose npm run native:build for the compiled private demo."
+      detail: "package.json must expose npm run native:build for the compiled V1."
     }),
     buildCheck({
       id: "tauri-bundle-active",
@@ -121,7 +121,7 @@ export function buildPrivateDemoReadinessSummary({
         readme.includes("npm run openai:smoke -- --route npm-cache") &&
         windowsSetup.includes("npm run openai:smoke -- --route npm-cache") &&
         agentDesign.includes("The OpenAI integration is advisory, not an executor."),
-      detail: "The live OpenAI smoke must use .env/API-key mode, keep fixture-only separate, and document advisory-only authority before the private demo."
+      detail: "The live OpenAI smoke must use .env/API-key mode, keep fixture-only separate, and document advisory-only authority before the V1."
     }),
     buildCheck({
       id: "openai-native-advisor-contract",
@@ -159,78 +159,78 @@ export function buildPrivateDemoReadinessSummary({
       label: "Native executor coverage",
       passed: scriptIncludes(packageJson, "native:executor-coverage", "run-native-executor-coverage.mjs") &&
         fileExists(root, "scripts", "run-native-executor-coverage.mjs"),
-      detail: "Private demo readiness must expose native route boundary and Rust unit-test coverage for real cleanup executors."
+      detail: "V1 readiness must expose native route boundary and Rust unit-test coverage for real cleanup executors."
     }),
     buildCheck({
-      id: "windows-private-preflight-runner",
-      label: "Windows private preflight runner",
-      passed: scriptIncludes(packageJson, "demo:private-windows-preflight", "run-private-demo-windows-preflight.ps1") &&
-        fileReady(privateWindowsPreflightRunner) &&
-        privateWindowsPreflightRunner.includes("Get-NativeBundleArtifacts") &&
-        privateWindowsPreflightRunner.includes("Copy-NativeBundleArtifacts") &&
-        privateWindowsPreflightRunner.includes("evidencePath") &&
-        privateWindowsPreflightRunner.includes("sha256") &&
-        privateWindowsPreflightRunner.includes("nativeBundleArtifacts"),
-      detail: "Private demo readiness must provide one Windows host preflight command that captures native bundle artifacts before fixture and npm-cache proof runs."
+      id: "windows-v1-preflight-runner",
+      label: "Windows V1 preflight runner",
+      passed: scriptIncludes(packageJson, "v1:preflight", "run-v1-windows-preflight.ps1") &&
+        fileReady(v1WindowsPreflightRunner) &&
+        v1WindowsPreflightRunner.includes("Get-NativeBundleArtifacts") &&
+        v1WindowsPreflightRunner.includes("Copy-NativeBundleArtifacts") &&
+        v1WindowsPreflightRunner.includes("evidencePath") &&
+        v1WindowsPreflightRunner.includes("sha256") &&
+        v1WindowsPreflightRunner.includes("nativeBundleArtifacts"),
+      detail: "V1 readiness must provide one Windows host preflight command that captures native bundle artifacts before fixture and npm-cache proof runs."
     }),
     buildCheck({
-      id: "windows-private-v1-proof-runner",
-      label: "Windows private V1 proof runner",
-      passed: scriptIncludes(packageJson, "demo:private-v1-windows", "run-private-v1-windows-proof.ps1") &&
-        fileReady(privateV1Runner) &&
-        privateV1Runner.includes("spaceguard-private-v1-windows-proof/v1") &&
-        privateV1Runner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK") &&
-        privateV1Runner.includes("[System.Diagnostics.ProcessStartInfo]::new()") &&
-        privateV1Runner.includes("stderrPath") &&
-        privateV1Runner.includes("private-v1-openai-live-required") &&
-        privateV1Runner.includes("private-v1-openai-key-required") &&
-        privateV1Runner.includes("Import-SpaceGuardDotEnv") &&
-        privateV1Runner.includes("Assert-KnownSelectedRoute") &&
-        privateV1Runner.includes("selected-route-setup.json") &&
-        privateV1Runner.includes("selected-route-unknown") &&
-        privateV1Runner.includes("Assert-CompletionProofCounts") &&
-        privateV1Runner.includes("Assert-ExistingPrivateWindowsPreflight") &&
-        privateV1Runner.includes("private-windows-preflight-skipped-missing") &&
-        privateV1Runner.includes("SkipPreflightExistingEvidence") &&
-        privateV1Runner.includes("npm run proof:first-route:windows -- -Route temp-fixture") &&
-        privateV1Runner.includes("npm run proof:route:windows -- -Route $SelectedRoute") &&
-        privateV1Runner.includes("ledgerReclaimedBytes") &&
-        privateV1Runner.includes("rescanExpectedBytes") &&
-        privateV1Runner.includes("rescanActualRemainingBytes") &&
-        privateV1Runner.includes("run-private-v1-proof-check.mjs --file") &&
-        directDeleteFree(privateV1Runner),
-      detail: "Private demo readiness must expose a single Windows V1 proof command that binds first-route completion and route/rescan parity before selected real-data cleanup."
+      id: "windows-v1-proof-runner",
+      label: "Windows V1 proof runner",
+      passed: scriptIncludes(packageJson, "v1:windows", "run-v1-windows-proof.ps1") &&
+        fileReady(v1Runner) &&
+        v1Runner.includes("spaceguard-v1-windows-proof/v1") &&
+        v1Runner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK") &&
+        v1Runner.includes("[System.Diagnostics.ProcessStartInfo]::new()") &&
+        v1Runner.includes("stderrPath") &&
+        v1Runner.includes("v1-openai-live-required") &&
+        v1Runner.includes("v1-openai-key-required") &&
+        v1Runner.includes("Import-SpaceGuardDotEnv") &&
+        v1Runner.includes("Assert-KnownSelectedRoute") &&
+        v1Runner.includes("selected-route-setup.json") &&
+        v1Runner.includes("selected-route-unknown") &&
+        v1Runner.includes("Assert-CompletionProofCounts") &&
+        v1Runner.includes("Assert-ExistingV1WindowsPreflight") &&
+        v1Runner.includes("v1-windows-preflight-skipped-missing") &&
+        v1Runner.includes("SkipPreflightExistingEvidence") &&
+        v1Runner.includes("npm run proof:first-route:windows -- -Route temp-fixture") &&
+        v1Runner.includes("npm run proof:route:windows -- -Route $SelectedRoute") &&
+        v1Runner.includes("ledgerReclaimedBytes") &&
+        v1Runner.includes("rescanExpectedBytes") &&
+        v1Runner.includes("rescanActualRemainingBytes") &&
+        v1Runner.includes("run-v1-proof-check.mjs --file") &&
+        directDeleteFree(v1Runner),
+      detail: "V1 readiness must expose a single Windows V1 proof command that binds first-route completion and route/rescan parity before selected real-data cleanup."
     }),
     buildCheck({
-      id: "private-v1-proof-validation",
-      label: "Private V1 proof validation",
-      passed: scriptIncludes(packageJson, "validate:private-v1-proof", "run-private-v1-proof-check.mjs") &&
-        fileReady(privateV1ProofCheck) &&
-        privateV1ProofCheck.includes("spaceguard-private-v1-proof-check/v1") &&
-        privateV1ProofCheck.includes("spaceguard-private-v1-windows-proof/v1") &&
-        privateV1ProofCheck.includes("selected-route-setup") &&
-        privateV1ProofCheck.includes("spaceguard-route-setup-packet/v1") &&
-        privateV1ProofCheck.includes("bind-first-route-completion") &&
-        privateV1ProofCheck.includes("validateReusedPrivateWindowsPreflightCommand") &&
-        privateV1ProofCheck.includes("SkipPreflightExistingEvidence") &&
-        privateV1ProofCheck.includes("private-windows-preflight-route") &&
-        privateV1ProofCheck.includes("command-stderr") &&
-        privateV1ProofCheck.includes("stderrPath") &&
-        privateV1ProofCheck.includes("openAiSmokeArtifacts") &&
-        privateV1ProofCheck.includes("openai-fixture-smoke") &&
-        privateV1ProofCheck.includes("openai-live-smoke") &&
-        privateV1ProofCheck.includes("validation=broker-ready") &&
-        privateV1ProofCheck.includes("validateChildCommandRecords") &&
-        privateV1ProofCheck.includes("validatePrivatePreflightCommandRecords") &&
-        privateV1ProofCheck.includes("validatePrivatePreflightOpenAiSmokeEvidence") &&
-        privateV1ProofCheck.includes("command-route-selected-route-proof") &&
-        privateV1ProofCheck.includes("REQUIRED_PRIVATE_PREFLIGHT_COMMANDS") &&
-        privateV1ProofCheck.includes("rust-tests") &&
-        privateV1ProofCheck.includes("native-build") &&
-        privateV1ProofCheck.includes("private-preflight-command-direct-cleanup") &&
-        privateV1ProofCheck.includes("command-direct-cleanup") &&
-        privateV1ProofCheck.includes("completion-parity"),
-      detail: "Private demo readiness must include an independent verifier for final V1 proof, child stderr artifacts, child command ledgers, OpenAI smoke evidence, and route/rescan parity counts."
+      id: "v1-proof-validation",
+      label: "V1 proof validation",
+      passed: scriptIncludes(packageJson, "validate:v1-proof", "run-v1-proof-check.mjs") &&
+        fileReady(v1ProofCheck) &&
+        v1ProofCheck.includes("spaceguard-v1-proof-check/v1") &&
+        v1ProofCheck.includes("spaceguard-v1-windows-proof/v1") &&
+        v1ProofCheck.includes("selected-route-setup") &&
+        v1ProofCheck.includes("spaceguard-route-setup-packet/v1") &&
+        v1ProofCheck.includes("bind-first-route-completion") &&
+        v1ProofCheck.includes("validateReusedV1WindowsPreflightCommand") &&
+        v1ProofCheck.includes("SkipPreflightExistingEvidence") &&
+        v1ProofCheck.includes("v1-windows-preflight-route") &&
+        v1ProofCheck.includes("command-stderr") &&
+        v1ProofCheck.includes("stderrPath") &&
+        v1ProofCheck.includes("openAiSmokeArtifacts") &&
+        v1ProofCheck.includes("openai-fixture-smoke") &&
+        v1ProofCheck.includes("openai-live-smoke") &&
+        v1ProofCheck.includes("validation=broker-ready") &&
+        v1ProofCheck.includes("validateChildCommandRecords") &&
+        v1ProofCheck.includes("validateV1PreflightCommandRecords") &&
+        v1ProofCheck.includes("validateV1PreflightOpenAiSmokeEvidence") &&
+        v1ProofCheck.includes("command-route-selected-route-proof") &&
+        v1ProofCheck.includes("REQUIRED_V1_PREFLIGHT_COMMANDS") &&
+        v1ProofCheck.includes("rust-tests") &&
+        v1ProofCheck.includes("native-build") &&
+        v1ProofCheck.includes("v1-preflight-command-direct-cleanup") &&
+        v1ProofCheck.includes("command-direct-cleanup") &&
+        v1ProofCheck.includes("completion-parity"),
+      detail: "V1 readiness must include an independent verifier for final V1 proof, child stderr artifacts, child command ledgers, OpenAI smoke evidence, and route/rescan parity counts."
     }),
     buildCheck({
       id: "workflow-proof-validation",
@@ -260,12 +260,11 @@ export function buildPrivateDemoReadinessSummary({
       detail: "PowerShell proof runners must not delete files directly; all cleanup stays inside the guarded app executor."
     }),
     buildCheck({
-      id: "docs-private-runbooks",
-      label: "Private demo runbooks",
+      id: "docs-v1-runbooks",
+      label: "V1 runbooks",
       passed: fileExists(root, "WINDOWS_REAL_DATA_SETUP.md") &&
-        fileExists(root, "NATIVE_BETA_DISTRIBUTION.md") &&
         fileExists(root, "AGENT_DESIGN.md"),
-      detail: "Private demo setup, beta distribution, and agent authority docs must be present."
+      detail: "V1 setup and agent authority docs must be present."
     })
   ];
 
@@ -279,9 +278,9 @@ export function buildPrivateDemoReadinessSummary({
     schemaVersion: SCHEMA_VERSION,
     tool: SCRIPT_ID,
     generatedAt,
-    target: "private-windows-demo",
+    target: "windows-v1",
     status: ready ? "ready" : "blocked",
-    canAttemptPrivateWindowsDemo: ready,
+    canAttemptWindowsV1: ready,
     build: {
       platformRequired: "windows",
       tauriProductName: String(tauriConfig.productName || ""),
@@ -304,19 +303,19 @@ export function buildPrivateDemoReadinessSummary({
     nextCommands: [
       "npm test",
       "npm run build",
-      "npm run demo:private-readiness",
-      "npm run demo:private-v1-windows -- -SelectedRoute npm-cache",
-      "npm run validate:private-v1-proof -- --file evidence/private-v1-proof-npm-cache-YYYYMMDD-HHMMSS/private-v1-proof.json",
+      "npm run v1:readiness",
+      "npm run v1:windows -- -SelectedRoute npm-cache",
+      "npm run validate:v1-proof -- --file evidence/v1-proof-npm-cache-YYYYMMDD-HHMMSS/v1-proof.json",
       "npm run openai:smoke:fixture -- --route npm-cache",
       "npm run openai:smoke -- --route npm-cache",
-      "npm run demo:private-windows-preflight",
+      "npm run v1:preflight",
       "npm run native:build",
       "npm run proof:first-route:windows -- -Route temp-fixture",
       "npm run proof:route:windows -- -Route npm-cache"
     ],
     primary: ready
-      ? "Private Windows demo readiness is proven; run the V1 Windows coordinator on a prepared Windows host for seeded first-route proof and npm-cache proof."
-      : `Private Windows demo readiness is blocked by ${blockers.length} issue(s).`
+      ? "Windows V1 readiness is proven; run the V1 Windows coordinator on a prepared Windows host for seeded first-route proof and npm-cache proof."
+      : `Windows V1 readiness is blocked by ${blockers.length} issue(s).`
   };
 }
 
@@ -381,7 +380,7 @@ function buildHostPrerequisiteSummary({ hostPlatform = process.platform, command
     const pkgConfigAvailable = commandAvailable("pkg-config", commandAvailability);
     if (!pkgConfigAvailable) {
       warnings.push("pkg-config is missing; Linux native builds need pkg-config and libdbus-1-dev before Tauri can compile libdbus-sys.");
-      warnings.push("The private proof workflow still targets Windows; run npm run native:build on a prepared Windows host for the Windows demo bundle.");
+      warnings.push("The V1 proof workflow targets Windows; run npm run native:build on a prepared Windows host for the SpaceGuard bundle.");
       return {
         currentPlatform,
         nativeBuildStatus: "host-prereqs-missing",
@@ -389,7 +388,7 @@ function buildHostPrerequisiteSummary({ hostPlatform = process.platform, command
       };
     }
 
-    warnings.push("Linux host prerequisites look present, but the private proof workflow and runner commands still require Windows.");
+    warnings.push("Linux host prerequisites look present, but the V1 proof workflow and runner commands still require Windows.");
     return {
       currentPlatform,
       nativeBuildStatus: "host-prereqs-present",
@@ -397,7 +396,7 @@ function buildHostPrerequisiteSummary({ hostPlatform = process.platform, command
     };
   }
 
-  warnings.push("The private proof workflow is Windows-targeted; use a Windows host for the compiled demo and proof runners.");
+  warnings.push("The V1 proof workflow is Windows-targeted; use a Windows host for the compiled app and proof runners.");
   return {
     currentPlatform,
     nativeBuildStatus: "non-windows-host",
@@ -424,7 +423,7 @@ function commandAvailable(command, commandAvailability = null) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const summary = buildPrivateDemoReadinessSummary();
+  const summary = buildV1ReadinessSummary();
   console.log(JSON.stringify(summary, null, 2));
-  if (!summary.canAttemptPrivateWindowsDemo) process.exitCode = 1;
+  if (!summary.canAttemptWindowsV1) process.exitCode = 1;
 }

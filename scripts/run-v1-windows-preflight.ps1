@@ -7,7 +7,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
-  throw "The private demo Windows preflight must be run on Windows because cargo test, Tauri bundle output, and proof runners are Windows-targeted."
+  throw "The V1 Windows preflight must be run on Windows because cargo test, Tauri bundle output, and proof runners are Windows-targeted."
 }
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
@@ -16,17 +16,17 @@ Push-Location $RepoRoot
 try {
   $SelectedRoute = $SelectedRoute.Trim()
   if ([string]::IsNullOrWhiteSpace($SelectedRoute)) {
-    throw "SelectedRoute is required. Example: npm run demo:private-windows-preflight -- -SelectedRoute npm-cache"
+    throw "SelectedRoute is required. Example: npm run v1:preflight -- -SelectedRoute npm-cache"
   }
 
   $RunStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
   if ([string]::IsNullOrWhiteSpace($EvidenceRoot)) {
-    $EvidenceRoot = Join-Path $RepoRoot "evidence\private-demo-preflight-$RunStamp"
+    $EvidenceRoot = Join-Path $RepoRoot "evidence\v1-preflight-$RunStamp"
   }
 
   $CommandLogPath = Join-Path $EvidenceRoot "commands.ndjson"
-  $PreflightPath = Join-Path $EvidenceRoot "private-demo-preflight.json"
-  $ReadinessPath = Join-Path $EvidenceRoot "private-demo-readiness.json"
+  $PreflightPath = Join-Path $EvidenceRoot "v1-preflight.json"
+  $ReadinessPath = Join-Path $EvidenceRoot "v1-readiness.json"
   $NativeCoveragePath = Join-Path $EvidenceRoot "native-executor-coverage.json"
   $OpenAiFixtureSmokePath = Join-Path $EvidenceRoot "openai-fixture-smoke.txt"
   $OpenAiLiveSmokePath = Join-Path $EvidenceRoot "openai-live-smoke.txt"
@@ -153,7 +153,7 @@ try {
     nativeExecutorCoverage = "npm run native:executor-coverage"
     rustTests = "cargo test --manifest-path src-tauri\Cargo.toml"
     webBuild = "npm run build"
-    privateReadiness = "npm run demo:private-readiness"
+    v1Readiness = "npm run v1:readiness"
     openAiFixtureSmoke = "npm run openai:smoke:fixture -- --route $SelectedRoute"
     openAiLiveSmoke = "npm run openai:smoke -- --route $SelectedRoute"
     nativeBuild = "npm run native:build"
@@ -165,7 +165,7 @@ try {
   Invoke-LoggedCommand -Id "native-executor-coverage" -CommandLine $commands.nativeExecutorCoverage -OutputPath $NativeCoveragePath | Out-Null
   Invoke-LoggedCommand -Id "rust-tests" -CommandLine $commands.rustTests -OutputPath (Join-Path $EvidenceRoot "cargo-test.txt") | Out-Null
   Invoke-LoggedCommand -Id "web-build" -CommandLine $commands.webBuild -OutputPath (Join-Path $EvidenceRoot "npm-build.txt") | Out-Null
-  Invoke-LoggedCommand -Id "private-demo-readiness" -CommandLine $commands.privateReadiness -OutputPath $ReadinessPath | Out-Null
+  Invoke-LoggedCommand -Id "v1-readiness" -CommandLine $commands.v1Readiness -OutputPath $ReadinessPath | Out-Null
   Invoke-LoggedCommand -Id "openai-fixture-smoke" -CommandLine $commands.openAiFixtureSmoke -OutputPath $OpenAiFixtureSmokePath | Out-Null
   Invoke-LoggedCommand -Id "openai-live-smoke" -CommandLine $commands.openAiLiveSmoke -OutputPath $OpenAiLiveSmokePath | Out-Null
   Invoke-LoggedCommand -Id "native-build" -CommandLine $commands.nativeBuild -OutputPath (Join-Path $EvidenceRoot "native-build.txt") | Out-Null
@@ -175,7 +175,7 @@ try {
   }
 
   $summary = [PSCustomObject]@{
-    schemaVersion = "spaceguard-private-demo-windows-preflight/v1"
+    schemaVersion = "spaceguard-v1-windows-preflight/v1"
     generatedAt = (Get-Date).ToUniversalTime().ToString("o")
     startedAt = $startedAt
     status = "passed"
@@ -183,8 +183,8 @@ try {
     evidenceRoot = $EvidenceRoot
     commandLogPath = $CommandLogPath
     artifacts = [PSCustomObject]@{
-      privateDemoPreflight = $PreflightPath
-      privateDemoReadiness = $ReadinessPath
+      v1Preflight = $PreflightPath
+      v1Readiness = $ReadinessPath
       nativeExecutorCoverage = $NativeCoveragePath
       openAiFixtureSmoke = $OpenAiFixtureSmokePath
       openAiLiveSmoke = $OpenAiLiveSmokePath
@@ -197,13 +197,13 @@ try {
       $commands.nextFirstRoute,
       $commands.nextSelectedRoute
     )
-    primary = "Windows private demo host preflight passed. Start the seeded first-route proof before npm-cache."
+    primary = "Windows V1 host preflight passed. Start the seeded first-route proof before npm-cache."
   }
 
   Write-JsonFile -Value $summary -Path $PreflightPath
 
   Write-Host ""
-  Write-Host "SpaceGuard private demo Windows preflight passed."
+  Write-Host "SpaceGuard V1 Windows preflight passed."
   Write-Host "Evidence root: $EvidenceRoot"
   Write-Host "Preflight artifact: $PreflightPath"
   Write-Host ""

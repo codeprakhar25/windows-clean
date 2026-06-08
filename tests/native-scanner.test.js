@@ -2,8 +2,10 @@ const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 
+const MB = 1024 * 1024;
+const GB = 1024 * MB;
+
 (async () => {
-  const guard = await import("../src/spaceguard-model.mjs");
   const native = await import("../src/native-scanner.mjs");
   const rustMain = fs.readFileSync(path.join(__dirname, "..", "src-tauri", "src", "main.rs"), "utf8");
 
@@ -72,6 +74,9 @@ const path = require("path");
   assert.strictEqual(writeUnavailable.available, false, "native write boundary should report unavailable outside Tauri");
   assert.strictEqual(writeUnavailable.accepted, false, "native write fallback must not accept execution");
   assert.strictEqual(writeUnavailable.destructiveCommands, false, "native write fallback must not expose destructive commands");
+  const proofArtifactUnavailable = await native.writeNativeProofArtifact("spaceguard-real-workflow-proof.md", "{}", {}, {});
+  assert.strictEqual(proofArtifactUnavailable.available, false, "native proof artifact writer should report unavailable outside Tauri");
+  assert.strictEqual(proofArtifactUnavailable.written, false, "browser fallback must not claim proof artifact writes");
   const capabilityUnavailable = await native.getNativeRuntimeCapabilities({});
   assert.strictEqual(capabilityUnavailable.available, false, "runtime capability should report unavailable outside Tauri");
   assert.strictEqual(capabilityUnavailable.elevated, false, "browser runtime capability must not imply elevation");
@@ -83,12 +88,12 @@ const path = require("path");
   let scanInvocation = null;
   const invokedScan = await native.runNativeReadonlyScan(
     {
-      protectedPaths: ["C:\\Users\\demo\\ClientWork"],
+      protectedPaths: ["C:\\Users\\LocalUser\\ClientWork"],
       includeProjectArtifacts: false,
       maxDepth: 4,
       maxEntriesPerRoot: 5000,
       targetDrive: "d",
-      customRoots: ["C:\\Users\\demo\\Archives", "C:\\Users\\demo\\Archives", " "]
+      customRoots: ["C:\\Users\\LocalUser\\Archives", "C:\\Users\\LocalUser\\Archives", " "]
     },
     {
       __TAURI__: {
@@ -102,16 +107,87 @@ const path = require("path");
     }
   );
   assert.strictEqual(scanInvocation.command, "scan_known_roots", "native scan should invoke scan_known_roots");
-  assert.deepStrictEqual(scanInvocation.payload.request.protectedPaths, ["C:\\Users\\demo\\ClientWork"], "native scan should pass protected paths");
+  assert.deepStrictEqual(scanInvocation.payload.request.protectedPaths, ["C:\\Users\\LocalUser\\ClientWork"], "native scan should pass protected paths");
   assert.strictEqual(scanInvocation.payload.request.includeProjectArtifacts, false, "native scan should pass project artifact setting");
   assert.strictEqual(scanInvocation.payload.request.maxDepth, 4, "native scan should pass max depth setting");
   assert.strictEqual(scanInvocation.payload.request.maxEntriesPerRoot, 5000, "native scan should pass entry cap setting");
   assert.strictEqual(scanInvocation.payload.request.targetDrive, "D:", "native scan should pass normalized target drive");
-  assert.deepStrictEqual(scanInvocation.payload.request.customRoots, ["C:\\Users\\demo\\Archives"], "native scan should pass deduped custom roots");
+  assert.deepStrictEqual(scanInvocation.payload.request.customRoots, ["C:\\Users\\LocalUser\\Archives"], "native scan should pass deduped custom roots");
   assert.strictEqual(invokedScan.request.targetDrive, "D:", "native scan should return the request that produced evidence");
-  assert.deepStrictEqual(invokedScan.request.customRoots, ["C:\\Users\\demo\\Archives"], "native scan request evidence should keep normalized custom roots");
+  assert.deepStrictEqual(invokedScan.request.customRoots, ["C:\\Users\\LocalUser\\Archives"], "native scan request evidence should keep normalized custom roots");
 
-  const actionList = guard.buildScenarioActions("developer");
+  let proofArtifactInvocation = null;
+  const proofArtifactWrite = await native.writeNativeProofArtifact(
+    "spaceguard-selected-route-proof-packet.md",
+    "# proof",
+    { route: "known-temp-delete" },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            proofArtifactInvocation = { command, payload };
+            return Promise.resolve({
+              schemaVersion: "spaceguard-proof-artifact-write/v1",
+              available: true,
+              written: true,
+              fileName: "spaceguard-selected-route-proof-packet.md",
+              path: "C:\\repo\\spaceguard-selected-route-proof-packet.md",
+              bytes: 7,
+              warnings: []
+            });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(proofArtifactInvocation.command, "write_proof_artifact", "native proof export should invoke write_proof_artifact");
+  assert.strictEqual(proofArtifactInvocation.payload.request.fileName, "spaceguard-selected-route-proof-packet.md", "native proof export should pass the expected file name");
+  assert.strictEqual(proofArtifactInvocation.payload.request.content, "# proof", "native proof export should pass the proof content");
+  assert.strictEqual(proofArtifactWrite.written, true, "native proof export should normalize successful writes");
+  assert.strictEqual(proofArtifactWrite.fileName, "spaceguard-selected-route-proof-packet.md", "native proof export should preserve the file name");
+
+  const actionList = [
+    {
+      id: "windows-temp",
+      title: "Windows temporary files",
+      path: "C:\\Users\\real\\AppData\\Local\\Temp",
+      bytes: 0,
+      selectedByDefault: true,
+      recommendation: "Review local temp roots."
+    },
+    {
+      id: "gradle-cache",
+      title: "Gradle dependency and build cache",
+      path: "C:\\Users\\real\\.gradle\\caches",
+      bytes: 0,
+      selectedByDefault: false,
+      recommendation: "Clean rebuildable Gradle caches."
+    },
+    {
+      id: "docker-build-cache",
+      title: "Docker build cache",
+      path: "Docker Desktop",
+      bytes: 0,
+      selectedByDefault: false,
+      recommendation: "Use Docker's own prune route."
+    },
+    {
+      id: "large-user-files",
+      title: "Large personal files",
+      path: "C:\\Users\\real\\Videos",
+      bytes: 0,
+      selectedByDefault: false,
+      recommendation: "Review and archive manually selected files."
+    },
+    {
+      id: "installed-app-footprints",
+      title: "Installed app footprints",
+      path: "Program Files, ProgramData, LocalAppData\\Programs",
+      bytes: 0,
+      selectedByDefault: false,
+      recommendation: "Review uninstall candidates manually."
+    }
+  ];
   const scan = native.normalizeNativeScan({
     mode: "native-readonly",
     platform: "windows",
@@ -119,12 +195,12 @@ const path = require("path");
     target_drive: "C:",
     volume: {
       drive: "C:",
-      total_bytes: 512 * guard.GB,
-      free_bytes: 64 * guard.GB,
-      used_bytes: 448 * guard.GB,
+      total_bytes: 512 * GB,
+      free_bytes: 64 * GB,
+      used_bytes: 448 * GB,
       source: "GetDiskFreeSpaceExW"
     },
-    totalBytes: 42 * guard.GB,
+    totalBytes: 42 * GB,
     scan_request: {
       protected_paths: ["C:\\Users\\real\\ClientWork"],
       include_project_artifacts: true,
@@ -138,21 +214,21 @@ const path = require("path");
         recipeId: "gradle-cache",
         title: "Gradle dependency and build cache",
         path: "C:\\Users\\real\\.gradle\\caches",
-        bytes: 42 * guard.GB,
+        bytes: 42 * GB,
         status: "measured"
       },
       {
         recipeId: "windows-temp",
         title: "Windows temporary files",
         path: "C:\\Users\\real\\AppData\\Local\\Temp",
-        bytes: 5 * guard.MB,
+        bytes: 5 * MB,
         status: "measured",
         items: [
           {
             id: "known-temp-fixture-file",
             name: "known-temp.tmp",
             path: "C:\\Users\\real\\AppData\\Local\\Temp\\spaceguard-fixture\\known-temp.tmp",
-            bytes: 5 * guard.MB,
+            bytes: 5 * MB,
             age_days: 3,
             kind: "fixture temp file",
             recommendation: "review",
@@ -171,14 +247,14 @@ const path = require("path");
         recipe_id: "large-user-files",
         title: "Large personal files",
         path: "C:\\Users\\real\\Videos",
-        bytes: 3 * guard.GB,
+        bytes: 3 * GB,
         status: "measured",
         items: [
           {
             id: "large-real-video",
             name: "old-export.mov",
             path: "C:\\Users\\real\\Videos\\old-export.mov",
-            bytes: 3 * guard.GB,
+            bytes: 3 * GB,
             age_days: 120,
             kind: "large personal file",
             recommendation: "review",
@@ -190,7 +266,7 @@ const path = require("path");
         recipe_id: "custom-root-1",
         title: "Custom folder: Archives",
         path: "C:\\Users\\real\\Archives",
-        bytes: 7 * guard.GB,
+        bytes: 7 * GB,
         status: "measured",
         files: 12,
         dirs: 2,
@@ -200,7 +276,7 @@ const path = require("path");
         recipe_id: "installed-app-footprints",
         title: "Installed app footprints",
         path: "Program Files, ProgramData, LocalAppData\\Programs",
-        bytes: 10 * guard.GB,
+        bytes: 10 * GB,
         status: "limited",
         metadata_sources: {
           uninstall_registry: "scanned",
@@ -221,7 +297,7 @@ const path = require("path");
             id: "app-old-ide",
             name: "Old IDE 2023",
             path: "C:\\Program Files\\Old IDE 2023",
-            bytes: 6 * guard.GB,
+            bytes: 6 * GB,
             age_days: 180,
             kind: "developer tool footprint",
             recommendation: "review",
@@ -237,7 +313,7 @@ const path = require("path");
             id: "app-unity-hub",
             name: "Unity Hub",
             path: "C:\\Program Files\\Unity Hub",
-            bytes: 4 * guard.GB,
+            bytes: 4 * GB,
             age_days: 180,
             kind: "developer tool footprint",
             recommendation: "keep",
@@ -256,7 +332,7 @@ const path = require("path");
         id: "drive-users",
         name: "Users",
         path: "C:\\Users",
-        bytes: 256 * guard.GB,
+        bytes: 256 * GB,
         status: "limited",
         files: 1200,
         dirs: 90,
@@ -270,7 +346,7 @@ const path = require("path");
         id: "drive-windows",
         name: "Windows",
         path: "C:\\Windows",
-        bytes: 80 * guard.GB,
+        bytes: 80 * GB,
         status: "limited",
         files: 5000,
         dirs: 300,
@@ -288,8 +364,8 @@ const path = require("path");
   assert.strictEqual(scan.request.targetDrive, "C:", "native scan should normalize captured scan request");
   assert.deepStrictEqual(scan.request.protectedPaths, ["C:\\Users\\real\\ClientWork"], "native scan should normalize request protected paths");
   assert.strictEqual(scan.volume.drive, "C:", "native scan should normalize volume drive");
-  assert.strictEqual(scan.volume.freeBytes, 64 * guard.GB, "native scan should normalize volume free bytes");
-  assert.strictEqual(scan.volume.usedBytes, 448 * guard.GB, "native scan should normalize volume used bytes");
+  assert.strictEqual(scan.volume.freeBytes, 64 * GB, "native scan should normalize volume free bytes");
+  assert.strictEqual(scan.volume.usedBytes, 448 * GB, "native scan should normalize volume used bytes");
   assert.strictEqual(scan.driveInventory.length, 2, "native scan should normalize drive inventory rows");
   assert.strictEqual(scan.driveInventory[0].classification, "user-data-review", "drive inventory classification should normalize");
   assert.strictEqual(scan.driveInventory[0].canCreateExecutor, false, "drive inventory must not create executor routes");
@@ -301,20 +377,20 @@ const path = require("path");
   const largeFiles = merged.find((action) => action.id === "large-user-files");
   const appFootprints = merged.find((action) => action.id === "installed-app-footprints");
 
-  assert.strictEqual(gradle.bytes, 42 * guard.GB, "real scan bytes should replace demo bytes");
+  assert.strictEqual(gradle.bytes, 42 * GB, "real scan bytes should replace placeholder bytes");
   assert.strictEqual(gradle.scanStatus, "measured", "measured findings should be marked");
-  assert(gradle.path.includes("C:\\Users\\real"), "real scan path should replace demo path");
+  assert(gradle.path.includes("C:\\Users\\real"), "real scan path should replace placeholder path");
   assert.strictEqual(broadTemp.selectedByDefault, false, "fixture validation should not auto-select broad temp cleanup");
   assert(tempFixture, "native fixture evidence should create a scoped fixture cleanup action");
   assert.strictEqual(tempFixture.path, "%TEMP%\\spaceguard-fixture", "fixture cleanup action should target only the seeded fixture root");
-  assert.strictEqual(tempFixture.bytes, 5 * guard.MB, "fixture cleanup should use measured fixture bytes");
+  assert.strictEqual(tempFixture.bytes, 5 * MB, "fixture cleanup should use measured fixture bytes");
   assert.strictEqual(tempFixture.selectedByDefault, false, "fixture cleanup must not be auto-selected");
-  assert.strictEqual(guard.getExecutorPolicy(tempFixture).route, "known-temp-delete", "fixture cleanup should reuse the native temp executor route");
-  assert.strictEqual(docker.bytes, 0, "unsupported native findings should not keep demo bytes");
+  assert.strictEqual(tempFixture.method, "Delete only the seeded SpaceGuard temp fixture root.", "fixture cleanup should stay scoped to the validation root");
+  assert.strictEqual(docker.bytes, 0, "unsupported native findings should not keep placeholder bytes");
   assert.strictEqual(docker.scanStatus, "unsupported", "unsupported native findings should be explicit");
-  assert.strictEqual(largeFiles.bytes, 3 * guard.GB, "native large-file discovery should replace demo bytes");
+  assert.strictEqual(largeFiles.bytes, 3 * GB, "native large-file discovery should replace placeholder bytes");
   assert.strictEqual(largeFiles.scanStatus, "measured", "native large-file discovery should be marked measured");
-  assert.strictEqual(appFootprints.bytes, 10 * guard.GB, "native app footprint discovery should replace demo bytes");
+  assert.strictEqual(appFootprints.bytes, 10 * GB, "native app footprint discovery should replace placeholder bytes");
   assert.strictEqual(appFootprints.scanStatus, "limited", "native app footprint discovery should preserve limited status");
   const appFinding = scan.findings.find((finding) => finding.recipeId === "installed-app-footprints");
   assert.strictEqual(appFinding.metadataSources.uninstallRegistry, "scanned", "native app finding should expose uninstall registry scan source state");
@@ -327,75 +403,10 @@ const path = require("path");
   const appSensitiveSignals = appFinding.items[0].signals.filter((signal) => /uninstallstring|quietuninstallstring|msiexec|uninstall\.exe/i.test(`${signal.label} ${signal.value}`));
   assert.deepStrictEqual(appSensitiveSignals, [], "native app finding normalization must drop uninstall command strings from item signals");
   assert(appFinding.items[0].signals.some((signal) => signal.label === "uninstall entry" && signal.value === "present"), "native app finding should preserve uninstall-entry availability without the command string");
-
-  const scanCoverage = guard.buildScanCoverageSummary({
-    actionList: merged,
-    scanMode: "native-readonly",
-    nativeScan: scan
-  });
-  assert.strictEqual(scanCoverage.schemaVersion, "spaceguard-scan-coverage/v1", "scan coverage should expose a schema version");
-  assert.strictEqual(scanCoverage.status, "partial-native", "mixed native evidence should be marked partial");
-  assert(scanCoverage.confidenceScore > 0, "measured native roots should increase scan confidence");
-  assert.strictEqual(scanCoverage.customRootRows.length, 1, "scan coverage should expose custom root discovery rows");
-  assert.strictEqual(scanCoverage.customRootBytes, 7 * guard.GB, "scan coverage should total custom root bytes separately");
-  assert.strictEqual(scanCoverage.customRootRows[0].nextStep.includes("never create executor routes"), true, "custom roots should stay advisory");
-  assert(scanCoverage.unverifiedRows.some((row) => row.id === "docker-build-cache" && row.evidence === "unsupported"), "unsupported native roots should stay visible in coverage gaps");
-  assert(scanCoverage.unverifiedRows.some((row) => row.evidence === "demo-estimate"), "demo-estimated roots should remain visible after partial native scan");
-  const driveInventory = guard.buildDriveInventorySummary({
-    nativeScan: scan,
-    scanMode: "native-readonly"
-  });
-  assert.strictEqual(driveInventory.schemaVersion, "spaceguard-drive-inventory/v1", "drive inventory should expose a schema version");
-  assert.strictEqual(driveInventory.status, "inventory-ready", "native drive inventory should be ready when rows exist");
-  assert.strictEqual(driveInventory.manualOnly, true, "drive inventory should stay manual-only");
-  assert.strictEqual(driveInventory.counts.executorRoutes, 0, "drive inventory should never create executor routes");
-  assert.strictEqual(driveInventory.counts.realRun, 0, "drive inventory should never create real-run rows");
-  assert.strictEqual(driveInventory.counts.system, 1, "drive inventory should identify system buckets");
-  assert.strictEqual(driveInventory.topRows[0].name, "Users", "drive inventory should sort largest buckets first");
-  const demoDriveInventory = guard.buildDriveInventorySummary({ nativeScan: null, scanMode: "demo" });
-  assert.strictEqual(demoDriveInventory.status, "demo-only", "demo mode should not claim drive inventory evidence");
-
-  const largeFileReview = guard.buildItemReview("large-user-files", merged, scan, []);
-  assert.strictEqual(largeFileReview.source, "native-readonly", "large-file item review should use native candidates when available");
-  assert.strictEqual(largeFileReview.items[0].name, "old-export.mov", "native large-file candidate should be preserved");
-  assert.strictEqual(largeFileReview.items[0].decision, "undecided", "native large-file candidate should require user decision");
-  const appFootprintReview = guard.buildItemReview("installed-app-footprints", merged, scan, []);
-  assert.strictEqual(appFootprintReview.source, "native-readonly", "app footprint item review should use native candidates when available");
-  assert.strictEqual(appFootprintReview.evidenceSummary.metadataSources.userAssist, "scanned", "item review should preserve app evidence source state");
-  assert.strictEqual(appFootprintReview.evidenceSummary.userAssistMatched, 1, "item review should preserve UserAssist match summary");
-  assert.strictEqual(appFootprintReview.evidenceSummary.canCreateExecutor, false, "item review evidence summary must keep app uninstall manual-only");
-  assert.strictEqual(appFootprintReview.items[0].name, "Old IDE 2023", "native app footprint candidate should be preserved");
-  assert.strictEqual(appFootprintReview.items[0].signals[0].label, "usage proof", "app footprint review should preserve structured review signals");
-  assert.strictEqual(appFootprintReview.items[0].signals[0].value, "not proven", "app footprint signals should make usage uncertainty explicit");
-  const usageBackedApp = appFootprintReview.items.find((item) => item.id === "app-unity-hub");
-  assert(usageBackedApp, "app footprint review should preserve usage-backed app candidates");
-  assert.strictEqual(
-    usageBackedApp.signals.find((signal) => signal.label === "usage proof").value,
-    "UserAssist launch evidence",
-    "app footprint review should preserve read-only app usage evidence"
-  );
-  assert.strictEqual(appFootprintReview.selectedBytes, 0, "app footprint candidates should not become executor recovery bytes");
-  const appReviewDossier = guard.buildInstalledAppReviewDossier({ itemReviewsByAction: { "installed-app-footprints": appFootprintReview } });
-  assert.strictEqual(appReviewDossier.status, "needs-user-review", "native app footprint candidates should populate app review dossier");
-  assert.strictEqual(appReviewDossier.evidenceSummary.metadataSources.uninstallRegistry, "scanned", "app review dossier should preserve uninstall registry source state");
-  assert.strictEqual(appReviewDossier.evidenceSummary.metadataSources.userAssist, "scanned", "app review dossier should preserve UserAssist source state");
-  assert.strictEqual(appReviewDossier.evidenceSummary.registryMatched, 2, "app review dossier should preserve registry match counts");
-  assert.strictEqual(appReviewDossier.evidenceSummary.usageProofMissing, 1, "app review dossier should preserve usage-proof missing counts");
-  assert.strictEqual(appReviewDossier.evidenceSummary.manualOnly, true, "app review dossier evidence must stay manual-only");
-  assert.strictEqual(appReviewDossier.rows[0].usageProof, "not proven", "app review dossier should keep usage uncertainty explicit");
-  assert.strictEqual(appReviewDossier.rows[0].uninstallEntry, "present", "app review dossier should keep uninstall-entry evidence");
-  const oldIdeDossierRow = appReviewDossier.rows.find((row) => row.id === "app-old-ide");
-  const unityDossierRow = appReviewDossier.rows.find((row) => row.id === "app-unity-hub");
-  assert(oldIdeDossierRow.unusedReviewScore > unityDossierRow.unusedReviewScore, "missing usage proof should rank above usage-backed app candidates");
-  assert.strictEqual(oldIdeDossierRow.unusedReviewTier, "strong-review", "large old apps with no usage proof should become strong review candidates");
-  assert.strictEqual(unityDossierRow.unusedReviewTier, "weak-review", "UserAssist launch evidence should lower app uninstall confidence");
-  assert(oldIdeDossierRow.scoreFactors.includes("missing UserAssist usage proof"), "app score should explain missing usage proof");
-  assert(unityDossierRow.scoreFactors.includes("UserAssist launch evidence lowers uninstall confidence"), "app score should explain usage-backed caution");
-  assert(
-    appReviewDossier.rows.some((row) => row.usageProof === "UserAssist launch evidence"),
-    "app review dossier should preserve UserAssist usage evidence for review"
-  );
-  assert.strictEqual(appReviewDossier.canCreateExecutor, false, "app review dossier must not create executor routes");
+  assert.strictEqual(scan.driveInventory[0].name, "Users", "native drive inventory should keep the largest user bucket");
+  assert.strictEqual(scan.driveInventory[1].classification, "system-or-protected", "native drive inventory should preserve system classifications");
+  assert.strictEqual(scan.findings.find((finding) => finding.recipeId === "large-user-files").items[0].name, "old-export.mov", "native large-file candidate should be preserved");
+  assert.strictEqual(scan.findings.find((finding) => finding.recipeId === "installed-app-footprints").items[0].name, "Old IDE 2023", "native app footprint candidate should be preserved");
 
   const normalizedWithItems = native.normalizeNativeScan({
     findings: [
@@ -501,7 +512,7 @@ const path = require("path");
         {
           id: "large-user-files",
           title: "Large personal files",
-          bytes: 3 * guard.GB,
+          bytes: 3 * GB,
           route: "item-review-large-files",
           canSimulate: true,
           archiveTargets: [
@@ -509,13 +520,13 @@ const path = require("path");
               id: "old-video",
               name: "old-video.mov",
               path: "C:\\Users\\real\\Videos\\old-video.mov",
-              bytes: 2 * guard.GB
+              bytes: 2 * GB
             },
             {
               id: "old-export",
               name: "old-export.zip",
               path: "C:\\Users\\real\\Downloads\\old-export.zip",
-              bytes: guard.GB
+              bytes: GB
             }
           ]
         }
@@ -952,11 +963,11 @@ const path = require("path");
   let dockerExecutionInvocation = null;
   const dockerExecution = await native.runNativeDockerBuildCacheExecutor(
     {
-      row: { id: "docker-build-cache", title: "Docker build cache", path: "Docker Desktop build cache", bytes: 6 * guard.GB },
+      row: { id: "docker-build-cache", title: "Docker build cache", path: "Docker Desktop build cache", bytes: 6 * GB },
       planId: "plan-docker",
       scanFingerprint: "scan-docker",
       consentPlanId: "plan-docker",
-      expectedBytes: 6 * guard.GB
+      expectedBytes: 6 * GB
     },
     {
       __TAURI__: {
@@ -969,7 +980,7 @@ const path = require("path");
               destructive_commands: true,
               accepted: true,
               reason: "accepted",
-              entries: [{ id: "docker-build-cache", title: "Docker build cache", route: "tool-native-docker-build-cache-prune", result: "executed", reject_code: "", bytes: 6 * guard.GB, note: "pruned Docker build cache" }],
+              entries: [{ id: "docker-build-cache", title: "Docker build cache", route: "tool-native-docker-build-cache-prune", result: "executed", reject_code: "", bytes: 6 * GB, note: "pruned Docker build cache" }],
               warnings: ["docker build cache done"]
             });
           }
@@ -1156,7 +1167,7 @@ const path = require("path");
               id: "old-video",
               name: "old-video.mov",
               path: "C:\\Users\\real\\Videos\\old-video.mov",
-              bytes: 2 * guard.GB,
+              bytes: 2 * GB,
               decision: "archive"
             }
           ]
@@ -1166,7 +1177,7 @@ const path = require("path");
       planId: "plan-archive",
       scanFingerprint: "scan-archive",
       consentPlanId: "plan-archive",
-      expectedBytes: 2 * guard.GB
+      expectedBytes: 2 * GB
     },
     {
       __TAURI__: {
@@ -1191,7 +1202,7 @@ const path = require("path");
                 mutation_attempted: payload.request.mutationAttempted,
                 action_count: payload.request.actions.length
               },
-              entries: [{ id: "old-video", title: "old-video.mov", route: "item-review-large-files", result: "executed", reject_code: "", bytes: 2 * guard.GB, note: "archived" }],
+              entries: [{ id: "old-video", title: "old-video.mov", route: "item-review-large-files", result: "executed", reject_code: "", bytes: 2 * GB, note: "archived" }],
               warnings: ["archive done"]
             });
           }

@@ -156,7 +156,7 @@ function buildHostRustTestSummary(hostPlatform = process.platform) {
     currentPlatform,
     cargoTestCommand: "cargo test --manifest-path src-tauri/Cargo.toml",
     warnings: currentPlatform === "win32"
-      ? ["Run cargo test on the prepared Windows demo host before public beta."]
+      ? ["Run cargo test on the prepared SpaceGuard host before public beta."]
       : ["Run cargo test on a prepared host with Tauri system dependencies; this Linux sandbox currently needs pkg-config and GTK/WebKit packages before cargo test can compile."]
   };
 }

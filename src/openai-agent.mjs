@@ -1256,7 +1256,7 @@ function buildOpenAIAgentRecommendationBrokerRow(row = {}, context = null, execu
       status: canAct ? "ready" : "blocked",
       tone: canAct ? "safe" : "restricted",
       canAct,
-      buttonLabel: postRunRescan ? "Run post-run rescan" : context?.runtime?.nativeAvailable ? "Run real scan" : "Run demo scan",
+      buttonLabel: postRunRescan ? "Run post-run rescan" : context?.runtime?.nativeAvailable ? "Run real scan" : "Review setup steps",
       targetPanel: postRunRescan ? "execution-proof-handoff-panel" : "real-data-readiness-panel",
       blockedReason: canAct ? "" : "Post-run rescan is not available in the current runtime.",
       checks: [

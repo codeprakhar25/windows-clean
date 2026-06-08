@@ -4,27 +4,27 @@ const path = require("path");
 const { pathToFileURL } = require("url");
 
 const root = path.resolve(__dirname, "..");
-const script = path.join(root, "scripts", "run-private-demo-readiness.mjs");
+const script = path.join(root, "scripts", "run-v1-readiness.mjs");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 
 (async () => {
-  assert(fs.existsSync(script), "private demo readiness verifier should exist");
+  assert(fs.existsSync(script), "V1 readiness verifier should exist");
   assert(
-    packageJson.scripts["demo:private-readiness"]?.includes("run-private-demo-readiness.mjs"),
-    "package.json should expose the private demo readiness verifier"
+    packageJson.scripts["v1:readiness"]?.includes("run-v1-readiness.mjs"),
+    "package.json should expose the V1 readiness verifier"
   );
 
   const readiness = await import(pathToFileURL(script).href);
-  const summary = readiness.buildPrivateDemoReadinessSummary({
+  const summary = readiness.buildV1ReadinessSummary({
     rootDir: root,
     generatedAt: "2026-06-08T12:00:00.000Z"
   });
 
-  assert.strictEqual(summary.schemaVersion, "spaceguard-private-demo-readiness/v1", "readiness verifier should expose a stable schema");
-  assert.strictEqual(summary.status, "ready", "private compiled demo should be ready to attempt");
-  assert.strictEqual(summary.canAttemptPrivateWindowsDemo, true, "readiness verifier should clear the private Windows demo attempt");
-  assert.strictEqual(summary.target, "private-windows-demo", "readiness verifier should target the private Windows demo milestone");
-  assert.strictEqual(summary.build.platformRequired, "windows", "compiled demo attempt should be Windows-specific");
+  assert.strictEqual(summary.schemaVersion, "spaceguard-v1-readiness/v1", "readiness verifier should expose a stable schema");
+  assert.strictEqual(summary.status, "ready", "V1 app should be ready to attempt");
+  assert.strictEqual(summary.canAttemptWindowsV1, true, "readiness verifier should clear the Windows V1 attempt");
+  assert.strictEqual(summary.target, "windows-v1", "readiness verifier should target the Windows V1 milestone");
+  assert.strictEqual(summary.build.platformRequired, "windows", "V1 app attempt should be Windows-specific");
   assert.strictEqual(summary.build.tauriProductName, "SpaceGuard", "readiness verifier should preserve the Tauri product name");
   assert.strictEqual(summary.routes.firstRoute, "temp-fixture", "first route should remain the seeded fixture route");
   assert.strictEqual(summary.routes.selectedRoute, "npm-cache", "first bounded real-data route should be npm-cache");
@@ -46,7 +46,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
   assertReadyCheck(summary, "workflow-proof-validation");
   assertReadyCheck(summary, "completion-verifiers");
   assertReadyCheck(summary, "runner-direct-delete-free");
-  assert(summary.nextCommands.includes("npm test"), "readiness verifier should require tests before the compiled demo");
+  assert(summary.nextCommands.includes("npm test"), "readiness verifier should require tests before the V1 app");
   assert(summary.nextCommands.includes("npm run build"), "readiness verifier should require web build before native build");
   assert(summary.nextCommands.includes("npm run native:build"), "readiness verifier should include the native build command");
   assert(
@@ -62,7 +62,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
     "readiness verifier should include the npm-cache selected-route proof command"
   );
 
-  const linuxMissingPkgConfig = readiness.buildPrivateDemoReadinessSummary({
+  const linuxMissingPkgConfig = readiness.buildV1ReadinessSummary({
     rootDir: root,
     generatedAt: "2026-06-08T12:00:00.000Z",
     hostPlatform: "linux",
@@ -75,12 +75,12 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
     "Linux native build warning should mention pkg-config"
   );
   assert.strictEqual(
-    linuxMissingPkgConfig.canAttemptPrivateWindowsDemo,
+    linuxMissingPkgConfig.canAttemptWindowsV1,
     true,
-    "missing Linux packaging deps should not block the Windows-target private demo contract"
+    "missing Linux packaging deps should not block the Windows-target V1 contract"
   );
 
-  console.log("private demo readiness ok");
+  console.log("V1 readiness ok");
 })().catch((error) => {
   console.error(error);
   process.exit(1);

@@ -9,15 +9,15 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
-  throw "The private V1 Windows proof coordinator must be run on Windows because the native bundle and proof runners are Windows-targeted."
+  throw "The V1 Windows proof coordinator must be run on Windows because the native bundle and proof runners are Windows-targeted."
 }
 
 $SelectedRoute = $SelectedRoute.Trim()
 if ([string]::IsNullOrWhiteSpace($SelectedRoute)) {
-  throw "SelectedRoute is required. Example: npm run demo:private-v1-windows -- -SelectedRoute npm-cache"
+  throw "SelectedRoute is required. Example: npm run v1:windows -- -SelectedRoute npm-cache"
 }
 if ($SkipLiveOpenAI) {
-  throw "private-v1-openai-live-required: private V1 acceptance requires live OpenAI smoke evidence from .env OPENAI_API_KEY. Use lower proof runners for fixture-only rehearsals."
+  throw "v1-openai-live-required: V1 acceptance requires live OpenAI smoke evidence from .env OPENAI_API_KEY. Use lower proof runners for fixture-only rehearsals."
 }
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
@@ -58,15 +58,15 @@ try {
     }
   }
 
-  function Assert-PrivateV1OpenAIKey {
+  function Assert-V1OpenAIKey {
     $apiKey = [System.Environment]::GetEnvironmentVariable("OPENAI_API_KEY", "Process")
     if ([string]::IsNullOrWhiteSpace($apiKey)) {
-      throw "private-v1-openai-key-required: private V1 acceptance requires OPENAI_API_KEY in .env or the process environment before any cleanup proof starts."
+      throw "v1-openai-key-required: V1 acceptance requires OPENAI_API_KEY in .env or the process environment before any cleanup proof starts."
     }
   }
 
   Import-SpaceGuardDotEnv -Path (Join-Path $RepoRoot ".env")
-  Assert-PrivateV1OpenAIKey
+  Assert-V1OpenAIKey
 
   $RunStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
   $RouteSlug = ($SelectedRoute.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim("-")
@@ -75,16 +75,16 @@ try {
   }
 
   if ([string]::IsNullOrWhiteSpace($EvidenceRoot)) {
-    $EvidenceRoot = Join-Path $RepoRoot "evidence\private-v1-proof-$RouteSlug-$RunStamp"
+    $EvidenceRoot = Join-Path $RepoRoot "evidence\v1-proof-$RouteSlug-$RunStamp"
   }
 
   $CommandLogPath = Join-Path $EvidenceRoot "commands.ndjson"
-  $SummaryPath = Join-Path $EvidenceRoot "private-v1-proof.json"
-  $PrivateV1ProofCheckPath = Join-Path $EvidenceRoot "private-v1-proof-check.json"
+  $SummaryPath = Join-Path $EvidenceRoot "v1-proof.json"
+  $V1ProofCheckPath = Join-Path $EvidenceRoot "v1-proof-check.json"
   $SelectedRouteSetupPath = Join-Path $EvidenceRoot "selected-route-setup.json"
-  $PreflightEvidenceRoot = Join-Path $EvidenceRoot "private-demo-preflight"
-  $PreflightSummaryPath = Join-Path $PreflightEvidenceRoot "private-demo-preflight.json"
-  $PreflightLogPath = Join-Path $EvidenceRoot "private-demo-preflight.txt"
+  $PreflightEvidenceRoot = Join-Path $EvidenceRoot "v1-preflight"
+  $PreflightSummaryPath = Join-Path $PreflightEvidenceRoot "v1-preflight.json"
+  $PreflightLogPath = Join-Path $EvidenceRoot "v1-preflight.txt"
   $FirstRouteEvidenceRoot = Join-Path $EvidenceRoot "first-route-proof"
   $SelectedRouteEvidenceRoot = Join-Path $EvidenceRoot "selected-route-proof-$RouteSlug"
   $FirstRouteCompletionPath = Join-Path $FirstRouteEvidenceRoot "first-route-completion-check.json"
@@ -198,34 +198,34 @@ try {
       throw "selected-route-setup-schema: expected spaceguard-route-setup-packet/v1."
     }
     if ($packet.status -eq "unknown-route" -or $packet.status -eq "route-required" -or $null -eq $packet.selected) {
-      throw "selected-route-unknown: SelectedRoute must match one setup:route alias before private V1 starts. See $Path"
+      throw "selected-route-unknown: SelectedRoute must match one setup:route alias before V1 starts. See $Path"
     }
     if ($packet.route -eq "known-temp-delete") {
-      throw "selected-route-bootstrap-disallowed: private V1 already runs temp-fixture as the seeded first route; choose a real-data selected route such as npm-cache."
+      throw "selected-route-bootstrap-disallowed: V1 already runs temp-fixture as the seeded first route; choose a real-data selected route such as npm-cache."
     }
 
     return $packet
   }
 
-  function Assert-ExistingPrivateWindowsPreflight {
+  function Assert-ExistingV1WindowsPreflight {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path)) {
-      throw "private-windows-preflight-skipped-missing: -SkipPreflight requires an existing passed preflight artifact at $Path"
+      throw "v1-windows-preflight-skipped-missing: -SkipPreflight requires an existing passed preflight artifact at $Path"
     }
 
     $proof = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
-    if ($proof.schemaVersion -ne "spaceguard-private-demo-windows-preflight/v1") {
-      throw "private-windows-preflight-skipped-schema: expected spaceguard-private-demo-windows-preflight/v1."
+    if ($proof.schemaVersion -ne "spaceguard-v1-windows-preflight/v1") {
+      throw "v1-windows-preflight-skipped-schema: expected spaceguard-v1-windows-preflight/v1."
     }
     if ($proof.status -ne "passed") {
-      throw "private-windows-preflight-skipped-status: reused preflight artifact must have status passed."
+      throw "v1-windows-preflight-skipped-status: reused preflight artifact must have status passed."
     }
     if ($proof.selectedRoute -ne $SelectedRoute) {
-      throw "private-windows-preflight-skipped-route: reused preflight selectedRoute must match $SelectedRoute."
+      throw "v1-windows-preflight-skipped-route: reused preflight selectedRoute must match $SelectedRoute."
     }
     if ($null -eq $proof.nativeBundleArtifacts -or $proof.nativeBundleArtifacts.Count -lt 1) {
-      throw "private-windows-preflight-skipped-bundle: reused preflight artifact must include copied native bundle artifacts."
+      throw "v1-windows-preflight-skipped-bundle: reused preflight artifact must include copied native bundle artifacts."
     }
 
     return $proof
@@ -265,7 +265,7 @@ try {
       throw "selected-route-completion-schema: expected spaceguard-selected-route-completion-check/v1."
     }
     if ($proof.status -ne "accepted" -or $proof.canStartNextRoute -ne $true) {
-      throw "selected-route-completion-blocked: selected route must be accepted for private V1 proof."
+      throw "selected-route-completion-blocked: selected route must be accepted for V1 proof."
     }
     Assert-CompletionProofCounts -Proof $proof -Prefix "selected-route" -Label "Selected-route"
 
@@ -344,7 +344,7 @@ try {
 
   $startedAt = (Get-Date).ToUniversalTime().ToString("o")
   $selectedRouteSetup = Assert-KnownSelectedRoute -Route $SelectedRoute -Path $SelectedRouteSetupPath
-  $preflightCommand = "npm run demo:private-windows-preflight -- -EvidenceRoot `"$PreflightEvidenceRoot`" -SelectedRoute $SelectedRoute"
+  $preflightCommand = "npm run v1:preflight -- -EvidenceRoot `"$PreflightEvidenceRoot`" -SelectedRoute $SelectedRoute"
   $firstRouteCommand = "npm run proof:first-route:windows -- -Route temp-fixture -EvidenceRoot `"$FirstRouteEvidenceRoot`""
   $selectedRouteCommand = "npm run proof:route:windows -- -Route $SelectedRoute -EvidenceRoot `"$SelectedRouteEvidenceRoot`""
 
@@ -355,15 +355,15 @@ try {
 
   $commands = [PSCustomObject]@{
     selectedRouteSetup = "node scripts\run-setup-route.mjs --route `"$SelectedRoute`""
-    privateWindowsPreflight = $preflightCommand
+    v1WindowsPreflight = $preflightCommand
     firstRouteProof = $firstRouteCommand
     selectedRouteProof = $selectedRouteCommand
   }
 
   if ($SkipPreflight) {
-    $preflightProof = Assert-ExistingPrivateWindowsPreflight -Path $PreflightSummaryPath
+    $preflightProof = Assert-ExistingV1WindowsPreflight -Path $PreflightSummaryPath
     Write-CommandRecord -Record ([PSCustomObject]@{
-        id = "private-windows-preflight"
+        id = "v1-windows-preflight"
         command = $preflightCommand
         outputPath = $PreflightSummaryPath
         exitCode = 0
@@ -376,7 +376,7 @@ try {
         nativeBundleArtifactCount = [int]$preflightProof.nativeBundleArtifacts.Count
       })
   } else {
-    Invoke-LoggedCommand -Id "private-windows-preflight" -CommandLine $preflightCommand -OutputPath $PreflightLogPath | Out-Null
+    Invoke-LoggedCommand -Id "v1-windows-preflight" -CommandLine $preflightCommand -OutputPath $PreflightLogPath | Out-Null
   }
 
   Invoke-LoggedCommand -Id "first-route-proof" -CommandLine $firstRouteCommand -OutputPath (Join-Path $EvidenceRoot "first-route-proof.txt") | Out-Null
@@ -399,7 +399,7 @@ try {
   $selectedRouteCompletion = Assert-AcceptedSelectedRouteCompletion -Path $SelectedRouteCompletionPath
 
   $summary = [PSCustomObject]@{
-    schemaVersion = "spaceguard-private-v1-windows-proof/v1"
+    schemaVersion = "spaceguard-v1-windows-proof/v1"
     generatedAt = (Get-Date).ToUniversalTime().ToString("o")
     startedAt = $startedAt
     status = "accepted"
@@ -409,10 +409,10 @@ try {
     destructiveCommands = $false
     directCleanupCommands = $false
     artifacts = [PSCustomObject]@{
-      privateV1Proof = $SummaryPath
-      privateV1ProofCheck = $PrivateV1ProofCheckPath
+      v1Proof = $SummaryPath
+      v1ProofCheck = $V1ProofCheckPath
       selectedRouteSetup = $SelectedRouteSetupPath
-      privateWindowsPreflight = $PreflightSummaryPath
+      v1WindowsPreflight = $PreflightSummaryPath
       firstRouteCompletionCheck = $FirstRouteCompletionPath
       selectedRouteCompletionCheck = $SelectedRouteCompletionPath
       archivedFirstRouteRootExports = $ArchiveRoot
@@ -446,17 +446,17 @@ try {
     }
     archivedRootExports = $archivedRootExports
     commands = $commands
-    primary = "Private V1 Windows proof accepted: preflight, seeded first-route cleanup proof, first-route completion binding, and selected real-data route proof all passed."
+    primary = "V1 Windows proof accepted: preflight, seeded first-route cleanup proof, first-route completion binding, and selected real-data route proof all passed."
   }
 
   Write-JsonFile -Value $summary -Path $SummaryPath
-  Invoke-LoggedCommand -Id "private-v1-proof-check" -CommandLine "node scripts\run-private-v1-proof-check.mjs --file `"$SummaryPath`"" -OutputPath $PrivateV1ProofCheckPath | Out-Null
+  Invoke-LoggedCommand -Id "v1-proof-check" -CommandLine "node scripts\run-v1-proof-check.mjs --file `"$SummaryPath`"" -OutputPath $V1ProofCheckPath | Out-Null
 
   Write-Host ""
-  Write-Host "SpaceGuard private V1 Windows proof accepted."
+  Write-Host "SpaceGuard V1 Windows proof accepted."
   Write-Host "Evidence root: $EvidenceRoot"
   Write-Host "V1 proof artifact: $SummaryPath"
-  Write-Host "V1 proof check: $PrivateV1ProofCheckPath"
+  Write-Host "V1 proof check: $V1ProofCheckPath"
   Write-Host "Selected route: $SelectedRoute"
 } finally {
   Pop-Location

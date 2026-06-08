@@ -233,6 +233,28 @@ struct WriteExecutionAction {
     target_path: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProofArtifactWriteRequest {
+    file_name: String,
+    content: String,
+    route: Option<String>,
+    proof_kind: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProofArtifactWriteResponse {
+    schema_version: &'static str,
+    available: bool,
+    written: bool,
+    file_name: String,
+    path: String,
+    bytes: u64,
+    reason: String,
+    warnings: Vec<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WriteExecutionResponse {
@@ -444,6 +466,7 @@ fn main() {
             scan_known_roots,
             simulate_cleanup_plan,
             execute_cleanup_plan,
+            write_proof_artifact,
             openai_agent_advice,
             runtime_capabilities
         ])
@@ -889,6 +912,82 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
 
 fn real_write_request_attempted(request: &WriteExecutionRequest) -> bool {
     request.dry_run_only == Some(false) || request.mutation_attempted == Some(true)
+}
+
+#[tauri::command]
+fn write_proof_artifact(request: Option<ProofArtifactWriteRequest>) -> ProofArtifactWriteResponse {
+    let request = request.unwrap_or(ProofArtifactWriteRequest {
+        file_name: String::new(),
+        content: String::new(),
+        route: None,
+        proof_kind: None,
+    });
+    let file_name = request.file_name.trim().to_string();
+    if !allowed_proof_artifact_file_name(&file_name) {
+        return ProofArtifactWriteResponse {
+            schema_version: "spaceguard-proof-artifact-write/v1",
+            available: true,
+            written: false,
+            file_name,
+            path: String::new(),
+            bytes: 0,
+            reason: "proof-artifact-file-not-allowed".to_string(),
+            warnings: vec![
+                "Proof artifact writes are restricted to SpaceGuard runner proof file names."
+                    .to_string(),
+            ],
+        };
+    }
+
+    let working_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let artifact_path = working_dir.join(&file_name);
+    match fs::write(&artifact_path, request.content.as_bytes()) {
+        Ok(()) => ProofArtifactWriteResponse {
+            schema_version: "spaceguard-proof-artifact-write/v1",
+            available: true,
+            written: true,
+            file_name,
+            path: path_to_string(&artifact_path),
+            bytes: request.content.as_bytes().len() as u64,
+            reason: "proof-artifact-written".to_string(),
+            warnings: proof_artifact_write_warnings(&request),
+        },
+        Err(error) => ProofArtifactWriteResponse {
+            schema_version: "spaceguard-proof-artifact-write/v1",
+            available: true,
+            written: false,
+            file_name,
+            path: path_to_string(&artifact_path),
+            bytes: 0,
+            reason: format!("proof-artifact-write-failed: {error}"),
+            warnings: proof_artifact_write_warnings(&request),
+        },
+    }
+}
+
+fn allowed_proof_artifact_file_name(file_name: &str) -> bool {
+    matches!(
+        file_name,
+        "spaceguard-selected-route-proof-packet.md" | "spaceguard-real-workflow-proof.md"
+    )
+}
+
+fn proof_artifact_write_warnings(request: &ProofArtifactWriteRequest) -> Vec<String> {
+    let mut warnings = vec![
+        "Native proof artifact writes are restricted to the proof runner working directory."
+            .to_string(),
+    ];
+    if let Some(route) = request.route.as_ref().filter(|value| !value.trim().is_empty()) {
+        warnings.push(format!("Route binding: {route}."));
+    }
+    if let Some(proof_kind) = request
+        .proof_kind
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        warnings.push(format!("Proof kind: {proof_kind}."));
+    }
+    warnings
 }
 
 fn start_write_volume_probe(request: &WriteExecutionRequest) -> WriteVolumeProbe {

@@ -2,7 +2,7 @@
   "name": "windows-clean",
   "version": "0.1.0",
   "private": true,
-  "description": "Dry-run Windows space recovery assistant prototype with guarded cleanup workflows.",
+  "description": "Real Windows space recovery assistant with native scan, guarded cleanup, and proof export workflows.",
   "scripts": {
     "start": "vite --host 127.0.0.1",
     "dev": "vite --host 127.0.0.1",
@@ -11,12 +11,11 @@
     "native:build": "tauri build",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "demo:rehearsal": "node scripts/run-demo-rehearsal.mjs",
-    "native:rehearsal": "node scripts/run-native-readonly-rehearsal.mjs",
+    "real-app:shell": "node tests/real-app-shell.test.js",
     "native:executor-coverage": "node scripts/run-native-executor-coverage.mjs",
-    "demo:private-readiness": "node scripts/run-private-demo-readiness.mjs",
-    "demo:private-windows-preflight": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-private-demo-windows-preflight.ps1",
-    "demo:private-v1-windows": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-private-v1-windows-proof.ps1",
+    "v1:readiness": "node scripts/run-v1-readiness.mjs",
+    "v1:preflight": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-v1-windows-preflight.ps1",
+    "v1:windows": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-v1-windows-proof.ps1",
     "openai:smoke": "node scripts/run-openai-advisor-smoke.mjs",
     "openai:smoke:fixture": "node scripts/run-openai-advisor-smoke.mjs --fixture-only",
     "setup:doctor": "node scripts/run-setup-doctor.mjs",
@@ -28,13 +27,13 @@
     "validate:first-route-preflight": "node scripts/run-first-route-preflight-check.mjs",
     "validate:first-route-completion": "node scripts/run-first-route-completion-check.mjs",
     "validate:workflow-proof": "node scripts/run-workflow-proof-check.mjs",
-    "validate:private-v1-proof": "node scripts/run-private-v1-proof-check.mjs",
+    "validate:v1-proof": "node scripts/run-v1-proof-check.mjs",
     "proof:first-route": "node scripts/run-first-route-proof.mjs",
     "proof:first-route:windows": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-first-route-proof-windows.ps1",
     "proof:first-route:windows:finalize": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-first-route-proof-windows.ps1 -FinalizeOnly",
     "proof:route:windows": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-route-proof-windows.ps1",
     "proof:route:windows:finalize": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-route-proof-windows.ps1 -FinalizeOnly",
-    "test": "node tests/guardrails.test.js && node tests/native-scanner.test.js && node tests/route-boundary-contracts.test.js && node tests/route-contract-audit.test.js && node tests/first-route-proof.test.js && node tests/first-route-windows-runner.test.js && node tests/route-windows-runner.test.js && node tests/route-preflight-check.test.js && node tests/route-completion-check.test.js && node tests/first-route-preflight-check.test.js && node tests/first-route-completion-check.test.js && node tests/openai-agent.test.js && node tests/openai-smoke.test.js && node tests/setup-route.test.js && node tests/setup-doctor.test.js && node tests/windows-validation-packet.test.js && node tests/workflow-proof-check.test.js && node tests/demo-rehearsal.test.js && node tests/native-readonly-rehearsal.test.js && node tests/native-executor-coverage.test.js && node tests/private-demo-readiness.test.js && node tests/private-demo-windows-preflight.test.js && node tests/private-v1-windows-proof.test.js && node tests/private-v1-proof-check.test.js && node tests/static-app.test.js",
+    "test": "node tests/native-scanner.test.js && node tests/route-boundary-contracts.test.js && node tests/route-contract-audit.test.js && node tests/first-route-proof.test.js && node tests/first-route-windows-runner.test.js && node tests/route-windows-runner.test.js && node tests/route-preflight-check.test.js && node tests/route-completion-check.test.js && node tests/first-route-preflight-check.test.js && node tests/first-route-completion-check.test.js && node tests/openai-agent.test.js && node tests/openai-smoke.test.js && node tests/setup-route.test.js && node tests/setup-doctor.test.js && node tests/windows-validation-packet.test.js && node tests/workflow-proof-check.test.js && node tests/native-executor-coverage.test.js && node tests/v1-readiness.test.js && node tests/v1-windows-preflight.test.js && node tests/v1-windows-proof.test.js && node tests/v1-proof-check.test.js && node tests/real-app-shell.test.js && node tests/static-app.test.js",
     "check": "npm run build"
   },
   "dependencies": {
@@ -59,7 +58,7 @@
     "windows",
     "disk-cleanup",
     "space-recovery",
-    "dry-run"
+    "native-cleanup"
   ],
   "license": "UNLICENSED"
 }

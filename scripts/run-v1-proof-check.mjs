@@ -5,32 +5,32 @@ import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-const SCRIPT_ID = "spaceguard-private-v1-proof-check";
-const CHECK_SCHEMA = "spaceguard-private-v1-proof-check/v1";
-const PRIVATE_V1_SCHEMA = "spaceguard-private-v1-windows-proof/v1";
+const SCRIPT_ID = "spaceguard-v1-proof-check";
+const CHECK_SCHEMA = "spaceguard-v1-proof-check/v1";
+const V1_SCHEMA = "spaceguard-v1-windows-proof/v1";
 const ROUTE_SETUP_SCHEMA = "spaceguard-route-setup-packet/v1";
-const PRIVATE_PREFLIGHT_SCHEMA = "spaceguard-private-demo-windows-preflight/v1";
+const V1_PREFLIGHT_SCHEMA = "spaceguard-v1-windows-preflight/v1";
 const FIRST_ROUTE_COMPLETION_SCHEMA = "spaceguard-first-route-completion-check/v1";
 const SELECTED_ROUTE_COMPLETION_SCHEMA = "spaceguard-selected-route-completion-check/v1";
 const REQUIRED_COMMANDS = [
   "selected-route-setup",
-  "private-windows-preflight",
+  "v1-windows-preflight",
   "first-route-proof",
   "bind-first-route-completion",
   "archive-first-route-root-exports",
   "selected-route-proof"
 ];
 const REQUIRED_STDERR_COMMANDS = new Set([
-  "private-windows-preflight",
+  "v1-windows-preflight",
   "first-route-proof",
   "selected-route-proof"
 ]);
-const REQUIRED_PRIVATE_PREFLIGHT_COMMANDS = [
+const REQUIRED_V1_PREFLIGHT_COMMANDS = [
   "js-tests",
   "native-executor-coverage",
   "rust-tests",
   "web-build",
-  "private-demo-readiness",
+  "v1-readiness",
   "openai-fixture-smoke",
   "openai-live-smoke",
   "native-build"
@@ -47,7 +47,7 @@ function parseArgs(argv = []) {
   return args;
 }
 
-export function buildPrivateV1ProofCheck({
+export function buildV1ProofCheck({
   proofPath = "",
   checkedAt = new Date().toISOString()
 } = {}) {
@@ -57,30 +57,30 @@ export function buildPrivateV1ProofCheck({
   };
 
   const resolvedProofPath = proofPath ? path.resolve(proofPath) : "";
-  const proof = readJsonArtifact("private-v1-proof", resolvedProofPath, add);
+  const proof = readJsonArtifact("v1-proof", resolvedProofPath, add);
   const baseDir = resolvedProofPath ? path.dirname(resolvedProofPath) : process.cwd();
   const artifacts = proof?.artifacts || {};
   const resolvedCommandLogPath = normalizeArtifactPath(proof?.commandLogPath || "", baseDir);
   const resolvedSelectedRouteSetupPath = normalizeArtifactPath(artifacts.selectedRouteSetup || "", baseDir);
-  const resolvedPreflightPath = normalizeArtifactPath(artifacts.privateWindowsPreflight || "", baseDir);
+  const resolvedPreflightPath = normalizeArtifactPath(artifacts.v1WindowsPreflight || "", baseDir);
   const resolvedFirstRouteCompletionPath = normalizeArtifactPath(artifacts.firstRouteCompletionCheck || proof?.firstRouteCompletion?.path || "", baseDir);
   const resolvedSelectedRouteCompletionPath = normalizeArtifactPath(artifacts.selectedRouteCompletionCheck || proof?.selectedRouteCompletion?.path || "", baseDir);
-  const resolvedPrivateV1ProofCheckPath = normalizeArtifactPath(artifacts.privateV1ProofCheck || "", baseDir);
+  const resolvedV1ProofCheckPath = normalizeArtifactPath(artifacts.v1ProofCheck || "", baseDir);
 
-  validatePrivateV1Proof(proof, resolvedProofPath, add);
+  validateV1Proof(proof, resolvedProofPath, add);
   const commandRecords = readCommandRecords(resolvedCommandLogPath, add);
   const commandSummary = validateCommandRecords(commandRecords, add, path.dirname(resolvedCommandLogPath || baseDir), {
-    privateWindowsPreflightPath: resolvedPreflightPath
+    v1WindowsPreflightPath: resolvedPreflightPath
   });
   const selectedRouteSetup = readJsonArtifact("selected-route-setup", resolvedSelectedRouteSetupPath, add);
-  const preflight = readJsonArtifact("private-windows-preflight", resolvedPreflightPath, add);
+  const preflight = readJsonArtifact("v1-windows-preflight", resolvedPreflightPath, add);
   const firstRouteCompletion = readJsonArtifact("first-route-completion", resolvedFirstRouteCompletionPath, add);
   const selectedRouteCompletion = readJsonArtifact("selected-route-completion", resolvedSelectedRouteCompletionPath, add);
 
   validateSelectedRouteSetup(selectedRouteSetup, proof, selectedRouteCompletion, add);
   validateTopLevelSelectedRouteCommandRecords(commandRecords, proof, selectedRouteSetup, selectedRouteCompletion, add);
   validatePreflight(preflight, proof, selectedRouteSetup, selectedRouteCompletion, add);
-  const privatePreflightCommandCount = validatePrivatePreflightCommandRecords(preflight, resolvedPreflightPath, {
+  const v1PreflightCommandCount = validateV1PreflightCommandRecords(preflight, resolvedPreflightPath, {
     proof,
     selectedRouteSetup,
     selectedRouteCompletion,
@@ -97,29 +97,29 @@ export function buildPrivateV1ProofCheck({
   const selectedRoute = String(proof?.selectedRoute || selectedRouteCompletion?.routeInput || "");
   const firstRouteReclaimedBytes = Number(firstRouteCompletion?.counts?.reclaimedBytes || 0);
   const selectedRouteReclaimedBytes = Number(selectedRouteCompletion?.counts?.reclaimedBytes || 0);
-  const canAcceptPrivateV1Proof = blockers.length === 0;
+  const canAcceptV1Proof = blockers.length === 0;
 
   return {
     schemaVersion: CHECK_SCHEMA,
     tool: SCRIPT_ID,
     checkedAt,
-    status: canAcceptPrivateV1Proof ? "accepted" : "blocked",
-    canAcceptPrivateV1Proof,
+    status: canAcceptV1Proof ? "accepted" : "blocked",
+    canAcceptV1Proof,
     selectedRoute,
     proofPath: resolvedProofPath,
     commandLogPath: resolvedCommandLogPath,
     selectedRouteSetupPath: resolvedSelectedRouteSetupPath,
-    privateWindowsPreflightPath: resolvedPreflightPath,
+    v1WindowsPreflightPath: resolvedPreflightPath,
     firstRouteCompletionCheckPath: resolvedFirstRouteCompletionPath,
     selectedRouteCompletionCheckPath: resolvedSelectedRouteCompletionPath,
-    privateV1ProofCheckPath: resolvedPrivateV1ProofCheckPath,
+    v1ProofCheckPath: resolvedV1ProofCheckPath,
     blockers,
     counts: {
       blockers: blockers.length,
       commandRecords: commandRecords.length,
       requiredCommands: REQUIRED_COMMANDS.length,
       requiredCommandsPassed: commandSummary.requiredPassed,
-      privatePreflightCommandRecords: privatePreflightCommandCount,
+      v1PreflightCommandRecords: v1PreflightCommandCount,
       nativeBundleArtifacts: nativeBundleArtifactCount,
       openAiSmokeArtifacts: openAiSmokeArtifactCount,
       firstRouteReclaimedBytes,
@@ -132,9 +132,9 @@ export function buildPrivateV1ProofCheck({
       selectedRouteRescanActualRemainingBytes: selectedRouteProofCounts.rescanActualRemainingBytes,
       reclaimedBytes: selectedRouteReclaimedBytes
     },
-    primary: canAcceptPrivateV1Proof
-      ? `Private V1 Windows proof is accepted for ${selectedRoute || "selected route"}.`
-      : `Private V1 Windows proof is blocked by ${blockers.length} issue(s).`
+    primary: canAcceptV1Proof
+      ? `V1 Windows proof is accepted for ${selectedRoute || "selected route"}.`
+      : `V1 Windows proof is blocked by ${blockers.length} issue(s).`
   };
 }
 
@@ -175,11 +175,11 @@ function readJsonArtifact(id, filePath, add) {
 
 function readCommandRecords(commandLogPath, add) {
   if (!commandLogPath) {
-    add("command-log", "Command log missing", "Private V1 proof command log path is missing.");
+    add("command-log", "Command log missing", "V1 proof command log path is missing.");
     return [];
   }
   if (!fs.existsSync(commandLogPath)) {
-    add("command-log", "Command log missing", `Private V1 command log does not exist: ${commandLogPath}`);
+    add("command-log", "Command log missing", `V1 command log does not exist: ${commandLogPath}`);
     return [];
   }
 
@@ -197,29 +197,29 @@ function readCommandRecords(commandLogPath, add) {
   return records;
 }
 
-function validatePrivateV1Proof(proof, resolvedProofPath, add) {
+function validateV1Proof(proof, resolvedProofPath, add) {
   if (!proof) return;
-  if (proof.schemaVersion !== PRIVATE_V1_SCHEMA) {
-    add("schema", "Private V1 proof schema mismatch", `Expected ${PRIVATE_V1_SCHEMA}.`);
+  if (proof.schemaVersion !== V1_SCHEMA) {
+    add("schema", "V1 proof schema mismatch", `Expected ${V1_SCHEMA}.`);
   }
   if (proof.status !== "accepted") {
-    add("status", "Private V1 proof not accepted", "Private V1 proof status must be accepted.");
+    add("status", "V1 proof not accepted", "V1 proof status must be accepted.");
   }
   if (proof.destructiveCommands !== false) {
-    add("destructive-commands", "Destructive command authority present", "Private V1 proof must keep destructiveCommands=false.");
+    add("destructive-commands", "Destructive command authority present", "V1 proof must keep destructiveCommands=false.");
   }
   if (proof.directCleanupCommands !== false) {
-    add("direct-cleanup-commands", "Direct cleanup command authority present", "Private V1 proof must keep directCleanupCommands=false.");
+    add("direct-cleanup-commands", "Direct cleanup command authority present", "V1 proof must keep directCleanupCommands=false.");
   }
   if (!proof.selectedRoute) {
-    add("selected-route", "Selected route missing", "Private V1 proof must name the selected real-data route.");
+    add("selected-route", "Selected route missing", "V1 proof must name the selected real-data route.");
   }
-  if (proof.artifacts?.privateV1Proof && !samePath(proof.artifacts.privateV1Proof, resolvedProofPath)) {
-    add("private-v1-proof-path", "Private V1 proof path mismatch", "Private V1 proof artifact path must match the checked file.");
+  if (proof.artifacts?.v1Proof && !samePath(proof.artifacts.v1Proof, resolvedProofPath)) {
+    add("v1-proof-path", "V1 proof path mismatch", "V1 proof artifact path must match the checked file.");
   }
 }
 
-function validateCommandRecords(commandRecords, add, baseDir = process.cwd(), { privateWindowsPreflightPath = "" } = {}) {
+function validateCommandRecords(commandRecords, add, baseDir = process.cwd(), { v1WindowsPreflightPath = "" } = {}) {
   let requiredPassed = 0;
   for (const id of REQUIRED_COMMANDS) {
     const record = commandRecords.find((row) => row.id === id);
@@ -229,17 +229,17 @@ function validateCommandRecords(commandRecords, add, baseDir = process.cwd(), { 
     }
     if (record.skipped) {
       if (
-        id === "private-windows-preflight" &&
-        validateReusedPrivateWindowsPreflightCommand(record, privateWindowsPreflightPath, baseDir, add)
+        id === "v1-windows-preflight" &&
+        validateReusedV1WindowsPreflightCommand(record, v1WindowsPreflightPath, baseDir, add)
       ) {
         requiredPassed += 1;
         continue;
       }
-      add(`command-${id}`, "Required command skipped", `${id} must run for private V1 proof acceptance.`);
+      add(`command-${id}`, "Required command skipped", `${id} must run for V1 proof acceptance.`);
       continue;
     }
     if (record.exitCode !== 0) {
-      add(`command-${id}`, "Required command failed", `${id} must exit 0 for private V1 proof acceptance.`);
+      add(`command-${id}`, "Required command failed", `${id} must exit 0 for V1 proof acceptance.`);
       continue;
     }
     if (REQUIRED_STDERR_COMMANDS.has(id)) {
@@ -256,19 +256,19 @@ function validateCommandRecords(commandRecords, add, baseDir = process.cwd(), { 
   return { requiredPassed };
 }
 
-function validateReusedPrivateWindowsPreflightCommand(record, expectedPreflightPath, baseDir, add) {
+function validateReusedV1WindowsPreflightCommand(record, expectedPreflightPath, baseDir, add) {
   const outputPath = normalizeArtifactPath(record?.outputPath || "", baseDir);
   let accepted = true;
   if (record?.reused !== true || record?.reason !== "SkipPreflightExistingEvidence") {
-    add("command-private-windows-preflight", "Required command skipped", "Skipped private-windows-preflight is accepted only when marked reused with reason SkipPreflightExistingEvidence.");
+    add("command-v1-windows-preflight", "Required command skipped", "Skipped v1-windows-preflight is accepted only when marked reused with reason SkipPreflightExistingEvidence.");
     accepted = false;
   }
   if (!isExitCodeZero(record?.exitCode)) {
-    add("command-private-windows-preflight", "Required command failed", "Reused private-windows-preflight command record must preserve exitCode=0.");
+    add("command-v1-windows-preflight", "Required command failed", "Reused v1-windows-preflight command record must preserve exitCode=0.");
     accepted = false;
   }
   if (!outputPath || !expectedPreflightPath || !samePath(outputPath, expectedPreflightPath)) {
-    add("command-private-windows-preflight", "Reused preflight path mismatch", "Reused private-windows-preflight command record must point at the checked private preflight artifact.");
+    add("command-v1-windows-preflight", "Reused preflight path mismatch", "Reused v1-windows-preflight command record must point at the checked V1 preflight artifact.");
     accepted = false;
   }
   return accepted;
@@ -364,7 +364,7 @@ function validateOpenAiSmokeCommand(commandRecords, {
     return 0;
   }
   if (record.skipped === true) {
-    add(blockerId, `${smokeLabel} skipped`, `${label} ${smokeLabel.toLowerCase()} must run for private V1 proof acceptance.`);
+    add(blockerId, `${smokeLabel} skipped`, `${label} ${smokeLabel.toLowerCase()} must run for V1 proof acceptance.`);
     return 0;
   }
   if (!isExitCodeZero(record.exitCode)) {
@@ -416,7 +416,7 @@ function validateTopLevelSelectedRouteCommandRecords(commandRecords, proof, sele
   }
 }
 
-function validatePrivatePreflightCommandRecords(preflight, preflightPath, {
+function validateV1PreflightCommandRecords(preflight, preflightPath, {
   proof = null,
   selectedRouteSetup = null,
   selectedRouteCompletion = null,
@@ -425,26 +425,26 @@ function validatePrivatePreflightCommandRecords(preflight, preflightPath, {
   if (!preflight) return 0;
   const baseDir = preflightPath ? path.dirname(preflightPath) : process.cwd();
   const commandLogPath = normalizeArtifactPath(preflight.commandLogPath || "", baseDir);
-  const records = readChildCommandRecords("private-preflight-command-log", commandLogPath, add);
-  for (const id of REQUIRED_PRIVATE_PREFLIGHT_COMMANDS) {
+  const records = readChildCommandRecords("v1-preflight-command-log", commandLogPath, add);
+  for (const id of REQUIRED_V1_PREFLIGHT_COMMANDS) {
     const record = findLatestCommandRecord(records, id);
     if (!record) {
-      add(`private-preflight-command-${id}`, "Private preflight command missing", `Private preflight command ledger must include ${id}.`);
+      add(`v1-preflight-command-${id}`, "V1 preflight command missing", `V1 preflight command ledger must include ${id}.`);
       continue;
     }
     if (record.skipped === true) {
-      add(`private-preflight-command-${id}`, "Private preflight command skipped", `${id} must run before private V1 proof acceptance.`);
+      add(`v1-preflight-command-${id}`, "V1 preflight command skipped", `${id} must run before V1 proof acceptance.`);
       continue;
     }
     if (!isExitCodeZero(record.exitCode)) {
-      add(`private-preflight-command-${id}`, "Private preflight command failed", `${id} exited with ${record.exitCode ?? "missing"}.`);
+      add(`v1-preflight-command-${id}`, "V1 preflight command failed", `${id} exited with ${record.exitCode ?? "missing"}.`);
     }
   }
   const directCommand = records.find((row) => hasDirectCleanupCommand(row.command));
   if (directCommand) {
-    add("private-preflight-command-direct-cleanup", "Direct cleanup command found", `Private preflight command ledger contains direct cleanup command: ${directCommand.command}`);
+    add("v1-preflight-command-direct-cleanup", "Direct cleanup command found", `V1 preflight command ledger contains direct cleanup command: ${directCommand.command}`);
   }
-  validatePrivatePreflightOpenAiSmokeEvidence(records, {
+  validateV1PreflightOpenAiSmokeEvidence(records, {
     proof,
     preflight,
     selectedRouteSetup,
@@ -455,7 +455,7 @@ function validatePrivatePreflightCommandRecords(preflight, preflightPath, {
   return records.length;
 }
 
-function validatePrivatePreflightOpenAiSmokeEvidence(records, {
+function validateV1PreflightOpenAiSmokeEvidence(records, {
   proof = null,
   preflight = null,
   selectedRouteSetup = null,
@@ -471,8 +471,8 @@ function validatePrivatePreflightOpenAiSmokeEvidence(records, {
     proof?.selectedRoute || selectedRouteSetup?.routeInput || selectedRouteCompletion?.routeInput || preflight?.selectedRoute || ""
   ).trim();
   validateOpenAiSmokeCommand(records, {
-    idPrefix: "private-preflight",
-    label: "Private preflight",
+    idPrefix: "v1-preflight",
+    label: "V1 preflight",
     commandId: "openai-fixture-smoke",
     expectedRoute,
     expectedRouteInput,
@@ -481,8 +481,8 @@ function validatePrivatePreflightOpenAiSmokeEvidence(records, {
     add
   });
   validateOpenAiSmokeCommand(records, {
-    idPrefix: "private-preflight",
-    label: "Private preflight",
+    idPrefix: "v1-preflight",
+    label: "V1 preflight",
     commandId: "openai-live-smoke",
     expectedRoute,
     expectedRouteInput,
@@ -522,20 +522,20 @@ function hasDirectCleanupCommand(command = "") {
 
 function validatePreflight(preflight, proof, routeSetup, selectedRouteCompletion, add) {
   if (!preflight) return;
-  if (preflight.schemaVersion !== PRIVATE_PREFLIGHT_SCHEMA) {
-    add("private-windows-preflight", "Private Windows preflight schema mismatch", `Expected ${PRIVATE_PREFLIGHT_SCHEMA}.`);
+  if (preflight.schemaVersion !== V1_PREFLIGHT_SCHEMA) {
+    add("v1-windows-preflight", "V1 Windows preflight schema mismatch", `Expected ${V1_PREFLIGHT_SCHEMA}.`);
   }
   if (preflight.status !== "passed") {
-    add("private-windows-preflight", "Private Windows preflight not passed", "Private Windows preflight must pass before private V1 proof acceptance.");
+    add("v1-windows-preflight", "V1 Windows preflight not passed", "V1 Windows preflight must pass before V1 proof acceptance.");
   }
   const expectedSelectedRoute = String(
     proof?.selectedRoute || routeSetup?.routeInput || selectedRouteCompletion?.routeInput || ""
   ).trim();
   const preflightSelectedRoute = String(preflight.selectedRoute || "").trim();
   if (!preflightSelectedRoute) {
-    add("private-windows-preflight-route", "Private Windows preflight selected route missing", "Private Windows preflight must record selectedRoute.");
+    add("v1-windows-preflight-route", "V1 Windows preflight selected route missing", "V1 Windows preflight must record selectedRoute.");
   } else if (expectedSelectedRoute && preflightSelectedRoute !== expectedSelectedRoute) {
-    add("private-windows-preflight-route", "Private Windows preflight route mismatch", `Private Windows preflight selectedRoute must match ${expectedSelectedRoute}.`);
+    add("v1-windows-preflight-route", "V1 Windows preflight route mismatch", `V1 Windows preflight selectedRoute must match ${expectedSelectedRoute}.`);
   }
 }
 
@@ -548,26 +548,26 @@ function validateSelectedRouteSetup(routeSetup, proof, selectedRouteCompletion, 
     add("selected-route-setup", "Selected route setup not resolved", "Selected-route setup must resolve to a known scoped cleanup route.");
   }
   if (routeSetup.route === "known-temp-delete") {
-    add("selected-route-setup", "Selected route is bootstrap route", "Private V1 already runs temp-fixture first; selected route must be a real-data route.");
+    add("selected-route-setup", "Selected route is bootstrap route", "V1 already runs temp-fixture first; selected route must be a real-data route.");
   }
   if (proof?.selectedRoute && routeSetup.routeInput && proof.selectedRoute !== routeSetup.routeInput) {
-    add("selected-route-setup-mismatch", "Selected route setup input mismatch", "Private V1 selectedRoute must match selected-route setup routeInput.");
+    add("selected-route-setup-mismatch", "Selected route setup input mismatch", "V1 selectedRoute must match selected-route setup routeInput.");
   }
   if (selectedRouteCompletion?.route && routeSetup.route && selectedRouteCompletion.route !== routeSetup.route) {
     add("selected-route-setup-mismatch", "Selected route setup canonical mismatch", "Selected-route setup canonical route must match selected-route completion route.");
   }
   if (proof?.routes?.selectedRouteCanonical && routeSetup.route && proof.routes.selectedRouteCanonical !== routeSetup.route) {
-    add("selected-route-setup-mismatch", "Selected route summary canonical mismatch", "Private V1 routes.selectedRouteCanonical must match selected-route setup route.");
+    add("selected-route-setup-mismatch", "Selected route summary canonical mismatch", "V1 routes.selectedRouteCanonical must match selected-route setup route.");
   }
   if (proof?.routes?.selectedRouteSetupStatus && routeSetup.status && proof.routes.selectedRouteSetupStatus !== routeSetup.status) {
-    add("selected-route-setup-mismatch", "Selected route setup status mismatch", "Private V1 routes.selectedRouteSetupStatus must match selected-route setup status.");
+    add("selected-route-setup-mismatch", "Selected route setup status mismatch", "V1 routes.selectedRouteSetupStatus must match selected-route setup status.");
   }
 }
 
 function validateNativeBundleArtifacts(preflight, add) {
   const artifacts = Array.isArray(preflight?.nativeBundleArtifacts) ? preflight.nativeBundleArtifacts : [];
   if (artifacts.length < 1) {
-    add("native-bundle-artifacts", "Native bundle artifacts missing", "Private Windows preflight must capture at least one native bundle artifact after npm run native:build.");
+    add("native-bundle-artifacts", "Native bundle artifacts missing", "V1 Windows preflight must capture at least one native bundle artifact after npm run native:build.");
     return 0;
   }
 
@@ -637,7 +637,7 @@ function validateFirstRouteCompletion(completion, proof, resolvedPath, add) {
   }
   const summary = proof?.firstRouteCompletion || {};
   if (summary.path && !samePath(summary.path, resolvedPath)) {
-    add("first-route-completion-path", "First-route completion path mismatch", "Private V1 summary must point at the checked first-route completion artifact.");
+    add("first-route-completion-path", "First-route completion path mismatch", "V1 summary must point at the checked first-route completion artifact.");
   }
   validateChildCompletionRoot({
     proof,
@@ -648,7 +648,7 @@ function validateFirstRouteCompletion(completion, proof, resolvedPath, add) {
     add
   });
   if (summary.status && summary.status !== completion.status) {
-    add("first-route-completion-summary", "First-route completion summary mismatch", "Private V1 summary status must match first-route completion.");
+    add("first-route-completion-summary", "First-route completion summary mismatch", "V1 summary status must match first-route completion.");
   }
   validateCompletionSummaryCounts(summary, proofCounts, "first-route", "First-route", add);
   return proofCounts;
@@ -661,17 +661,17 @@ function validateSelectedRouteCompletion(completion, proof, resolvedPath, add) {
     add("selected-route-completion", "Selected-route completion schema mismatch", `Expected ${SELECTED_ROUTE_COMPLETION_SCHEMA}.`);
   }
   if (completion.status !== "accepted" || completion.canStartNextRoute !== true) {
-    add("selected-route-completion", "Selected-route completion not accepted", "Selected route must be accepted before private V1 proof acceptance.");
+    add("selected-route-completion", "Selected-route completion not accepted", "Selected route must be accepted before V1 proof acceptance.");
   }
   if (Number(completion.counts?.reclaimedBytes || 0) <= 0) {
     add("selected-route-reclaimed-bytes", "Selected-route reclaimed bytes missing", "Selected-route completion must prove positive reclaimed bytes.");
   }
   if (proof?.selectedRoute && completion.routeInput && proof.selectedRoute !== completion.routeInput) {
-    add("selected-route-mismatch", "Selected route mismatch", "Private V1 selectedRoute must match selected-route completion routeInput.");
+    add("selected-route-mismatch", "Selected route mismatch", "V1 selectedRoute must match selected-route completion routeInput.");
   }
   const summary = proof?.selectedRouteCompletion || {};
   if (summary.path && !samePath(summary.path, resolvedPath)) {
-    add("selected-route-completion-path", "Selected-route completion path mismatch", "Private V1 summary must point at the checked selected-route completion artifact.");
+    add("selected-route-completion-path", "Selected-route completion path mismatch", "V1 summary must point at the checked selected-route completion artifact.");
   }
   validateChildCompletionRoot({
     proof,
@@ -682,23 +682,23 @@ function validateSelectedRouteCompletion(completion, proof, resolvedPath, add) {
     add
   });
   if (summary.status && summary.status !== completion.status) {
-    add("selected-route-completion-summary", "Selected-route completion summary mismatch", "Private V1 summary status must match selected-route completion.");
+    add("selected-route-completion-summary", "Selected-route completion summary mismatch", "V1 summary status must match selected-route completion.");
   }
   validateCompletionSummaryCounts(summary, proofCounts, "selected-route", "Selected-route", add);
   return proofCounts;
 }
 
 function validateChildCompletionRoot({ proof, resolvedPath, childFolder, blockerId, label, add } = {}) {
-  const privateRoot = normalizeArtifactPath(proof?.evidenceRoot || "", resolvedPath ? path.dirname(resolvedPath) : process.cwd());
-  if (!privateRoot) {
-    add(blockerId, `${label} completion root missing`, "Private V1 proof must record evidenceRoot before child completion artifacts can be trusted.");
+  const evidenceRoot = normalizeArtifactPath(proof?.evidenceRoot || "", resolvedPath ? path.dirname(resolvedPath) : process.cwd());
+  if (!evidenceRoot) {
+    add(blockerId, `${label} completion root missing`, "V1 proof must record evidenceRoot before child completion artifacts can be trusted.");
     return;
   }
-  const expectedRoot = path.join(privateRoot, childFolder);
+  const expectedRoot = path.join(evidenceRoot, childFolder);
   if (!isPathInsideDirectory(resolvedPath, expectedRoot)) {
     add(
       blockerId,
-      `${label} completion outside private evidence root`,
+      `${label} completion outside V1 evidence root`,
       `${label} completion artifact must live under ${expectedRoot}.`
     );
   }
@@ -769,11 +769,11 @@ function validateCompletionSummaryCounts(summary, proofCounts, idPrefix, label, 
   ];
   for (const field of fields) {
     if (!Object.prototype.hasOwnProperty.call(summary, field)) {
-      add(`${idPrefix}-completion-summary`, `${label} completion summary missing proof count`, `Private V1 summary must include ${field} for ${label.toLowerCase()} completion.`);
+      add(`${idPrefix}-completion-summary`, `${label} completion summary missing proof count`, `V1 summary must include ${field} for ${label.toLowerCase()} completion.`);
       continue;
     }
     if (Number(summary[field] || 0) !== Number(proofCounts[field] || 0)) {
-      add(`${idPrefix}-completion-summary`, `${label} completion summary mismatch`, `Private V1 summary ${field} must match ${label.toLowerCase()} completion.`);
+      add(`${idPrefix}-completion-summary`, `${label} completion summary mismatch`, `V1 summary ${field} must match ${label.toLowerCase()} completion.`);
     }
   }
 }
@@ -794,7 +794,7 @@ function validateArchivedRootExports(proof, add) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = parseArgs(process.argv.slice(2));
-  const result = buildPrivateV1ProofCheck({ proofPath: args.file });
+  const result = buildV1ProofCheck({ proofPath: args.file });
   console.log(JSON.stringify(result, null, 2));
-  if (!result.canAcceptPrivateV1Proof && !args.allowIncomplete) process.exitCode = 1;
+  if (!result.canAcceptV1Proof && !args.allowIncomplete) process.exitCode = 1;
 }
