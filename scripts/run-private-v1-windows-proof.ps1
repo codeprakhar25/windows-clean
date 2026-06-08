@@ -76,21 +76,36 @@ try {
     $startedAt = (Get-Date).ToUniversalTime().ToString("o")
     Write-Host "[$Id] $CommandLine"
 
-    & cmd.exe /d /c $CommandLine 2>&1 | Tee-Object -FilePath $OutputPath
-    $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = "cmd.exe"
+    $startInfo.Arguments = "/d /c $CommandLine"
+    $startInfo.WorkingDirectory = $RepoRoot
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+
+    $process = [System.Diagnostics.Process]::Start($startInfo)
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+
     $endedAt = (Get-Date).ToUniversalTime().ToString("o")
+    $stderrPath = "$OutputPath.stderr.txt"
+    Set-Content -LiteralPath $OutputPath -Value $stdout -Encoding UTF8
+    Set-Content -LiteralPath $stderrPath -Value $stderr -Encoding UTF8
 
     $record = [PSCustomObject]@{
       id = $Id
       command = $CommandLine
       outputPath = $OutputPath
-      exitCode = $exitCode
+      stderrPath = $stderrPath
+      exitCode = $process.ExitCode
       startedAt = $startedAt
       endedAt = $endedAt
     }
     Write-CommandRecord -Record $record
 
-    if ($exitCode -ne 0) {
+    if ($process.ExitCode -ne 0) {
       throw "Command failed: $Id. See $OutputPath"
     }
 

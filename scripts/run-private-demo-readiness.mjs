@@ -180,6 +180,8 @@ export function buildPrivateDemoReadinessSummary({
         fileReady(privateV1Runner) &&
         privateV1Runner.includes("spaceguard-private-v1-windows-proof/v1") &&
         privateV1Runner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK") &&
+        privateV1Runner.includes("[System.Diagnostics.ProcessStartInfo]::new()") &&
+        privateV1Runner.includes("stderrPath") &&
         privateV1Runner.includes("Assert-KnownSelectedRoute") &&
         privateV1Runner.includes("selected-route-setup.json") &&
         privateV1Runner.includes("selected-route-unknown") &&
