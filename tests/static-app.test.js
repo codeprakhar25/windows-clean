@@ -412,6 +412,7 @@ assert(app.includes('fileName: "spaceguard-selected-route-proof-packet.md"'), "s
 assert(app.includes('proofPacket.readyForNextRoute ? "next-route-ready" : "next-route-blocked"'), "selected-route proof receipt key should change after validation import clears next-route readiness");
 assert(app.includes('validationImport.complete ? "import-complete" : "import-incomplete"'), "selected-route proof receipt key should change after validation import completes");
 assert(app.includes("validationImport.evidencePath || \"\""), "selected-route proof receipt key should include validation import artifact evidence");
+assert(app.includes("Re-export selected-route proof packet after validation import before another scoped executor"), "executor blockers should require final proof re-export after validation import");
 assert(app.includes("primaryProofExportRequired"), "command flow primary CTA should switch to proof export before validation import");
 assert(app.includes("!proofPacketComplete || !selectedRouteProofExported"), "selected-route validation import should stay disabled until proof is exported");
 assert(app.includes("export proof first"), "selected-route proof UI should explain that export must happen before validation import");

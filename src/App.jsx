@@ -2343,6 +2343,9 @@ export default function App() {
     if (executionProofHandoff.status === "proof-complete" && validationImport && !validationImport.complete) {
       return `Import selected-route proof into validation evidence before another scoped executor. Current validation import: ${validationImport.status}.`;
     }
+    if (executionProofHandoff.status === "proof-complete" && validationImport?.complete && !selectedRouteProofExportedForCurrentPacket(scopedExecutorCommandFlow?.proofPacket)) {
+      return "Re-export selected-route proof packet after validation import before another scoped executor.";
+    }
     if (executionProofHandoff.status === "waiting-for-execution" || executionProofHandoff.status === "proof-complete") return "";
     return `Finish post-run proof before another scoped executor. Current proof state: ${executionProofHandoff.status}.`;
   }
