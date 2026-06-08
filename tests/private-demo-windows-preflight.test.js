@@ -23,6 +23,8 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
   assert(runner.includes("cargo test --manifest-path src-tauri\\Cargo.toml"), "preflight runner should run Rust unit tests on the Windows host");
   assert(runner.includes("npm run build"), "preflight runner should run the Vite production build");
   assert(runner.includes("npm run demo:private-readiness"), "preflight runner should capture private demo readiness");
+  assert(runner.includes("npm run openai:smoke:fixture -- --route npm-cache"), "preflight runner should run selected-route OpenAI fixture smoke");
+  assert(runner.includes("npm run openai:smoke -- --route npm-cache"), "preflight runner should run selected-route live OpenAI smoke");
   assert(runner.includes("npm run native:build"), "preflight runner should produce the native bundle");
   assert(runner.includes("proof:first-route:windows -- -Route temp-fixture"), "preflight runner should print the first-route proof as the next command");
   assert(runner.includes("proof:route:windows -- -Route npm-cache"), "preflight runner should print npm-cache as the selected real-data route command");
@@ -42,6 +44,11 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
   assert(
     summary.nextCommands.includes("npm run demo:private-windows-preflight"),
     "private demo readiness should put the Windows preflight before manual proof commands"
+  );
+  assert(
+    summary.nextCommands.includes("npm run openai:smoke:fixture -- --route npm-cache") &&
+      summary.nextCommands.includes("npm run openai:smoke -- --route npm-cache"),
+    "private demo readiness should expose both OpenAI smoke commands before Windows preflight"
   );
 
   console.log("private demo windows preflight ok");

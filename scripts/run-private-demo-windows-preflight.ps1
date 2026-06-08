@@ -22,6 +22,8 @@ try {
   $PreflightPath = Join-Path $EvidenceRoot "private-demo-preflight.json"
   $ReadinessPath = Join-Path $EvidenceRoot "private-demo-readiness.json"
   $NativeCoveragePath = Join-Path $EvidenceRoot "native-executor-coverage.json"
+  $OpenAiFixtureSmokePath = Join-Path $EvidenceRoot "openai-fixture-smoke.txt"
+  $OpenAiLiveSmokePath = Join-Path $EvidenceRoot "openai-live-smoke.txt"
 
   New-Item -ItemType Directory -Path $EvidenceRoot -Force | Out-Null
 
@@ -96,6 +98,8 @@ try {
     rustTests = "cargo test --manifest-path src-tauri\Cargo.toml"
     webBuild = "npm run build"
     privateReadiness = "npm run demo:private-readiness"
+    openAiFixtureSmoke = "npm run openai:smoke:fixture -- --route npm-cache"
+    openAiLiveSmoke = "npm run openai:smoke -- --route npm-cache"
     nativeBuild = "npm run native:build"
     nextFirstRoute = "npm run proof:first-route:windows -- -Route temp-fixture"
     nextSelectedRoute = "npm run proof:route:windows -- -Route npm-cache"
@@ -106,6 +110,8 @@ try {
   Invoke-LoggedCommand -Id "rust-tests" -CommandLine $commands.rustTests -OutputPath (Join-Path $EvidenceRoot "cargo-test.txt") | Out-Null
   Invoke-LoggedCommand -Id "web-build" -CommandLine $commands.webBuild -OutputPath (Join-Path $EvidenceRoot "npm-build.txt") | Out-Null
   Invoke-LoggedCommand -Id "private-demo-readiness" -CommandLine $commands.privateReadiness -OutputPath $ReadinessPath | Out-Null
+  Invoke-LoggedCommand -Id "openai-fixture-smoke" -CommandLine $commands.openAiFixtureSmoke -OutputPath $OpenAiFixtureSmokePath | Out-Null
+  Invoke-LoggedCommand -Id "openai-live-smoke" -CommandLine $commands.openAiLiveSmoke -OutputPath $OpenAiLiveSmokePath | Out-Null
   Invoke-LoggedCommand -Id "native-build" -CommandLine $commands.nativeBuild -OutputPath (Join-Path $EvidenceRoot "native-build.txt") | Out-Null
 
   $summary = [PSCustomObject]@{
@@ -119,6 +125,8 @@ try {
       privateDemoPreflight = $PreflightPath
       privateDemoReadiness = $ReadinessPath
       nativeExecutorCoverage = $NativeCoveragePath
+      openAiFixtureSmoke = $OpenAiFixtureSmokePath
+      openAiLiveSmoke = $OpenAiLiveSmokePath
     }
     commands = $commands
     nextCommands = @(
