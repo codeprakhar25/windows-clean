@@ -194,6 +194,75 @@ const assert = require("assert");
   assert.strictEqual(handedOffLocks.targetSwitchLocked, false, "support bundle handoff should unlock target switching");
   assert.strictEqual(handedOffLocks.routeSetupLocked, false, "support bundle handoff should unlock route setup switching");
 
+  const gateCandidate = {
+    id: "npm-cache:C:\\Users\\LocalUser\\AppData\\Local\\npm-cache\\_cacache",
+    title: "npm cache",
+    routeInput: "npm-cache",
+    canExecute: true
+  };
+  const missingConsentGate = workflow.buildExecutionGate({
+    candidate: gateCandidate,
+    consentChecked: false,
+    confirmationText: "RUN npm-cache",
+    expectedConfirmation: "RUN npm-cache",
+    executionPrerequisites: { ready: true },
+    scanFingerprint: "scan-123",
+    executionStatus: "idle"
+  });
+  assert.strictEqual(missingConsentGate.ready, false, "execution gate should block without explicit consent");
+  assert(missingConsentGate.rows.some((row) => row.id === "consent-checkbox" && !row.passed), "execution gate should name missing consent");
+
+  const wrongPhraseGate = workflow.buildExecutionGate({
+    candidate: gateCandidate,
+    consentChecked: true,
+    confirmationText: "RUN gradle-cache",
+    expectedConfirmation: "RUN npm-cache",
+    executionPrerequisites: { ready: true },
+    scanFingerprint: "scan-123",
+    executionStatus: "idle"
+  });
+  assert.strictEqual(wrongPhraseGate.ready, false, "execution gate should block when confirmation text does not match the selected route");
+  assert(wrongPhraseGate.rows.some((row) => row.id === "confirmation-phrase" && !row.passed), "execution gate should expose confirmation mismatch");
+
+  const missingScanGate = workflow.buildExecutionGate({
+    candidate: gateCandidate,
+    consentChecked: true,
+    confirmationText: "RUN npm-cache",
+    expectedConfirmation: "RUN npm-cache",
+    executionPrerequisites: { ready: true },
+    scanFingerprint: "",
+    executionStatus: "idle"
+  });
+  assert.strictEqual(missingScanGate.ready, false, "execution gate should block without a current scan fingerprint");
+  assert(missingScanGate.rows.some((row) => row.id === "scan-fingerprint" && !row.passed), "execution gate should expose missing scan fingerprint");
+
+  const blockedPrerequisiteGate = workflow.buildExecutionGate({
+    candidate: gateCandidate,
+    consentChecked: true,
+    confirmationText: "RUN npm-cache",
+    expectedConfirmation: "RUN npm-cache",
+    executionPrerequisites: {
+      ready: false,
+      blockers: [{ id: "archive-destination" }]
+    },
+    scanFingerprint: "scan-123",
+    executionStatus: "idle"
+  });
+  assert.strictEqual(blockedPrerequisiteGate.ready, false, "execution gate should block when route-specific prerequisites are blocked");
+  assert(blockedPrerequisiteGate.rows.some((row) => row.id === "execution-prerequisites" && !row.passed), "execution gate should expose blocked route-specific prerequisites");
+
+  const readyExecutionGate = workflow.buildExecutionGate({
+    candidate: gateCandidate,
+    consentChecked: true,
+    confirmationText: "RUN npm-cache",
+    expectedConfirmation: "RUN npm-cache",
+    executionPrerequisites: { ready: true },
+    scanFingerprint: "scan-123",
+    executionStatus: "idle"
+  });
+  assert.strictEqual(readyExecutionGate.schemaVersion, "spaceguard-execution-gate/v1", "execution gate should expose a stable schema");
+  assert.strictEqual(readyExecutionGate.ready, true, "execution gate should pass only when all dispatch prerequisites are ready");
+
   const inAppBundle = workflow.buildInAppSupportBundleReport({
     generatedAt: "2026-06-08T19:30:00.000Z",
     routeInput: "npm-cache",

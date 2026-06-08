@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildAppAgentTaskQueue, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowLocks, formatBytes, renderInAppSupportBundleMarkdown } from "./real-workflow.mjs";
+import { buildAppAgentTaskQueue, buildExecutionGate, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowLocks, formatBytes, renderInAppSupportBundleMarkdown } from "./real-workflow.mjs";
 import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -321,13 +321,19 @@ function App() {
     }),
     [selectedCandidate, archiveDestination, permanentRemovalConfirmed]
   );
-  const canExecute = Boolean(
-    selectedCandidate?.canExecute &&
-      consentChecked &&
-      confirmationText.trim() === expectedConfirmation &&
-      executionPrerequisites.ready &&
-      executionStatus !== "running"
+  const executionGate = useMemo(
+    () => buildExecutionGate({
+      candidate: selectedCandidate,
+      consentChecked,
+      confirmationText,
+      expectedConfirmation,
+      executionPrerequisites,
+      scanFingerprint,
+      executionStatus
+    }),
+    [selectedCandidate, consentChecked, confirmationText, expectedConfirmation, executionPrerequisites, scanFingerprint, executionStatus]
   );
+  const canExecute = executionGate.ready;
   const canExportProof = Boolean(postRunProof.status === "matched" && proofReviewed && executionRecord?.accepted);
   const supportBundleWritten = Boolean(workflowProofAccepted && supportBundleWrite?.written);
   const workflowLocks = useMemo(
@@ -432,6 +438,20 @@ function App() {
 
   async function executeSelectedCleanup() {
     if (!selectedCandidate) return;
+    const currentExecutionGate = buildExecutionGate({
+      candidate: selectedCandidate,
+      consentChecked,
+      confirmationText,
+      expectedConfirmation,
+      executionPrerequisites,
+      scanFingerprint,
+      executionStatus
+    });
+    if (!currentExecutionGate.ready) {
+      setExecutionStatus("error");
+      setExecutionError(currentExecutionGate.primary);
+      return;
+    }
     setExecutionStatus("running");
     setExecutionError("");
     setExecutionResult(null);

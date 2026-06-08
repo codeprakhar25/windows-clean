@@ -106,12 +106,15 @@ assert(app.includes("./real-workflow.mjs"), "app should import tested real workf
 assert(app.includes("buildAppAgentTaskQueue"), "app should build a deterministic task queue for OpenAI advisor context");
 assert(app.includes("buildRouteReadiness"), "app should use tested route readiness guardrails");
 assert(app.includes("buildCleanupCandidates(scan, runtime, setupRouteInput)"), "app cleanup candidates should be gated by the selected route setup");
+assert(app.includes("buildExecutionGate"), "app should use tested execution dispatch gate guardrails");
 assert(app.includes("buildExecutionPrerequisites"), "app should use tested route-specific execution prerequisites");
 assert(app.includes("buildWorkflowLocks"), "app should use tested workflow lock policy for proof handoff");
 assert(app.includes("buildRouteSetupChecklist"), "app should use tested route setup checklist guardrails");
 assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
 assert(app.includes("Execution prerequisites"), "user gate should render route-specific execution prerequisite blockers");
-assert(app.includes("executionPrerequisites.ready"), "execute button should stay locked until route-specific prerequisites pass");
+assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
+assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
+assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
 assert(app.includes("executionRecord?.accepted"), "proof export should require an accepted native execution record");
 assert(app.includes("targetSwitchLocked"), "cleanup queue should lock target switching after accepted execution until proof export completes");
 assert(app.includes("routeSetupLocked"), "route setup should share the proof handoff lock after accepted execution");
@@ -232,6 +235,7 @@ assert(realWorkflow.includes("findPostRunTargetEvidence"), "real workflow helper
 assert(realWorkflow.includes("reviewTarget?.path"), "real workflow helper should compare selected review item paths");
 assert(realWorkflow.includes("single-route-scope"), "real workflow helper should expose single route scope guardrail rows");
 assert(realWorkflow.includes("selected-route-setup"), "real workflow helper should expose selected route setup as an execution guardrail");
+assert(realWorkflow.includes("spaceguard-execution-gate/v1"), "real workflow helper should expose a stable execution gate schema");
 assert(realWorkflow.includes("spaceguard-workflow-locks/v1"), "real workflow helper should expose a stable workflow lock schema");
 assert(!realWorkflow.includes("temp-fixture"), "real workflow helper must not point app setup at seeded fixture routes");
 assert(!realWorkflow.includes("first-route-proof"), "real workflow helper must not block real routes behind seeded first-route proof rows");

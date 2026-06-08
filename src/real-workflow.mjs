@@ -624,6 +624,78 @@ export function buildExecutionPrerequisites({
   };
 }
 
+export function buildExecutionGate({
+  candidate = null,
+  consentChecked = false,
+  confirmationText = "",
+  expectedConfirmation = "",
+  executionPrerequisites = { ready: true, blockers: [] },
+  scanFingerprint = "",
+  executionStatus = "idle"
+} = {}) {
+  const expected = String(expectedConfirmation || "").trim();
+  const actual = String(confirmationText || "").trim();
+  const prerequisiteBlockers = Array.isArray(executionPrerequisites?.blockers)
+    ? executionPrerequisites.blockers
+    : [];
+  const rows = [
+    guardrailRow({
+      id: "selected-target",
+      label: "Selected target",
+      passed: Boolean(candidate),
+      detail: candidate ? `Selected ${candidate.title || candidate.routeInput || "cleanup target"}.` : "Select one measured cleanup target."
+    }),
+    guardrailRow({
+      id: "route-readiness",
+      label: "Route readiness",
+      passed: Boolean(candidate?.canExecute),
+      detail: candidate?.canExecute ? "Selected target route readiness passed." : candidate?.blockedReason || "Selected target route readiness is blocked."
+    }),
+    guardrailRow({
+      id: "consent-checkbox",
+      label: "Explicit consent",
+      passed: Boolean(consentChecked),
+      detail: consentChecked ? "The operator checked the current-plan consent box." : "Check the current-plan consent box before execution."
+    }),
+    guardrailRow({
+      id: "confirmation-phrase",
+      label: "Confirmation phrase",
+      passed: Boolean(expected && actual === expected),
+      detail: expected && actual === expected ? "Confirmation phrase matches the selected route." : `Type exactly ${expected || "the selected route confirmation phrase"}.`
+    }),
+    guardrailRow({
+      id: "scan-fingerprint",
+      label: "Current scan fingerprint",
+      passed: Boolean(String(scanFingerprint || "").trim()),
+      detail: scanFingerprint ? "Current native scan fingerprint is present." : "Run a current native scan before execution."
+    }),
+    guardrailRow({
+      id: "execution-prerequisites",
+      label: "Route-specific prerequisites",
+      passed: executionPrerequisites?.ready !== false,
+      detail: executionPrerequisites?.ready !== false
+        ? "Route-specific execution prerequisites are satisfied."
+        : `Resolve ${prerequisiteBlockers.length || 1} route-specific prerequisite blocker(s).`
+    }),
+    guardrailRow({
+      id: "executor-not-running",
+      label: "Executor not running",
+      passed: executionStatus !== "running",
+      detail: executionStatus === "running" ? "A native executor is already running." : "No native executor is currently running."
+    })
+  ];
+  const blockers = rows.filter((row) => !row.passed);
+  return {
+    schemaVersion: "spaceguard-execution-gate/v1",
+    ready: blockers.length === 0,
+    rows,
+    blockers,
+    primary: blockers.length
+      ? `Execution is blocked by ${blockers.length} dispatch gate(s).`
+      : "Execution dispatch gate is ready."
+  };
+}
+
 export function buildWorkflowLocks({
   executionRecord = null,
   workflowProofAccepted = false,
