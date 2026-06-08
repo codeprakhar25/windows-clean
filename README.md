@@ -54,6 +54,7 @@ npm run setup:doctor
 npm run proof:first-route
 # fastest full private V1 Windows proof:
 npm run demo:private-v1-windows -- -SelectedRoute npm-cache
+npm run validate:private-v1-proof -- --file evidence/private-v1-proof-npm-cache-YYYYMMDD-HHMMSS/private-v1-proof.json
 # lower-level recovery/manual commands:
 npm run proof:first-route:windows
 npm run openai:smoke:fixture -- --route npm-cache
@@ -91,7 +92,7 @@ When the completion verifier accepts that evidence, keep the generated first-rou
 
 After first-route proof is accepted, `npm run proof:route:windows -- -Route npm-cache` is the fastest selected-route proof path. It runs only on Windows, loads `.env`, requires `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to point at an accepted `spaceguard-first-route-completion-check/v1` file, forces all scoped executor flags off except the selected route flag, runs setup doctor, route-specific OpenAI fixture smoke, live OpenAI smoke when configured, route setup, route validation, writes `operator-preflight.json`, validates it into `operator-preflight-check.json`, writes `operator-app-handoff.md` and `commands.ndjson`, then launches `npm run native:dev`. It does not run cleanup itself; deletion still requires the desktop app's real scan, target selection, consent, executor button, native volume proof, post-run rescan, selected-route proof packet export, selected-route proof import, and workflow proof export. After the app exits cleanly, the runner validates the workflow proof and writes `selected-route-completion-check.json`; that completion artifact is the selected-route handoff for starting the next cleanup route.
 
-`npm run demo:private-v1-windows -- -SelectedRoute npm-cache` coordinates the private V1 Windows proof from the top: host preflight, seeded first-route proof, accepted first-route completion check binding through `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK`, first-route root proof export archival into evidence, and selected real-data route proof. It still never performs cleanup directly; it only runs the existing guarded proof runners and writes `private-v1-proof.json` when both route completions are accepted.
+`npm run demo:private-v1-windows -- -SelectedRoute npm-cache` coordinates the private V1 Windows proof from the top: host preflight, seeded first-route proof, accepted first-route completion check binding through `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK`, first-route root proof export archival into evidence, and selected real-data route proof. It still never performs cleanup directly; it only runs the existing guarded proof runners and writes `private-v1-proof.json` when both route completions are accepted. The coordinator also runs `npm run validate:private-v1-proof -- --file ...` and writes `private-v1-proof-check.json`; rerun that verifier manually if you need to audit or share the captured V1 evidence folder.
 
 If the app proof export is fixed after the selected-route desktop session closes, rerun only the post-app finalization against the existing evidence root:
 

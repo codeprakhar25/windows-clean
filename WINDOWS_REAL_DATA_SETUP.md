@@ -42,6 +42,7 @@ npm run setup:doctor
 npm run proof:first-route
 # fastest full private V1 Windows proof:
 npm run demo:private-v1-windows -- -SelectedRoute npm-cache
+npm run validate:private-v1-proof -- --file evidence/private-v1-proof-npm-cache-YYYYMMDD-HHMMSS/private-v1-proof.json
 # lower-level recovery/manual commands:
 npm run proof:first-route:windows
 npm run openai:smoke:fixture -- --route npm-cache
@@ -86,6 +87,14 @@ npm run demo:private-v1-windows -- -SelectedRoute npm-cache
 ```
 
 This coordinator runs the host preflight, launches the seeded first-route proof, verifies the accepted `first-route-completion-check.json`, sets `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` for the current process, archives the first-route root proof exports into evidence, then launches the selected real-data route proof. It writes `private-v1-proof.json` only after both route completions are accepted. It does not add a new cleanup authority path; cleanup remains inside the desktop app's scoped executor, consent, proof export, and completion verifier workflow.
+
+The coordinator also writes `private-v1-proof-check.json` by running:
+
+```powershell
+npm run validate:private-v1-proof -- --file evidence/private-v1-proof-npm-cache-YYYYMMDD-HHMMSS/private-v1-proof.json
+```
+
+That verifier checks the final V1 proof schema, command ledger, Windows preflight artifact, first-route completion artifact, selected-route completion artifact, accepted status, positive reclaimed bytes, and the absence of direct cleanup command authority.
 
 ## First npm real-data proof checklist
 

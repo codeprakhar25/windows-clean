@@ -27,6 +27,7 @@ export function buildPrivateDemoReadinessSummary({
   const selectedRouteRunner = readText(selectedRouteRunnerPath);
   const privateV1Runner = readText(privateV1RunnerPath);
   const workflowProofCheck = readText(path.join(root, "scripts", "run-workflow-proof-check.mjs"));
+  const privateV1ProofCheck = readText(path.join(root, "scripts", "run-private-v1-proof-check.mjs"));
   const firstRouteCompletionCheck = readText(path.join(root, "scripts", "run-first-route-completion-check.mjs"));
   const selectedRouteCompletionCheck = readText(path.join(root, "scripts", "run-route-completion-check.mjs"));
   const openAiSmokeRunner = readText(path.join(root, "scripts", "run-openai-advisor-smoke.mjs"));
@@ -170,8 +171,19 @@ export function buildPrivateDemoReadinessSummary({
         privateV1Runner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK") &&
         privateV1Runner.includes("npm run proof:first-route:windows -- -Route temp-fixture") &&
         privateV1Runner.includes("npm run proof:route:windows -- -Route $SelectedRoute") &&
+        privateV1Runner.includes("run-private-v1-proof-check.mjs --file") &&
         directDeleteFree(privateV1Runner),
       detail: "Private demo readiness must expose a single Windows V1 proof command that binds first-route completion before selected real-data cleanup."
+    }),
+    buildCheck({
+      id: "private-v1-proof-validation",
+      label: "Private V1 proof validation",
+      passed: scriptIncludes(packageJson, "validate:private-v1-proof", "run-private-v1-proof-check.mjs") &&
+        fileReady(privateV1ProofCheck) &&
+        privateV1ProofCheck.includes("spaceguard-private-v1-proof-check/v1") &&
+        privateV1ProofCheck.includes("spaceguard-private-v1-windows-proof/v1") &&
+        privateV1ProofCheck.includes("bind-first-route-completion"),
+      detail: "Private demo readiness must include an independent verifier for the final private V1 proof artifact."
     }),
     buildCheck({
       id: "workflow-proof-validation",
@@ -243,6 +255,7 @@ export function buildPrivateDemoReadinessSummary({
       "npm run build",
       "npm run demo:private-readiness",
       "npm run demo:private-v1-windows -- -SelectedRoute npm-cache",
+      "npm run validate:private-v1-proof -- --file evidence/private-v1-proof-npm-cache-YYYYMMDD-HHMMSS/private-v1-proof.json",
       "npm run openai:smoke:fixture -- --route npm-cache",
       "npm run openai:smoke -- --route npm-cache",
       "npm run demo:private-windows-preflight",

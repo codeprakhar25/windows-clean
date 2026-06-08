@@ -33,6 +33,7 @@ try {
 
   $CommandLogPath = Join-Path $EvidenceRoot "commands.ndjson"
   $SummaryPath = Join-Path $EvidenceRoot "private-v1-proof.json"
+  $PrivateV1ProofCheckPath = Join-Path $EvidenceRoot "private-v1-proof-check.json"
   $PreflightEvidenceRoot = Join-Path $EvidenceRoot "private-demo-preflight"
   $FirstRouteEvidenceRoot = Join-Path $EvidenceRoot "first-route-proof"
   $SelectedRouteEvidenceRoot = Join-Path $EvidenceRoot "selected-route-proof-$RouteSlug"
@@ -221,6 +222,7 @@ try {
     directCleanupCommands = $false
     artifacts = [PSCustomObject]@{
       privateV1Proof = $SummaryPath
+      privateV1ProofCheck = $PrivateV1ProofCheckPath
       privateWindowsPreflight = Join-Path $PreflightEvidenceRoot "private-demo-preflight.json"
       firstRouteCompletionCheck = $FirstRouteCompletionPath
       selectedRouteCompletionCheck = $SelectedRouteCompletionPath
@@ -251,11 +253,13 @@ try {
   }
 
   Write-JsonFile -Value $summary -Path $SummaryPath
+  Invoke-LoggedCommand -Id "private-v1-proof-check" -CommandLine "node scripts\run-private-v1-proof-check.mjs --file `"$SummaryPath`"" -OutputPath $PrivateV1ProofCheckPath | Out-Null
 
   Write-Host ""
   Write-Host "SpaceGuard private V1 Windows proof accepted."
   Write-Host "Evidence root: $EvidenceRoot"
   Write-Host "V1 proof artifact: $SummaryPath"
+  Write-Host "V1 proof check: $PrivateV1ProofCheckPath"
   Write-Host "Selected route: $SelectedRoute"
 } finally {
   Pop-Location
