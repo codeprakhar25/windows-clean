@@ -4053,6 +4053,10 @@ export default function App() {
   }
 
   function exportRealWorkflowProofPacket() {
+    if (windowsSetupAssistant.realWorkflow?.status !== "next-route-ready") {
+      focusWorkflowPanel("windows-setup-assistant-panel");
+      return false;
+    }
     const exportedPacket = buildRealWorkflowProofPacket({
       windowsSetupAssistant,
       scopedExecutorCommandFlow,

@@ -393,6 +393,7 @@ assert(model.includes("buildSelectedRouteProofPacketMarkdown"), "model should ex
 assert(app.includes("buildSelectedRouteProofPacketMarkdown"), "app should wire selected-route proof packet markdown export");
 assert(model.includes("buildRealWorkflowProofPacketMarkdown"), "model should export real workflow proof packet markdown");
 assert(app.includes("buildRealWorkflowProofPacketMarkdown"), "app should wire real workflow proof markdown export");
+assert(app.includes('windowsSetupAssistant.realWorkflow?.status !== "next-route-ready"'), "real workflow proof export should require setup assistant next-route readiness at runtime");
 assert(app.includes('if (exportedPacket.status !== "workflow-proven")'), "real workflow proof export should require a workflow-proven packet");
 assert(app.includes('disabled={!workflowProofExportReady}'), "setup assistant workflow proof export should stay disabled until the workflow is ready");
 assert(app.includes("flow.proofPacket"), "command flow UI should receive the selected-route proof packet");
