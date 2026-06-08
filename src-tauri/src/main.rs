@@ -7794,6 +7794,10 @@ fn first_non_empty_line(value: &str) -> Option<String> {
 }
 
 fn delete_npm_cache_target(root: &Path) -> NpmCacheDeleteResult {
+    delete_npm_cache_target_at(root, SystemTime::now())
+}
+
+fn delete_npm_cache_target_at(root: &Path, now: SystemTime) -> NpmCacheDeleteResult {
     let mut result = NpmCacheDeleteResult::default();
     if npm_cache_target_reject_code(&path_to_string(root)).is_some() {
         result.skipped_count += 1;
@@ -7819,7 +7823,7 @@ fn delete_npm_cache_target(root: &Path) -> NpmCacheDeleteResult {
             continue;
         }
         if metadata.is_file() {
-            delete_single_npm_cache_file(&path, &metadata, &mut result);
+            delete_single_npm_cache_file_at(&path, &metadata, now, &mut result);
             continue;
         }
         if metadata.is_dir() {
@@ -7854,7 +7858,16 @@ fn delete_single_npm_cache_file(
     metadata: &fs::Metadata,
     result: &mut NpmCacheDeleteResult,
 ) {
-    if !file_old_enough_for_npm_cache_delete(metadata) || npm_cache_file_forbidden(path) {
+    delete_single_npm_cache_file_at(path, metadata, SystemTime::now(), result);
+}
+
+fn delete_single_npm_cache_file_at(
+    path: &Path,
+    metadata: &fs::Metadata,
+    now: SystemTime,
+    result: &mut NpmCacheDeleteResult,
+) {
+    if !file_old_enough_for_npm_cache_delete_at(metadata, now) || npm_cache_file_forbidden(path) {
         result.skipped_count += 1;
         return;
     }
@@ -7869,10 +7882,14 @@ fn delete_single_npm_cache_file(
 }
 
 fn file_old_enough_for_npm_cache_delete(metadata: &fs::Metadata) -> bool {
+    file_old_enough_for_npm_cache_delete_at(metadata, SystemTime::now())
+}
+
+fn file_old_enough_for_npm_cache_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
     let Ok(modified) = metadata.modified() else {
         return false;
     };
-    let Ok(age) = SystemTime::now().duration_since(modified) else {
+    let Ok(age) = now.duration_since(modified) else {
         return false;
     };
     age.as_secs() >= 14 * 24 * 60 * 60
@@ -11895,5 +11912,61 @@ mod tests {
             npm_cache_file_forbidden(&root.join("tmp").join("cache.lock")),
             "lock files should never be deleted by the npm cache executor"
         );
+    }
+
+    #[test]
+    fn npm_cache_deleter_removes_only_old_content_and_tmp_files() {
+        let local_app_data = unique_test_dir("npm-delete-proof");
+        let root = local_app_data.join("npm-cache").join("_cacache");
+        let old_content = root
+            .join("content-v2")
+            .join("sha512")
+            .join("ab")
+            .join("blob");
+        let old_tmp = root.join("tmp").join("scratch");
+        let index_metadata = root.join("index-v5").join("bucket").join("entry");
+        let lock_file = root.join("tmp").join("cache.lock");
+
+        fs::create_dir_all(old_content.parent().expect("old content parent"))
+            .expect("create old content dir");
+        fs::create_dir_all(old_tmp.parent().expect("old tmp parent"))
+            .expect("create old tmp dir");
+        fs::create_dir_all(index_metadata.parent().expect("index parent"))
+            .expect("create index dir");
+        fs::write(&old_content, b"delete-content").expect("write old content");
+        fs::write(&old_tmp, b"delete-tmp").expect("write old tmp");
+        fs::write(&index_metadata, b"keep-index").expect("write index");
+        fs::write(&lock_file, b"keep-lock").expect("write lock");
+
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _restore = EnvRestore::set("LOCALAPPDATA", &local_app_data);
+        let old_enough_now = SystemTime::now() + Duration::from_secs(15 * 24 * 60 * 60);
+
+        let result = delete_npm_cache_target_at(&root, old_enough_now);
+
+        assert_eq!(
+            result.deleted_files, 2,
+            "old npm content and tmp files should be deleted"
+        );
+        assert_eq!(
+            result.deleted_bytes, 24,
+            "deleted bytes should match removed file lengths"
+        );
+        assert!(!old_content.exists(), "old content blob should be removed");
+        assert!(!old_tmp.exists(), "old tmp file should be removed");
+        assert!(index_metadata.exists(), "index metadata must survive");
+        assert!(lock_file.exists(), "lock files must survive");
+
+        let _ = fs::remove_file(&index_metadata);
+        let _ = fs::remove_file(&lock_file);
+        let _ = fs::remove_dir(index_metadata.parent().expect("index metadata parent"));
+        let _ = fs::remove_dir(root.join("index-v5"));
+        let _ = fs::remove_dir(root.join("tmp"));
+        let _ = fs::remove_dir(root.join("content-v2").join("sha512").join("ab"));
+        let _ = fs::remove_dir(root.join("content-v2").join("sha512"));
+        let _ = fs::remove_dir(root.join("content-v2"));
+        let _ = fs::remove_dir(&root);
+        let _ = fs::remove_dir(local_app_data.join("npm-cache"));
+        let _ = fs::remove_dir(&local_app_data);
     }
 }

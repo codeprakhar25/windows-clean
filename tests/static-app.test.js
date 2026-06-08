@@ -816,6 +816,9 @@ assert(rustScanner.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "Rust nativ
 assert(rustScanner.includes("npm_cache_target_reject_code"), "Rust native shell should validate npm cache targets");
 assert(rustScanner.includes("target-not-npm-cache"), "Rust native shell should reject non-npm cache targets");
 assert(rustScanner.includes("file_old_enough_for_npm_cache_delete"), "Rust npm cache cleanup should enforce the age threshold");
+assert(rustScanner.includes("delete_npm_cache_target_at(root, SystemTime::now())"), "Rust npm cache cleanup should keep production deletion on the real clock");
+assert(rustScanner.includes("delete_single_npm_cache_file_at"), "Rust npm cache cleanup should expose clock-injected file deletion for proof tests");
+assert(rustScanner.includes("npm_cache_deleter_removes_only_old_content_and_tmp_files"), "Rust npm cache cleanup should prove old content and tmp deletion while preserving metadata");
 assert(app.includes("PnpmStoreExecutorPanel"), "pnpm store executor panel should be rendered");
 assert(app.includes("pnpm-store-executor-panel"), "pnpm store executor panel should be focusable");
 assert(app.includes("Run pnpm store cleanup"), "pnpm store executor should expose a user-triggered cleanup button");

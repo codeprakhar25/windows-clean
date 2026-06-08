@@ -1,8 +1,16 @@
 const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
 
 (async () => {
   const guard = await import("../src/spaceguard-model.mjs");
   const native = await import("../src/native-scanner.mjs");
+  const rustMain = fs.readFileSync(path.join(__dirname, "..", "src-tauri", "src", "main.rs"), "utf8");
+
+  assert(rustMain.includes("fn delete_npm_cache_target_at(root: &Path, now: SystemTime)"), "native npm executor should expose a clock-injected deleter for proof tests");
+  assert(rustMain.includes("delete_npm_cache_target_at(root, SystemTime::now())"), "production npm executor should use the real clock for age gating");
+  assert(rustMain.includes("fn delete_single_npm_cache_file_at("), "native npm executor should age-gate deletion through a clock-injected file helper");
+  assert(rustMain.includes("npm_cache_deleter_removes_only_old_content_and_tmp_files"), "native npm executor should have a deletion proof test");
 
   assert.strictEqual(native.getNativeScannerCapability({}).available, false, "browser host should not expose native scanner");
   assert.strictEqual(
