@@ -4207,6 +4207,13 @@ const assert = require("assert");
         title: "npm cache cleanup",
         readyForNextRoute: true,
         validationImport: { status: "import-complete", complete: true, route: "bounded-npm-cache-delete" },
+        volumeProof: {
+          status: "measured",
+          measured: true,
+          driveLabel: "C:",
+          freeBytesDelta: 4096,
+          entries: 1
+        },
         counts: { ledgerEntries: 1, matchedRows: 1, reclaimedBytes: 4096 }
       }
     },
@@ -4219,6 +4226,35 @@ const assert = require("assert");
   assert.strictEqual(selectedRouteWorkflowProof.appCloseContract.nextRouteBlockedUntil, "validate:workflow-proof accepted", "selected-route app-close contract should keep the in-app close gate on workflow proof acceptance");
   assert(selectedRouteWorkflowProof.appCloseContract.requiredBeforeClosingApp.includes("native-volume-proof-captured"), "selected-route app-close contract should require native volume proof before closing");
   assert(guard.buildRealWorkflowProofPacketMarkdown(selectedRouteWorkflowProof).includes("App-close contract: spaceguard-selected-route-app-close-contract/v1"), "selected-route workflow proof markdown should include selected-route app-close contract status");
+  const selectedRouteMissingVolumeProof = guard.buildRealWorkflowProofPacket({
+    windowsSetupAssistant: {
+      destructiveCommands: false,
+      realWorkflow: {
+        route: "bounded-npm-cache-delete",
+        routeInput: "npm-cache",
+        title: "npm cache cleanup",
+        status: "next-route-ready"
+      }
+    },
+    scopedExecutorCommandFlow: {
+      route: "bounded-npm-cache-delete",
+      proofPacket: {
+        schemaVersion: "spaceguard-selected-route-proof-packet/v1",
+        status: "proof-complete",
+        route: "bounded-npm-cache-delete",
+        routeInput: "npm-cache",
+        title: "npm cache cleanup",
+        readyForNextRoute: true,
+        validationImport: { status: "import-complete", complete: true, route: "bounded-npm-cache-delete" },
+        counts: { ledgerEntries: 1, matchedRows: 1, reclaimedBytes: 4096 }
+      }
+    },
+    executionProofHandoff: { status: "proof-complete" },
+    scanSession: currentScanSession,
+    generatedAt: "2026-06-05T02:23:00.000Z"
+  });
+  assert.strictEqual(selectedRouteMissingVolumeProof.status, "native-volume-proof-required", "selected-route workflow proof should block until native volume proof is measured");
+  assert(selectedRouteMissingVolumeProof.rows.some((row) => row.id === "native-volume-proof" && !row.passed), "missing volume proof should expose a native-volume-proof blocker row");
   const zeroByteWorkflowProof = guard.buildRealWorkflowProofPacket({
     windowsSetupAssistant: completeWorkflowSetupAssistant,
     scopedExecutorCommandFlow: {

@@ -8774,9 +8774,16 @@ export function buildRealWorkflowProofPacket({
   const importComplete = Boolean(validationImport.complete);
   const reclaimedBytes = Number(proofPacket.counts?.reclaimedBytes || 0);
   const positiveRecoveredBytes = reclaimedBytes > 0;
-  const readyForNextRoute = Boolean(proofPacket.readyForNextRoute && importComplete && positiveRecoveredBytes);
   const unsafeRuntime = Boolean(windowsSetupAssistant?.destructiveCommands || windowsSetupAssistant?.status === "unsafe-runtime");
   const appCloseContract = buildRealWorkflowAppCloseContract({ route });
+  const selectedRoute = String(route || "").trim() && String(route || "").trim() !== "known-temp-delete";
+  const nativeVolumeProofRequired = appCloseContract.requiredBeforeClosingApp.includes("native-volume-proof-captured");
+  const nativeVolumeProofCaptured = Boolean(
+    !nativeVolumeProofRequired ||
+      proofPacket.volumeProof?.status === "measured" ||
+      proofPacket.volumeProof?.measured === true
+  );
+  const readyForNextRoute = Boolean(proofPacket.readyForNextRoute && importComplete && positiveRecoveredBytes && nativeVolumeProofCaptured);
   const rows = [
     buildRealWorkflowProofRow({
       id: "native-scan-current",
@@ -8810,6 +8817,18 @@ export function buildRealWorkflowProofPacket({
         ? `${formatBytes(reclaimedBytes)} recovered bytes are recorded in selected-route proof.`
         : "Selected-route proof must record positive recovered bytes before workflow proof is accepted."
     }),
+    ...(selectedRoute
+      ? [
+          buildRealWorkflowProofRow({
+            id: "native-volume-proof",
+            label: "Native volume proof",
+            passed: nativeVolumeProofCaptured,
+            detail: nativeVolumeProofCaptured
+              ? `Selected-route proof includes measured native volume evidence (${proofPacket.volumeProof?.driveLabel || proofPacket.volumeProof?.drive || "drive"}).`
+              : "Selected-route proof must include measured native write volume proof before workflow proof is accepted."
+          })
+        ]
+      : []),
     buildRealWorkflowProofRow({
       id: "next-route-clearance",
       label: "Next route clearance",
@@ -8830,9 +8849,11 @@ export function buildRealWorkflowProofPacket({
         ? "proof-import-required"
         : !positiveRecoveredBytes
           ? "recovered-bytes-required"
-        : !readyForNextRoute
-          ? "next-route-blocked"
-          : "workflow-proven";
+        : !nativeVolumeProofCaptured
+          ? "native-volume-proof-required"
+          : !readyForNextRoute
+            ? "next-route-blocked"
+            : "workflow-proven";
 
   return {
     schemaVersion: "spaceguard-real-workflow-proof/v1",
@@ -8908,6 +8929,7 @@ function getRealWorkflowProofPrimary(status, { routeInput = "unknown", blockedRo
   if (status === "post-run-proof-required") return "Run post-run native rescan and build selected-route proof.";
   if (status === "proof-import-required") return "Import selected-route proof into validation evidence before accepting workflow proof.";
   if (status === "recovered-bytes-required") return "Selected-route proof is imported, but no positive recovered bytes are recorded.";
+  if (status === "native-volume-proof-required") return "Selected-route proof is imported, but measured native volume proof is missing.";
   if (status === "next-route-blocked") return "Selected-route proof exists, but next-route clearance is still blocked.";
   return blockedRows[0]?.detail || "Real workflow proof is incomplete.";
 }
