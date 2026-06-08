@@ -480,12 +480,12 @@ export function buildRouteContractExecutionState({ routeInput = defaultRouteInpu
   };
 }
 
-export function buildRouteContractRecommendationBroker({ context, advice, route = null, routeInput = defaultRouteInput } = {}) {
+export function buildRouteContractRecommendationBroker({ context, advice, route = null, routeInput = defaultRouteInput, executionState = null } = {}) {
   const selectedRoute = route?.requiredRecommendation ? route : resolveSmokeRoute(routeInput);
   return buildOpenAIAgentRecommendationBroker({
     advice,
     context,
-    executionState: buildRouteContractExecutionState({ route: selectedRoute })
+    executionState: executionState || buildRouteContractExecutionState({ route: selectedRoute })
   });
 }
 

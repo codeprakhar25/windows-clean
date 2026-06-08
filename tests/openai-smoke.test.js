@@ -41,6 +41,71 @@ const script = path.join(root, "scripts", "run-openai-advisor-smoke.mjs");
   });
 
   assert.strictEqual(validation.passed, true, `pnpm route-contract advice should validate: ${validation.failures.join(", ")}`);
+
+  const appQueueContext = {
+    runtime: {
+      nativeAvailable: true,
+      realRunEnabled: true,
+      npmCacheExecutor: true,
+      enabledScopedExecutorFlags: ["SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"]
+    },
+    execution: {
+      planId: "plan-app-queue",
+      scanFingerprint: "scan-app-queue",
+      proofStatus: "waiting-for-execution",
+      proofAllowsNextExecutor: true
+    },
+    cleanupQueue: [
+      {
+        id: "npm-cache:C:\\Users\\LocalUser\\AppData\\Local\\npm-cache\\_cacache",
+        targetId: "npm-cache:C:\\Users\\LocalUser\\AppData\\Local\\npm-cache\\_cacache",
+        title: "npm cache cleanup",
+        route: "bounded-npm-cache-delete",
+        actionType: "run-npm-cache-executor",
+        bytes: 256 * 1024 * 1024,
+        canExecute: true
+      }
+    ]
+  };
+  const appQueueAdvice = {
+    recommendedActions: [
+      {
+        actionType: "run-npm-cache-executor",
+        targetId: appQueueContext.cleanupQueue[0].id,
+        route: "bounded-npm-cache-delete",
+        title: "Run npm cache cleanup",
+        reason: "Use the selected app cleanup queue target.",
+        priority: "high"
+      }
+    ]
+  };
+  const appQueueBlockedBroker = smoke.buildRouteContractRecommendationBroker({
+    context: appQueueContext,
+    advice: appQueueAdvice,
+    route: smoke.resolveSmokeRoute("npm-cache"),
+    executionState: {
+      planId: "plan-app-queue",
+      scanFingerprint: "scan-app-queue",
+      proofStatus: "waiting-for-execution"
+    }
+  });
+  const blockedBrokerRow = appQueueBlockedBroker.rows[0];
+  assert.strictEqual(blockedBrokerRow.status, "blocked", "app-shaped OpenAI broker should still require current consent before executor routing");
+  assert(blockedBrokerRow.checks.some((check) => check.id === "target-id-match" && check.passed), "app-shaped broker should match targets from cleanupQueue");
+  assert(blockedBrokerRow.checks.some((check) => check.id === "consent" && !check.passed), "app-shaped broker should expose missing consent as the blocker");
+  const appQueueReadyBroker = smoke.buildRouteContractRecommendationBroker({
+    context: appQueueContext,
+    advice: appQueueAdvice,
+    route: smoke.resolveSmokeRoute("npm-cache"),
+    executionState: {
+      planId: "plan-app-queue",
+      scanFingerprint: "scan-app-queue",
+      consentPlanId: "plan-app-queue",
+      proofStatus: "waiting-for-execution"
+    }
+  });
+  assert.strictEqual(appQueueReadyBroker.rows[0].status, "ready", "app-shaped OpenAI broker should route the recommendation after deterministic app gates pass");
+
   const mismatchedLiveRouteValidation = smoke.validateSmokeAdvice({
     context: {
       ...context,

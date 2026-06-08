@@ -49,7 +49,7 @@ import {
   runNativeUserCacheExecutor,
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
-import { requestOpenAIAgentAdvice } from "./openai-agent.mjs";
+import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
 import { buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, formatBytes } from "./real-workflow.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -296,6 +296,10 @@ function App() {
     [setupRoute, runtime]
   );
   const scanFingerprint = useMemo(() => buildScanFingerprint(scan), [scan]);
+  const activePlanId = useMemo(
+    () => buildCurrentPlanId({ candidate: selectedCandidate, scanFingerprint }),
+    [selectedCandidate, scanFingerprint]
+  );
   const postRunProof = useMemo(
     () => buildPostRunProof({ candidate: selectedCandidate, executionRecord, postRunScan }),
     [selectedCandidate, executionRecord, postRunScan]
@@ -312,6 +316,40 @@ function App() {
       executionStatus !== "running"
   );
   const canExportProof = Boolean(postRunProof.status === "matched" && proofReviewed && executionRecord?.accepted);
+  const agentContext = useMemo(
+    () => buildAgentContext({
+      runtime,
+      scan,
+      candidates,
+      selectedCandidate,
+      executionRecord,
+      postRunProof,
+      planId: activePlanId,
+      scanFingerprint,
+      consentPlanId: canExecute ? activePlanId : "",
+      archiveDestination,
+      permanentRemovalConfirmed
+    }),
+    [runtime, scan, candidates, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, permanentRemovalConfirmed]
+  );
+  const agentBroker = useMemo(
+    () => {
+      if (!agentAdvice?.advice) return null;
+      return buildOpenAIAgentRecommendationBroker({
+        advice: agentAdvice.advice,
+        context: agentContext,
+        executionState: {
+          planId: activePlanId,
+          scanFingerprint,
+          consentPlanId: canExecute ? activePlanId : "",
+          proofStatus: getAgentProofStatus(executionRecord, postRunProof),
+          largeFileArchiveDestination: archiveDestination,
+          permanentRemovalConfirmed
+        }
+      });
+    },
+    [agentAdvice, agentContext, activePlanId, scanFingerprint, canExecute, executionRecord, postRunProof, archiveDestination, permanentRemovalConfirmed]
+  );
 
   async function refreshRuntime() {
     setRuntimeStatus("loading");
@@ -370,7 +408,7 @@ function App() {
     setExecutionResult(null);
     setProofExportStatus("idle");
     setProofExportMessage("");
-    const planId = `plan-${Date.now()}-${selectedCandidate.id}`;
+    const planId = activePlanId || `plan-${Date.now()}-${selectedCandidate.id}`;
     const executedAt = new Date().toISOString();
     try {
       const result = await dispatchExecutor(selectedCandidate, {
@@ -414,16 +452,8 @@ function App() {
     setAgentError("");
     setAgentAdvice(null);
     try {
-      const context = buildAgentContext({
-        runtime,
-        scan,
-        candidates,
-        selectedCandidate,
-        executionRecord,
-        postRunProof
-      });
       const result = await requestOpenAIAgentAdvice({
-        context,
+        context: agentContext,
         userPrompt: agentPrompt
       });
       setAgentAdvice(result);
@@ -592,6 +622,7 @@ function App() {
             status={agentStatus}
             error={agentError}
             advice={agentAdvice}
+            agentBroker={agentBroker}
             onAsk={askOpenAI}
           />
         </section>
@@ -1291,7 +1322,7 @@ function ProofPanel({
   );
 }
 
-function OpenAIPanel({ runtime, scan, candidates, selectedCandidate, prompt, setPrompt, status, error, advice, onAsk }) {
+function OpenAIPanel({ runtime, scan, candidates, selectedCandidate, prompt, setPrompt, status, error, advice, agentBroker, onAsk }) {
   const canAsk = Boolean(runtime?.openAiAgentAdvice && runtime?.openAiAdvisorConfigured && scan && candidates.length);
   const assistant = advice?.advice;
   return (
@@ -1335,6 +1366,33 @@ function OpenAIPanel({ runtime, scan, candidates, selectedCandidate, prompt, set
             {selectedCandidate ? (
               <p className="text-xs text-muted-foreground">Selected UI target remains {selectedCandidate.title}; model advice cannot change consent.</p>
             ) : null}
+          </div>
+        ) : null}
+        {agentBroker ? (
+          <div className="space-y-3 rounded-md border bg-background p-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-medium">Recommendation broker</p>
+              <Badge variant={agentBroker.status === "broker-ready" ? "safe" : "review"}>{agentBroker.status}</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">{agentBroker.primary}</p>
+            <div className="grid gap-2">
+              {agentBroker.rows.slice(0, 4).map((row) => (
+                <div key={row.key} className="rounded-md border bg-muted/25 p-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={row.canAct ? "safe" : row.status === "manual-only" ? "outline" : "restricted"}>
+                      {row.status}
+                    </Badge>
+                    <p className="text-xs font-medium">{row.actionType}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {row.targetPanel} · {row.route || "manual"}
+                  </p>
+                  {row.blockedReason ? (
+                    <p className="mt-1 text-xs text-red-600">{row.blockedReason}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
           </div>
         ) : null}
       </CardContent>
@@ -1832,7 +1890,32 @@ function normalizeProofVolumeProof(volumeProof) {
   };
 }
 
-function buildAgentContext({ runtime, scan, candidates, selectedCandidate, executionRecord, postRunProof }) {
+function buildAgentContext({
+  runtime,
+  scan,
+  candidates,
+  selectedCandidate,
+  executionRecord,
+  postRunProof,
+  planId = "",
+  scanFingerprint = "",
+  consentPlanId = "",
+  archiveDestination = "",
+  permanentRemovalConfirmed = false
+}) {
+  const cleanupQueue = candidates.slice(0, 24).map((candidate) => ({
+    id: candidate.id,
+    title: candidate.title,
+    route: candidate.route,
+    routeInput: candidate.routeInput,
+    actionType: candidate.actionType,
+    targetId: candidate.id,
+    bytes: Number(candidate.bytes || 0),
+    canExecute: Boolean(candidate.canExecute),
+    blockedReason: candidate.blockedReason || "",
+    targetPath: redactPath(candidate.targetPath || "")
+  }));
+  const targetsForRoute = (route) => cleanupQueue.filter((candidate) => candidate.route === route);
   return {
     schemaVersion: "spaceguard-openai-agent-context/v1",
     productSurface: "real-windows-desktop-app",
@@ -1840,9 +1923,13 @@ function buildAgentContext({ runtime, scan, candidates, selectedCandidate, execu
       nativeAvailable: Boolean(runtime?.available),
       windows: Boolean(runtime?.windows),
       realRunEnabled: Boolean(runtime?.realRunEnabled),
+      destructiveCommands: Boolean(runtime?.destructiveCommands),
       executorScopeStatus: runtime?.executorScopeStatus || "",
+      enabledScopedExecutorFlagCount: Number(runtime?.enabledScopedExecutorFlagCount || 0),
       enabledScopedExecutorFlags: runtime?.enabledScopedExecutorFlags || [],
-      openAiAgentAdvice: Boolean(runtime?.openAiAgentAdvice)
+      ...(runtime?.executorFlags || {}),
+      openAiAgentAdvice: Boolean(runtime?.openAiAgentAdvice),
+      openAiAdvisorConfigured: Boolean(runtime?.openAiAdvisorConfigured)
     },
     scan: {
       generatedAt: scan?.generatedAt || "",
@@ -1857,18 +1944,21 @@ function buildAgentContext({ runtime, scan, candidates, selectedCandidate, execu
         itemCount: finding.items?.length || 0
       }))
     },
-    cleanupQueue: candidates.slice(0, 24).map((candidate) => ({
-      id: candidate.id,
-      title: candidate.title,
-      route: candidate.route,
-      routeInput: candidate.routeInput,
-      actionType: candidate.actionType,
-      targetId: candidate.id,
-      bytes: Number(candidate.bytes || 0),
-      canExecute: Boolean(candidate.canExecute),
-      blockedReason: candidate.blockedReason || "",
-      targetPath: redactPath(candidate.targetPath || "")
-    })),
+    cleanupQueue,
+    executableRows: cleanupQueue,
+    reviewedDownloadsTargets: targetsForRoute("item-review-recycle-bin"),
+    reviewedProjectTargets: targetsForRoute("item-review-project-cache"),
+    largeFileArchiveTargets: targetsForRoute("item-review-large-files"),
+    browserCacheTargets: targetsForRoute("browser-cache-only"),
+    gradleCacheTargets: targetsForRoute("bounded-cache-delete"),
+    userCacheTargets: targetsForRoute("bounded-user-cache-delete"),
+    androidCacheTargets: targetsForRoute("bounded-android-cache-delete"),
+    shaderCacheTargets: targetsForRoute("launcher-cache-cleanup"),
+    pipCacheTargets: targetsForRoute("bounded-pip-cache-delete"),
+    dockerBuildCacheTargets: targetsForRoute("tool-native-docker-build-cache-prune"),
+    npmCacheTargets: targetsForRoute("bounded-npm-cache-delete"),
+    pnpmStoreTargets: targetsForRoute("bounded-pnpm-store-delete"),
+    recycleBinTargets: targetsForRoute("shell-recycle-bin"),
     selected: selectedCandidate ? {
       id: selectedCandidate.id,
       route: selectedCandidate.route,
@@ -1877,12 +1967,44 @@ function buildAgentContext({ runtime, scan, candidates, selectedCandidate, execu
       bytes: selectedCandidate.bytes
     } : null,
     execution: executionRecord ? {
+      planId,
+      scanFingerprint,
+      scanFingerprintPresent: Boolean(scanFingerprint),
+      consentPlanId,
+      consentMatchesPlan: Boolean(planId && consentPlanId && consentPlanId === planId),
       route: executionRecord.route,
       accepted: executionRecord.accepted,
       reclaimedBytes: executionRecord.bytes,
-      proofStatus: postRunProof.status
-    } : null
+      proofStatus: getAgentProofStatus(executionRecord, postRunProof),
+      proofAllowsNextExecutor: !executionRecord || postRunProof.matched,
+      canRunPostRunRescan: Boolean(executionRecord),
+      rescanComparisonStatus: postRunProof.status,
+      postRunScanEvidence: Boolean(postRunProof.scanGeneratedAt),
+      largeFileArchiveDestination: String(archiveDestination || "").trim(),
+      archiveDestinationReady: Boolean(String(archiveDestination || "").trim()),
+      permanentRemovalConfirmed: Boolean(permanentRemovalConfirmed)
+    } : {
+      planId,
+      scanFingerprint,
+      scanFingerprintPresent: Boolean(scanFingerprint),
+      consentPlanId,
+      consentMatchesPlan: Boolean(planId && consentPlanId && consentPlanId === planId),
+      proofStatus: "waiting-for-execution",
+      proofAllowsNextExecutor: true,
+      canRunPostRunRescan: false,
+      rescanComparisonStatus: "not-run",
+      postRunScanEvidence: false,
+      largeFileArchiveDestination: String(archiveDestination || "").trim(),
+      archiveDestinationReady: Boolean(String(archiveDestination || "").trim()),
+      permanentRemovalConfirmed: Boolean(permanentRemovalConfirmed)
+    }
   };
+}
+
+function getAgentProofStatus(executionRecord, postRunProof) {
+  if (!executionRecord) return "waiting-for-execution";
+  if (postRunProof?.matched) return "proof-complete";
+  return postRunProof?.status || "proof-pending";
 }
 
 function redactPath(value = "") {
@@ -1930,6 +2052,21 @@ function buildScanFingerprint(scan) {
     scan.totalBytes || 0,
     scan.volume?.freeBytes || 0
   ].join(":");
+}
+
+function buildCurrentPlanId({ candidate, scanFingerprint }) {
+  if (!candidate || !scanFingerprint) return "";
+  return [
+    "plan",
+    candidate.routeInput,
+    candidate.id,
+    scanFingerprint
+  ]
+    .join("-")
+    .replace(/[^a-z0-9_-]+/gi, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 140);
 }
 
 function totalEntryBytes(entries = []) {

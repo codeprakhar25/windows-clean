@@ -1490,9 +1490,26 @@ function buildLiveRouteValidationBrokerCheck(policy = null, liveRouteValidation 
 
 function getExecutorRecommendationTargets(policy, context = null) {
   if (policy.targetList === "executableRows") {
-    return (context?.executableRows || []).filter((row) => row.route === policy.route);
+    const rows = (context?.executableRows || []).filter((row) => row.route === policy.route);
+    return rows.length ? rows : getCleanupQueueRecommendationTargets(policy, context);
   }
-  return Array.isArray(context?.[policy.targetList]) ? context[policy.targetList] : [];
+  const rows = Array.isArray(context?.[policy.targetList]) ? context[policy.targetList] : [];
+  return rows.length ? rows : getCleanupQueueRecommendationTargets(policy, context);
+}
+
+function getCleanupQueueRecommendationTargets(policy, context = null) {
+  return (Array.isArray(context?.cleanupQueue) ? context.cleanupQueue : [])
+    .filter((row) => row?.route === policy.route || row?.actionType === getActionTypeForExecutorPolicy(policy))
+    .map((row) => ({
+      ...row,
+      id: row.id || row.targetId || row.target_id || "",
+      targetId: row.targetId || row.target_id || row.id || ""
+    }));
+}
+
+function getActionTypeForExecutorPolicy(policy = {}) {
+  return Object.entries(OPENAI_RECOMMENDATION_EXECUTOR_POLICIES)
+    .find(([, value]) => value === policy)?.[0] || "";
 }
 
 function targetMatchesRecommendationId(target = {}, targetId = "", { allowPrefix = false } = {}) {
