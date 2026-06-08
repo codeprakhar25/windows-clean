@@ -112,6 +112,7 @@ assert(app.includes("Execution prerequisites"), "user gate should render route-s
 assert(app.includes("executionPrerequisites.ready"), "execute button should stay locked until route-specific prerequisites pass");
 assert(app.includes("executionRecord?.accepted"), "proof export should require an accepted native execution record");
 assert(app.includes("targetSwitchLocked"), "cleanup queue should lock target switching after accepted execution until proof export completes");
+assert(app.includes("routeSetupLocked"), "route setup should share the proof handoff lock after accepted execution");
 assert(app.includes("workflowProofAccepted"), "cleanup queue should require accepted workflow proof validation before unlocking another target");
 assert(app.includes("buildWorkflowProofCheck"), "proof export should run the shared workflow proof verifier inside the app");
 assert(app.includes("workflowProofCheck"), "proof panel should render workflow proof validation output from the app");
@@ -128,6 +129,8 @@ assert(app.includes("selected-route-proof-reviewed"), "app workflow proof should
 assert(!app.includes("selected-route-proof-import"), "app workflow proof should not require obsolete selected-route proof import");
 assert(app.includes("Export proof, let the in-app verifier accept it, and capture the support bundle before selecting another cleanup target."), "cleanup queue should explain the workflow proof and support bundle lock");
 assert(app.includes("disabled={targetSwitchLocked && candidate.id !== selectedId}"), "cleanup queue should disable other targets while proof export is pending");
+assert(app.includes("disabled={routeSetupLocked && route.routeInput !== selectedRouteInput}"), "route setup should disable other routes while proof export is pending");
+assert(app.includes("Current route is locked until proof export and support bundle capture finish."), "route setup should explain proof handoff route lock");
 assert(!app.includes("npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted"), "proof panel should not rely on a manual CLI acceptance checkbox");
 assert(
   /setSelectedId=\{\(id\) => \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setPostRunScan\(null\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}\}/.test(app),
@@ -150,7 +153,7 @@ assert(app.includes("Windows test runbook"), "route setup panel should render th
 assert(app.includes("copyRunbook"), "route setup panel should expose a copy action for the Windows runbook");
 assert(app.includes("navigator.clipboard.writeText(checklist.runbook.content)"), "route setup runbook copy action should copy the tested runbook");
 assert(app.includes("npm run openai:smoke -- --local-contract --route"), "route setup panel should show offline OpenAI route-contract smoke");
-assert(app.includes("function ConnectionRequired({ runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist })"), "browser-only setup state should accept route setup wizard props");
+assert(app.includes("function ConnectionRequired({ runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist, routeSetupLocked = false })"), "browser-only setup state should accept route setup wizard props");
 assert(/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup state should render the route setup wizard");
 assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context should keep a stable schema");
 assert(app.includes("Recommendation broker"), "OpenAI panel should render deterministic broker status");

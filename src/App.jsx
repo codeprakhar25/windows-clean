@@ -331,6 +331,7 @@ function App() {
   const canExportProof = Boolean(postRunProof.status === "matched" && proofReviewed && executionRecord?.accepted);
   const supportBundleWritten = Boolean(workflowProofAccepted && supportBundleWrite?.written);
   const targetSwitchLocked = Boolean(executionRecord?.accepted && !supportBundleWritten);
+  const routeSetupLocked = targetSwitchLocked;
   const agentContext = useMemo(
     () => buildAgentContext({
       runtime,
@@ -572,6 +573,7 @@ function App() {
           selectedRouteInput={setupRouteInput}
           setSelectedRouteInput={setSetupRouteInput}
           checklist={setupChecklist}
+          routeSetupLocked={routeSetupLocked}
         />
       </AppFrame>
     );
@@ -608,6 +610,7 @@ function App() {
               selectedRouteInput={setupRouteInput}
               setSelectedRouteInput={setSetupRouteInput}
               checklist={setupChecklist}
+              routeSetupLocked={routeSetupLocked}
             />
           </div>
         </section>
@@ -745,7 +748,7 @@ function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, sel
   );
 }
 
-function ConnectionRequired({ runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist }) {
+function ConnectionRequired({ runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist, routeSetupLocked = false }) {
   const setupSteps = [
     {
       label: "Install dependencies",
@@ -815,6 +818,7 @@ function ConnectionRequired({ runtimeError, onRefresh, routes, selectedRouteInpu
             selectedRouteInput={selectedRouteInput}
             setSelectedRouteInput={setSelectedRouteInput}
             checklist={checklist}
+            routeSetupLocked={routeSetupLocked}
           />
           <Card className="rounded-md">
             <CardHeader>
@@ -925,7 +929,7 @@ function RuntimePanel({ runtime }) {
   );
 }
 
-function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, checklist }) {
+function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, checklist, routeSetupLocked = false }) {
   const [copyStatus, setCopyStatus] = useState("idle");
   const [copyRunbookStatus, setCopyRunbookStatus] = useState("idle");
   const runbook = checklist.runbook || { commands: [], appSteps: [], guardrails: [], content: "" };
@@ -963,13 +967,24 @@ function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, ch
         <CardDescription>Pick a route and follow the exact setup, proof, and command steps.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {routeSetupLocked ? (
+          <Notice
+            tone="review"
+            icon={Lock}
+            text="Current route is locked until proof export and support bundle capture finish."
+          />
+        ) : null}
         <div className="grid gap-2 sm:grid-cols-2">
           {routes.map((route) => (
             <button
               key={route.routeInput}
               type="button"
-              onClick={() => setSelectedRouteInput(route.routeInput)}
-              className={`rounded-md border px-3 py-2 text-left text-sm transition hover:border-primary ${
+              disabled={routeSetupLocked && route.routeInput !== selectedRouteInput}
+              onClick={() => {
+                if (routeSetupLocked && route.routeInput !== selectedRouteInput) return;
+                setSelectedRouteInput(route.routeInput);
+              }}
+              className={`rounded-md border px-3 py-2 text-left text-sm transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-50 ${
                 selectedRouteInput === route.routeInput ? "border-primary bg-primary/5" : "bg-background"
               }`}
             >
