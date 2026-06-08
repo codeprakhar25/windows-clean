@@ -345,9 +345,10 @@ function App() {
       archiveDestination,
       permanentRemovalConfirmed,
       workflowProofAccepted,
-      workflowProofCheck
+      workflowProofCheck,
+      supportBundleWritten
     }),
-    [runtime, scan, candidates, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted, workflowProofCheck]
+    [runtime, scan, candidates, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted, workflowProofCheck, supportBundleWritten]
   );
   const agentBroker = useMemo(
     () => {
@@ -1992,7 +1993,8 @@ function buildAgentContext({
   archiveDestination = "",
   permanentRemovalConfirmed = false,
   workflowProofAccepted = false,
-  workflowProofCheck = null
+  workflowProofCheck = null,
+  supportBundleWritten = false
 }) {
   const cleanupQueue = candidates.slice(0, 24).map((candidate) => ({
     id: candidate.id,
@@ -2070,6 +2072,7 @@ function buildAgentContext({
       proofAllowsNextExecutor: !executionRecord || workflowProofAccepted,
       workflowProofCheckStatus: workflowProofCheck?.status || "not-run",
       workflowProofCheckCanAccept: Boolean(workflowProofCheck?.canAccept),
+      supportBundleWritten: Boolean(supportBundleWritten),
       workflowProofCheckBlockers: Array.isArray(workflowProofCheck?.blockers)
         ? workflowProofCheck.blockers.map((blocker) => ({
             id: blocker.id || "",
@@ -2091,6 +2094,7 @@ function buildAgentContext({
       consentMatchesPlan: Boolean(planId && consentPlanId && consentPlanId === planId),
       proofStatus: "waiting-for-execution",
       proofAllowsNextExecutor: true,
+      supportBundleWritten: Boolean(supportBundleWritten),
       canRunPostRunRescan: false,
       rescanComparisonStatus: "not-run",
       postRunScanEvidence: false,

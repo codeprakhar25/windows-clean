@@ -127,6 +127,7 @@ export function buildOpenAIAgentContext({
   executionProofHandoff,
   rescanComparison,
   workflowProofCheck,
+  supportBundleWritten = false,
   planSnapshot,
   liveValidationManifest,
   scopedExecutorCommandFlow,
@@ -437,6 +438,7 @@ export function buildOpenAIAgentContext({
     postRunScanEvidence: Boolean(rescanComparison?.postRunScanEvidence),
     workflowProofCheckStatus: workflowProofCheck?.status || "not-run",
     workflowProofCheckCanAccept: Boolean(workflowProofCheck?.canAccept),
+    supportBundleWritten: Boolean(supportBundleWritten || executionProofHandoff?.supportBundleWritten),
     workflowProofCheckBlockers: Array.isArray(workflowProofCheck?.blockers)
       ? workflowProofCheck.blockers.map((blocker) => ({
           id: blocker.id || "",
@@ -976,7 +978,8 @@ function buildOpenAIProofBundleTaskRows(execution = {}) {
   const rescanMatched = execution.rescanComparisonStatus === "matched";
   const postRunScanEvidence = Boolean(execution.postRunScanEvidence);
   const proofCheckAccepted = Boolean(execution.workflowProofCheckCanAccept);
-  if (!proofComplete || !rescanMatched || !postRunScanEvidence || !proofCheckAccepted) return [];
+  const supportBundleWritten = Boolean(execution.supportBundleWritten);
+  if (!proofComplete || !rescanMatched || !postRunScanEvidence || !proofCheckAccepted || supportBundleWritten) return [];
   return [
     {
       id: "task-support-bundle",

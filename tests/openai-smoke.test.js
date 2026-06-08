@@ -127,6 +127,24 @@ const script = path.join(root, "scripts", "run-openai-advisor-smoke.mjs");
   assert.strictEqual(supportBundleTask.targetId, "spaceguard-support-bundle", "support bundle task should target the handoff bundle");
   assert(!proofCompleteContext.agentTaskQueue.rows.some((row) => row.source === "selected-route-proof-import"), "proof-complete OpenAI context should not expose obsolete proof import task");
 
+  const proofCompleteWithBundleContext = agent.buildOpenAIAgentContext({
+    executionProofHandoff: {
+      status: "proof-complete",
+      canRunRescan: true
+    },
+    rescanComparison: {
+      status: "matched",
+      postRunScanEvidence: true
+    },
+    workflowProofCheck: {
+      status: "accepted",
+      canAccept: true,
+      blockers: []
+    },
+    supportBundleWritten: true
+  });
+  assert(!proofCompleteWithBundleContext.agentTaskQueue.rows.some((row) => row.source === "support-bundle"), "OpenAI context should not keep recommending support bundle capture after the bundle is written");
+
   const mismatchedLiveRouteValidation = smoke.validateSmokeAdvice({
     context: {
       ...context,
