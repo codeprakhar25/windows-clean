@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildPostRunProof, formatBytes } from "./real-workflow.mjs";
+import { buildPostRunProof, buildRouteReadiness, formatBytes } from "./real-workflow.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
   targetDrive: "C:",
@@ -910,8 +910,9 @@ function CleanupQueue({ candidates, selectedId, setSelectedId, scan }) {
                   </div>
                 </div>
                 {!candidate.canExecute ? (
-                  <div className="mt-3 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                    {candidate.blockedReason}
+                  <div className="mt-3 space-y-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    <p>{candidate.blockedReason}</p>
+                    <RouteReadinessList rows={candidate.readinessRows} compact />
                   </div>
                 ) : null}
               </button>
@@ -961,6 +962,7 @@ function DecisionPanel({
               <p className="mt-1 text-xs text-muted-foreground">{candidate.targetPath}</p>
               <p className="mt-2 text-sm">{candidate.consequence}</p>
             </div>
+            <RouteReadinessList rows={candidate.readinessRows} />
             <label className="flex items-start gap-3 text-sm">
               <Checkbox checked={consentChecked} onClick={() => setConsentChecked(!consentChecked)} />
               <span>I reviewed the target, expected bytes, route flag, and consequence for this cleanup.</span>
@@ -1004,6 +1006,27 @@ function DecisionPanel({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function RouteReadinessList({ rows = [], compact = false }) {
+  const visibleRows = compact ? rows.filter((row) => !row.passed).slice(0, 3) : rows;
+  if (!visibleRows.length) return null;
+  return (
+    <div className="space-y-2 rounded-md border bg-background p-3">
+      {!compact ? <p className="text-sm font-medium">Route readiness</p> : null}
+      <div className={compact ? "flex flex-wrap gap-2" : "grid gap-2"}>
+        {visibleRows.map((row) => (
+          <div key={row.id} className={compact ? "flex items-center gap-1 rounded border px-2 py-1" : "flex items-start justify-between gap-3 rounded border px-3 py-2"}>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium">{row.label}</p>
+              {!compact ? <p className="mt-0.5 text-xs text-muted-foreground">{row.detail}</p> : null}
+            </div>
+            <Badge variant={row.passed ? "safe" : row.status === "not-required" ? "outline" : "restricted"}>{row.status}</Badge>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -1250,7 +1273,7 @@ function buildCleanupCandidates(scan, runtime) {
 }
 
 function buildCandidateFromFinding(finding, recipe, runtime) {
-  const status = executableStatus({ recipe, finding, runtime });
+  const status = buildRouteReadiness({ recipe, finding, runtime });
   return {
     id: `${finding.recipeId}:${finding.path || recipe.route}`,
     title: finding.title || recipe.label,
@@ -1270,6 +1293,7 @@ function buildCandidateFromFinding(finding, recipe, runtime) {
     executable: status.executable,
     canExecute: status.canExecute,
     blockedReason: status.blockedReason,
+    readinessRows: status.rows,
     requiresPermanentConfirmation: Boolean(recipe.requiresPermanentConfirmation),
     requiresArchiveDestination: Boolean(recipe.requiresArchiveDestination),
     sourceFinding: finding
@@ -1281,7 +1305,7 @@ function buildItemCandidates(finding, recipe, runtime, options = {}) {
   return items
     .filter((item) => item.path && Number(item.bytes || 0) > 0)
     .map((item) => {
-      const status = executableStatus({ recipe, finding, runtime });
+      const status = buildRouteReadiness({ recipe, finding, runtime });
       return {
         id: `${finding.recipeId}:${item.id || item.path}`,
         title: item.name || recipe.label,
@@ -1301,6 +1325,7 @@ function buildItemCandidates(finding, recipe, runtime, options = {}) {
         executable: status.executable,
         canExecute: status.canExecute,
         blockedReason: status.blockedReason,
+        readinessRows: status.rows,
         requiresArchiveDestination: Boolean(options.archive),
         reviewTarget: {
           id: item.id || `${finding.recipeId}-${item.name || "item"}`,
@@ -1314,39 +1339,6 @@ function buildItemCandidates(finding, recipe, runtime, options = {}) {
         sourceFinding: finding
       };
     });
-}
-
-function executableStatus({ recipe, finding, runtime }) {
-  const executable = Boolean(recipe.executor);
-  if (!executable) {
-    return { executable: false, canExecute: false, blockedReason: "Manual review only." };
-  }
-  if (!runtime?.windows) {
-    return { executable: true, canExecute: false, blockedReason: "Windows native runtime is required." };
-  }
-  if (!runtime?.executeCleanupPlan) {
-    return { executable: true, canExecute: false, blockedReason: "Native executor command is unavailable." };
-  }
-  if (runtime.executorScopeStatus === "multiple-scoped-flags") {
-    return { executable: true, canExecute: false, blockedReason: "Only one scoped executor flag may be enabled per run." };
-  }
-  if (!runtime?.executorFlags?.[recipe.flagKey]) {
-    return { executable: true, canExecute: false, blockedReason: `Set ${recipe.envVar}=1 in .env and restart the desktop app.` };
-  }
-  if (!runtime?.realRunEnabled || !runtime?.destructiveCommands) {
-    return { executable: true, canExecute: false, blockedReason: "Runtime does not report real-run authority for the single selected route." };
-  }
-  if (recipe.route !== "known-temp-delete" && runtime?.firstRouteProof?.accepted !== true) {
-    return {
-      executable: true,
-      canExecute: false,
-      blockedReason: "Accepted known-temp-delete completion proof is required before this route."
-    };
-  }
-  if (!["measured", "limited"].includes(finding.status)) {
-    return { executable: true, canExecute: false, blockedReason: `Native finding status is ${finding.status || "unknown"}.` };
-  }
-  return { executable: true, canExecute: true, blockedReason: "" };
 }
 
 function buildManualFindings(scan) {

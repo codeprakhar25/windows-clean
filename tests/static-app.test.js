@@ -40,6 +40,7 @@ const requiredAppMarkers = [
   "Export proof packet",
   "Proof target",
   "selected item",
+  "Route readiness",
   "OpenAI cleanup agent",
   "Manual review findings",
   "spaceguard-selected-route-proof-packet.md",
@@ -93,6 +94,8 @@ for (const marker of [
 
 assert(app.includes("requestOpenAIAgentAdvice"), "OpenAI advisor should be wired into the real desktop shell");
 assert(app.includes("./real-workflow.mjs"), "app should import tested real workflow helpers");
+assert(app.includes("buildRouteReadiness"), "app should use tested route readiness guardrails");
+assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
 assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context should keep a stable schema");
 assert(app.includes("redactPath"), "OpenAI context should redact local paths before provider calls");
 assert(app.includes("No local folders are scanned from this browser session."), "browser-only state should be setup-only");
@@ -138,6 +141,8 @@ assert(workflowProofScript.includes("spaceguard-real-workflow-proof/v1"), "workf
 assert(workflowProofScript.includes("readyForNextRoute"), "workflow proof verifier should require next-route clearance");
 assert(realWorkflow.includes("findPostRunTargetEvidence"), "real workflow helper should expose post-run target evidence matching");
 assert(realWorkflow.includes("reviewTarget?.path"), "real workflow helper should compare selected review item paths");
+assert(realWorkflow.includes("single-route-scope"), "real workflow helper should expose single route scope guardrail rows");
+assert(realWorkflow.includes("first-route-proof"), "real workflow helper should expose first-route proof guardrail rows");
 
 assert(readme.includes("npm run native:dev"), "README should document the desktop shell");
 assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");

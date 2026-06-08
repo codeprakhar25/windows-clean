@@ -1,6 +1,116 @@
 export const MB = 1024 ** 2;
 export const RESCAN_TOLERANCE_BYTES = 64 * MB;
 
+export function buildRouteReadiness({ recipe = {}, finding = {}, runtime = {} } = {}) {
+  const executable = Boolean(recipe.executor);
+  if (!executable) {
+    return {
+      executable: false,
+      canExecute: false,
+      blockedReason: "Manual review only.",
+      rows: [
+        {
+          id: "manual-only",
+          label: "Manual review",
+          status: "blocked",
+          passed: false,
+          detail: "No native executor is mapped for this finding."
+        }
+      ]
+    };
+  }
+
+  const routeFlagEnabled = Boolean(runtime?.executorFlags?.[recipe.flagKey]);
+  const multipleFlags = runtime?.executorScopeStatus === "multiple-scoped-flags";
+  const enabledFlags = Array.isArray(runtime?.enabledScopedExecutorFlags)
+    ? runtime.enabledScopedExecutorFlags
+    : [];
+  const firstRouteRequired = recipe.route !== "known-temp-delete";
+  const firstRouteAccepted = Boolean(runtime?.firstRouteProof?.accepted);
+  const findingStatus = finding.status || "unknown";
+
+  const rows = [
+    guardrailRow({
+      id: "native-runtime",
+      label: "Windows native runtime",
+      passed: Boolean(runtime?.windows),
+      detail: runtime?.windows ? "Desktop runtime is Windows." : "Windows native runtime is required."
+    }),
+    guardrailRow({
+      id: "executor-command",
+      label: "Executor command",
+      passed: Boolean(runtime?.executeCleanupPlan),
+      detail: runtime?.executeCleanupPlan ? "Native executor command is available." : "Native executor command is unavailable."
+    }),
+    guardrailRow({
+      id: "single-route-scope",
+      label: "Single route scope",
+      passed: !multipleFlags,
+      detail: multipleFlags
+        ? `Turn off all but one scoped executor flag. Enabled: ${enabledFlags.join(", ") || "multiple flags"}.`
+        : "No competing scoped executor flags detected."
+    }),
+    guardrailRow({
+      id: "route-flag",
+      label: "Route flag",
+      passed: routeFlagEnabled,
+      detail: routeFlagEnabled
+        ? `${recipe.envVar}=1 is active for this route.`
+        : `Set ${recipe.envVar}=1 in .env and restart the desktop app.`
+    }),
+    guardrailRow({
+      id: "real-run-authority",
+      label: "Real-run authority",
+      passed: Boolean(runtime?.realRunEnabled && runtime?.destructiveCommands),
+      detail: runtime?.realRunEnabled && runtime?.destructiveCommands
+        ? "Runtime allows exactly one scoped mutating executor."
+        : "Runtime does not report real-run authority for the single selected route."
+    }),
+    firstRouteRequired
+      ? guardrailRow({
+          id: "first-route-proof",
+          label: "First-route proof",
+          passed: firstRouteAccepted,
+          detail: firstRouteAccepted
+            ? `Accepted known-temp-delete proof: ${runtime?.firstRouteProof?.path || "configured path"}.`
+            : "Accepted known-temp-delete completion proof is required before this route."
+        })
+      : {
+          id: "first-route-proof",
+          label: "First-route proof",
+          status: "not-required",
+          passed: true,
+          detail: "Not required for known-temp-delete."
+        },
+    guardrailRow({
+      id: "native-finding-status",
+      label: "Native finding status",
+      passed: ["measured", "limited"].includes(findingStatus),
+      detail: ["measured", "limited"].includes(findingStatus)
+        ? `Finding status is ${findingStatus}.`
+        : `Native finding status is ${findingStatus}.`
+    })
+  ];
+
+  const blocked = rows.find((row) => !row.passed);
+  return {
+    executable,
+    canExecute: !blocked,
+    blockedReason: blocked?.detail || "",
+    rows
+  };
+}
+
+function guardrailRow({ id, label, passed, detail }) {
+  return {
+    id,
+    label,
+    status: passed ? "passed" : "blocked",
+    passed: Boolean(passed),
+    detail
+  };
+}
+
 export function buildPostRunProof({ candidate, executionRecord, postRunScan }) {
   if (!candidate || !executionRecord) {
     return { status: "not-run", detail: "Run a native executor first.", matched: false };
