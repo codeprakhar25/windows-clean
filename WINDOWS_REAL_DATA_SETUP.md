@@ -78,6 +78,18 @@ When the completion verifier accepts that evidence, keep the generated first-rou
 
 After first-route proof is accepted, `npm run proof:route:windows -- -Route npm-cache` runs the selected-route operator preflight on Windows. It loads `.env`, requires `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to point at an accepted `spaceguard-first-route-completion-check/v1` file, forces all scoped executor flags off except the selected route flag, runs setup doctor, route-specific OpenAI fixture smoke, live OpenAI smoke when configured, route setup, and route validation, then launches the Tauri app. It writes `operator-preflight.json`, validates it into `operator-preflight-check.json`, and writes `operator-app-handoff.md` plus `commands.ndjson` before launch. It does not clean anything outside the desktop workflow; the actual selected-route cleanup still requires in-app scan, target selection, consent, selected executor click, native volume proof, post-run rescan, selected-route proof import, and `spaceguard-real-workflow-proof.md` export. After the app exits cleanly, the runner validates the workflow proof and writes `selected-route-completion-check.json`; that completion artifact is the selected-route handoff for starting the next cleanup route.
 
+## First npm real-data proof checklist
+
+Use this exact fast path after the seeded first-route proof is accepted and `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` points at the accepted completion check JSON:
+
+```powershell
+$env:SPACEGUARD_ROUTE_SETUP_IGNORE_DOTENV="1"
+$env:SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR="1"
+npm run proof:route:windows -- -Route npm-cache
+```
+
+The selected-route runner still owns the final process environment: it forces every other scoped executor flag off before launching the app. In the app, run the native scan, select only the scanned npm `_cacache` target, arm consent, optionally use OpenAI cleanup agent only for ranking and brokered follow-through, click the npm scoped executor, capture native volume proof, run the post-run rescan, export `spaceguard-selected-route-proof-packet.md`, complete Selected route proof import, re-export the selected-route proof packet, and export `spaceguard-real-workflow-proof.md`. Do not close the app until native volume proof, selected-route proof import, and workflow proof export are complete.
+
 If selected-route proof export/import is corrected after the desktop session closes, resume only selected-route post-app finalization against the existing evidence folder:
 
 ```powershell

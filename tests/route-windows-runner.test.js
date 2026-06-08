@@ -50,6 +50,12 @@ assert(runner.includes("validate:workflow-proof"), "runner should validate the f
 assert(runner.includes("operator-preflight.json"), "runner should write selected-route preflight evidence");
 assert(runner.includes("operator-preflight-check.json"), "runner should write selected-route preflight check output");
 assert(runner.includes("operator-app-handoff.md"), "runner should write selected-route app handoff");
+assert(runner.includes("## Selected route fast path"), "runner handoff should include a selected-route fast path section");
+assert(runner.includes("$EnableRouteFlagCommand = '$env:' + $RouteSpec.envVar + '=\"1\"'"), "runner handoff should print the exact selected route PowerShell flag command");
+assert(runner.includes("$IgnoreDotEnvCommand = '$env:SPACEGUARD_ROUTE_SETUP_IGNORE_DOTENV=\"1\"'"), "runner handoff should print the dotenv override command");
+assert(runner.includes("npm run proof:route:windows -- -Route $Route"), "runner handoff should print the selected-route proof command");
+assert(runner.includes("Use OpenAI cleanup agent only for ranking and brokered follow-through"), "runner handoff should keep OpenAI advisory-only authority explicit");
+assert(runner.includes("Do not close the app until native volume proof, selected-route proof import, and workflow proof export are complete"), "runner handoff should make the app-close stop condition explicit");
 assert(runner.includes("commands.ndjson"), "runner should write command evidence records");
 assert(runner.includes("run-route-preflight-check.mjs"), "runner should validate selected-route preflight evidence before app launch");
 assert(runner.includes("spaceguard-selected-route-proof-packet.md"), "runner handoff should name the selected-route proof export");

@@ -1308,6 +1308,9 @@ assert(realDataGuide.includes("-AfterCleanupRoute known-temp-delete"), "real-dat
 assert(realDataGuide.includes("DryRunScopeEvidencePath"), "real-data guide should explain dry-run scope evidence inspection");
 assert(realDataGuide.includes("Validation pack import"), "real-data guide should explain validation pack import resume flow");
 assert(realDataGuide.includes("selected route proof import"), "real-data guide should include selected route proof import in proof checklist");
+assert(realDataGuide.includes("First npm real-data proof checklist"), "real-data guide should include a compact first npm real-data proof checklist");
+assert(realDataGuide.includes("SPACEGUARD_ROUTE_SETUP_IGNORE_DOTENV=\"1\""), "real-data guide should show the dotenv override for route proof runs");
+assert(realDataGuide.includes("Do not close the app until native volume proof"), "real-data guide should make the selected-route app-close stop condition explicit");
 assert(realDataGuide.includes("beta handoff manifest"), "real-data guide should include beta handoff manifest export");
 assert(realDataGuide.includes("OpenAI handoff"), "real-data guide should require OpenAI handoff ledger evidence");
 assert(realDataGuide.includes("volume proof"), "real-data guide should distinguish native volume proof");

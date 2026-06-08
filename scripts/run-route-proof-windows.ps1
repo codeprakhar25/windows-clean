@@ -338,6 +338,9 @@ try {
   function Write-OperatorAppHandoff {
     $ValidateWorkflowProofCommand = "npm run validate:workflow-proof -- --file .\spaceguard-real-workflow-proof.md"
     $ValidateCompletionCommand = "npm run validate:route-completion -- --preflight `"$PreflightPath`" --native-exit `"$NativeDevExitPath`" --workflow-proof .\spaceguard-real-workflow-proof.md"
+    $EnableRouteFlagCommand = '$env:' + $RouteSpec.envVar + '="1"'
+    $IgnoreDotEnvCommand = '$env:SPACEGUARD_ROUTE_SETUP_IGNORE_DOTENV="1"'
+    $RouteProofCommand = "npm run proof:route:windows -- -Route $Route"
     $lines = @(
       "# SpaceGuard Selected-Route App Handoff",
       "",
@@ -347,17 +350,25 @@ try {
       "Native route: $($RouteSpec.route)",
       "Required flag: $($RouteSpec.envVar)",
       "",
+      "## Selected route fast path",
+      $IgnoreDotEnvCommand,
+      $EnableRouteFlagCommand,
+      $RouteProofCommand,
+      "The runner forces every other scoped executor flag off in the process before launching the app.",
+      "",
       "## In-app steps",
       "1. Run real scan in the Tauri desktop app.",
       "2. Select only the scanned target(s) for $Route.",
       "3. Arm consent for the current plan and scan fingerprint.",
-      "4. Run the selected scoped executor from $($RouteSpec.panelId).",
-      "5. Confirm native volume proof is present on the write response.",
-      "6. Run post-run rescan.",
-      "7. Export spaceguard-selected-route-proof-packet.md to the repo root.",
-      "8. Complete Selected route proof import with reviewer and artifact path.",
-      "9. Re-export spaceguard-selected-route-proof-packet.md to the repo root after import complete.",
-      "10. Export spaceguard-real-workflow-proof.md to the repo root before closing the app.",
+      "4. Use OpenAI cleanup agent only for ranking and brokered follow-through; it cannot approve or run cleanup.",
+      "5. Run the selected scoped executor from $($RouteSpec.panelId).",
+      "6. Confirm native volume proof is present on the write response.",
+      "7. Run post-run rescan.",
+      "8. Export spaceguard-selected-route-proof-packet.md to the repo root.",
+      "9. Complete Selected route proof import with reviewer and artifact path.",
+      "10. Re-export spaceguard-selected-route-proof-packet.md to the repo root after import complete.",
+      "11. Export spaceguard-real-workflow-proof.md to the repo root before closing the app.",
+      "12. Do not close the app until native volume proof, selected-route proof import, and workflow proof export are complete.",
       "",
       "## Resume validation",
       "npm run proof:route:windows:finalize -- -Route $Route -EvidenceRoot `"$EvidenceRoot`"",
