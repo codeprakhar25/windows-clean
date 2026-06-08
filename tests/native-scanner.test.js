@@ -11,6 +11,10 @@ const path = require("path");
   assert(rustMain.includes("delete_npm_cache_target_at(root, SystemTime::now())"), "production npm executor should use the real clock for age gating");
   assert(rustMain.includes("fn delete_single_npm_cache_file_at("), "native npm executor should age-gate deletion through a clock-injected file helper");
   assert(rustMain.includes("npm_cache_deleter_removes_only_old_content_and_tmp_files"), "native npm executor should have a deletion proof test");
+  assert(rustMain.includes("fn delete_pnpm_store_target_at(root: &Path, now: SystemTime)"), "native pnpm executor should expose a clock-injected deleter for proof tests");
+  assert(rustMain.includes("delete_pnpm_store_target_at(root, SystemTime::now())"), "production pnpm executor should use the real clock for age gating");
+  assert(rustMain.includes("fn delete_single_pnpm_store_file_at("), "native pnpm executor should age-gate deletion through a clock-injected file helper");
+  assert(rustMain.includes("pnpm_store_deleter_removes_only_old_content_and_temp_files"), "native pnpm executor should have a deletion proof test");
 
   assert.strictEqual(native.getNativeScannerCapability({}).available, false, "browser host should not expose native scanner");
   assert.strictEqual(

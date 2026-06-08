@@ -7908,6 +7908,10 @@ fn npm_cache_file_forbidden(path: &Path) -> bool {
 }
 
 fn delete_pnpm_store_target(root: &Path) -> PnpmStoreDeleteResult {
+    delete_pnpm_store_target_at(root, SystemTime::now())
+}
+
+fn delete_pnpm_store_target_at(root: &Path, now: SystemTime) -> PnpmStoreDeleteResult {
     let mut result = PnpmStoreDeleteResult::default();
     if pnpm_store_target_reject_code(&path_to_string(root)).is_some() {
         result.skipped_count += 1;
@@ -7933,7 +7937,7 @@ fn delete_pnpm_store_target(root: &Path) -> PnpmStoreDeleteResult {
             continue;
         }
         if metadata.is_file() {
-            delete_single_pnpm_store_file(&path, &metadata, &mut result);
+            delete_single_pnpm_store_file_at(&path, &metadata, now, &mut result);
             continue;
         }
         if metadata.is_dir() {
@@ -7968,7 +7972,16 @@ fn delete_single_pnpm_store_file(
     metadata: &fs::Metadata,
     result: &mut PnpmStoreDeleteResult,
 ) {
-    if !file_old_enough_for_pnpm_store_delete(metadata) || pnpm_store_file_forbidden(path) {
+    delete_single_pnpm_store_file_at(path, metadata, SystemTime::now(), result);
+}
+
+fn delete_single_pnpm_store_file_at(
+    path: &Path,
+    metadata: &fs::Metadata,
+    now: SystemTime,
+    result: &mut PnpmStoreDeleteResult,
+) {
+    if !file_old_enough_for_pnpm_store_delete_at(metadata, now) || pnpm_store_file_forbidden(path) {
         result.skipped_count += 1;
         return;
     }
@@ -7983,10 +7996,14 @@ fn delete_single_pnpm_store_file(
 }
 
 fn file_old_enough_for_pnpm_store_delete(metadata: &fs::Metadata) -> bool {
+    file_old_enough_for_pnpm_store_delete_at(metadata, SystemTime::now())
+}
+
+fn file_old_enough_for_pnpm_store_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
     let Ok(modified) = metadata.modified() else {
         return false;
     };
-    let Ok(age) = SystemTime::now().duration_since(modified) else {
+    let Ok(age) = now.duration_since(modified) else {
         return false;
     };
     age.as_secs() >= 30 * 24 * 60 * 60
@@ -11929,8 +11946,7 @@ mod tests {
 
         fs::create_dir_all(old_content.parent().expect("old content parent"))
             .expect("create old content dir");
-        fs::create_dir_all(old_tmp.parent().expect("old tmp parent"))
-            .expect("create old tmp dir");
+        fs::create_dir_all(old_tmp.parent().expect("old tmp parent")).expect("create old tmp dir");
         fs::create_dir_all(index_metadata.parent().expect("index parent"))
             .expect("create index dir");
         fs::write(&old_content, b"delete-content").expect("write old content");
@@ -11967,6 +11983,60 @@ mod tests {
         let _ = fs::remove_dir(root.join("content-v2"));
         let _ = fs::remove_dir(&root);
         let _ = fs::remove_dir(local_app_data.join("npm-cache"));
+        let _ = fs::remove_dir(&local_app_data);
+    }
+
+    #[test]
+    fn pnpm_store_deleter_removes_only_old_content_and_temp_files() {
+        let local_app_data = unique_test_dir("pnpm-delete-proof");
+        let root = local_app_data.join("pnpm").join("store");
+        let old_content = root.join("v3").join("files").join("ab").join("blob");
+        let old_temp = root.join("tmp").join("scratch");
+        let metadata_file = root.join("v3").join("files").join("ab").join("metadata");
+        let json_file = root.join("files").join("package.json");
+        let lock_file = root.join("tmp").join("store.lock");
+
+        fs::create_dir_all(old_content.parent().expect("old content parent"))
+            .expect("create old content dir");
+        fs::create_dir_all(old_temp.parent().expect("old temp parent"))
+            .expect("create old temp dir");
+        fs::create_dir_all(json_file.parent().expect("json parent")).expect("create json dir");
+        fs::write(&old_content, b"delete-content").expect("write old content");
+        fs::write(&old_temp, b"delete-temp").expect("write old temp");
+        fs::write(&metadata_file, b"keep-metadata").expect("write metadata");
+        fs::write(&json_file, b"keep-json").expect("write json");
+        fs::write(&lock_file, b"keep-lock").expect("write lock");
+
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _restore = EnvRestore::set("LOCALAPPDATA", &local_app_data);
+        let old_enough_now = SystemTime::now() + Duration::from_secs(31 * 24 * 60 * 60);
+
+        let result = delete_pnpm_store_target_at(&root, old_enough_now);
+
+        assert_eq!(
+            result.deleted_files, 2,
+            "old pnpm store content and temp files should be deleted"
+        );
+        assert_eq!(
+            result.deleted_bytes, 25,
+            "deleted bytes should match removed file lengths"
+        );
+        assert!(!old_content.exists(), "old content blob should be removed");
+        assert!(!old_temp.exists(), "old temp file should be removed");
+        assert!(metadata_file.exists(), "pnpm metadata must survive");
+        assert!(json_file.exists(), "pnpm json metadata must survive");
+        assert!(lock_file.exists(), "pnpm lock files must survive");
+
+        let _ = fs::remove_file(&metadata_file);
+        let _ = fs::remove_file(&json_file);
+        let _ = fs::remove_file(&lock_file);
+        let _ = fs::remove_dir(metadata_file.parent().expect("metadata parent"));
+        let _ = fs::remove_dir(root.join("v3").join("files"));
+        let _ = fs::remove_dir(root.join("v3"));
+        let _ = fs::remove_dir(root.join("files"));
+        let _ = fs::remove_dir(root.join("tmp"));
+        let _ = fs::remove_dir(&root);
+        let _ = fs::remove_dir(local_app_data.join("pnpm"));
         let _ = fs::remove_dir(&local_app_data);
     }
 }
