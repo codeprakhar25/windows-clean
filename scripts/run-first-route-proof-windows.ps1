@@ -118,6 +118,19 @@ try {
     [System.Environment]::SetEnvironmentVariable("SPACEGUARD_ROUTE_SETUP_IGNORE_DOTENV", "1", "Process")
   }
 
+  function Assert-CleanProofExportSlots {
+    $staleExports = @()
+    foreach ($proofPath in @($SelectedRouteProofPacketPath, $WorkflowProofPath)) {
+      if (Test-Path -LiteralPath $proofPath) {
+        $staleExports += $proofPath
+      }
+    }
+
+    if ($staleExports.Count -gt 0) {
+      throw "stale-proof-export: Move or archive existing root proof export(s) before starting a new first-route app launch. Use -FinalizeOnly with an existing evidence root after app export. Existing file(s): $($staleExports -join ', ')"
+    }
+  }
+
   function Write-JsonFile {
     param(
       [Parameter(Mandatory = $true)]$Value,
@@ -288,6 +301,9 @@ try {
     Write-Host "Finalized existing first-route evidence root: $EvidenceRoot"
     Write-Host "Completion check: $CompletionCheckPath"
     return
+  }
+  if (-not $SkipLaunch) {
+    Assert-CleanProofExportSlots
   }
 
   $liveOpenAiConfigured = -not [string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable("OPENAI_API_KEY", "Process"))

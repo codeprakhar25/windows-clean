@@ -31,6 +31,8 @@ assert(runner.includes("[System.PlatformID]::Win32NT"), "runner should refuse no
 assert(runner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"), "runner should require accepted first-route completion proof");
 assert(runner.includes("spaceguard-first-route-completion-check/v1"), "runner should validate the first-route completion schema");
 assert(runner.includes("Assert-AcceptedFirstRouteCompletion"), "runner should validate the proof file before route launch");
+assert(runner.includes("Assert-CleanProofExportSlots"), "runner should reject stale root proof exports before a new app launch");
+assert(runner.includes("stale-proof-export"), "runner should name stale proof export blockers");
 assert(runner.includes("Assert-OneSelectedRouteFlag"), "runner should enforce exactly one scoped selected-route flag");
 assert(runner.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "runner should support npm cache route flag validation");
 assert(runner.includes("SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR"), "runner should support pnpm store route flag validation");

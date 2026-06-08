@@ -163,6 +163,19 @@ try {
     }
   }
 
+  function Assert-CleanProofExportSlots {
+    $staleExports = @()
+    foreach ($proofPath in @($SelectedRouteProofPacketPath, $WorkflowProofPath)) {
+      if (Test-Path -LiteralPath $proofPath) {
+        $staleExports += $proofPath
+      }
+    }
+
+    if ($staleExports.Count -gt 0) {
+      throw "stale-proof-export: Move or archive existing root proof export(s) before starting a new selected-route app launch. Use -FinalizeOnly with an existing evidence root after app export. Existing file(s): $($staleExports -join ', ')"
+    }
+  }
+
   function Assert-AcceptedFirstRouteCompletion {
     $proofPath = [System.Environment]::GetEnvironmentVariable("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK", "Process")
     if ([string]::IsNullOrWhiteSpace($proofPath)) {
@@ -369,6 +382,9 @@ try {
     Write-Host "Workflow proof check: $WorkflowProofCheckPath"
     Write-Host "Selected-route completion check: $CompletionCheckPath"
     return
+  }
+  if (-not $SkipLaunch) {
+    Assert-CleanProofExportSlots
   }
 
   $liveOpenAiConfigured = -not [string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable("OPENAI_API_KEY", "Process"))

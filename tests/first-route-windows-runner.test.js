@@ -38,6 +38,8 @@ assert(runner.includes("FinalizeOnly requires -EvidenceRoot"), "finalize-only mo
 assert(runner.includes("FinalizeOnly evidence root does not exist"), "finalize-only mode should reject missing evidence roots");
 assert(runner.includes("Test-Path -LiteralPath $EvidenceRoot"), "finalize-only mode should check the evidence root before creating directories");
 assert(runner.includes("Complete-PostAppValidation -Reason \"finalize-only\""), "finalize-only mode should rerun post-app validation without reseeding fixtures");
+assert(runner.includes("Assert-CleanProofExportSlots"), "runner should reject stale root proof exports before a new app launch");
+assert(runner.includes("stale-proof-export"), "runner should name stale proof export blockers");
 assert(runner.includes("SPACEGUARD_ROUTE_SETUP_IGNORE_DOTENV"), "runner should force scoped env over .env executor flags");
 assert(runner.includes("SPACEGUARD_ENABLE_TEMP_EXECUTOR"), "runner should enable only the temp executor flag");
 assert(runner.includes("run-first-route-proof.mjs"), "runner should capture the first-route proof packet");
