@@ -4009,6 +4009,10 @@ export default function App() {
       scanSession,
       generatedAt: new Date().toISOString()
     });
+    if (exportedPacket.status !== "workflow-proven") {
+      focusWorkflowPanel("windows-setup-assistant-panel");
+      return false;
+    }
     const markdown = buildRealWorkflowProofPacketMarkdown(exportedPacket);
     const body = [
       markdown,
@@ -4022,6 +4026,7 @@ export default function App() {
       "```"
     ].join("\n");
     downloadTextFile("spaceguard-real-workflow-proof.md", body, "text/markdown;charset=utf-8");
+    return true;
   }
 
   function prepareSelectedRouteProofImport() {
@@ -5010,6 +5015,7 @@ function WindowsSetupAssistantPanel({ assistant, onWorkflowStep, onExportWorkflo
   const realWorkflow = assistant.realWorkflow || null;
   const workflowSteps = realWorkflow?.steps || [];
   const appCloseHandoff = realWorkflow?.appCloseHandoff || null;
+  const workflowProofExportReady = Boolean(realWorkflow && realWorkflow.status === "next-route-ready");
   return (
     <Card id="windows-setup-assistant-panel">
       <CardHeader className="pb-3">
@@ -5072,7 +5078,7 @@ function WindowsSetupAssistantPanel({ assistant, onWorkflowStep, onExportWorkflo
               <Badge variant={realWorkflow.tone || "review"}>{realWorkflow.status}</Badge>
               <Badge variant="outline">{realWorkflow.routeInput}</Badge>
               {realWorkflow.envVar ? <Badge variant="outline">{realWorkflow.envVar}</Badge> : null}
-              <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={onExportWorkflowProof}>
+              <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={onExportWorkflowProof} disabled={!workflowProofExportReady}>
                 <Download className="h-4 w-4" />
                 Export proof
               </Button>
