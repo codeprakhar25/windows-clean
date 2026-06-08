@@ -431,7 +431,8 @@ export function buildOpenAIAgentContext({
     releaseReadyForRealRun: Boolean(releaseGate?.readyForRealRun),
     validationReadyForRealRun: Boolean(validationPack?.readyForRealRun),
     proofStatus: executionProofHandoff?.status || "waiting-for-execution",
-    proofAllowsNextExecutor: ["waiting-for-execution", "proof-complete"].includes(executionProofHandoff?.status || "waiting-for-execution"),
+    proofAllowsNextExecutor: (executionProofHandoff?.status || "waiting-for-execution") === "waiting-for-execution" ||
+      ((executionProofHandoff?.status || "") === "proof-complete" && Boolean(supportBundleWritten || executionProofHandoff?.supportBundleWritten)),
     proofPrimary: executionProofHandoff?.primary || "",
     canRunPostRunRescan: Boolean(executionProofHandoff?.canRunRescan),
     rescanComparisonStatus: rescanComparison?.status || "not-run",
@@ -1911,7 +1912,7 @@ export async function requestOpenAIAgentAdvice({
       "Use context.agentTaskQueue.rows as the primary task list. When recommending one of those tasks, copy its actionType, targetId, and route exactly.",
       "When context.liveRouteValidation is present, treat it as the selected live route contract and do not recommend a different executor route until its proof is complete.",
       "When a scoped executor is visible, recommend the exact UI button only after the context says current consent and route-specific targets exist.",
-      "If execution.proofAllowsNextExecutor is false, recommend post-run rescan or proof review instead of another executor.",
+      "If execution.proofAllowsNextExecutor is false, recommend post-run rescan, proof review, or support bundle capture instead of another executor.",
       "Use execution.consentMatchesPlan, execution.scanFingerprintPresent, and execution.proofStatus when explaining blockers.",
       "Use actionType values from the schema. Keep targetId empty unless you are referring to a provided target id.",
       "Prioritize concrete next steps that move toward real safe cleanup.",

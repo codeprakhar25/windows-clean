@@ -2069,7 +2069,7 @@ function buildAgentContext({
       accepted: executionRecord.accepted,
       reclaimedBytes: executionRecord.bytes,
       proofStatus: getAgentProofStatus(executionRecord, postRunProof, workflowProofAccepted),
-      proofAllowsNextExecutor: !executionRecord || workflowProofAccepted,
+      proofAllowsNextExecutor: !executionRecord || supportBundleWritten,
       workflowProofCheckStatus: workflowProofCheck?.status || "not-run",
       workflowProofCheckCanAccept: Boolean(workflowProofCheck?.canAccept),
       supportBundleWritten: Boolean(supportBundleWritten),

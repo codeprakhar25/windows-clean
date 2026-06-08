@@ -124,6 +124,7 @@ const script = path.join(root, "scripts", "run-openai-advisor-smoke.mjs");
   });
   const supportBundleTask = proofCompleteContext.agentTaskQueue.rows.find((row) => row.source === "support-bundle");
   assert(supportBundleTask, "proof-complete OpenAI context should expose support bundle capture task");
+  assert.strictEqual(proofCompleteContext.execution.proofAllowsNextExecutor, false, "proof-complete OpenAI context should still block the next executor until support bundle is written");
   assert.strictEqual(supportBundleTask.targetId, "spaceguard-support-bundle", "support bundle task should target the handoff bundle");
   assert(!proofCompleteContext.agentTaskQueue.rows.some((row) => row.source === "selected-route-proof-import"), "proof-complete OpenAI context should not expose obsolete proof import task");
 
@@ -143,6 +144,7 @@ const script = path.join(root, "scripts", "run-openai-advisor-smoke.mjs");
     },
     supportBundleWritten: true
   });
+  assert.strictEqual(proofCompleteWithBundleContext.execution.proofAllowsNextExecutor, true, "OpenAI context should allow next executor after proof and support bundle are both complete");
   assert(!proofCompleteWithBundleContext.agentTaskQueue.rows.some((row) => row.source === "support-bundle"), "OpenAI context should not keep recommending support bundle capture after the bundle is written");
 
   const mismatchedLiveRouteValidation = smoke.validateSmokeAdvice({
