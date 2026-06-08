@@ -7431,6 +7431,10 @@ fn android_cache_file_forbidden(path: &Path) -> bool {
 }
 
 fn delete_shader_cache_target(root: &Path) -> ShaderCacheDeleteResult {
+    delete_shader_cache_target_at(root, SystemTime::now())
+}
+
+fn delete_shader_cache_target_at(root: &Path, now: SystemTime) -> ShaderCacheDeleteResult {
     let mut result = ShaderCacheDeleteResult::default();
     if shader_cache_target_reject_code(&path_to_string(root)).is_some() {
         result.skipped_count += 1;
@@ -7456,7 +7460,7 @@ fn delete_shader_cache_target(root: &Path) -> ShaderCacheDeleteResult {
             continue;
         }
         if metadata.is_file() {
-            delete_single_shader_cache_file(&path, &metadata, &mut result);
+            delete_single_shader_cache_file_at(&path, &metadata, now, &mut result);
             continue;
         }
         if metadata.is_dir() {
@@ -7495,7 +7499,18 @@ fn delete_single_shader_cache_file(
     metadata: &fs::Metadata,
     result: &mut ShaderCacheDeleteResult,
 ) {
-    if !file_old_enough_for_shader_cache_delete(metadata) || shader_cache_file_forbidden(path) {
+    delete_single_shader_cache_file_at(path, metadata, SystemTime::now(), result);
+}
+
+fn delete_single_shader_cache_file_at(
+    path: &Path,
+    metadata: &fs::Metadata,
+    now: SystemTime,
+    result: &mut ShaderCacheDeleteResult,
+) {
+    if !file_old_enough_for_shader_cache_delete_at(metadata, now)
+        || shader_cache_file_forbidden(path)
+    {
         result.skipped_count += 1;
         return;
     }
@@ -7510,10 +7525,14 @@ fn delete_single_shader_cache_file(
 }
 
 fn file_old_enough_for_shader_cache_delete(metadata: &fs::Metadata) -> bool {
+    file_old_enough_for_shader_cache_delete_at(metadata, SystemTime::now())
+}
+
+fn file_old_enough_for_shader_cache_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
     let Ok(modified) = metadata.modified() else {
         return false;
     };
-    let Ok(age) = SystemTime::now().duration_since(modified) else {
+    let Ok(age) = now.duration_since(modified) else {
         return false;
     };
     age.as_secs() >= 14 * 24 * 60 * 60
@@ -12242,6 +12261,66 @@ mod tests {
         let _ = fs::remove_dir(&root);
         let _ = fs::remove_dir(user_profile.join(".android"));
         let _ = fs::remove_dir(&user_profile);
+    }
+
+    #[test]
+    fn shader_cache_deleter_removes_only_old_cache_files() {
+        let local_app_data = unique_test_dir("shader-cache-delete-proof");
+        let root = local_app_data.join("D3DSCache");
+        let old_blob = root.join("shader.bin");
+        let old_nested = root.join("pipeline").join("cache.bin");
+        let json_metadata = root.join("metadata.json");
+        let config_file = root.join("config").join("state.bin");
+        let blob_bytes = b"delete-shader-cache";
+        let nested_bytes = b"delete-shader-nested";
+
+        fs::create_dir_all(old_nested.parent().expect("old nested parent"))
+            .expect("create shader nested dir");
+        fs::create_dir_all(config_file.parent().expect("config parent"))
+            .expect("create shader config dir");
+        fs::write(&old_blob, blob_bytes).expect("write old shader cache blob");
+        fs::write(&old_nested, nested_bytes).expect("write old shader nested cache");
+        fs::write(&json_metadata, b"keep-json").expect("write shader json metadata");
+        fs::write(&config_file, b"keep-config").expect("write shader config file");
+
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _restore_local = EnvRestore::set("LOCALAPPDATA", &local_app_data);
+        let old_enough_now = SystemTime::now() + Duration::from_secs(15 * 24 * 60 * 60);
+
+        let result = delete_shader_cache_target_at(&root, old_enough_now);
+
+        assert_eq!(
+            result.deleted_files, 2,
+            "old shader cache files should be deleted"
+        );
+        assert_eq!(
+            result.deleted_bytes,
+            (blob_bytes.len() + nested_bytes.len()) as u64,
+            "deleted bytes should match removed shader cache file lengths"
+        );
+        assert!(
+            !old_blob.exists(),
+            "old shader cache blob should be removed"
+        );
+        assert!(
+            !old_nested.exists(),
+            "old nested shader cache file should be removed"
+        );
+        assert!(
+            json_metadata.exists(),
+            "shader cache json metadata must survive"
+        );
+        assert!(
+            config_file.exists(),
+            "shader cache config dirs must survive"
+        );
+
+        let _ = fs::remove_file(&json_metadata);
+        let _ = fs::remove_file(&config_file);
+        let _ = fs::remove_dir(root.join("pipeline"));
+        let _ = fs::remove_dir(root.join("config"));
+        let _ = fs::remove_dir(&root);
+        let _ = fs::remove_dir(&local_app_data);
     }
 
     #[test]
