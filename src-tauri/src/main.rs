@@ -6072,6 +6072,18 @@ fn project_dependency_target_reject_code(value: &str) -> Option<&'static str> {
     {
         return Some("target-not-node-modules");
     }
+    let original = normalize_write_target(value);
+    let resolved = normalize_write_target(&path_to_string(&path));
+    if !write_target_allowed("item-review-project-cache", &original)
+        && !write_target_allowed("item-review-project-cache", &resolved)
+    {
+        return Some("target-not-node-modules");
+    }
+    if write_target_forbidden("item-review-project-cache", &original)
+        || write_target_forbidden("item-review-project-cache", &resolved)
+    {
+        return Some("target-forbidden");
+    }
     let Ok(metadata) = fs::symlink_metadata(&path) else {
         return Some("target-missing");
     };
@@ -12599,6 +12611,157 @@ mod tests {
         let _ = fs::remove_dir(user_profile.join("AppData"));
         let _ = fs::remove_dir(&archive_destination);
         let _ = fs::remove_dir(&user_profile);
+    }
+
+    #[test]
+    fn project_dependency_target_validation_rejects_forbidden_locations() {
+        let project_root = unique_test_dir("project-dependency-target-proof");
+        let node_modules = project_root.join("node_modules");
+        let package_file = node_modules.join("left-pad").join("index.js");
+        let non_node_modules = project_root.join("vendor-cache");
+        let missing_package_root = unique_test_dir("project-dependency-missing-package");
+        let missing_package_node_modules = missing_package_root.join("node_modules");
+        let forbidden_base = unique_test_dir("project-dependency-forbidden");
+        let forbidden_program_files = forbidden_base.join("Program Files");
+        let forbidden_project_root = forbidden_program_files.join("Vendor");
+        let forbidden_node_modules = forbidden_project_root.join("node_modules");
+
+        fs::create_dir_all(package_file.parent().expect("dependency package parent"))
+            .expect("create dependency package dir");
+        fs::write(project_root.join("package.json"), b"{}").expect("write package manifest");
+        fs::write(&package_file, b"module.exports = 1;").expect("write dependency file");
+        fs::create_dir_all(&non_node_modules).expect("create non node_modules target");
+        fs::create_dir_all(&missing_package_node_modules)
+            .expect("create missing-package node_modules target");
+        fs::create_dir_all(&forbidden_node_modules).expect("create forbidden node_modules target");
+        fs::write(forbidden_project_root.join("package.json"), b"{}")
+            .expect("write forbidden package manifest");
+
+        assert_eq!(
+            project_dependency_target_reject_code(&path_to_string(&node_modules)),
+            None,
+            "reviewed node_modules under a project manifest should be accepted"
+        );
+        assert_eq!(
+            project_dependency_target_reject_code(&path_to_string(&non_node_modules)),
+            Some("target-not-node-modules"),
+            "project dependency cleanup must only accept node_modules folders"
+        );
+        assert_eq!(
+            project_dependency_target_reject_code(&path_to_string(&missing_package_node_modules)),
+            Some("target-missing-package-json"),
+            "node_modules without a project package.json should stay outside the executor"
+        );
+        assert_eq!(
+            project_dependency_target_reject_code(&path_to_string(&forbidden_node_modules)),
+            Some("target-forbidden"),
+            "node_modules in protected install locations should be blocked"
+        );
+
+        let _ = fs::remove_file(&package_file);
+        let _ = fs::remove_dir(package_file.parent().expect("dependency package parent"));
+        let _ = fs::remove_dir(&node_modules);
+        let _ = fs::remove_dir(&non_node_modules);
+        let _ = fs::remove_file(project_root.join("package.json"));
+        let _ = fs::remove_dir(&project_root);
+        let _ = fs::remove_dir(&missing_package_node_modules);
+        let _ = fs::remove_dir(&missing_package_root);
+        let _ = fs::remove_dir(&forbidden_node_modules);
+        let _ = fs::remove_file(forbidden_project_root.join("package.json"));
+        let _ = fs::remove_dir(&forbidden_project_root);
+        let _ = fs::remove_dir(&forbidden_program_files);
+        let _ = fs::remove_dir(&forbidden_base);
+    }
+
+    #[test]
+    fn project_dependency_deleter_removes_only_reviewed_node_modules() {
+        let project_root = unique_test_dir("project-dependency-delete-proof");
+        let node_modules = project_root.join("node_modules");
+        let dependency_file = node_modules.join("dep").join("index.js");
+        let bin_file = node_modules.join(".bin").join("tool.cmd");
+        let source_file = project_root.join("src").join("index.js");
+        let package_json = project_root.join("package.json");
+        let forbidden_base = unique_test_dir("project-dependency-delete-forbidden");
+        let forbidden_program_files = forbidden_base.join("Program Files");
+        let forbidden_project_root = forbidden_program_files.join("Vendor");
+        let forbidden_node_modules = forbidden_project_root.join("node_modules");
+        let forbidden_file = forbidden_node_modules.join("dep").join("index.js");
+
+        fs::create_dir_all(dependency_file.parent().expect("dependency parent"))
+            .expect("create dependency dir");
+        fs::create_dir_all(bin_file.parent().expect("bin parent")).expect("create bin dir");
+        fs::create_dir_all(source_file.parent().expect("source parent"))
+            .expect("create source dir");
+        fs::write(&dependency_file, b"delete dependency").expect("write dependency file");
+        fs::write(&bin_file, b"delete bin").expect("write bin file");
+        fs::write(&source_file, b"keep source").expect("write source file");
+        fs::write(&package_json, b"{}").expect("write package manifest");
+        fs::create_dir_all(
+            forbidden_file
+                .parent()
+                .expect("forbidden dependency parent"),
+        )
+        .expect("create forbidden dependency dir");
+        fs::write(forbidden_project_root.join("package.json"), b"{}")
+            .expect("write forbidden package manifest");
+        fs::write(&forbidden_file, b"keep forbidden dependency")
+            .expect("write forbidden dependency file");
+
+        let result = delete_project_dependency_target(&node_modules);
+
+        assert_eq!(
+            result.deleted_files, 2,
+            "reviewed node_modules files should be deleted"
+        );
+        assert_eq!(
+            result.deleted_bytes, 28,
+            "deleted bytes should match removed dependency files"
+        );
+        assert!(
+            !node_modules.exists(),
+            "reviewed node_modules directory should be removed"
+        );
+        assert!(source_file.exists(), "project source files must survive");
+        assert!(
+            package_json.exists(),
+            "project package manifest must survive"
+        );
+
+        let skipped = delete_project_dependency_target(&forbidden_node_modules);
+
+        assert_eq!(
+            skipped.deleted_files, 0,
+            "forbidden node_modules targets must not delete files"
+        );
+        assert_eq!(
+            skipped.skipped_count, 1,
+            "forbidden node_modules targets should be counted as skipped"
+        );
+        assert!(
+            forbidden_file.exists(),
+            "forbidden node_modules dependency file should survive"
+        );
+
+        let _ = fs::remove_file(&dependency_file);
+        let _ = fs::remove_file(&bin_file);
+        let _ = fs::remove_dir(dependency_file.parent().expect("dependency parent"));
+        let _ = fs::remove_dir(bin_file.parent().expect("bin parent"));
+        let _ = fs::remove_dir(&node_modules);
+        let _ = fs::remove_file(&source_file);
+        let _ = fs::remove_dir(source_file.parent().expect("source parent"));
+        let _ = fs::remove_file(&package_json);
+        let _ = fs::remove_dir(&project_root);
+        let _ = fs::remove_file(&forbidden_file);
+        let _ = fs::remove_dir(
+            forbidden_file
+                .parent()
+                .expect("forbidden dependency parent"),
+        );
+        let _ = fs::remove_dir(&forbidden_node_modules);
+        let _ = fs::remove_file(forbidden_project_root.join("package.json"));
+        let _ = fs::remove_dir(&forbidden_project_root);
+        let _ = fs::remove_dir(&forbidden_program_files);
+        let _ = fs::remove_dir(&forbidden_base);
     }
 
     #[test]
