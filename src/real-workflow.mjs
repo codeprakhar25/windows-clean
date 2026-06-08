@@ -450,7 +450,7 @@ function envVarToFlagKey(envVar = "") {
   return map[envVar] || "";
 }
 
-export function buildRouteReadiness({ recipe = {}, finding = {}, runtime = {} } = {}) {
+export function buildRouteReadiness({ recipe = {}, finding = {}, runtime = {}, selectedRouteInput = "" } = {}) {
   const executable = Boolean(recipe.executor);
   if (!executable) {
     return {
@@ -475,6 +475,8 @@ export function buildRouteReadiness({ recipe = {}, finding = {}, runtime = {} } 
     ? runtime.enabledScopedExecutorFlags
     : [];
   const findingStatus = finding.status || "unknown";
+  const selectedRoute = String(selectedRouteInput || "").trim();
+  const selectedRouteMatches = !selectedRoute || !recipe.routeInput || selectedRoute === recipe.routeInput;
 
   const rows = [
     guardrailRow({
@@ -504,6 +506,16 @@ export function buildRouteReadiness({ recipe = {}, finding = {}, runtime = {} } 
       detail: routeFlagEnabled
         ? `${recipe.envVar}=1 is active for this route.`
         : `Set ${recipe.envVar}=1 in .env and restart the desktop app.`
+    }),
+    guardrailRow({
+      id: "selected-route-setup",
+      label: "Selected route setup",
+      passed: selectedRouteMatches,
+      detail: selectedRouteMatches
+        ? selectedRoute
+          ? `${selectedRoute} is selected in the route setup wizard.`
+          : "No route setup selection was provided by this caller."
+        : `Select ${recipe.routeInput} in the route setup wizard before execution.`
     }),
     guardrailRow({
       id: "real-run-authority",

@@ -287,7 +287,7 @@ function App() {
   }, []);
 
   const nativeConnected = Boolean(capability.available && runtime?.available);
-  const candidates = useMemo(() => buildCleanupCandidates(scan, runtime), [scan, runtime]);
+  const candidates = useMemo(() => buildCleanupCandidates(scan, runtime, setupRouteInput), [scan, runtime, setupRouteInput]);
   const selectedCandidate = useMemo(
     () => candidates.find((candidate) => candidate.id === selectedId) || null,
     [candidates, selectedId]
@@ -1652,22 +1652,22 @@ function splitLines(value = "") {
     .filter(Boolean);
 }
 
-function buildCleanupCandidates(scan, runtime) {
+function buildCleanupCandidates(scan, runtime, selectedRouteInput = "") {
   if (!scan?.findings?.length) return [];
   const rows = [];
   for (const finding of scan.findings) {
     const rootRecipe = EXECUTOR_RECIPES[finding.recipeId];
     if (rootRecipe) {
-      rows.push(buildCandidateFromFinding(finding, rootRecipe, runtime));
+      rows.push(buildCandidateFromFinding(finding, rootRecipe, runtime, selectedRouteInput));
       continue;
     }
     const itemRecipe = ITEM_REVIEW_RECIPES[finding.recipeId];
     if (itemRecipe) {
-      rows.push(...buildItemCandidates(finding, itemRecipe, runtime));
+      rows.push(...buildItemCandidates(finding, itemRecipe, runtime, { selectedRouteInput }));
       continue;
     }
     if (finding.recipeId === "large-user-files") {
-      rows.push(...buildItemCandidates(finding, ARCHIVE_RECIPE, runtime, { archive: true }));
+      rows.push(...buildItemCandidates(finding, ARCHIVE_RECIPE, runtime, { archive: true, selectedRouteInput }));
     }
   }
   return rows
@@ -1694,8 +1694,8 @@ function buildRouteSetupOptions() {
   return Array.from(routeMap.values()).sort((left, right) => left.label.localeCompare(right.label));
 }
 
-function buildCandidateFromFinding(finding, recipe, runtime) {
-  const status = buildRouteReadiness({ recipe, finding, runtime });
+function buildCandidateFromFinding(finding, recipe, runtime, selectedRouteInput = "") {
+  const status = buildRouteReadiness({ recipe, finding, runtime, selectedRouteInput });
   return {
     id: `${finding.recipeId}:${finding.path || recipe.route}`,
     title: finding.title || recipe.label,
@@ -1727,7 +1727,7 @@ function buildItemCandidates(finding, recipe, runtime, options = {}) {
   return items
     .filter((item) => item.path && Number(item.bytes || 0) > 0)
     .map((item) => {
-      const status = buildRouteReadiness({ recipe, finding, runtime });
+      const status = buildRouteReadiness({ recipe, finding, runtime, selectedRouteInput: options.selectedRouteInput || "" });
       return {
         id: `${finding.recipeId}:${item.id || item.path}`,
         title: item.name || recipe.label,

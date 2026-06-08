@@ -105,6 +105,7 @@ assert(app.includes("buildOpenAIAgentRecommendationBroker"), "OpenAI advisor sho
 assert(app.includes("./real-workflow.mjs"), "app should import tested real workflow helpers");
 assert(app.includes("buildAppAgentTaskQueue"), "app should build a deterministic task queue for OpenAI advisor context");
 assert(app.includes("buildRouteReadiness"), "app should use tested route readiness guardrails");
+assert(app.includes("buildCleanupCandidates(scan, runtime, setupRouteInput)"), "app cleanup candidates should be gated by the selected route setup");
 assert(app.includes("buildExecutionPrerequisites"), "app should use tested route-specific execution prerequisites");
 assert(app.includes("buildRouteSetupChecklist"), "app should use tested route setup checklist guardrails");
 assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
@@ -228,6 +229,7 @@ assert(!workflowProofModule.includes("selected-route-proof-import"), "workflow p
 assert(realWorkflow.includes("findPostRunTargetEvidence"), "real workflow helper should expose post-run target evidence matching");
 assert(realWorkflow.includes("reviewTarget?.path"), "real workflow helper should compare selected review item paths");
 assert(realWorkflow.includes("single-route-scope"), "real workflow helper should expose single route scope guardrail rows");
+assert(realWorkflow.includes("selected-route-setup"), "real workflow helper should expose selected route setup as an execution guardrail");
 assert(!realWorkflow.includes("temp-fixture"), "real workflow helper must not point app setup at seeded fixture routes");
 assert(!realWorkflow.includes("first-route-proof"), "real workflow helper must not block real routes behind seeded first-route proof rows");
 assert(!realWorkflow.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"), "real workflow helper must not emit seeded proof env vars");

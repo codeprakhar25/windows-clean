@@ -118,6 +118,46 @@ const assert = require("assert");
   });
   assert.strictEqual(confirmedRecyclePrerequisites.ready, true, "Recycle Bin execution should unlock after explicit permanent-removal confirmation");
 
+  const setupMismatchRuntime = {
+    windows: true,
+    executeCleanupPlan: true,
+    realRunEnabled: true,
+    destructiveCommands: true,
+    executorScopeStatus: "single-scoped-flag",
+    executorFlags: {
+      npmCacheExecutor: true
+    }
+  };
+  const setupMismatchRecipe = {
+    executor: "npm",
+    routeInput: "npm-cache",
+    route: "bounded-npm-cache-delete",
+    flagKey: "npmCacheExecutor",
+    envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"
+  };
+  const setupMismatchFinding = {
+    status: "measured",
+    recipeId: "npm-cache",
+    path: "C:\\Users\\LocalUser\\AppData\\Local\\npm-cache\\_cacache",
+    bytes: 512 * 1024 * 1024
+  };
+  const mismatchedRouteReadiness = workflow.buildRouteReadiness({
+    recipe: setupMismatchRecipe,
+    finding: setupMismatchFinding,
+    runtime: setupMismatchRuntime,
+    selectedRouteInput: "gradle-cache"
+  });
+  assert.strictEqual(mismatchedRouteReadiness.canExecute, false, "route readiness should block execution when selected route setup points at a different route");
+  assert(mismatchedRouteReadiness.rows.some((row) => row.id === "selected-route-setup" && !row.passed), "route readiness should expose selected route setup mismatch as a blocker");
+
+  const matchedRouteReadiness = workflow.buildRouteReadiness({
+    recipe: setupMismatchRecipe,
+    finding: setupMismatchFinding,
+    runtime: setupMismatchRuntime,
+    selectedRouteInput: "npm-cache"
+  });
+  assert.strictEqual(matchedRouteReadiness.canExecute, true, "route readiness should allow execution when selected route setup matches the target route");
+
   const inAppBundle = workflow.buildInAppSupportBundleReport({
     generatedAt: "2026-06-08T19:30:00.000Z",
     routeInput: "npm-cache",
@@ -319,7 +359,7 @@ const assert = require("assert");
   assert.strictEqual(readyStatus.canExecute, true, "ready route should pass every guardrail");
   assert.deepStrictEqual(
     readyStatus.rows.map((row) => row.id),
-    ["native-runtime", "executor-command", "single-route-scope", "route-flag", "real-run-authority", "native-finding-status"],
+    ["native-runtime", "executor-command", "single-route-scope", "route-flag", "selected-route-setup", "real-run-authority", "native-finding-status"],
     "route readiness should expose each execution guardrail in order"
   );
   assert(readyStatus.rows.every((row) => row.passed), "ready route readiness rows should all pass");
