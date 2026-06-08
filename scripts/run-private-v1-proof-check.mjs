@@ -8,10 +8,12 @@ import { pathToFileURL } from "node:url";
 const SCRIPT_ID = "spaceguard-private-v1-proof-check";
 const CHECK_SCHEMA = "spaceguard-private-v1-proof-check/v1";
 const PRIVATE_V1_SCHEMA = "spaceguard-private-v1-windows-proof/v1";
+const ROUTE_SETUP_SCHEMA = "spaceguard-route-setup-packet/v1";
 const PRIVATE_PREFLIGHT_SCHEMA = "spaceguard-private-demo-windows-preflight/v1";
 const FIRST_ROUTE_COMPLETION_SCHEMA = "spaceguard-first-route-completion-check/v1";
 const SELECTED_ROUTE_COMPLETION_SCHEMA = "spaceguard-selected-route-completion-check/v1";
 const REQUIRED_COMMANDS = [
+  "selected-route-setup",
   "private-windows-preflight",
   "first-route-proof",
   "bind-first-route-completion",
@@ -44,6 +46,7 @@ export function buildPrivateV1ProofCheck({
   const baseDir = resolvedProofPath ? path.dirname(resolvedProofPath) : process.cwd();
   const artifacts = proof?.artifacts || {};
   const resolvedCommandLogPath = normalizeArtifactPath(proof?.commandLogPath || "", baseDir);
+  const resolvedSelectedRouteSetupPath = normalizeArtifactPath(artifacts.selectedRouteSetup || "", baseDir);
   const resolvedPreflightPath = normalizeArtifactPath(artifacts.privateWindowsPreflight || "", baseDir);
   const resolvedFirstRouteCompletionPath = normalizeArtifactPath(artifacts.firstRouteCompletionCheck || proof?.firstRouteCompletion?.path || "", baseDir);
   const resolvedSelectedRouteCompletionPath = normalizeArtifactPath(artifacts.selectedRouteCompletionCheck || proof?.selectedRouteCompletion?.path || "", baseDir);
@@ -52,10 +55,12 @@ export function buildPrivateV1ProofCheck({
   validatePrivateV1Proof(proof, resolvedProofPath, add);
   const commandRecords = readCommandRecords(resolvedCommandLogPath, add);
   const commandSummary = validateCommandRecords(commandRecords, add);
+  const selectedRouteSetup = readJsonArtifact("selected-route-setup", resolvedSelectedRouteSetupPath, add);
   const preflight = readJsonArtifact("private-windows-preflight", resolvedPreflightPath, add);
   const firstRouteCompletion = readJsonArtifact("first-route-completion", resolvedFirstRouteCompletionPath, add);
   const selectedRouteCompletion = readJsonArtifact("selected-route-completion", resolvedSelectedRouteCompletionPath, add);
 
+  validateSelectedRouteSetup(selectedRouteSetup, proof, selectedRouteCompletion, add);
   validatePreflight(preflight, add);
   const nativeBundleArtifactCount = validateNativeBundleArtifacts(preflight, add);
   const firstRouteProofCounts = validateFirstRouteCompletion(firstRouteCompletion, proof, resolvedFirstRouteCompletionPath, add);
@@ -76,6 +81,7 @@ export function buildPrivateV1ProofCheck({
     selectedRoute,
     proofPath: resolvedProofPath,
     commandLogPath: resolvedCommandLogPath,
+    selectedRouteSetupPath: resolvedSelectedRouteSetupPath,
     privateWindowsPreflightPath: resolvedPreflightPath,
     firstRouteCompletionCheckPath: resolvedFirstRouteCompletionPath,
     selectedRouteCompletionCheckPath: resolvedSelectedRouteCompletionPath,
@@ -225,6 +231,31 @@ function validatePreflight(preflight, add) {
   }
   if (preflight.status !== "passed") {
     add("private-windows-preflight", "Private Windows preflight not passed", "Private Windows preflight must pass before private V1 proof acceptance.");
+  }
+}
+
+function validateSelectedRouteSetup(routeSetup, proof, selectedRouteCompletion, add) {
+  if (!routeSetup) return;
+  if (routeSetup.schemaVersion !== ROUTE_SETUP_SCHEMA) {
+    add("selected-route-setup", "Selected-route setup schema mismatch", `Expected ${ROUTE_SETUP_SCHEMA}.`);
+  }
+  if (routeSetup.status === "unknown-route" || routeSetup.status === "route-required" || !routeSetup.selected) {
+    add("selected-route-setup", "Selected route setup not resolved", "Selected-route setup must resolve to a known scoped cleanup route.");
+  }
+  if (routeSetup.route === "known-temp-delete") {
+    add("selected-route-setup", "Selected route is bootstrap route", "Private V1 already runs temp-fixture first; selected route must be a real-data route.");
+  }
+  if (proof?.selectedRoute && routeSetup.routeInput && proof.selectedRoute !== routeSetup.routeInput) {
+    add("selected-route-setup-mismatch", "Selected route setup input mismatch", "Private V1 selectedRoute must match selected-route setup routeInput.");
+  }
+  if (selectedRouteCompletion?.route && routeSetup.route && selectedRouteCompletion.route !== routeSetup.route) {
+    add("selected-route-setup-mismatch", "Selected route setup canonical mismatch", "Selected-route setup canonical route must match selected-route completion route.");
+  }
+  if (proof?.routes?.selectedRouteCanonical && routeSetup.route && proof.routes.selectedRouteCanonical !== routeSetup.route) {
+    add("selected-route-setup-mismatch", "Selected route summary canonical mismatch", "Private V1 routes.selectedRouteCanonical must match selected-route setup route.");
+  }
+  if (proof?.routes?.selectedRouteSetupStatus && routeSetup.status && proof.routes.selectedRouteSetupStatus !== routeSetup.status) {
+    add("selected-route-setup-mismatch", "Selected route setup status mismatch", "Private V1 routes.selectedRouteSetupStatus must match selected-route setup status.");
   }
 }
 

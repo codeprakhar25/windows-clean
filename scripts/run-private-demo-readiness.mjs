@@ -175,6 +175,9 @@ export function buildPrivateDemoReadinessSummary({
         fileReady(privateV1Runner) &&
         privateV1Runner.includes("spaceguard-private-v1-windows-proof/v1") &&
         privateV1Runner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK") &&
+        privateV1Runner.includes("Assert-KnownSelectedRoute") &&
+        privateV1Runner.includes("selected-route-setup.json") &&
+        privateV1Runner.includes("selected-route-unknown") &&
         privateV1Runner.includes("Assert-CompletionProofCounts") &&
         privateV1Runner.includes("Assert-ExistingPrivateWindowsPreflight") &&
         privateV1Runner.includes("private-windows-preflight-skipped-missing") &&
@@ -195,6 +198,8 @@ export function buildPrivateDemoReadinessSummary({
         fileReady(privateV1ProofCheck) &&
         privateV1ProofCheck.includes("spaceguard-private-v1-proof-check/v1") &&
         privateV1ProofCheck.includes("spaceguard-private-v1-windows-proof/v1") &&
+        privateV1ProofCheck.includes("selected-route-setup") &&
+        privateV1ProofCheck.includes("spaceguard-route-setup-packet/v1") &&
         privateV1ProofCheck.includes("bind-first-route-completion") &&
         privateV1ProofCheck.includes("completion-parity"),
       detail: "Private demo readiness must include an independent verifier for the final private V1 proof artifact and child route/rescan parity counts."

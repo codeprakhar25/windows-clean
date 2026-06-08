@@ -25,6 +25,7 @@ function writeNdjson(file, records) {
 
 function createPrivateV1Evidence(patch = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "spaceguard-private-v1-"));
+  const selectedRouteSetupPath = path.join(dir, "selected-route-setup.json");
   const preflightPath = path.join(dir, "private-demo-preflight", "private-demo-preflight.json");
   const firstRouteCompletionPath = path.join(dir, "first-route-proof", "first-route-completion-check.json");
   const selectedRouteCompletionPath = path.join(dir, "selected-route-proof-npm-cache", "selected-route-completion-check.json");
@@ -59,6 +60,23 @@ function createPrivateV1Evidence(patch = {}) {
     ],
     ...patch.preflight
   };
+  const selectedRouteSetup = {
+    schemaVersion: "spaceguard-route-setup-packet/v1",
+    status: "flag-disabled",
+    routeInput: "npm-cache",
+    route: "bounded-npm-cache-delete",
+    selected: {
+      route: "bounded-npm-cache-delete",
+      aliases: ["npm-cache", "npm", "bounded-npm-cache-delete"],
+      title: "npm cache cleanup",
+      envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
+      requestMode: "execute-npm-cache",
+      panelId: "npm-cache-executor-panel",
+      actionLabel: "Run npm cache cleanup",
+      enabled: false
+    },
+    ...patch.selectedRouteSetup
+  };
   const firstRouteCompletion = {
     schemaVersion: "spaceguard-first-route-completion-check/v1",
     status: "accepted",
@@ -89,6 +107,7 @@ function createPrivateV1Evidence(patch = {}) {
     ...patch.selectedRouteCompletion
   };
   const commands = [
+    { id: "selected-route-setup", command: "node scripts\\run-setup-route.mjs --route \"npm-cache\"", outputPath: selectedRouteSetupPath, exitCode: 0 },
     { id: "private-windows-preflight", command: "npm run demo:private-windows-preflight", outputPath: preflightPath, exitCode: 0 },
     { id: "first-route-proof", command: "npm run proof:first-route:windows -- -Route temp-fixture", outputPath: path.join(dir, "first-route-proof.txt"), exitCode: 0 },
     { id: "bind-first-route-completion", command: "set SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK", outputPath: firstRouteCompletionPath, exitCode: 0 },
@@ -108,6 +127,7 @@ function createPrivateV1Evidence(patch = {}) {
     directCleanupCommands: false,
     artifacts: {
       privateV1Proof: proofPath,
+      selectedRouteSetup: selectedRouteSetupPath,
       privateWindowsPreflight: preflightPath,
       firstRouteCompletionCheck: firstRouteCompletionPath,
       selectedRouteCompletionCheck: selectedRouteCompletionPath,
@@ -118,6 +138,8 @@ function createPrivateV1Evidence(patch = {}) {
       firstRoute: "temp-fixture",
       firstRouteStatus: "accepted",
       selectedRoute: "npm-cache",
+      selectedRouteSetupStatus: "flag-disabled",
+      selectedRouteCanonical: "bounded-npm-cache-delete",
       selectedRouteStatus: "accepted"
     },
     firstRouteCompletion: {
@@ -141,6 +163,7 @@ function createPrivateV1Evidence(patch = {}) {
     },
     archivedRootExports: [{ source: path.join(dir, "spaceguard-real-workflow-proof.md"), destination: archivedProofPath }],
     commands: {
+      selectedRouteSetup: "node scripts\\run-setup-route.mjs --route \"npm-cache\"",
       privateWindowsPreflight: "npm run demo:private-windows-preflight",
       firstRouteProof: "npm run proof:first-route:windows -- -Route temp-fixture",
       selectedRouteProof: "npm run proof:route:windows -- -Route npm-cache"
@@ -148,6 +171,7 @@ function createPrivateV1Evidence(patch = {}) {
     ...patch.proof
   };
 
+  writeJson(selectedRouteSetupPath, selectedRouteSetup);
   writeJson(preflightPath, preflight);
   writeJson(firstRouteCompletionPath, firstRouteCompletion);
   writeJson(selectedRouteCompletionPath, selectedRouteCompletion);
@@ -160,7 +184,7 @@ function createPrivateV1Evidence(patch = {}) {
   fs.mkdirSync(path.dirname(bundleEvidencePath), { recursive: true });
   fs.writeFileSync(bundleEvidencePath, bundleBytes);
 
-  return { dir, proofPath, commandLogPath, firstRouteCompletionPath, selectedRouteCompletionPath };
+  return { dir, proofPath, commandLogPath, selectedRouteSetupPath, firstRouteCompletionPath, selectedRouteCompletionPath };
 }
 
 (async () => {
@@ -185,8 +209,17 @@ function createPrivateV1Evidence(patch = {}) {
   assert.strictEqual(accepted.counts.selectedRouteRescanExpectedBytes, 1048576, "verifier should report selected-route rescan expected bytes");
   assert.strictEqual(accepted.counts.selectedRouteLedgerReclaimedBytes, 1048576, "verifier should report selected-route ledger reclaimed bytes");
   assert.strictEqual(accepted.counts.nativeBundleArtifacts, 1, "verifier should count native bundle artifacts");
-  assert.strictEqual(accepted.counts.commandRecords, 5, "verifier should count command ledger records");
+  assert.strictEqual(accepted.counts.commandRecords, 6, "verifier should count command ledger records");
   assert.strictEqual(accepted.blockers.length, 0, "accepted V1 proof should not have blockers");
+
+  const missingSelectedRouteSetup = createPrivateV1Evidence();
+  fs.unlinkSync(missingSelectedRouteSetup.selectedRouteSetupPath);
+  const missingSelectedRouteSetupCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingSelectedRouteSetup.proofPath });
+  assert.strictEqual(missingSelectedRouteSetupCheck.status, "blocked", "missing selected-route setup evidence should block private V1 proof");
+  assert(
+    missingSelectedRouteSetupCheck.blockers.some((blocker) => blocker.id === "selected-route-setup"),
+    "selected-route setup blocker should be explicit"
+  );
 
   const missingBind = createPrivateV1Evidence({
     commands: [],

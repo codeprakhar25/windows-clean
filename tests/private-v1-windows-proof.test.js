@@ -23,6 +23,15 @@ const windowsSetup = fs.readFileSync(path.join(root, "WINDOWS_REAL_DATA_SETUP.md
   assert(runner.includes("[System.PlatformID]::Win32NT"), "V1 proof coordinator should refuse non-Windows execution");
   assert(runner.includes("npm run demo:private-windows-preflight"), "V1 proof coordinator should start with host preflight");
   assert(runner.includes("-SelectedRoute $SelectedRoute"), "V1 proof coordinator should pass the selected route into host preflight");
+  assert(runner.includes("$SelectedRouteSetupPath"), "V1 proof coordinator should capture selected-route setup evidence");
+  assert(runner.includes("Assert-KnownSelectedRoute"), "V1 proof coordinator should validate selected route before preflight");
+  assert(runner.includes("selected-route-setup.json"), "V1 proof coordinator should write selected-route setup JSON");
+  assert(runner.includes("selected-route-unknown"), "V1 proof coordinator should fail early for unknown selected routes");
+  assert(runner.includes("selected-route-bootstrap-disallowed"), "V1 proof coordinator should reject temp-fixture as the selected real-data route");
+  assert(
+    runner.indexOf("Assert-KnownSelectedRoute -Route $SelectedRoute") < runner.indexOf("npm run demo:private-windows-preflight"),
+    "V1 proof coordinator should validate selected route before building/running preflight commands"
+  );
   assert(runner.includes("$PreflightSummaryPath"), "V1 proof coordinator should track the exact private preflight JSON path");
   assert(runner.includes("Assert-ExistingPrivateWindowsPreflight"), "V1 proof coordinator should validate reused preflight evidence");
   assert(runner.includes("private-windows-preflight-skipped-missing"), "V1 proof coordinator should fail early when skipped preflight evidence is missing");

@@ -86,7 +86,7 @@ For the fastest private V1 proof on a prepared Windows host, run:
 npm run demo:private-v1-windows -- -SelectedRoute npm-cache
 ```
 
-This coordinator runs the host preflight, captures copied native bundle artifact evidence after `npm run native:build` with SHA-256 hashes, launches the seeded first-route proof, verifies the accepted `first-route-completion-check.json`, sets `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` for the current process, archives the first-route root proof exports into evidence, then launches the selected real-data route proof. It writes `private-v1-proof.json` only after both route completions are accepted and summarized with reclaimed bytes, ledger bytes, rescan expected bytes, and rescan remaining bytes. It does not add a new cleanup authority path; cleanup remains inside the desktop app's scoped executor, consent, proof export, and completion verifier workflow. Replace the selected route when validating another scoped executor, for example `npm run demo:private-v1-windows -- -SelectedRoute gradle-cache`.
+This coordinator first validates the selected route through `setup:route` and writes `selected-route-setup.json`, then runs the host preflight, captures copied native bundle artifact evidence after `npm run native:build` with SHA-256 hashes, launches the seeded first-route proof, verifies the accepted `first-route-completion-check.json`, sets `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` for the current process, archives the first-route root proof exports into evidence, then launches the selected real-data route proof. It writes `private-v1-proof.json` only after route setup is resolved and both route completions are accepted and summarized with reclaimed bytes, ledger bytes, rescan expected bytes, and rescan remaining bytes. It does not add a new cleanup authority path; cleanup remains inside the desktop app's scoped executor, consent, proof export, and completion verifier workflow. Replace the selected route when validating another scoped executor, for example `npm run demo:private-v1-windows -- -SelectedRoute gradle-cache`.
 
 Use `-SkipPreflight` only to reuse an already-passed `private-demo-preflight/private-demo-preflight.json` inside the same V1 evidence root. The coordinator validates that artifact's schema, passed status, selected route, and copied native bundle artifacts before it starts the first-route proof.
 
@@ -96,7 +96,7 @@ The coordinator also writes `private-v1-proof-check.json` by running:
 npm run validate:private-v1-proof -- --file evidence/private-v1-proof-npm-cache-YYYYMMDD-HHMMSS/private-v1-proof.json
 ```
 
-That verifier checks the final V1 proof schema, command ledger, Windows preflight artifact, first-route completion artifact, selected-route completion artifact, accepted status, positive reclaimed bytes, child completion route/rescan parity counts, and the absence of direct cleanup command authority.
+That verifier checks the final V1 proof schema, command ledger, selected-route setup artifact, Windows preflight artifact, first-route completion artifact, selected-route completion artifact, accepted status, positive reclaimed bytes, child completion route/rescan parity counts, and the absence of direct cleanup command authority.
 
 ## First npm real-data proof checklist
 

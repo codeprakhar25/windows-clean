@@ -34,6 +34,7 @@ try {
   $CommandLogPath = Join-Path $EvidenceRoot "commands.ndjson"
   $SummaryPath = Join-Path $EvidenceRoot "private-v1-proof.json"
   $PrivateV1ProofCheckPath = Join-Path $EvidenceRoot "private-v1-proof-check.json"
+  $SelectedRouteSetupPath = Join-Path $EvidenceRoot "selected-route-setup.json"
   $PreflightEvidenceRoot = Join-Path $EvidenceRoot "private-demo-preflight"
   $PreflightSummaryPath = Join-Path $PreflightEvidenceRoot "private-demo-preflight.json"
   $PreflightLogPath = Join-Path $EvidenceRoot "private-demo-preflight.txt"
@@ -94,6 +95,54 @@ try {
     }
 
     return $record
+  }
+
+  function Assert-KnownSelectedRoute {
+    param(
+      [Parameter(Mandatory = $true)][string]$Route,
+      [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    $startedAt = (Get-Date).ToUniversalTime().ToString("o")
+    $commandLine = "node scripts\run-setup-route.mjs --route `"$Route`""
+    Write-Host "[selected-route-setup] $commandLine"
+
+    $output = @(& node "scripts\run-setup-route.mjs" "--route" $Route 2>&1)
+    $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+    $text = ($output | ForEach-Object { $_.ToString() }) -join "`r`n"
+    Set-Content -LiteralPath $Path -Value $text -Encoding UTF8
+    $endedAt = (Get-Date).ToUniversalTime().ToString("o")
+
+    Write-CommandRecord -Record ([PSCustomObject]@{
+        id = "selected-route-setup"
+        command = $commandLine
+        outputPath = $Path
+        exitCode = $exitCode
+        startedAt = $startedAt
+        endedAt = $endedAt
+      })
+
+    if ($exitCode -ne 0) {
+      throw "selected-route-setup-failed: setup route command failed for $Route. See $Path"
+    }
+
+    try {
+      $packet = $text | ConvertFrom-Json
+    } catch {
+      throw "selected-route-setup-invalid-json: setup route output could not be parsed. See $Path"
+    }
+
+    if ($packet.schemaVersion -ne "spaceguard-route-setup-packet/v1") {
+      throw "selected-route-setup-schema: expected spaceguard-route-setup-packet/v1."
+    }
+    if ($packet.status -eq "unknown-route" -or $packet.status -eq "route-required" -or $null -eq $packet.selected) {
+      throw "selected-route-unknown: SelectedRoute must match one setup:route alias before private V1 starts. See $Path"
+    }
+    if ($packet.route -eq "known-temp-delete") {
+      throw "selected-route-bootstrap-disallowed: private V1 already runs temp-fixture as the seeded first route; choose a real-data selected route such as npm-cache."
+    }
+
+    return $packet
   }
 
   function Assert-ExistingPrivateWindowsPreflight {
@@ -232,6 +281,7 @@ try {
   }
 
   $startedAt = (Get-Date).ToUniversalTime().ToString("o")
+  $selectedRouteSetup = Assert-KnownSelectedRoute -Route $SelectedRoute -Path $SelectedRouteSetupPath
   $preflightCommand = "npm run demo:private-windows-preflight -- -EvidenceRoot `"$PreflightEvidenceRoot`" -SelectedRoute $SelectedRoute"
   $firstRouteCommand = "npm run proof:first-route:windows -- -Route temp-fixture -EvidenceRoot `"$FirstRouteEvidenceRoot`""
   $selectedRouteCommand = "npm run proof:route:windows -- -Route $SelectedRoute -EvidenceRoot `"$SelectedRouteEvidenceRoot`""
@@ -242,6 +292,7 @@ try {
   }
 
   $commands = [PSCustomObject]@{
+    selectedRouteSetup = "node scripts\run-setup-route.mjs --route `"$SelectedRoute`""
     privateWindowsPreflight = $preflightCommand
     firstRouteProof = $firstRouteCommand
     selectedRouteProof = $selectedRouteCommand
@@ -298,6 +349,7 @@ try {
     artifacts = [PSCustomObject]@{
       privateV1Proof = $SummaryPath
       privateV1ProofCheck = $PrivateV1ProofCheckPath
+      selectedRouteSetup = $SelectedRouteSetupPath
       privateWindowsPreflight = $PreflightSummaryPath
       firstRouteCompletionCheck = $FirstRouteCompletionPath
       selectedRouteCompletionCheck = $SelectedRouteCompletionPath
@@ -307,6 +359,8 @@ try {
       firstRoute = "temp-fixture"
       firstRouteStatus = $firstRouteCompletion.status
       selectedRoute = $SelectedRoute
+      selectedRouteSetupStatus = $selectedRouteSetup.status
+      selectedRouteCanonical = $selectedRouteSetup.route
       selectedRouteStatus = $selectedRouteCompletion.status
     }
     firstRouteCompletion = [PSCustomObject]@{
