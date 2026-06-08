@@ -39,6 +39,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
   assertReadyCheck(summary, "exact-proof-import-artifact");
   assertReadyCheck(summary, "openai-fixture-smoke");
   assertReadyCheck(summary, "openai-live-smoke");
+  assertReadyCheck(summary, "openai-native-advisor-contract");
   assertReadyCheck(summary, "setup-doctor");
   assertReadyCheck(summary, "route-setup-validation");
   assertReadyCheck(summary, "native-executor-coverage");

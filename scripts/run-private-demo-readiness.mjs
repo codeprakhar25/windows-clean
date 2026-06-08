@@ -28,6 +28,8 @@ export function buildPrivateDemoReadinessSummary({
   const firstRouteCompletionCheck = readText(path.join(root, "scripts", "run-first-route-completion-check.mjs"));
   const selectedRouteCompletionCheck = readText(path.join(root, "scripts", "run-route-completion-check.mjs"));
   const openAiSmokeRunner = readText(path.join(root, "scripts", "run-openai-advisor-smoke.mjs"));
+  const openAiAgent = readText(path.join(root, "src", "openai-agent.mjs"));
+  const nativeOpenAiAgent = readText(path.join(root, "src-tauri", "src", "main.rs"));
   const envExample = readText(path.join(root, ".env.example"));
   const readme = readText(path.join(root, "README.md"));
   const windowsSetup = readText(path.join(root, "WINDOWS_REAL_DATA_SETUP.md"));
@@ -111,6 +113,21 @@ export function buildPrivateDemoReadinessSummary({
         windowsSetup.includes("npm run openai:smoke -- --route npm-cache") &&
         agentDesign.includes("The OpenAI integration is advisory, not an executor."),
       detail: "The live OpenAI smoke must use .env/API-key mode, keep fixture-only separate, and document advisory-only authority before the private demo."
+    }),
+    buildCheck({
+      id: "openai-native-advisor-contract",
+      label: "OpenAI native advisor contract",
+      passed: openAiAgent.includes("NATIVE_OPENAI_AGENT_COMMAND") &&
+        openAiAgent.includes("openai_agent_advice") &&
+        openAiAgent.includes("When context.liveRouteValidation is present") &&
+        nativeOpenAiAgent.includes("openai_agent_advice") &&
+        nativeOpenAiAgent.includes("OPENAI_API_KEY") &&
+        nativeOpenAiAgent.includes("dotenv_candidate_paths") &&
+        nativeOpenAiAgent.includes("openai_response_format") &&
+        nativeOpenAiAgent.includes("spaceguard_cleanup_agent_advice") &&
+        nativeOpenAiAgent.includes("When context.liveRouteValidation is present") &&
+        nativeOpenAiAgent.includes("OpenAI advice is advisory only"),
+      detail: "The Tauri desktop advisor must read .env, use strict structured advice, preserve advisory-only authority, and honor the selected live route contract."
     }),
     buildCheck({
       id: "setup-doctor",
