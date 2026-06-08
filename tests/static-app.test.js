@@ -109,6 +109,7 @@ assert(app.includes("buildCleanupCandidates(scan, runtime, setupRouteInput)"), "
 assert(app.includes("buildExecutionGate"), "app should use tested execution dispatch gate guardrails");
 assert(app.includes("buildExecutionPrerequisites"), "app should use tested route-specific execution prerequisites");
 assert(app.includes("buildWorkflowLocks"), "app should use tested workflow lock policy for proof handoff");
+assert(app.includes("buildBaselinePromotion"), "app should use tested baseline promotion after proof handoff");
 assert(app.includes("buildRouteSetupChecklist"), "app should use tested route setup checklist guardrails");
 assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
 assert(app.includes("Execution prerequisites"), "user gate should render route-specific execution prerequisite blockers");
@@ -140,6 +141,10 @@ assert(app.includes("disabled={targetSwitchLocked && candidate.id !== selectedId
 assert(app.includes("disabled={routeSetupLocked && route.routeInput !== selectedRouteInput}"), "route setup should disable other routes while proof export is pending");
 assert(app.includes("Current route is locked until proof export and support bundle capture finish."), "route setup should explain proof handoff route lock");
 assert(app.includes("workflowLocks?.noOpExecution"), "proof panel should render accepted zero-byte no-op handoff state");
+assert(app.includes("buildProofCandidateFromExecutionRecord"), "proof panel should preserve executed target proof context after baseline promotion");
+assert(app.includes("recipeId: selectedCandidate.recipeId"), "execution records should preserve recipe id for post-run proof matching");
+assert(app.includes("setScan(baselinePromotion.activeScan)"), "proof export should promote accepted post-run scan to active cleanup baseline");
+assert(app.includes("Post-run scan promoted as the active cleanup baseline."), "proof export should tell the operator when baseline promotion succeeds");
 assert(!app.includes("npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted"), "proof panel should not rely on a manual CLI acceptance checkbox");
 assert(
   /setSelectedId=\{\(id\) => \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setPostRunScan\(null\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}\}/.test(app),
@@ -242,6 +247,7 @@ assert(realWorkflow.includes("spaceguard-execution-gate/v1"), "real workflow hel
 assert(realWorkflow.includes("proof-handoff"), "execution gate should expose proof handoff as a dispatch guardrail");
 assert(realWorkflow.includes("baseline-scan-current"), "execution gate should expose active scan freshness as a dispatch guardrail");
 assert(realWorkflow.includes("spaceguard-workflow-locks/v1"), "real workflow helper should expose a stable workflow lock schema");
+assert(realWorkflow.includes("spaceguard-baseline-promotion/v1"), "real workflow helper should expose a stable baseline promotion schema");
 assert(!realWorkflow.includes("temp-fixture"), "real workflow helper must not point app setup at seeded fixture routes");
 assert(!realWorkflow.includes("first-route-proof"), "real workflow helper must not block real routes behind seeded first-route proof rows");
 assert(!realWorkflow.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"), "real workflow helper must not emit seeded proof env vars");

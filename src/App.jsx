@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildAppAgentTaskQueue, buildExecutionGate, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowLocks, formatBytes, renderInAppSupportBundleMarkdown } from "./real-workflow.mjs";
+import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowLocks, formatBytes, renderInAppSupportBundleMarkdown } from "./real-workflow.mjs";
 import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -306,9 +306,13 @@ function App() {
     () => buildCurrentPlanId({ candidate: selectedCandidate, scanFingerprint }),
     [selectedCandidate, scanFingerprint]
   );
+  const proofCandidate = useMemo(
+    () => selectedCandidate || buildProofCandidateFromExecutionRecord(executionRecord),
+    [selectedCandidate, executionRecord]
+  );
   const postRunProof = useMemo(
-    () => buildPostRunProof({ candidate: selectedCandidate, executionRecord, postRunScan }),
-    [selectedCandidate, executionRecord, postRunScan]
+    () => buildPostRunProof({ candidate: proofCandidate, executionRecord, postRunScan }),
+    [proofCandidate, executionRecord, postRunScan]
   );
   const expectedConfirmation = selectedCandidate
     ? `${CONFIRM_PREFIX} ${selectedCandidate.routeInput}`
@@ -484,6 +488,7 @@ function App() {
         source: `native-${selectedCandidate.executor}-executor`,
         id: selectedCandidate.id,
         title: selectedCandidate.title,
+        recipeId: selectedCandidate.recipeId,
         route: selectedCandidate.route,
         routeInput: selectedCandidate.routeInput,
         targetPath: selectedCandidate.targetPath,
@@ -493,6 +498,8 @@ function App() {
         resultMode: result.mode || "",
         reason: result.reason || "",
         volumeProof: result.volumeProof || null,
+        sourceFinding: selectedCandidate.sourceFinding || null,
+        reviewTarget: selectedCandidate.reviewTarget || null,
         entries: result.entries
       };
       setExecutionResult(result);
@@ -572,13 +579,29 @@ function App() {
         route: selectedCandidate.route,
         proofKind: "support-bundle"
       });
+      const supportBundleWrittenNow = Boolean(acceptedCheck.canAccept && supportWrite?.written);
+      const baselinePromotion = buildBaselinePromotion({
+        currentScan: scan,
+        postRunScan,
+        executionRecord,
+        workflowProofAccepted: Boolean(acceptedCheck.canAccept),
+        supportBundleWritten: supportBundleWrittenNow
+      });
       setWorkflowProofCheck(acceptedCheck);
       setWorkflowProofAccepted(Boolean(acceptedCheck.canAccept));
       setSupportBundleWrite(supportWrite);
+      if (baselinePromotion.canPromote) {
+        setScan(baselinePromotion.activeScan);
+        setSelectedId("");
+        setConsentChecked(false);
+        setConfirmationText("");
+        setPermanentRemovalConfirmed(false);
+        setArchiveDestination("");
+      }
       setProofExportStatus("complete");
       setProofExportMessage(
         acceptedCheck.canAccept
-          ? `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE}, ${workflowWrite.fileName || WORKFLOW_PROOF_FILE}, ${proofCheckWrite.fileName || WORKFLOW_PROOF_CHECK_FILE}, and ${supportWrite.fileName || SUPPORT_BUNDLE_FILE} into the runner working directory. Workflow proof accepted by in-app verifier. Support bundle captured.`
+          ? `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE}, ${workflowWrite.fileName || WORKFLOW_PROOF_FILE}, ${proofCheckWrite.fileName || WORKFLOW_PROOF_CHECK_FILE}, and ${supportWrite.fileName || SUPPORT_BUNDLE_FILE} into the runner working directory. Workflow proof accepted by in-app verifier. Support bundle captured.${baselinePromotion.canPromote ? " Post-run scan promoted as the active cleanup baseline." : ""}`
           : `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE}, ${workflowWrite.fileName || WORKFLOW_PROOF_FILE}, ${proofCheckWrite.fileName || WORKFLOW_PROOF_CHECK_FILE}, and ${supportWrite.fileName || SUPPORT_BUNDLE_FILE} into the runner working directory. Workflow proof blocked by in-app verifier: ${acceptedCheck.blockers.length} blocker(s).`
       );
     } catch (error) {
@@ -2204,6 +2227,21 @@ function buildScanFingerprint(scan) {
     scan.totalBytes || 0,
     scan.volume?.freeBytes || 0
   ].join(":");
+}
+
+function buildProofCandidateFromExecutionRecord(executionRecord) {
+  if (!executionRecord) return null;
+  return {
+    id: executionRecord.id,
+    title: executionRecord.title,
+    recipeId: executionRecord.recipeId,
+    route: executionRecord.route,
+    routeInput: executionRecord.routeInput,
+    targetPath: executionRecord.targetPath,
+    bytes: Number(executionRecord.expectedBytes || executionRecord.bytes || 0),
+    sourceFinding: executionRecord.sourceFinding || null,
+    reviewTarget: executionRecord.reviewTarget || null
+  };
 }
 
 function buildCurrentPlanId({ candidate, scanFingerprint }) {

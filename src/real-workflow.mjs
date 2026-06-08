@@ -759,6 +759,66 @@ export function buildWorkflowLocks({
   };
 }
 
+export function buildBaselinePromotion({
+  currentScan = null,
+  postRunScan = null,
+  executionRecord = null,
+  workflowProofAccepted = false,
+  supportBundleWritten = false
+} = {}) {
+  const executionTime = Date.parse(executionRecord?.executedAt || "");
+  const postRunTime = Date.parse(postRunScan?.generatedAt || "");
+  const acceptedPositiveExecution = Boolean(executionRecord?.accepted && Number(executionRecord?.bytes || 0) > 0);
+  const postRunScanCurrent = Boolean(
+    Number.isFinite(executionTime) &&
+      Number.isFinite(postRunTime) &&
+      postRunTime >= executionTime
+  );
+  const canPromote = Boolean(
+    acceptedPositiveExecution &&
+      workflowProofAccepted &&
+      supportBundleWritten &&
+      postRunScan &&
+      postRunScanCurrent
+  );
+
+  return {
+    schemaVersion: "spaceguard-baseline-promotion/v1",
+    canPromote,
+    activeScan: canPromote ? postRunScan : currentScan,
+    promotedAt: canPromote ? new Date().toISOString() : "",
+    reason: canPromote
+      ? "Post-run scan is verified and can become the next cleanup baseline."
+      : "Keep the current active scan until accepted proof, support bundle, and a current post-run scan are available.",
+    rows: [
+      guardrailRow({
+        id: "accepted-positive-execution",
+        label: "Accepted positive execution",
+        passed: acceptedPositiveExecution,
+        detail: acceptedPositiveExecution ? "A positive native execution was accepted." : "No positive accepted execution is available."
+      }),
+      guardrailRow({
+        id: "proof-accepted",
+        label: "Workflow proof accepted",
+        passed: Boolean(workflowProofAccepted),
+        detail: workflowProofAccepted ? "Workflow proof verifier accepted the route." : "Workflow proof is not accepted."
+      }),
+      guardrailRow({
+        id: "support-bundle-written",
+        label: "Support bundle written",
+        passed: Boolean(supportBundleWritten),
+        detail: supportBundleWritten ? "Support bundle was captured." : "Support bundle capture is missing."
+      }),
+      guardrailRow({
+        id: "post-run-scan-current",
+        label: "Post-run scan current",
+        passed: postRunScanCurrent,
+        detail: postRunScanCurrent ? "Post-run scan is newer than the execution." : "Post-run scan is missing or predates the execution."
+      })
+    ]
+  };
+}
+
 const SUPPORT_BUNDLE_PROOF_ARTIFACTS = [
   "spaceguard-selected-route-proof-packet.md",
   "spaceguard-real-workflow-proof.md",

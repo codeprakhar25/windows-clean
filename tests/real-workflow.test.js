@@ -328,6 +328,46 @@ const assert = require("assert");
   });
   assert.strictEqual(currentBaselineAfterHandoffGate.ready, true, "execution gate should allow next dispatch after the active scan baseline is newer than the accepted execution");
 
+  const acceptedBaselinePromotion = workflow.buildBaselinePromotion({
+    currentScan: {
+      generatedAt: "2026-06-08T14:58:00.000Z",
+      findings: []
+    },
+    postRunScan: {
+      generatedAt: postRunGeneratedAt,
+      findings: [{ recipeId: "npm-cache" }]
+    },
+    executionRecord: {
+      accepted: true,
+      bytes: 1024,
+      executedAt
+    },
+    workflowProofAccepted: true,
+    supportBundleWritten: true
+  });
+  assert.strictEqual(acceptedBaselinePromotion.canPromote, true, "accepted proof handoff should promote the newer post-run scan as the next active baseline");
+  assert.strictEqual(acceptedBaselinePromotion.activeScan.generatedAt, postRunGeneratedAt, "baseline promotion should use the post-run scan");
+
+  const staleBaselinePromotion = workflow.buildBaselinePromotion({
+    currentScan: {
+      generatedAt: "2026-06-08T14:58:00.000Z",
+      findings: []
+    },
+    postRunScan: {
+      generatedAt: "2026-06-08T14:59:00.000Z",
+      findings: [{ recipeId: "npm-cache" }]
+    },
+    executionRecord: {
+      accepted: true,
+      bytes: 1024,
+      executedAt
+    },
+    workflowProofAccepted: true,
+    supportBundleWritten: true
+  });
+  assert.strictEqual(staleBaselinePromotion.canPromote, false, "baseline promotion should reject a post-run scan that predates execution");
+  assert.strictEqual(staleBaselinePromotion.activeScan.generatedAt, "2026-06-08T14:58:00.000Z", "stale promotion should keep the current active scan");
+
   const inAppBundle = workflow.buildInAppSupportBundleReport({
     generatedAt: "2026-06-08T19:30:00.000Z",
     routeInput: "npm-cache",
