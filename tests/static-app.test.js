@@ -250,6 +250,7 @@ assert(app.includes("step.actionType"), "Windows setup assistant workflow should
 assert(app.includes("post-run-rescan"), "Windows setup assistant UI should expose post-run rescan workflow step");
 assert(app.includes("proof-import"), "Windows setup assistant UI should expose proof import workflow step");
 assert(app.includes("appCloseHandoff"), "Windows setup assistant UI should render the app-close proof handoff");
+assert(app.includes("appCloseHandoff.finalizeCommand"), "Windows setup assistant UI should render the route-specific finalize command");
 assert(app.includes("Proof handoff"), "Windows setup assistant should label the first-route proof handoff");
 assert(app.includes("spaceguard-real-workflow-proof.md"), "Windows setup assistant should surface the workflow proof export file");
 assert(app.includes("spaceguard-selected-route-proof-packet.md"), "Windows setup assistant should surface the selected-route proof export file");

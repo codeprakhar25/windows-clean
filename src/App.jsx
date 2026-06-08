@@ -5070,7 +5070,7 @@ function WindowsSetupAssistantPanel({ assistant, onWorkflowStep, onExportWorkflo
                 <div className="grid gap-1 md:grid-cols-2">
                   <span className="font-mono">{appCloseHandoff.selectedRouteProofPacketPath || ".\\spaceguard-selected-route-proof-packet.md"}</span>
                   <span className="font-mono">{appCloseHandoff.workflowProofPath || ".\\spaceguard-real-workflow-proof.md"}</span>
-                  <span className="font-mono md:col-span-2">{appCloseHandoff.finalizeFirstRouteCommand || "npm run proof:first-route:windows:finalize"}</span>
+                  <span className="font-mono md:col-span-2">{appCloseHandoff.finalizeCommand || appCloseHandoff.finalizeFirstRouteCommand || "npm run proof:first-route:windows:finalize"}</span>
                 </div>
               </div>
             ) : null}

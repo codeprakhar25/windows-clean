@@ -800,7 +800,8 @@ const assert = require("assert");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.appCloseHandoff.schemaVersion, "spaceguard-in-app-proof-handoff/v1", "setup assistant should expose an in-app proof handoff schema");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.appCloseHandoff.workflowProofPath, ".\\spaceguard-real-workflow-proof.md", "proof handoff should name the workflow proof export path");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.appCloseHandoff.selectedRouteProofPacketPath, ".\\spaceguard-selected-route-proof-packet.md", "proof handoff should name the selected-route proof packet export path");
-  assert(nativeSetupAssistant.realWorkflow.appCloseHandoff.finalizeFirstRouteCommand.includes("proof:first-route:windows:finalize"), "proof handoff should expose the first-route finalize command");
+  assert(nativeSetupAssistant.realWorkflow.appCloseHandoff.requiredBeforeClosingApp.includes("native-volume-proof-captured"), "selected-route proof handoff should require native volume proof before closing");
+  assert(nativeSetupAssistant.realWorkflow.appCloseHandoff.finalizeCommand.includes("proof:route:windows:finalize"), "selected-route proof handoff should expose the selected-route finalize command");
   assert(nativeSetupAssistant.realWorkflow.appCloseHandoff.validateWorkflowProofCommand.includes("validate:workflow-proof"), "proof handoff should expose workflow proof validation");
   const unsafeSetupAssistant = guard.buildWindowsSetupAssistant({
     nativeCapability: { available: true },
@@ -4186,6 +4187,38 @@ const assert = require("assert");
   assert(completeWorkflowProof.rows.some((row) => row.id === "reclaimed-bytes" && row.passed), "complete workflow proof should include positive recovered-byte evidence");
   assert(guard.buildRealWorkflowProofPacketMarkdown(completeWorkflowProof).includes("Status: workflow-proven"), "workflow proof markdown should include final status");
   assert(guard.buildRealWorkflowProofPacketMarkdown(completeWorkflowProof).includes("App-close contract: spaceguard-first-route-app-close-contract/v1"), "workflow proof markdown should include app-close contract status");
+  const selectedRouteWorkflowProof = guard.buildRealWorkflowProofPacket({
+    windowsSetupAssistant: {
+      destructiveCommands: false,
+      realWorkflow: {
+        route: "bounded-npm-cache-delete",
+        routeInput: "npm-cache",
+        title: "npm cache cleanup",
+        status: "next-route-ready"
+      }
+    },
+    scopedExecutorCommandFlow: {
+      route: "bounded-npm-cache-delete",
+      proofPacket: {
+        schemaVersion: "spaceguard-selected-route-proof-packet/v1",
+        status: "proof-complete",
+        route: "bounded-npm-cache-delete",
+        routeInput: "npm-cache",
+        title: "npm cache cleanup",
+        readyForNextRoute: true,
+        validationImport: { status: "import-complete", complete: true, route: "bounded-npm-cache-delete" },
+        counts: { ledgerEntries: 1, matchedRows: 1, reclaimedBytes: 4096 }
+      }
+    },
+    executionProofHandoff: { status: "proof-complete" },
+    scanSession: currentScanSession,
+    generatedAt: "2026-06-05T02:22:00.000Z"
+  });
+  assert.strictEqual(selectedRouteWorkflowProof.status, "workflow-proven", "non-temp selected-route proof should still complete the real workflow proof");
+  assert.strictEqual(selectedRouteWorkflowProof.appCloseContract.schemaVersion, "spaceguard-selected-route-app-close-contract/v1", "non-temp selected-route proof should use the selected-route app-close contract");
+  assert.strictEqual(selectedRouteWorkflowProof.appCloseContract.nextRouteBlockedUntil, "validate:workflow-proof accepted", "selected-route app-close contract should keep the in-app close gate on workflow proof acceptance");
+  assert(selectedRouteWorkflowProof.appCloseContract.requiredBeforeClosingApp.includes("native-volume-proof-captured"), "selected-route app-close contract should require native volume proof before closing");
+  assert(guard.buildRealWorkflowProofPacketMarkdown(selectedRouteWorkflowProof).includes("App-close contract: spaceguard-selected-route-app-close-contract/v1"), "selected-route workflow proof markdown should include selected-route app-close contract status");
   const zeroByteWorkflowProof = guard.buildRealWorkflowProofPacket({
     windowsSetupAssistant: completeWorkflowSetupAssistant,
     scopedExecutorCommandFlow: {

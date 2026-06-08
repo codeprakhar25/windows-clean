@@ -8776,7 +8776,7 @@ export function buildRealWorkflowProofPacket({
   const positiveRecoveredBytes = reclaimedBytes > 0;
   const readyForNextRoute = Boolean(proofPacket.readyForNextRoute && importComplete && positiveRecoveredBytes);
   const unsafeRuntime = Boolean(windowsSetupAssistant?.destructiveCommands || windowsSetupAssistant?.status === "unsafe-runtime");
-  const appCloseContract = buildRealWorkflowAppCloseContract();
+  const appCloseContract = buildRealWorkflowAppCloseContract({ route });
   const rows = [
     buildRealWorkflowProofRow({
       id: "native-scan-current",
@@ -8863,20 +8863,28 @@ export function buildRealWorkflowProofPacket({
   };
 }
 
-function buildRealWorkflowAppCloseContract() {
+function buildRealWorkflowAppCloseContract({ route = "" } = {}) {
+  const selectedRoute = String(route || "").trim() && String(route || "").trim() !== "known-temp-delete";
+  const commonRequirements = [
+    "post-run-rescan-matched",
+    "selected-route-proof-packet-exported",
+    "selected-route-proof-import-complete",
+    "spaceguard-real-workflow-proof-exported"
+  ];
   return {
-    schemaVersion: "spaceguard-first-route-app-close-contract/v1",
+    schemaVersion: selectedRoute
+      ? "spaceguard-selected-route-app-close-contract/v1"
+      : "spaceguard-first-route-app-close-contract/v1",
     workflowProofPath: ".\\spaceguard-real-workflow-proof.md",
     selectedRouteProofPacketPath: ".\\spaceguard-selected-route-proof-packet.md",
     expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
     minimumReclaimedBytes: 1,
-    nextRouteBlockedUntil: "validate:first-route-completion accepted",
-    requiredBeforeClosingApp: [
-      "post-run-rescan-matched",
-      "selected-route-proof-packet-exported",
-      "selected-route-proof-import-complete",
-      "spaceguard-real-workflow-proof-exported"
-    ]
+    nextRouteBlockedUntil: selectedRoute
+      ? "validate:workflow-proof accepted"
+      : "validate:first-route-completion accepted",
+    requiredBeforeClosingApp: selectedRoute
+      ? ["native-volume-proof-captured", ...commonRequirements]
+      : commonRequirements
   };
 }
 
@@ -16528,7 +16536,7 @@ function buildInAppRealWorkflow({
     title,
     envVar: spec?.envVar || "",
     panelId: spec?.panelId || "",
-    appCloseHandoff: buildInAppProofHandoff({ routeInput }),
+    appCloseHandoff: buildInAppProofHandoff({ routeInput, route }),
     proofStatus,
     proofImportStatus: validationImport?.status || "not-imported",
     steps,
@@ -16543,14 +16551,20 @@ function buildInAppRealWorkflow({
   };
 }
 
-function buildInAppProofHandoff({ routeInput = "temp-fixture" } = {}) {
-  const contract = buildRealWorkflowAppCloseContract();
+function buildInAppProofHandoff({ routeInput = "temp-fixture", route = "" } = {}) {
+  const contract = buildRealWorkflowAppCloseContract({ route });
+  const selectedRoute = String(route || "").trim() && String(route || "").trim() !== "known-temp-delete";
+  const routeSlug = String(routeInput || "selected-route").trim() || "selected-route";
+  const finalizeCommand = selectedRoute
+    ? `npm run proof:route:windows:finalize -- -Route ${routeSlug} -EvidenceRoot .\\evidence\\route-proof-${routeSlug}-YYYYMMDD-HHMMSS`
+    : "npm run proof:first-route:windows:finalize -- -EvidenceRoot .\\evidence\\first-route-proof-YYYYMMDD-HHMMSS";
   return {
     schemaVersion: "spaceguard-in-app-proof-handoff/v1",
     routeInput,
     selectedRouteProofPacketPath: ".\\spaceguard-selected-route-proof-packet.md",
     workflowProofPath: contract.workflowProofPath,
     validateWorkflowProofCommand: `npm run validate:workflow-proof -- --file ${contract.workflowProofPath}`,
+    finalizeCommand,
     finalizeFirstRouteCommand: "npm run proof:first-route:windows:finalize -- -EvidenceRoot .\\evidence\\first-route-proof-YYYYMMDD-HHMMSS",
     requiredBeforeClosingApp: contract.requiredBeforeClosingApp
   };
