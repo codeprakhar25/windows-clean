@@ -3979,7 +3979,12 @@ export default function App() {
   }
 
   function exportSelectedRouteProofPacket() {
-    const exportedPacket = { ...(scopedExecutorCommandFlow.proofPacket || {}), generatedAt: new Date().toISOString() };
+    const proofPacket = scopedExecutorCommandFlow.proofPacket;
+    if (!proofPacket || proofPacket.status !== "proof-complete") {
+      focusWorkflowPanel("scoped-executor-command-flow-panel");
+      return false;
+    }
+    const exportedPacket = { ...proofPacket, generatedAt: new Date().toISOString() };
     const markdown = buildSelectedRouteProofPacketMarkdown(exportedPacket);
     const body = [
       markdown,
@@ -3993,6 +3998,7 @@ export default function App() {
       "```"
     ].join("\n");
     downloadTextFile("spaceguard-selected-route-proof-packet.md", body, "text/markdown;charset=utf-8");
+    return true;
   }
 
   function exportRealWorkflowProofPacket() {
@@ -5237,6 +5243,7 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
   const agentPrompt = buildScopedExecutorAgentPrompt(flow);
   const launchPacket = flow.launchPacket || null;
   const proofPacket = flow.proofPacket || null;
+  const proofPacketComplete = Boolean(proofPacket && proofPacket.status === "proof-complete");
   const launchChecks = (launchPacket?.checks || []).slice(0, 6);
   const proofLedgerRows = (proofPacket?.ledgerEntries || []).slice(0, 3);
   const proofRescanRows = (proofPacket?.rescanRows || []).slice(0, 3);
@@ -5524,11 +5531,11 @@ function ScopedExecutorCommandFlowPanel({ flow, agent = {}, onAction, onSelectRo
             <Download className="h-4 w-4" />
             Export launch packet
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={onExportProofPacket} disabled={!proofPacket}>
+          <Button type="button" variant="outline" size="sm" onClick={onExportProofPacket} disabled={!proofPacketComplete}>
             <Download className="h-4 w-4" />
             Export proof packet
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={onPrepareProofImport} disabled={!proofPacket || proofPacket.status !== "proof-complete"}>
+          <Button type="button" variant="outline" size="sm" onClick={onPrepareProofImport} disabled={!proofPacketComplete}>
             <ClipboardList className="h-4 w-4" />
             Prepare validation import
           </Button>

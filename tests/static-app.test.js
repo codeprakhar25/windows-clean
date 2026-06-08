@@ -400,6 +400,8 @@ assert(model.includes("Validation import:"), "selected-route proof markdown shou
 assert(model.includes("buildSelectedRouteProofValidationImportStatus"), "model should derive selected-route proof validation import status");
 assert(app.includes("Export proof packet"), "command flow UI should export the selected-route proof packet");
 assert(app.includes("prepareSelectedRouteProofImport"), "command flow should prepare selected-route proof import");
+assert(app.includes('if (!proofPacket || proofPacket.status !== "proof-complete")'), "selected-route proof packet export should require a completed proof packet");
+assert(app.includes('disabled={!proofPacketComplete}'), "selected-route proof packet export button should stay disabled until proof is complete");
 assert(app.includes('proofPacket.status !== "proof-complete"'), "selected-route proof import preparation should require a completed proof packet");
 assert(app.includes("Prepare validation import"), "command flow UI should preload proof into validation import");
 assert(app.includes("proofPacket?.validationImport"), "command flow UI should display selected-route proof validation import status");
