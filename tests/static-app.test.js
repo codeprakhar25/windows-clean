@@ -103,8 +103,11 @@ assert(app.includes("requestOpenAIAgentAdvice"), "OpenAI advisor should be wired
 assert(app.includes("buildOpenAIAgentRecommendationBroker"), "OpenAI advisor should broker model recommendations through deterministic app gates");
 assert(app.includes("./real-workflow.mjs"), "app should import tested real workflow helpers");
 assert(app.includes("buildRouteReadiness"), "app should use tested route readiness guardrails");
+assert(app.includes("buildExecutionPrerequisites"), "app should use tested route-specific execution prerequisites");
 assert(app.includes("buildRouteSetupChecklist"), "app should use tested route setup checklist guardrails");
 assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
+assert(app.includes("Execution prerequisites"), "user gate should render route-specific execution prerequisite blockers");
+assert(app.includes("executionPrerequisites.ready"), "execute button should stay locked until route-specific prerequisites pass");
 assert(app.includes("executionRecord?.accepted"), "proof export should require an accepted native execution record");
 assert(app.includes("targetSwitchLocked"), "cleanup queue should lock target switching after accepted execution until proof export completes");
 assert(app.includes("workflowProofAccepted"), "cleanup queue should require accepted workflow proof validation before unlocking another target");

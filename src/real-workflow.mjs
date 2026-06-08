@@ -532,6 +532,86 @@ export function buildRouteReadiness({ recipe = {}, finding = {}, runtime = {} } 
   };
 }
 
+export function buildExecutionPrerequisites({
+  candidate = null,
+  archiveDestination = "",
+  permanentRemovalConfirmed = false
+} = {}) {
+  const rows = [];
+  if (!candidate) {
+    rows.push(guardrailRow({
+      id: "selected-target",
+      label: "Selected target",
+      passed: false,
+      detail: "Select one cleanup target before execution."
+    }));
+  }
+
+  if (candidate?.requiresArchiveDestination || candidate?.route === "item-review-large-files") {
+    const destination = String(archiveDestination || "").trim();
+    const targetPath = String(candidate?.targetPath || candidate?.reviewTarget?.path || "");
+    const destinationDrive = getWindowsDrive(destination);
+    const sourceDrive = getWindowsDrive(targetPath);
+    const destinationPresent = Boolean(destination);
+    const destinationAbsolute = isAbsoluteWindowsPath(destination);
+    const differentDrive = Boolean(destinationAbsolute && destinationDrive && sourceDrive && destinationDrive !== sourceDrive);
+    const protectedDestination = isProtectedArchiveDestination(destination);
+
+    rows.push(guardrailRow({
+      id: "archive-destination",
+      label: "Archive destination",
+      passed: destinationPresent,
+      detail: destinationPresent ? `Archive destination set to ${destination}.` : "Choose an archive destination before running this route."
+    }));
+    rows.push(guardrailRow({
+      id: "archive-destination-absolute",
+      label: "Absolute destination path",
+      passed: destinationAbsolute,
+      detail: destinationAbsolute ? "Archive destination is an absolute Windows path." : "Use an absolute Windows path such as D:\\SpaceGuardArchive."
+    }));
+    rows.push(guardrailRow({
+      id: "archive-destination-drive",
+      label: "Different destination drive",
+      passed: differentDrive,
+      detail: differentDrive
+        ? "Archive destination is on a different drive from the selected file."
+        : "Archive destination must be on a different drive from the selected file."
+    }));
+    rows.push(guardrailRow({
+      id: "archive-destination-protected",
+      label: "Protected destination",
+      passed: destinationPresent && destinationAbsolute && !protectedDestination,
+      detail: protectedDestination
+        ? "Archive destination cannot be under Windows, Program Files, ProgramData, AppData, Temp, or Recycle Bin roots."
+        : "Archive destination is outside protected system and app-data roots."
+    }));
+  }
+
+  if (candidate?.requiresPermanentConfirmation || candidate?.route === "shell-recycle-bin") {
+    rows.push(guardrailRow({
+      id: "permanent-removal-confirmation",
+      label: "Permanent removal confirmation",
+      passed: Boolean(permanentRemovalConfirmed),
+      detail: permanentRemovalConfirmed
+        ? "Permanent Recycle Bin removal was explicitly confirmed."
+        : "Confirm permanent Recycle Bin removal before executing this route."
+    }));
+  }
+
+  const blockers = rows.filter((row) => !row.passed);
+  return {
+    schemaVersion: "spaceguard-execution-prerequisites/v1",
+    ready: blockers.length === 0,
+    rows,
+    blockers,
+    primary: rows.length
+      ? blockers.length
+        ? `Execution is blocked by ${blockers.length} route-specific prerequisite(s).`
+        : "Route-specific execution prerequisites are satisfied."
+      : "No additional route-specific execution prerequisites."
+  };
+}
+
 function guardrailRow({ id, label, passed, detail }) {
   return {
     id,
@@ -540,6 +620,32 @@ function guardrailRow({ id, label, passed, detail }) {
     passed: Boolean(passed),
     detail
   };
+}
+
+function isAbsoluteWindowsPath(value = "") {
+  return /^[A-Za-z]:[\\/].+/.test(String(value || "").trim());
+}
+
+function getWindowsDrive(value = "") {
+  const match = String(value || "").trim().match(/^([A-Za-z]):[\\/]/);
+  return match ? match[1].toUpperCase() : "";
+}
+
+function isProtectedArchiveDestination(value = "") {
+  const normalized = String(value || "").trim().replace(/\//g, "\\").toLowerCase();
+  if (!normalized) return false;
+  const withoutDrive = normalized.replace(/^[a-z]:/, "");
+  return [
+    "\\windows",
+    "\\program files",
+    "\\program files (x86)",
+    "\\programdata",
+    "\\$recycle.bin",
+    "\\recovery",
+    "\\system volume information"
+  ].some((prefix) => withoutDrive === prefix || withoutDrive.startsWith(`${prefix}\\`)) ||
+    /\\users\\[^\\]+\\appdata(\\|$)/.test(withoutDrive) ||
+    /\\users\\[^\\]+\\appdata\\local\\temp(\\|$)/.test(withoutDrive);
 }
 
 export function buildPostRunProof({ candidate, executionRecord, postRunScan }) {

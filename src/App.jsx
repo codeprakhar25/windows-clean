@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, formatBytes } from "./real-workflow.mjs";
+import { buildExecutionPrerequisites, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, formatBytes } from "./real-workflow.mjs";
 import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -311,12 +311,19 @@ function App() {
   const expectedConfirmation = selectedCandidate
     ? `${CONFIRM_PREFIX} ${selectedCandidate.routeInput}`
     : `${CONFIRM_PREFIX} route`;
+  const executionPrerequisites = useMemo(
+    () => buildExecutionPrerequisites({
+      candidate: selectedCandidate,
+      archiveDestination,
+      permanentRemovalConfirmed
+    }),
+    [selectedCandidate, archiveDestination, permanentRemovalConfirmed]
+  );
   const canExecute = Boolean(
     selectedCandidate?.canExecute &&
       consentChecked &&
       confirmationText.trim() === expectedConfirmation &&
-      (!selectedCandidate.requiresPermanentConfirmation || permanentRemovalConfirmed) &&
-      (!selectedCandidate.requiresArchiveDestination || archiveDestination.trim()) &&
+      executionPrerequisites.ready &&
       executionStatus !== "running"
   );
   const canExportProof = Boolean(postRunProof.status === "matched" && proofReviewed && executionRecord?.accepted);
@@ -619,6 +626,7 @@ function App() {
             setPermanentRemovalConfirmed={setPermanentRemovalConfirmed}
             archiveDestination={archiveDestination}
             setArchiveDestination={setArchiveDestination}
+            executionPrerequisites={executionPrerequisites}
             canExecute={canExecute}
             executionStatus={executionStatus}
             executionError={executionError}
@@ -1192,6 +1200,7 @@ function DecisionPanel({
   setPermanentRemovalConfirmed,
   archiveDestination,
   setArchiveDestination,
+  executionPrerequisites,
   canExecute,
   executionStatus,
   executionError,
@@ -1218,6 +1227,9 @@ function DecisionPanel({
               <p className="mt-2 text-sm">{candidate.consequence}</p>
             </div>
             <RouteReadinessList rows={candidate.readinessRows} />
+            {executionPrerequisites?.rows?.length ? (
+              <RouteReadinessList rows={executionPrerequisites.rows} title="Execution prerequisites" />
+            ) : null}
             <label className="flex items-start gap-3 text-sm">
               <Checkbox checked={consentChecked} onClick={() => setConsentChecked(!consentChecked)} />
               <span>I reviewed the target, expected bytes, route flag, and consequence for this cleanup.</span>
@@ -1264,12 +1276,12 @@ function DecisionPanel({
   );
 }
 
-function RouteReadinessList({ rows = [], compact = false }) {
+function RouteReadinessList({ rows = [], compact = false, title = "Route readiness" }) {
   const visibleRows = compact ? rows.filter((row) => !row.passed).slice(0, 3) : rows;
   if (!visibleRows.length) return null;
   return (
     <div className="space-y-2 rounded-md border bg-background p-3">
-      {!compact ? <p className="text-sm font-medium">Route readiness</p> : null}
+      {!compact ? <p className="text-sm font-medium">{title}</p> : null}
       <div className={compact ? "flex flex-wrap gap-2" : "grid gap-2"}>
         {visibleRows.map((row) => (
           <div key={row.id} className={compact ? "flex items-center gap-1 rounded border px-2 py-1" : "flex items-start justify-between gap-3 rounded border px-3 py-2"}>

@@ -52,6 +52,72 @@ const assert = require("assert");
   assert.strictEqual(proof.actualBytes, 0, "selected item proof should compare the selected item, not parent finding bytes");
   assert.strictEqual(proof.targetEvidence.kind, "item", "selected item proof should record item-level evidence");
 
+  const archiveCandidate = {
+    route: "item-review-large-files",
+    routeInput: "large-files",
+    title: "old-video.mkv",
+    targetPath: "C:\\Users\\LocalUser\\Videos\\old-video.mkv",
+    requiresArchiveDestination: true
+  };
+  const missingArchiveDestination = workflow.buildExecutionPrerequisites({
+    candidate: archiveCandidate,
+    archiveDestination: ""
+  });
+  assert.strictEqual(missingArchiveDestination.ready, false, "large-file archive should require a destination before execution");
+  assert(missingArchiveDestination.rows.some((row) => row.id === "archive-destination" && !row.passed), "archive prerequisites should expose the missing destination row");
+
+  const relativeArchiveDestination = workflow.buildExecutionPrerequisites({
+    candidate: archiveCandidate,
+    archiveDestination: "Archives"
+  });
+  assert.strictEqual(relativeArchiveDestination.ready, false, "large-file archive should reject relative destinations before native execution");
+  assert(relativeArchiveDestination.rows.some((row) => row.id === "archive-destination-absolute" && !row.passed), "archive prerequisites should require an absolute Windows destination");
+
+  const sameDriveArchiveDestination = workflow.buildExecutionPrerequisites({
+    candidate: archiveCandidate,
+    archiveDestination: "C:\\SpaceGuardArchive"
+  });
+  assert.strictEqual(sameDriveArchiveDestination.ready, false, "large-file archive should reject same-drive archive destinations before native execution");
+  assert(sameDriveArchiveDestination.rows.some((row) => row.id === "archive-destination-drive" && !row.passed), "archive prerequisites should require a different drive");
+
+  const protectedArchiveDestination = workflow.buildExecutionPrerequisites({
+    candidate: archiveCandidate,
+    archiveDestination: "D:\\Windows\\SpaceGuardArchive"
+  });
+  assert.strictEqual(protectedArchiveDestination.ready, false, "large-file archive should reject protected archive destinations before native execution");
+  assert(protectedArchiveDestination.rows.some((row) => row.id === "archive-destination-protected" && !row.passed), "archive prerequisites should block protected roots");
+
+  const validArchiveDestination = workflow.buildExecutionPrerequisites({
+    candidate: archiveCandidate,
+    archiveDestination: "D:\\SpaceGuardArchive"
+  });
+  assert.strictEqual(validArchiveDestination.ready, true, "large-file archive should allow a different-drive archive destination");
+
+  const recyclePrerequisites = workflow.buildExecutionPrerequisites({
+    candidate: {
+      route: "shell-recycle-bin",
+      routeInput: "recycle-bin",
+      title: "Recycle Bin",
+      targetPath: "C:\\$Recycle.Bin",
+      requiresPermanentConfirmation: true
+    },
+    permanentRemovalConfirmed: false
+  });
+  assert.strictEqual(recyclePrerequisites.ready, false, "Recycle Bin execution should require permanent-removal confirmation");
+  assert(recyclePrerequisites.rows.some((row) => row.id === "permanent-removal-confirmation" && !row.passed), "Recycle Bin prerequisites should expose the missing permanent confirmation");
+
+  const confirmedRecyclePrerequisites = workflow.buildExecutionPrerequisites({
+    candidate: {
+      route: "shell-recycle-bin",
+      routeInput: "recycle-bin",
+      title: "Recycle Bin",
+      targetPath: "C:\\$Recycle.Bin",
+      requiresPermanentConfirmation: true
+    },
+    permanentRemovalConfirmed: true
+  });
+  assert.strictEqual(confirmedRecyclePrerequisites.ready, true, "Recycle Bin execution should unlock after explicit permanent-removal confirmation");
+
   const stillPresent = workflow.buildPostRunProof({
     candidate: selectedInstaller,
     executionRecord: {
