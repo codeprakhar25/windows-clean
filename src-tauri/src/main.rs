@@ -6593,6 +6593,10 @@ fn recycle_bin_target_reject_code(value: &str) -> Option<&'static str> {
 }
 
 fn downloads_cleanup_target_reject_code(value: &str) -> Option<&'static str> {
+    downloads_cleanup_target_reject_code_at(value, SystemTime::now())
+}
+
+fn downloads_cleanup_target_reject_code_at(value: &str, now: SystemTime) -> Option<&'static str> {
     let path = resolve_dry_run_target(value);
     if path.as_os_str().is_empty() {
         return Some("target-missing");
@@ -6627,7 +6631,7 @@ fn downloads_cleanup_target_reject_code(value: &str) -> Option<&'static str> {
     if !should_count_file(MeasureKind::DownloadInstallers, &path) {
         return Some("target-not-downloads-file");
     }
-    if path_age_days(&path).unwrap_or(0) < 30 {
+    if path_age_days_at(&path, now).unwrap_or(0) < 30 {
         return Some("target-too-recent");
     }
     None
@@ -11811,8 +11815,12 @@ fn stable_item_id(recipe_id: &str, path: &Path) -> String {
 }
 
 fn path_age_days(path: &Path) -> Option<u64> {
+    path_age_days_at(path, SystemTime::now())
+}
+
+fn path_age_days_at(path: &Path, now: SystemTime) -> Option<u64> {
     let modified = fs::metadata(path).ok()?.modified().ok()?;
-    let elapsed = SystemTime::now().duration_since(modified).ok()?;
+    let elapsed = now.duration_since(modified).ok()?;
     Some(elapsed.as_secs() / 86_400)
 }
 
@@ -12391,6 +12399,78 @@ mod tests {
         let _ = fs::remove_dir(&root);
         let _ = fs::remove_dir(local_app_data.join("pip"));
         let _ = fs::remove_dir(&local_app_data);
+    }
+
+    #[test]
+    fn downloads_target_validation_accepts_only_old_reviewed_installer_files() {
+        let user_profile = unique_test_dir("downloads-target-proof");
+        let downloads = user_profile.join("Downloads");
+        let old_installer = downloads.join("setup-old.exe");
+        let recent_installer = downloads.join("setup-recent.msi");
+        let old_note = downloads.join("notes.txt");
+        let outside_installer = user_profile.join("Desktop").join("setup-old.exe");
+        let folder_target = downloads.join("archive.zip");
+
+        fs::create_dir_all(&downloads).expect("create downloads dir");
+        fs::create_dir_all(outside_installer.parent().expect("outside parent"))
+            .expect("create outside dir");
+        fs::create_dir_all(&folder_target).expect("create folder target");
+        fs::write(&old_installer, b"old installer").expect("write old installer");
+        fs::write(&recent_installer, b"recent installer").expect("write recent installer");
+        fs::write(&old_note, b"old note").expect("write old note");
+        fs::write(&outside_installer, b"outside installer").expect("write outside installer");
+
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _restore_profile = EnvRestore::set("USERPROFILE", &user_profile);
+        let _restore_home = EnvRestore::set("HOME", &user_profile);
+        let old_enough_now = SystemTime::now() + Duration::from_secs(31 * 24 * 60 * 60);
+
+        assert_eq!(
+            downloads_cleanup_target_reject_code_at(
+                &path_to_string(&old_installer),
+                old_enough_now
+            ),
+            None,
+            "old reviewed installer/archive files in Downloads should be accepted"
+        );
+        assert_eq!(
+            downloads_cleanup_target_reject_code_at(
+                &path_to_string(&recent_installer),
+                SystemTime::now()
+            ),
+            Some("target-too-recent"),
+            "recent Downloads installers should be blocked"
+        );
+        assert_eq!(
+            downloads_cleanup_target_reject_code_at(&path_to_string(&old_note), old_enough_now),
+            Some("target-not-downloads-file"),
+            "non-installer/archive Downloads files should be blocked"
+        );
+        assert_eq!(
+            downloads_cleanup_target_reject_code_at(
+                &path_to_string(&folder_target),
+                old_enough_now
+            ),
+            Some("target-link-or-not-file"),
+            "Downloads directories should be blocked"
+        );
+        assert_eq!(
+            downloads_cleanup_target_reject_code_at(
+                &path_to_string(&outside_installer),
+                old_enough_now
+            ),
+            Some("target-not-downloads-folder"),
+            "installer/archive files outside Downloads should be blocked"
+        );
+
+        let _ = fs::remove_file(&old_installer);
+        let _ = fs::remove_file(&recent_installer);
+        let _ = fs::remove_file(&old_note);
+        let _ = fs::remove_file(&outside_installer);
+        let _ = fs::remove_dir(&folder_target);
+        let _ = fs::remove_dir(&downloads);
+        let _ = fs::remove_dir(user_profile.join("Desktop"));
+        let _ = fs::remove_dir(&user_profile);
     }
 
     #[test]
