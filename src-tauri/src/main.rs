@@ -6902,6 +6902,10 @@ fn delete_browser_cache_action_targets(value: &str) -> BrowserCacheDeleteResult 
 }
 
 fn delete_browser_cache_target(root: &Path) -> BrowserCacheDeleteResult {
+    delete_browser_cache_target_at(root, SystemTime::now())
+}
+
+fn delete_browser_cache_target_at(root: &Path, now: SystemTime) -> BrowserCacheDeleteResult {
     let mut result = BrowserCacheDeleteResult::default();
     if browser_cache_target_reject_code(&path_to_string(root)).is_some() {
         result.skipped_count += 1;
@@ -6927,7 +6931,7 @@ fn delete_browser_cache_target(root: &Path) -> BrowserCacheDeleteResult {
             continue;
         }
         if metadata.is_file() {
-            delete_single_browser_cache_file(&path, &metadata, &mut result);
+            delete_single_browser_cache_file_at(&path, &metadata, now, &mut result);
             continue;
         }
         if metadata.is_dir() {
@@ -6962,7 +6966,16 @@ fn delete_single_browser_cache_file(
     metadata: &fs::Metadata,
     result: &mut BrowserCacheDeleteResult,
 ) {
-    if !file_old_enough_for_browser_cache_delete(metadata) {
+    delete_single_browser_cache_file_at(path, metadata, SystemTime::now(), result);
+}
+
+fn delete_single_browser_cache_file_at(
+    path: &Path,
+    metadata: &fs::Metadata,
+    now: SystemTime,
+    result: &mut BrowserCacheDeleteResult,
+) {
+    if !file_old_enough_for_browser_cache_delete_at(metadata, now) {
         result.skipped_count += 1;
         return;
     }
@@ -6977,10 +6990,14 @@ fn delete_single_browser_cache_file(
 }
 
 fn file_old_enough_for_browser_cache_delete(metadata: &fs::Metadata) -> bool {
+    file_old_enough_for_browser_cache_delete_at(metadata, SystemTime::now())
+}
+
+fn file_old_enough_for_browser_cache_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
     let Ok(modified) = metadata.modified() else {
         return false;
     };
-    let Ok(age) = SystemTime::now().duration_since(modified) else {
+    let Ok(age) = now.duration_since(modified) else {
         return false;
     };
     age.as_secs() >= 10 * 60
@@ -11948,6 +11965,49 @@ mod tests {
             npm_cache_file_forbidden(&root.join("tmp").join("cache.lock")),
             "lock files should never be deleted by the npm cache executor"
         );
+    }
+
+    #[test]
+    fn browser_cache_deleter_removes_only_old_cache_files() {
+        let base = unique_test_dir("browser-delete-proof");
+        let root = base.join("Cache").join("Cache_Data");
+        let cache_file = root.join("entry");
+        let cache_bytes = b"delete-cache";
+
+        fs::create_dir_all(&root).expect("create browser cache dir");
+        fs::write(&cache_file, cache_bytes).expect("write browser cache file");
+
+        let recent_result = delete_browser_cache_target_at(&root, SystemTime::now());
+
+        assert_eq!(
+            recent_result.deleted_files, 0,
+            "browser cache files younger than the age gate should be skipped"
+        );
+        assert!(
+            cache_file.exists(),
+            "recent browser cache file should survive"
+        );
+
+        let old_enough_now = SystemTime::now() + Duration::from_secs(11 * 60);
+        let result = delete_browser_cache_target_at(&root, old_enough_now);
+
+        assert_eq!(
+            result.deleted_files, 1,
+            "old browser cache file should be deleted"
+        );
+        assert_eq!(
+            result.deleted_bytes,
+            cache_bytes.len() as u64,
+            "deleted bytes should match removed browser cache file length"
+        );
+        assert!(
+            !cache_file.exists(),
+            "old browser cache file should be removed"
+        );
+
+        let _ = fs::remove_dir(&root);
+        let _ = fs::remove_dir(base.join("Cache"));
+        let _ = fs::remove_dir(&base);
     }
 
     #[test]
