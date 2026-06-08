@@ -3989,9 +3989,11 @@ export default function App() {
     if (!proofPacket) return "";
     const counts = proofPacket.counts || {};
     const volumeProof = proofPacket.volumeProof || {};
+    const validationImport = proofPacket.validationImport || {};
     return [
       proofPacket.route || "",
       proofPacket.status || "",
+      proofPacket.readyForNextRoute ? "next-route-ready" : "next-route-blocked",
       proofPacket.latestExecutionAt || "",
       proofPacket.scanGeneratedAt || "",
       counts.ledgerEntries || 0,
@@ -4000,7 +4002,11 @@ export default function App() {
       counts.waitingRows || 0,
       counts.reclaimedBytes || 0,
       volumeProof.measured ? "volume-measured" : "volume-missing",
-      volumeProof.freeBytesDelta || 0
+      volumeProof.freeBytesDelta || 0,
+      validationImport.status || "not-imported",
+      validationImport.complete ? "import-complete" : "import-incomplete",
+      validationImport.evidencePath || "",
+      validationImport.reviewer || ""
     ].join("::");
   }
 
@@ -5298,14 +5304,15 @@ function ScopedExecutorCommandFlowPanel({ flow, selectedRouteProofExported = fal
   const launchPacket = flow.launchPacket || null;
   const proofPacket = flow.proofPacket || null;
   const proofPacketComplete = Boolean(proofPacket && proofPacket.status === "proof-complete");
-  const primaryProofExportRequired = Boolean(next.type === "prepare-validation-import" && proofPacketComplete && !selectedRouteProofExported);
-  const primaryActionLabel = primaryProofExportRequired ? "Export proof packet" : next.label || "Open route";
+  const validationImport = proofPacket?.validationImport || null;
+  const validationImportComplete = Boolean(validationImport?.complete);
+  const primaryProofExportRequired = Boolean(proofPacketComplete && !selectedRouteProofExported);
+  const primaryActionLabel = primaryProofExportRequired ? (validationImportComplete ? "Re-export proof packet" : "Export proof packet") : next.label || "Open route";
   const launchChecks = (launchPacket?.checks || []).slice(0, 6);
   const proofLedgerRows = (proofPacket?.ledgerEntries || []).slice(0, 3);
   const proofRescanRows = (proofPacket?.rescanRows || []).slice(0, 3);
   const proofVolumeDelta = Number(proofPacket?.volumeProof?.freeBytesDelta || 0);
   const proofVolumeDeltaLabel = `${proofVolumeDelta >= 0 ? "+" : "-"}${formatBytes(Math.abs(proofVolumeDelta))}`;
-  const validationImport = proofPacket?.validationImport || null;
   const setupCommandRows = setupCommands
     ? [
         { label: ".env", command: setupCommands.enableEnv, detail: "Selected route flag" },
@@ -5443,7 +5450,7 @@ function ScopedExecutorCommandFlowPanel({ flow, selectedRouteProofExported = fal
             <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
               <span className="font-medium">Selected route proof packet</span>
               <Badge variant={proofPacket.tone || "review"}>{proofPacket.status}</Badge>
-              <Badge variant={selectedRouteProofExported ? "safe" : "review"}>{selectedRouteProofExported ? "proof exported" : "export proof first"}</Badge>
+              <Badge variant={selectedRouteProofExported ? "safe" : "review"}>{selectedRouteProofExported ? "proof exported" : validationImportComplete ? "re-export proof" : "export proof first"}</Badge>
               <Badge variant={proofPacket.readyForNextRoute ? "safe" : "review"}>{proofPacket.readyForNextRoute ? "next route clear" : "next route blocked"}</Badge>
               {validationImport ? <Badge variant={validationImport.complete ? "safe" : "review"}>{validationImport.status}</Badge> : null}
               {proofPacket.rescanStatus ? <Badge variant="outline">{proofPacket.rescanStatus}</Badge> : null}

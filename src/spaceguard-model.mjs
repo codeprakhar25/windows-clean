@@ -16458,7 +16458,7 @@ function buildInAppRealWorkflow({
   const validationImport = scopedExecutorCommandFlow?.proofPacket?.validationImport || null;
   const proofComplete = proofStatus === "proof-complete" || scopedExecutorCommandFlow?.proofPacket?.status === "proof-complete";
   const proofImportComplete = Boolean(validationImport?.complete || scopedExecutorCommandFlow?.proofPacket?.readyForNextRoute);
-  const proofExportComplete = Boolean(proofImportComplete || selectedRouteProofExported);
+  const proofExportComplete = Boolean(selectedRouteProofExported);
   const ready = Boolean(nativeAvailable && nativeScanCurrent && !unsafeRuntime);
   const steps = [
     buildInAppRealWorkflowStep({
@@ -16550,7 +16550,7 @@ function buildInAppRealWorkflow({
     buildInAppRealWorkflowStep({
       id: "next-route",
       label: "Next route",
-      status: unsafeRuntime ? "blocked" : proofImportComplete ? "ready" : "waiting",
+      status: unsafeRuntime ? "blocked" : proofImportComplete && proofExportComplete ? "ready" : "waiting",
       command: "Re-run setup doctor",
       actionType: "focus-panel",
       targetPanel: "scoped-executor-command-flow-panel",
@@ -16565,8 +16565,8 @@ function buildInAppRealWorkflow({
 
   return {
     schemaVersion: "spaceguard-in-app-real-workflow/v1",
-    status: unsafeRuntime ? "unsafe-runtime" : proofImportComplete ? "next-route-ready" : nativeScanCurrent ? "operator-workflow-active" : nativeAvailable ? "native-scan-needed" : "desktop-needed",
-    tone: unsafeRuntime ? "restricted" : proofImportComplete ? "safe" : nativeScanCurrent ? "review" : "advisory",
+    status: unsafeRuntime ? "unsafe-runtime" : proofImportComplete && proofExportComplete ? "next-route-ready" : nativeScanCurrent ? "operator-workflow-active" : nativeAvailable ? "native-scan-needed" : "desktop-needed",
+    tone: unsafeRuntime ? "restricted" : proofImportComplete && proofExportComplete ? "safe" : nativeScanCurrent ? "review" : "advisory",
     ready,
     route,
     routeInput,
@@ -16584,7 +16584,7 @@ function buildInAppRealWorkflow({
       waiting,
       blocked
     },
-    primary: getInAppRealWorkflowPrimary({ unsafeRuntime, proofImportComplete, nativeScanCurrent, nativeAvailable, routeInput })
+    primary: getInAppRealWorkflowPrimary({ unsafeRuntime, proofImportComplete, proofExportComplete, nativeScanCurrent, nativeAvailable, routeInput })
   };
 }
 
@@ -16622,9 +16622,10 @@ function buildInAppRealWorkflowStep({ id, label, status, command, detail, panel 
   };
 }
 
-function getInAppRealWorkflowPrimary({ unsafeRuntime = false, proofImportComplete = false, nativeScanCurrent = false, nativeAvailable = false, routeInput = "npm-cache" } = {}) {
+function getInAppRealWorkflowPrimary({ unsafeRuntime = false, proofImportComplete = false, proofExportComplete = false, nativeScanCurrent = false, nativeAvailable = false, routeInput = "npm-cache" } = {}) {
   if (unsafeRuntime) return "Runtime write capability is visible; stop the real workflow.";
-  if (proofImportComplete) return "Selected-route proof is imported; another route can be considered.";
+  if (proofImportComplete && !proofExportComplete) return "Selected-route proof is imported; re-export the final proof packet before another route can be considered.";
+  if (proofImportComplete) return "Selected-route proof is imported and the final proof packet is exported; another route can be considered.";
   if (nativeScanCurrent) return `Real workflow is active for ${routeInput}; continue through consent, execution, rescan, and proof import.`;
   if (nativeAvailable) return `Run a native read-only scan before executing ${routeInput}.`;
   return "Start the Tauri desktop shell before using real local disk data.";

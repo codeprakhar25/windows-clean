@@ -409,6 +409,9 @@ assert(app.includes('proofPacket.status !== "proof-complete"'), "selected-route 
 assert(app.includes("selectedRouteProofExportReceipt"), "selected-route proof import should track the exported proof receipt");
 assert(app.includes("selectedRouteProofExportedForCurrentPacket"), "selected-route proof import should require the current proof packet to be exported first");
 assert(app.includes('fileName: "spaceguard-selected-route-proof-packet.md"'), "selected-route proof receipt should bind to the exported proof packet file");
+assert(app.includes('proofPacket.readyForNextRoute ? "next-route-ready" : "next-route-blocked"'), "selected-route proof receipt key should change after validation import clears next-route readiness");
+assert(app.includes('validationImport.complete ? "import-complete" : "import-incomplete"'), "selected-route proof receipt key should change after validation import completes");
+assert(app.includes("validationImport.evidencePath || \"\""), "selected-route proof receipt key should include validation import artifact evidence");
 assert(app.includes("primaryProofExportRequired"), "command flow primary CTA should switch to proof export before validation import");
 assert(app.includes("!proofPacketComplete || !selectedRouteProofExported"), "selected-route validation import should stay disabled until proof is exported");
 assert(app.includes("export proof first"), "selected-route proof UI should explain that export must happen before validation import");

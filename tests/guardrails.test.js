@@ -827,6 +827,26 @@ const assert = require("assert");
   });
   assert.strictEqual(proofCompleteExportedAssistant.realWorkflow.steps.find((step) => step.id === "proof-export").status, "complete", "exported selected-route proof should complete the proof export step");
   assert.strictEqual(proofCompleteExportedAssistant.realWorkflow.steps.find((step) => step.id === "proof-import").status, "active", "proof import should activate only after selected-route proof export");
+  const proofCompleteImportedFlow = {
+    route: "bounded-npm-cache-delete",
+    selectedRoute: "bounded-npm-cache-delete",
+    proofPacket: {
+      status: "proof-complete",
+      readyForNextRoute: true,
+      validationImport: { status: "import-complete", complete: true, evidencePath: "evidence/selected-route-proof.md" }
+    }
+  };
+  const proofCompleteImportedNeedsReexportAssistant = guard.buildWindowsSetupAssistant({
+    nativeCapability: { available: true },
+    runtimeCapabilities: { available: true, platform: "windows", scanKnownRoots: true, realRunEnabled: false, destructiveCommands: false },
+    scanMode: "native-readonly",
+    scanSession: currentScanSession,
+    scopedExecutorCommandFlow: proofCompleteImportedFlow,
+    selectedRouteProofExported: false
+  });
+  assert.notStrictEqual(proofCompleteImportedNeedsReexportAssistant.realWorkflow.status, "next-route-ready", "completed proof import should still wait for selected-route proof re-export");
+  assert.strictEqual(proofCompleteImportedNeedsReexportAssistant.realWorkflow.steps.find((step) => step.id === "proof-export").status, "active", "completed proof import should reactivate proof export for the final packet");
+  assert.strictEqual(proofCompleteImportedNeedsReexportAssistant.realWorkflow.steps.find((step) => step.id === "proof-import").status, "complete", "completed proof import should stay complete while final proof export is waiting");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.appCloseHandoff.schemaVersion, "spaceguard-in-app-proof-handoff/v1", "setup assistant should expose an in-app proof handoff schema");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.appCloseHandoff.workflowProofPath, ".\\spaceguard-real-workflow-proof.md", "proof handoff should name the workflow proof export path");
   assert.strictEqual(nativeSetupAssistant.realWorkflow.appCloseHandoff.selectedRouteProofPacketPath, ".\\spaceguard-selected-route-proof-packet.md", "proof handoff should name the selected-route proof packet export path");
