@@ -88,12 +88,18 @@ For every route after the seeded temp fixture, `setup:route` stays at `first-rou
 
 When the completion verifier accepts that evidence, keep the generated first-route completion check JSON and set `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to that path before enabling `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR`, `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR`, or another non-temp route flag.
 
-After first-route proof is accepted, `npm run proof:route:windows -- -Route npm-cache` is the fastest selected-route proof path. It runs only on Windows, loads `.env`, requires `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to point at an accepted `spaceguard-first-route-completion-check/v1` file, forces all scoped executor flags off except the selected route flag, runs setup doctor, route-specific OpenAI fixture smoke, live OpenAI smoke when configured, route setup, route validation, writes `operator-preflight.json`, `operator-app-handoff.md`, and `commands.ndjson`, then launches `npm run native:dev`. It does not run cleanup itself; deletion still requires the desktop app's real scan, target selection, consent, executor button, native volume proof, post-run rescan, selected-route proof import, and workflow proof export.
+After first-route proof is accepted, `npm run proof:route:windows -- -Route npm-cache` is the fastest selected-route proof path. It runs only on Windows, loads `.env`, requires `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to point at an accepted `spaceguard-first-route-completion-check/v1` file, forces all scoped executor flags off except the selected route flag, runs setup doctor, route-specific OpenAI fixture smoke, live OpenAI smoke when configured, route setup, route validation, writes `operator-preflight.json`, validates it into `operator-preflight-check.json`, writes `operator-app-handoff.md` and `commands.ndjson`, then launches `npm run native:dev`. It does not run cleanup itself; deletion still requires the desktop app's real scan, target selection, consent, executor button, native volume proof, post-run rescan, selected-route proof import, and workflow proof export.
 
 If the app proof export is fixed after the selected-route desktop session closes, rerun only the post-app finalization against the existing evidence root:
 
 ```bash
 npm run proof:route:windows:finalize -- -Route npm-cache -EvidenceRoot evidence/route-proof-npm-cache-YYYYMMDD-HHMMSS
+```
+
+To re-check a captured selected-route preflight bundle manually:
+
+```bash
+npm run validate:route-preflight -- --file evidence/route-proof-npm-cache-YYYYMMDD-HHMMSS/operator-preflight.json
 ```
 
 If the app proof export is fixed after the desktop session closes, rerun only the post-app finalization against the existing evidence root:

@@ -47,6 +47,7 @@ try {
   $ValidateRoutePath = Join-Path $EvidenceRoot "validate-route.json"
   $CommandLogPath = Join-Path $EvidenceRoot "commands.ndjson"
   $PreflightPath = Join-Path $EvidenceRoot "operator-preflight.json"
+  $PreflightCheckPath = Join-Path $EvidenceRoot "operator-preflight-check.json"
   $OperatorAppHandoffPath = Join-Path $EvidenceRoot "operator-app-handoff.md"
   $SelectedRouteProofPacketPath = Join-Path $RepoRoot "spaceguard-selected-route-proof-packet.md"
   $WorkflowProofPath = Join-Path $RepoRoot "spaceguard-real-workflow-proof.md"
@@ -423,6 +424,7 @@ try {
       setupDoctor = $SetupDoctorPath
       setupRoute = $SetupRoutePath
       validateRoute = $ValidateRoutePath
+      routePreflightCheck = $PreflightCheckPath
       openAiFixtureSmoke = $FixtureSmokePath
       openAiLiveSmoke = $LiveSmokePath
       nativeDevExit = $NativeDevExitPath
@@ -463,6 +465,7 @@ try {
 
   Write-OperatorAppHandoff
   Write-JsonFile -Value $preflight -Path $PreflightPath
+  Invoke-LoggedCommand -Id "validate-selected-route-preflight" -CommandLine "node scripts\run-route-preflight-check.mjs --file `"$PreflightPath`"" -OutputPath $PreflightCheckPath | Out-Null
 
   Write-Host ""
   Write-Host "SpaceGuard selected-route preflight complete."
