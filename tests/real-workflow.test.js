@@ -158,6 +158,42 @@ const assert = require("assert");
   });
   assert.strictEqual(matchedRouteReadiness.canExecute, true, "route readiness should allow execution when selected route setup matches the target route");
 
+  const zeroByteNoOpLocks = workflow.buildWorkflowLocks({
+    executionRecord: {
+      accepted: true,
+      bytes: 0
+    },
+    workflowProofAccepted: false,
+    supportBundleWritten: false
+  });
+  assert.strictEqual(zeroByteNoOpLocks.noOpExecution, true, "accepted zero-byte executions should be classified as no-op handoffs");
+  assert.strictEqual(zeroByteNoOpLocks.proofHandoffRequired, false, "accepted zero-byte executions should not require impossible positive-byte proof handoff");
+  assert.strictEqual(zeroByteNoOpLocks.targetSwitchLocked, false, "accepted zero-byte executions should not lock target switching");
+  assert.strictEqual(zeroByteNoOpLocks.routeSetupLocked, false, "accepted zero-byte executions should not lock route setup switching");
+
+  const positiveExecutionLocks = workflow.buildWorkflowLocks({
+    executionRecord: {
+      accepted: true,
+      bytes: 1024
+    },
+    workflowProofAccepted: false,
+    supportBundleWritten: false
+  });
+  assert.strictEqual(positiveExecutionLocks.proofHandoffRequired, true, "positive accepted executions should require proof handoff");
+  assert.strictEqual(positiveExecutionLocks.targetSwitchLocked, true, "positive accepted executions should lock target switching before support bundle handoff");
+  assert.strictEqual(positiveExecutionLocks.routeSetupLocked, true, "positive accepted executions should lock route setup before support bundle handoff");
+
+  const handedOffLocks = workflow.buildWorkflowLocks({
+    executionRecord: {
+      accepted: true,
+      bytes: 1024
+    },
+    workflowProofAccepted: true,
+    supportBundleWritten: true
+  });
+  assert.strictEqual(handedOffLocks.targetSwitchLocked, false, "support bundle handoff should unlock target switching");
+  assert.strictEqual(handedOffLocks.routeSetupLocked, false, "support bundle handoff should unlock route setup switching");
+
   const inAppBundle = workflow.buildInAppSupportBundleReport({
     generatedAt: "2026-06-08T19:30:00.000Z",
     routeInput: "npm-cache",

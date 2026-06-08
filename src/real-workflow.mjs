@@ -624,6 +624,37 @@ export function buildExecutionPrerequisites({
   };
 }
 
+export function buildWorkflowLocks({
+  executionRecord = null,
+  workflowProofAccepted = false,
+  supportBundleWritten = false
+} = {}) {
+  const accepted = Boolean(executionRecord?.accepted);
+  const reclaimedBytes = Number(executionRecord?.bytes || 0);
+  const noOpExecution = Boolean(accepted && reclaimedBytes <= 0);
+  const positiveExecution = Boolean(accepted && reclaimedBytes > 0);
+  const proofHandoffRequired = Boolean(positiveExecution && !supportBundleWritten);
+  const targetSwitchLocked = proofHandoffRequired;
+  const routeSetupLocked = proofHandoffRequired;
+
+  return {
+    schemaVersion: "spaceguard-workflow-locks/v1",
+    acceptedExecution: accepted,
+    reclaimedBytes,
+    noOpExecution,
+    workflowProofAccepted: Boolean(workflowProofAccepted),
+    supportBundleWritten: Boolean(supportBundleWritten),
+    proofHandoffRequired,
+    targetSwitchLocked,
+    routeSetupLocked,
+    primary: noOpExecution
+      ? "Native executor accepted but reclaimed 0 bytes; proof handoff is not locked."
+      : proofHandoffRequired
+        ? "Positive reclaimed bytes require proof export and support bundle capture before another route."
+        : "Workflow route and target switching are unlocked."
+  };
+}
+
 const SUPPORT_BUNDLE_PROOF_ARTIFACTS = [
   "spaceguard-selected-route-proof-packet.md",
   "spaceguard-real-workflow-proof.md",

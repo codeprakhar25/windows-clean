@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildAppAgentTaskQueue, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, formatBytes, renderInAppSupportBundleMarkdown } from "./real-workflow.mjs";
+import { buildAppAgentTaskQueue, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowLocks, formatBytes, renderInAppSupportBundleMarkdown } from "./real-workflow.mjs";
 import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -330,8 +330,12 @@ function App() {
   );
   const canExportProof = Boolean(postRunProof.status === "matched" && proofReviewed && executionRecord?.accepted);
   const supportBundleWritten = Boolean(workflowProofAccepted && supportBundleWrite?.written);
-  const targetSwitchLocked = Boolean(executionRecord?.accepted && !supportBundleWritten);
-  const routeSetupLocked = targetSwitchLocked;
+  const workflowLocks = useMemo(
+    () => buildWorkflowLocks({ executionRecord, workflowProofAccepted, supportBundleWritten }),
+    [executionRecord, workflowProofAccepted, supportBundleWritten]
+  );
+  const targetSwitchLocked = workflowLocks.targetSwitchLocked;
+  const routeSetupLocked = workflowLocks.routeSetupLocked;
   const agentContext = useMemo(
     () => buildAgentContext({
       runtime,
@@ -670,6 +674,7 @@ function App() {
             setProofReviewed={setProofReviewed}
             workflowProofAccepted={workflowProofAccepted}
             workflowProofCheck={workflowProofCheck}
+            workflowLocks={workflowLocks}
             canExportProof={canExportProof}
             proofExportStatus={proofExportStatus}
             proofExportMessage={proofExportMessage}
@@ -1344,6 +1349,7 @@ function ProofPanel({
   setProofReviewed,
   workflowProofAccepted,
   workflowProofCheck,
+  workflowLocks,
   canExportProof,
   proofExportStatus,
   proofExportMessage,
@@ -1369,6 +1375,9 @@ function ProofPanel({
               <Metric label="Recovered" value={formatBytes(executionRecord.bytes)} />
               <Metric label="Rescan state" value={postRunProof.status} />
             </div>
+            {workflowLocks?.noOpExecution ? (
+              <Notice tone="review" icon={AlertTriangle} text={workflowLocks.primary} />
+            ) : null}
             <Button variant="outline" className="w-full" onClick={onRescan} disabled={scanStatus === "rescanning"}>
               {scanStatus === "rescanning" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
               Run post-run rescan
