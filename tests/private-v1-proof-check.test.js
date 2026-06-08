@@ -266,6 +266,22 @@ function writeOpenAiSmokeEvidence(filePath, { routeInput, route, transport }) {
   assert.strictEqual(accepted.counts.commandRecords, 6, "verifier should count command ledger records");
   assert.strictEqual(accepted.blockers.length, 0, "accepted V1 proof should not have blockers");
 
+  const reusedPreflight = createPrivateV1Evidence();
+  const reusedPreflightRecords = fs.readFileSync(reusedPreflight.commandLogPath, "utf8")
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => JSON.parse(line));
+  const reusedPreflightRecord = reusedPreflightRecords.find((record) => record.id === "private-windows-preflight");
+  reusedPreflightRecord.skipped = true;
+  reusedPreflightRecord.reused = true;
+  reusedPreflightRecord.reason = "SkipPreflightExistingEvidence";
+  reusedPreflightRecord.outputPath = path.join(reusedPreflight.dir, "private-demo-preflight", "private-demo-preflight.json");
+  delete reusedPreflightRecord.stderrPath;
+  writeNdjson(reusedPreflight.commandLogPath, reusedPreflightRecords);
+  const reusedPreflightCheck = verifier.buildPrivateV1ProofCheck({ proofPath: reusedPreflight.proofPath });
+  assert.strictEqual(reusedPreflightCheck.status, "accepted", "reused passed private preflight evidence should be accepted for V1 proof");
+  assert.strictEqual(reusedPreflightCheck.counts.requiredCommandsPassed, 6, "reused private preflight should count as a satisfied required command");
+
   const missingChildStderr = createPrivateV1Evidence();
   const childRecords = fs.readFileSync(missingChildStderr.commandLogPath, "utf8")
     .trim()

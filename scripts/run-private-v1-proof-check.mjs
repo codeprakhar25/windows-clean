@@ -59,7 +59,9 @@ export function buildPrivateV1ProofCheck({
 
   validatePrivateV1Proof(proof, resolvedProofPath, add);
   const commandRecords = readCommandRecords(resolvedCommandLogPath, add);
-  const commandSummary = validateCommandRecords(commandRecords, add, path.dirname(resolvedCommandLogPath || baseDir));
+  const commandSummary = validateCommandRecords(commandRecords, add, path.dirname(resolvedCommandLogPath || baseDir), {
+    privateWindowsPreflightPath: resolvedPreflightPath
+  });
   const selectedRouteSetup = readJsonArtifact("selected-route-setup", resolvedSelectedRouteSetupPath, add);
   const preflight = readJsonArtifact("private-windows-preflight", resolvedPreflightPath, add);
   const firstRouteCompletion = readJsonArtifact("first-route-completion", resolvedFirstRouteCompletionPath, add);
@@ -199,7 +201,7 @@ function validatePrivateV1Proof(proof, resolvedProofPath, add) {
   }
 }
 
-function validateCommandRecords(commandRecords, add, baseDir = process.cwd()) {
+function validateCommandRecords(commandRecords, add, baseDir = process.cwd(), { privateWindowsPreflightPath = "" } = {}) {
   let requiredPassed = 0;
   for (const id of REQUIRED_COMMANDS) {
     const record = commandRecords.find((row) => row.id === id);
@@ -208,6 +210,13 @@ function validateCommandRecords(commandRecords, add, baseDir = process.cwd()) {
       continue;
     }
     if (record.skipped) {
+      if (
+        id === "private-windows-preflight" &&
+        validateReusedPrivateWindowsPreflightCommand(record, privateWindowsPreflightPath, baseDir, add)
+      ) {
+        requiredPassed += 1;
+        continue;
+      }
       add(`command-${id}`, "Required command skipped", `${id} must run for private V1 proof acceptance.`);
       continue;
     }
@@ -227,6 +236,24 @@ function validateCommandRecords(commandRecords, add, baseDir = process.cwd()) {
   }
 
   return { requiredPassed };
+}
+
+function validateReusedPrivateWindowsPreflightCommand(record, expectedPreflightPath, baseDir, add) {
+  const outputPath = normalizeArtifactPath(record?.outputPath || "", baseDir);
+  let accepted = true;
+  if (record?.reused !== true || record?.reason !== "SkipPreflightExistingEvidence") {
+    add("command-private-windows-preflight", "Required command skipped", "Skipped private-windows-preflight is accepted only when marked reused with reason SkipPreflightExistingEvidence.");
+    accepted = false;
+  }
+  if (!isExitCodeZero(record?.exitCode)) {
+    add("command-private-windows-preflight", "Required command failed", "Reused private-windows-preflight command record must preserve exitCode=0.");
+    accepted = false;
+  }
+  if (!outputPath || !expectedPreflightPath || !samePath(outputPath, expectedPreflightPath)) {
+    add("command-private-windows-preflight", "Reused preflight path mismatch", "Reused private-windows-preflight command record must point at the checked private preflight artifact.");
+    accepted = false;
+  }
+  return accepted;
 }
 
 function validateCommandStderrArtifact(record, id, baseDir, add) {
