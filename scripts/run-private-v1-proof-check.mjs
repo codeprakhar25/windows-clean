@@ -78,7 +78,7 @@ export function buildPrivateV1ProofCheck({
   const selectedRouteCompletion = readJsonArtifact("selected-route-completion", resolvedSelectedRouteCompletionPath, add);
 
   validateSelectedRouteSetup(selectedRouteSetup, proof, selectedRouteCompletion, add);
-  validatePreflight(preflight, add);
+  validatePreflight(preflight, proof, selectedRouteSetup, selectedRouteCompletion, add);
   const privatePreflightCommandCount = validatePrivatePreflightCommandRecords(preflight, resolvedPreflightPath, add);
   const nativeBundleArtifactCount = validateNativeBundleArtifacts(preflight, add);
   const firstRouteProofCounts = validateFirstRouteCompletion(firstRouteCompletion, proof, resolvedFirstRouteCompletionPath, add);
@@ -438,13 +438,22 @@ function hasDirectCleanupCommand(command = "") {
     /\brmdir\s+/i.test(command);
 }
 
-function validatePreflight(preflight, add) {
+function validatePreflight(preflight, proof, routeSetup, selectedRouteCompletion, add) {
   if (!preflight) return;
   if (preflight.schemaVersion !== PRIVATE_PREFLIGHT_SCHEMA) {
     add("private-windows-preflight", "Private Windows preflight schema mismatch", `Expected ${PRIVATE_PREFLIGHT_SCHEMA}.`);
   }
   if (preflight.status !== "passed") {
     add("private-windows-preflight", "Private Windows preflight not passed", "Private Windows preflight must pass before private V1 proof acceptance.");
+  }
+  const expectedSelectedRoute = String(
+    proof?.selectedRoute || routeSetup?.routeInput || selectedRouteCompletion?.routeInput || ""
+  ).trim();
+  const preflightSelectedRoute = String(preflight.selectedRoute || "").trim();
+  if (!preflightSelectedRoute) {
+    add("private-windows-preflight-route", "Private Windows preflight selected route missing", "Private Windows preflight must record selectedRoute.");
+  } else if (expectedSelectedRoute && preflightSelectedRoute !== expectedSelectedRoute) {
+    add("private-windows-preflight-route", "Private Windows preflight route mismatch", `Private Windows preflight selectedRoute must match ${expectedSelectedRoute}.`);
   }
 }
 

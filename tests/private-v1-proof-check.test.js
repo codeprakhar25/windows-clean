@@ -47,6 +47,7 @@ function createPrivateV1Evidence(patch = {}) {
   const preflight = {
     schemaVersion: "spaceguard-private-demo-windows-preflight/v1",
     status: "passed",
+    selectedRoute: "npm-cache",
     evidenceRoot: path.join(dir, "private-demo-preflight"),
     commandLogPath: privatePreflightCommandLogPath,
     commands: {
@@ -375,6 +376,16 @@ function writeOpenAiSmokeEvidence(filePath, { routeInput, route, transport }) {
   assert(
     missingSelectedRouteSetupCheck.blockers.some((blocker) => blocker.id === "selected-route-setup"),
     "selected-route setup blocker should be explicit"
+  );
+
+  const mismatchedPreflightRoute = createPrivateV1Evidence({
+    preflight: { selectedRoute: "gradle-cache" }
+  });
+  const mismatchedPreflightRouteCheck = verifier.buildPrivateV1ProofCheck({ proofPath: mismatchedPreflightRoute.proofPath });
+  assert.strictEqual(mismatchedPreflightRouteCheck.status, "blocked", "private V1 proof should block preflight evidence from another selected route");
+  assert(
+    mismatchedPreflightRouteCheck.blockers.some((blocker) => blocker.id === "private-windows-preflight-route"),
+    "private preflight selected-route mismatch blocker should be explicit"
   );
 
   const missingBind = createPrivateV1Evidence({

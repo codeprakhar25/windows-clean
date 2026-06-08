@@ -213,6 +213,7 @@ export function buildPrivateDemoReadinessSummary({
         privateV1ProofCheck.includes("bind-first-route-completion") &&
         privateV1ProofCheck.includes("validateReusedPrivateWindowsPreflightCommand") &&
         privateV1ProofCheck.includes("SkipPreflightExistingEvidence") &&
+        privateV1ProofCheck.includes("private-windows-preflight-route") &&
         privateV1ProofCheck.includes("command-stderr") &&
         privateV1ProofCheck.includes("stderrPath") &&
         privateV1ProofCheck.includes("openAiSmokeArtifacts") &&
