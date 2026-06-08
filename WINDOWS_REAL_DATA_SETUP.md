@@ -88,6 +88,8 @@ npm run demo:private-v1-windows -- -SelectedRoute npm-cache
 
 This coordinator runs the host preflight, captures copied native bundle artifact evidence after `npm run native:build` with SHA-256 hashes, launches the seeded first-route proof, verifies the accepted `first-route-completion-check.json`, sets `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` for the current process, archives the first-route root proof exports into evidence, then launches the selected real-data route proof. It writes `private-v1-proof.json` only after both route completions are accepted and summarized with reclaimed bytes, ledger bytes, rescan expected bytes, and rescan remaining bytes. It does not add a new cleanup authority path; cleanup remains inside the desktop app's scoped executor, consent, proof export, and completion verifier workflow. Replace the selected route when validating another scoped executor, for example `npm run demo:private-v1-windows -- -SelectedRoute gradle-cache`.
 
+Use `-SkipPreflight` only to reuse an already-passed `private-demo-preflight/private-demo-preflight.json` inside the same V1 evidence root. The coordinator validates that artifact's schema, passed status, selected route, and copied native bundle artifacts before it starts the first-route proof.
+
 The coordinator also writes `private-v1-proof-check.json` by running:
 
 ```powershell

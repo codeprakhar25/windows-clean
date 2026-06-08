@@ -176,6 +176,9 @@ export function buildPrivateDemoReadinessSummary({
         privateV1Runner.includes("spaceguard-private-v1-windows-proof/v1") &&
         privateV1Runner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK") &&
         privateV1Runner.includes("Assert-CompletionProofCounts") &&
+        privateV1Runner.includes("Assert-ExistingPrivateWindowsPreflight") &&
+        privateV1Runner.includes("private-windows-preflight-skipped-missing") &&
+        privateV1Runner.includes("SkipPreflightExistingEvidence") &&
         privateV1Runner.includes("npm run proof:first-route:windows -- -Route temp-fixture") &&
         privateV1Runner.includes("npm run proof:route:windows -- -Route $SelectedRoute") &&
         privateV1Runner.includes("ledgerReclaimedBytes") &&

@@ -23,6 +23,11 @@ const windowsSetup = fs.readFileSync(path.join(root, "WINDOWS_REAL_DATA_SETUP.md
   assert(runner.includes("[System.PlatformID]::Win32NT"), "V1 proof coordinator should refuse non-Windows execution");
   assert(runner.includes("npm run demo:private-windows-preflight"), "V1 proof coordinator should start with host preflight");
   assert(runner.includes("-SelectedRoute $SelectedRoute"), "V1 proof coordinator should pass the selected route into host preflight");
+  assert(runner.includes("$PreflightSummaryPath"), "V1 proof coordinator should track the exact private preflight JSON path");
+  assert(runner.includes("Assert-ExistingPrivateWindowsPreflight"), "V1 proof coordinator should validate reused preflight evidence");
+  assert(runner.includes("private-windows-preflight-skipped-missing"), "V1 proof coordinator should fail early when skipped preflight evidence is missing");
+  assert(runner.includes("SkipPreflightExistingEvidence"), "V1 proof coordinator should log reused preflight evidence explicitly");
+  assert(runner.includes("reused = $true"), "V1 proof coordinator command ledger should mark reused preflight proof");
   assert(runner.includes("npm run proof:first-route:windows -- -Route temp-fixture"), "V1 proof coordinator should run the seeded first route");
   assert(runner.includes("first-route-completion-check.json"), "V1 proof coordinator should require the first-route completion artifact");
   assert(runner.includes("Assert-CompletionProofCounts"), "V1 proof coordinator should assert child completion parity counts before summary");

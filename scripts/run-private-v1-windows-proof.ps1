@@ -35,6 +35,8 @@ try {
   $SummaryPath = Join-Path $EvidenceRoot "private-v1-proof.json"
   $PrivateV1ProofCheckPath = Join-Path $EvidenceRoot "private-v1-proof-check.json"
   $PreflightEvidenceRoot = Join-Path $EvidenceRoot "private-demo-preflight"
+  $PreflightSummaryPath = Join-Path $PreflightEvidenceRoot "private-demo-preflight.json"
+  $PreflightLogPath = Join-Path $EvidenceRoot "private-demo-preflight.txt"
   $FirstRouteEvidenceRoot = Join-Path $EvidenceRoot "first-route-proof"
   $SelectedRouteEvidenceRoot = Join-Path $EvidenceRoot "selected-route-proof-$RouteSlug"
   $FirstRouteCompletionPath = Join-Path $FirstRouteEvidenceRoot "first-route-completion-check.json"
@@ -92,6 +94,30 @@ try {
     }
 
     return $record
+  }
+
+  function Assert-ExistingPrivateWindowsPreflight {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+      throw "private-windows-preflight-skipped-missing: -SkipPreflight requires an existing passed preflight artifact at $Path"
+    }
+
+    $proof = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    if ($proof.schemaVersion -ne "spaceguard-private-demo-windows-preflight/v1") {
+      throw "private-windows-preflight-skipped-schema: expected spaceguard-private-demo-windows-preflight/v1."
+    }
+    if ($proof.status -ne "passed") {
+      throw "private-windows-preflight-skipped-status: reused preflight artifact must have status passed."
+    }
+    if ($proof.selectedRoute -ne $SelectedRoute) {
+      throw "private-windows-preflight-skipped-route: reused preflight selectedRoute must match $SelectedRoute."
+    }
+    if ($null -eq $proof.nativeBundleArtifacts -or $proof.nativeBundleArtifacts.Count -lt 1) {
+      throw "private-windows-preflight-skipped-bundle: reused preflight artifact must include copied native bundle artifacts."
+    }
+
+    return $proof
   }
 
   function Assert-AcceptedFirstRouteCompletion {
@@ -222,18 +248,22 @@ try {
   }
 
   if ($SkipPreflight) {
+    $preflightProof = Assert-ExistingPrivateWindowsPreflight -Path $PreflightSummaryPath
     Write-CommandRecord -Record ([PSCustomObject]@{
         id = "private-windows-preflight"
         command = $preflightCommand
-        outputPath = Join-Path $EvidenceRoot "private-demo-preflight.txt"
-        exitCode = $null
+        outputPath = $PreflightSummaryPath
+        exitCode = 0
         startedAt = (Get-Date).ToUniversalTime().ToString("o")
         endedAt = (Get-Date).ToUniversalTime().ToString("o")
         skipped = $true
-        reason = "SkipPreflight"
+        reused = $true
+        reason = "SkipPreflightExistingEvidence"
+        selectedRoute = $preflightProof.selectedRoute
+        nativeBundleArtifactCount = [int]$preflightProof.nativeBundleArtifacts.Count
       })
   } else {
-    Invoke-LoggedCommand -Id "private-windows-preflight" -CommandLine $preflightCommand -OutputPath (Join-Path $EvidenceRoot "private-demo-preflight.txt") | Out-Null
+    Invoke-LoggedCommand -Id "private-windows-preflight" -CommandLine $preflightCommand -OutputPath $PreflightLogPath | Out-Null
   }
 
   Invoke-LoggedCommand -Id "first-route-proof" -CommandLine $firstRouteCommand -OutputPath (Join-Path $EvidenceRoot "first-route-proof.txt") | Out-Null
@@ -268,7 +298,7 @@ try {
     artifacts = [PSCustomObject]@{
       privateV1Proof = $SummaryPath
       privateV1ProofCheck = $PrivateV1ProofCheckPath
-      privateWindowsPreflight = Join-Path $PreflightEvidenceRoot "private-demo-preflight.json"
+      privateWindowsPreflight = $PreflightSummaryPath
       firstRouteCompletionCheck = $FirstRouteCompletionPath
       selectedRouteCompletionCheck = $SelectedRouteCompletionPath
       archivedFirstRouteRootExports = $ArchiveRoot
