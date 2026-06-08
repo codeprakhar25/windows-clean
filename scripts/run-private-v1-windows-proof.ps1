@@ -16,6 +16,9 @@ $SelectedRoute = $SelectedRoute.Trim()
 if ([string]::IsNullOrWhiteSpace($SelectedRoute)) {
   throw "SelectedRoute is required. Example: npm run demo:private-v1-windows -- -SelectedRoute npm-cache"
 }
+if ($SkipLiveOpenAI) {
+  throw "private-v1-openai-live-required: private V1 acceptance requires live OpenAI smoke evidence from .env OPENAI_API_KEY. Use lower proof runners for fixture-only rehearsals."
+}
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $RepoRoot

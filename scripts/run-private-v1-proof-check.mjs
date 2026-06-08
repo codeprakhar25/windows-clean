@@ -70,6 +70,9 @@ export function buildPrivateV1ProofCheck({
   const nativeBundleArtifactCount = validateNativeBundleArtifacts(preflight, add);
   const firstRouteProofCounts = validateFirstRouteCompletion(firstRouteCompletion, proof, resolvedFirstRouteCompletionPath, add);
   const selectedRouteProofCounts = validateSelectedRouteCompletion(selectedRouteCompletion, proof, resolvedSelectedRouteCompletionPath, add);
+  const openAiSmokeArtifactCount =
+    validateChildOpenAiSmokeEvidence(firstRouteCompletion, "first-route", "First-route", resolvedFirstRouteCompletionPath, add) +
+    validateChildOpenAiSmokeEvidence(selectedRouteCompletion, "selected-route", "Selected-route", resolvedSelectedRouteCompletionPath, add);
   validateArchivedRootExports(proof, add);
 
   const selectedRoute = String(proof?.selectedRoute || selectedRouteCompletion?.routeInput || "");
@@ -98,6 +101,7 @@ export function buildPrivateV1ProofCheck({
       requiredCommands: REQUIRED_COMMANDS.length,
       requiredCommandsPassed: commandSummary.requiredPassed,
       nativeBundleArtifacts: nativeBundleArtifactCount,
+      openAiSmokeArtifacts: openAiSmokeArtifactCount,
       firstRouteReclaimedBytes,
       firstRouteLedgerReclaimedBytes: firstRouteProofCounts.ledgerReclaimedBytes,
       firstRouteRescanExpectedBytes: firstRouteProofCounts.rescanExpectedBytes,
@@ -239,6 +243,119 @@ function validateCommandStderrArtifact(record, id, baseDir, add) {
   if (!stat.isFile()) {
     add(`command-stderr-${id}`, "Required command stderr invalid", `${id} stderr artifact must be a file: ${stderrPath}`);
   }
+}
+
+function validateChildOpenAiSmokeEvidence(completion, idPrefix, label, completionPath, add) {
+  if (!completion) return 0;
+  const baseDir = completionPath ? path.dirname(completionPath) : process.cwd();
+  const commandLogPath = normalizeArtifactPath(completion.commandLogPath || "", baseDir);
+  const commandRecords = readChildCommandRecords(`${idPrefix}-command-log`, commandLogPath, add);
+  if (!commandRecords.length) return 0;
+
+  const commandLogDir = path.dirname(commandLogPath);
+  const expectedRoute = String(completion.route || "");
+  return validateOpenAiSmokeCommand(commandRecords, {
+    idPrefix,
+    label,
+    commandId: "openai-fixture-smoke",
+    expectedRoute,
+    commandLogDir,
+    requireLive: false,
+    add
+  }) + validateOpenAiSmokeCommand(commandRecords, {
+    idPrefix,
+    label,
+    commandId: "openai-live-smoke",
+    expectedRoute,
+    commandLogDir,
+    requireLive: true,
+    add
+  });
+}
+
+function readChildCommandRecords(id, commandLogPath, add) {
+  if (!commandLogPath) {
+    add(id, "Child command log missing", `${id} path is missing.`);
+    return [];
+  }
+  if (!fs.existsSync(commandLogPath)) {
+    add(id, "Child command log missing", `${id} does not exist: ${commandLogPath}`);
+    return [];
+  }
+
+  const records = [];
+  for (const [index, line] of fs.readFileSync(commandLogPath, "utf8").split(/\r?\n/).entries()) {
+    const clean = line.trim();
+    if (!clean) continue;
+    try {
+      const parsed = JSON.parse(clean);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) records.push(parsed);
+    } catch {
+      add(`${id}-parse`, "Child command log parse failed", `${path.basename(commandLogPath)} line ${index + 1} is not JSON.`);
+    }
+  }
+  return records;
+}
+
+function validateOpenAiSmokeCommand(commandRecords, {
+  idPrefix,
+  label,
+  commandId,
+  expectedRoute,
+  commandLogDir,
+  requireLive,
+  add
+}) {
+  const blockerId = `${idPrefix}-${commandId}`;
+  const record = findLatestCommandRecord(commandRecords, commandId);
+  const smokeLabel = requireLive ? "Live OpenAI smoke" : "OpenAI fixture smoke";
+  if (!record) {
+    add(blockerId, `${smokeLabel} missing`, `${label} command log must include ${commandId}.`);
+    return 0;
+  }
+  if (record.skipped === true) {
+    add(blockerId, `${smokeLabel} skipped`, `${label} ${smokeLabel.toLowerCase()} must run for private V1 proof acceptance.`);
+    return 0;
+  }
+  if (!isExitCodeZero(record.exitCode)) {
+    add(blockerId, `${smokeLabel} failed`, `${label} ${commandId} exited with ${record.exitCode ?? "missing"}.`);
+    return 0;
+  }
+
+  const outputPath = normalizeArtifactPath(record.outputPath || "", commandLogDir);
+  if (!outputPath) {
+    add(blockerId, `${smokeLabel} artifact missing`, `${label} ${commandId} must record an outputPath artifact.`);
+    return 0;
+  }
+  if (!fs.existsSync(outputPath)) {
+    add(blockerId, `${smokeLabel} artifact missing`, `${label} ${commandId} output artifact does not exist: ${outputPath}`);
+    return 0;
+  }
+  const output = fs.readFileSync(outputPath, "utf8");
+  if (!/validation=broker-ready/.test(output)) {
+    add(blockerId, `${smokeLabel} not broker-ready`, `${label} ${commandId} output must include validation=broker-ready.`);
+    return 0;
+  }
+  if (expectedRoute && !new RegExp(`\\broute=${escapeRegExp(expectedRoute)}\\b`).test(output)) {
+    add(blockerId, `${smokeLabel} route mismatch`, `${label} ${commandId} output must bind to route=${expectedRoute}.`);
+    return 0;
+  }
+  return 1;
+}
+
+function findLatestCommandRecord(records = [], id = "") {
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    if (records[index]?.id === id) return records[index];
+  }
+  return null;
+}
+
+function isExitCodeZero(value) {
+  return value === 0 || value === "0";
+}
+
+function escapeRegExp(value = "") {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function hasDirectCleanupCommand(command = "") {

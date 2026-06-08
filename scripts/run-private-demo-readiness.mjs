@@ -182,6 +182,7 @@ export function buildPrivateDemoReadinessSummary({
         privateV1Runner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK") &&
         privateV1Runner.includes("[System.Diagnostics.ProcessStartInfo]::new()") &&
         privateV1Runner.includes("stderrPath") &&
+        privateV1Runner.includes("private-v1-openai-live-required") &&
         privateV1Runner.includes("Assert-KnownSelectedRoute") &&
         privateV1Runner.includes("selected-route-setup.json") &&
         privateV1Runner.includes("selected-route-unknown") &&
@@ -210,8 +211,12 @@ export function buildPrivateDemoReadinessSummary({
         privateV1ProofCheck.includes("bind-first-route-completion") &&
         privateV1ProofCheck.includes("command-stderr") &&
         privateV1ProofCheck.includes("stderrPath") &&
+        privateV1ProofCheck.includes("openAiSmokeArtifacts") &&
+        privateV1ProofCheck.includes("openai-fixture-smoke") &&
+        privateV1ProofCheck.includes("openai-live-smoke") &&
+        privateV1ProofCheck.includes("validation=broker-ready") &&
         privateV1ProofCheck.includes("completion-parity"),
-      detail: "Private demo readiness must include an independent verifier for final V1 proof, child stderr artifacts, and route/rescan parity counts."
+      detail: "Private demo readiness must include an independent verifier for final V1 proof, child stderr artifacts, OpenAI smoke evidence, and route/rescan parity counts."
     }),
     buildCheck({
       id: "workflow-proof-validation",

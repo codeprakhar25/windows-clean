@@ -32,6 +32,12 @@ function createPrivateV1Evidence(patch = {}) {
   const commandLogPath = path.join(dir, "commands.ndjson");
   const proofPath = path.join(dir, "private-v1-proof.json");
   const archivedProofPath = path.join(dir, "archived-first-route-root-exports", "spaceguard-real-workflow-proof.md");
+  const firstRouteCommandLogPath = path.join(dir, "first-route-proof", "commands.ndjson");
+  const selectedRouteCommandLogPath = path.join(dir, "selected-route-proof-npm-cache", "commands.ndjson");
+  const firstRouteFixtureSmokePath = path.join(dir, "first-route-proof", "openai-fixture-smoke.txt");
+  const firstRouteLiveSmokePath = path.join(dir, "first-route-proof", "openai-live-smoke.txt");
+  const selectedRouteFixtureSmokePath = path.join(dir, "selected-route-proof-npm-cache", "openai-fixture-smoke.txt");
+  const selectedRouteLiveSmokePath = path.join(dir, "selected-route-proof-npm-cache", "openai-live-smoke.txt");
   const bundleArtifactPath = path.join(dir, "private-demo-preflight", "src-tauri", "target", "release", "bundle", "nsis", "SpaceGuard_0.1.0_x64-setup.exe");
   const bundleEvidencePath = path.join(dir, "private-demo-preflight", "native-bundle-artifacts", "SpaceGuard_0.1.0_x64-setup.exe");
   const bundleBytes = Buffer.from("spaceguard-native-bundle-fixture");
@@ -82,6 +88,7 @@ function createPrivateV1Evidence(patch = {}) {
     status: "accepted",
     canStartNextRoute: true,
     route: "known-temp-delete",
+    commandLogPath: firstRouteCommandLogPath,
     counts: {
       reclaimedBytes: 8388608,
       selectedRouteProofPacketReclaimedBytes: 8388608,
@@ -97,6 +104,7 @@ function createPrivateV1Evidence(patch = {}) {
     canStartNextRoute: true,
     route: "bounded-npm-cache-delete",
     routeInput: "npm-cache",
+    commandLogPath: selectedRouteCommandLogPath,
     counts: {
       reclaimedBytes: 1048576,
       selectedRouteProofPacketReclaimedBytes: 1048576,
@@ -117,6 +125,16 @@ function createPrivateV1Evidence(patch = {}) {
     { id: "archive-first-route-root-exports", command: "archive first-route repo-root proof exports", outputPath: path.dirname(archivedProofPath), exitCode: 0 },
     { id: "selected-route-proof", command: "npm run proof:route:windows -- -Route npm-cache", outputPath: selectedRouteProofOutputPath, stderrPath: `${selectedRouteProofOutputPath}.stderr.txt`, exitCode: 0 },
     ...(patch.commands || [])
+  ];
+  const firstRouteCommands = [
+    { id: "openai-fixture-smoke", command: "npm run openai:smoke:fixture -- --route temp-fixture", outputPath: firstRouteFixtureSmokePath, stderrPath: `${firstRouteFixtureSmokePath}.stderr.txt`, exitCode: 0 },
+    { id: "openai-live-smoke", command: "npm run openai:smoke -- --route temp-fixture", outputPath: firstRouteLiveSmokePath, stderrPath: `${firstRouteLiveSmokePath}.stderr.txt`, exitCode: 0 },
+    ...(patch.firstRouteCommands || [])
+  ];
+  const selectedRouteCommands = [
+    { id: "openai-fixture-smoke", command: "npm run openai:smoke:fixture -- --route npm-cache", outputPath: selectedRouteFixtureSmokePath, stderrPath: `${selectedRouteFixtureSmokePath}.stderr.txt`, exitCode: 0 },
+    { id: "openai-live-smoke", command: "npm run openai:smoke -- --route npm-cache", outputPath: selectedRouteLiveSmokePath, stderrPath: `${selectedRouteLiveSmokePath}.stderr.txt`, exitCode: 0 },
+    ...(patch.selectedRouteCommands || [])
   ];
   const proof = {
     schemaVersion: "spaceguard-private-v1-windows-proof/v1",
@@ -184,7 +202,19 @@ function createPrivateV1Evidence(patch = {}) {
       fs.writeFileSync(command.stderrPath, "");
     }
   }
+  writeOpenAiSmokeEvidence(firstRouteFixtureSmokePath, { routeInput: "temp-fixture", route: "known-temp-delete", transport: "fixture-only" });
+  writeOpenAiSmokeEvidence(firstRouteLiveSmokePath, { routeInput: "temp-fixture", route: "known-temp-delete", transport: "openai" });
+  writeOpenAiSmokeEvidence(selectedRouteFixtureSmokePath, { routeInput: "npm-cache", route: "bounded-npm-cache-delete", transport: "fixture-only" });
+  writeOpenAiSmokeEvidence(selectedRouteLiveSmokePath, { routeInput: "npm-cache", route: "bounded-npm-cache-delete", transport: "openai" });
+  for (const command of [...firstRouteCommands, ...selectedRouteCommands]) {
+    if (command.stderrPath) {
+      fs.mkdirSync(path.dirname(command.stderrPath), { recursive: true });
+      fs.writeFileSync(command.stderrPath, "");
+    }
+  }
   writeNdjson(commandLogPath, commands);
+  writeNdjson(firstRouteCommandLogPath, firstRouteCommands);
+  writeNdjson(selectedRouteCommandLogPath, selectedRouteCommands);
   writeJson(proofPath, proof);
   fs.mkdirSync(path.dirname(archivedProofPath), { recursive: true });
   fs.writeFileSync(archivedProofPath, "# archived first route proof\n");
@@ -193,7 +223,21 @@ function createPrivateV1Evidence(patch = {}) {
   fs.mkdirSync(path.dirname(bundleEvidencePath), { recursive: true });
   fs.writeFileSync(bundleEvidencePath, bundleBytes);
 
-  return { dir, proofPath, commandLogPath, selectedRouteSetupPath, firstRouteCompletionPath, selectedRouteCompletionPath };
+  return { dir, proofPath, commandLogPath, selectedRouteSetupPath, firstRouteCompletionPath, selectedRouteCompletionPath, firstRouteCommandLogPath, selectedRouteCommandLogPath };
+}
+
+function writeOpenAiSmokeEvidence(filePath, { routeInput, route, transport }) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, [
+    "run-openai-advisor-smoke: OpenAI advisor smoke complete",
+    "No local filesystem scan was performed; this used fixture data only.",
+    `provider=openai model=gpt-5.2 transport=${transport}`,
+    `routeInput=${routeInput} route=${route} title=Fixture route`,
+    `required=run-npm-cache-executor route=${route} target=npm-cache`,
+    "taskStatus=ready expected=ready",
+    "validation=broker-ready",
+    "summary=Fixture advice is broker ready."
+  ].join("\n"));
 }
 
 (async () => {
@@ -218,6 +262,7 @@ function createPrivateV1Evidence(patch = {}) {
   assert.strictEqual(accepted.counts.selectedRouteRescanExpectedBytes, 1048576, "verifier should report selected-route rescan expected bytes");
   assert.strictEqual(accepted.counts.selectedRouteLedgerReclaimedBytes, 1048576, "verifier should report selected-route ledger reclaimed bytes");
   assert.strictEqual(accepted.counts.nativeBundleArtifacts, 1, "verifier should count native bundle artifacts");
+  assert.strictEqual(accepted.counts.openAiSmokeArtifacts, 4, "verifier should count required child OpenAI smoke artifacts");
   assert.strictEqual(accepted.counts.commandRecords, 6, "verifier should count command ledger records");
   assert.strictEqual(accepted.blockers.length, 0, "accepted V1 proof should not have blockers");
 
@@ -234,6 +279,21 @@ function createPrivateV1Evidence(patch = {}) {
   assert(
     missingChildStderrCheck.blockers.some((blocker) => blocker.id === "command-stderr-first-route-proof"),
     "missing child command stderr blocker should name the command"
+  );
+
+  const missingSelectedOpenAi = createPrivateV1Evidence();
+  const selectedChildRecords = fs.readFileSync(missingSelectedOpenAi.selectedRouteCommandLogPath, "utf8")
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => JSON.parse(line));
+  const selectedLiveOpenAiRecord = selectedChildRecords.find((record) => record.id === "openai-live-smoke");
+  fs.unlinkSync(selectedLiveOpenAiRecord.outputPath);
+  writeNdjson(missingSelectedOpenAi.selectedRouteCommandLogPath, selectedChildRecords);
+  const missingSelectedOpenAiCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingSelectedOpenAi.proofPath });
+  assert.strictEqual(missingSelectedOpenAiCheck.status, "blocked", "missing selected-route live OpenAI smoke evidence should block private V1 proof");
+  assert(
+    missingSelectedOpenAiCheck.blockers.some((blocker) => blocker.id === "selected-route-openai-live-smoke"),
+    "missing selected-route live OpenAI smoke blocker should be explicit"
   );
 
   const missingSelectedRouteSetup = createPrivateV1Evidence();

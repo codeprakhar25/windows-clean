@@ -24,6 +24,7 @@ const windowsSetup = fs.readFileSync(path.join(root, "WINDOWS_REAL_DATA_SETUP.md
   assert(runner.includes("[System.Diagnostics.ProcessStartInfo]::new()"), "V1 proof coordinator should use ProcessStartInfo for logged child commands");
   assert(runner.includes("stderrPath"), "V1 proof coordinator should preserve stderr evidence for logged child commands");
   assert(!runner.includes("Tee-Object"), "V1 proof coordinator should not use Tee-Object to infer child command exit state");
+  assert(runner.includes("private-v1-openai-live-required"), "V1 proof coordinator should reject live OpenAI skips for private V1 acceptance");
   assert(runner.includes("npm run demo:private-windows-preflight"), "V1 proof coordinator should start with host preflight");
   assert(runner.includes("-SelectedRoute $SelectedRoute"), "V1 proof coordinator should pass the selected route into host preflight");
   assert(runner.includes("$SelectedRouteSetupPath"), "V1 proof coordinator should capture selected-route setup evidence");
