@@ -101,100 +101,6 @@ function normalizeRequestStringList(values = []) {
   return rows;
 }
 
-export async function runNativeExecutorDryRun(executorPlan, host = globalThis) {
-  const capability = getNativeScannerCapability(host);
-  if (!capability.available) {
-    return {
-      available: false,
-      mode: "browser-setup",
-      realRunEnabled: false,
-      destructiveCommands: false,
-      entries: [],
-      warnings: ["Native executor dry-run is not available in the browser setup state."]
-    };
-  }
-
-  const result = await host.__TAURI__.core.invoke("simulate_cleanup_plan", {
-    request: {
-      actions: (executorPlan?.rows || [])
-        .filter((row) => row.canSimulate)
-        .flatMap((row) => {
-          if (Array.isArray(row.reviewTargets) && row.reviewTargets.length) {
-            return row.reviewTargets.map((target) => ({
-              id: target.id || row.id,
-              title: target.name || row.title,
-              bytes: Number(target.bytes || 0),
-              route: row.route,
-              targetPath: target.path || ""
-            }));
-          }
-          if (Array.isArray(row.archiveTargets) && row.archiveTargets.length) {
-            return row.archiveTargets.map((target) => ({
-              id: target.id || row.id,
-              title: target.name || row.title,
-              bytes: Number(target.bytes || 0),
-              route: row.route,
-              targetPath: target.path || ""
-            }));
-          }
-          return [{
-            id: row.id,
-            title: row.title,
-            bytes: row.bytes,
-            route: row.route,
-            targetPath: row.targetPath || row.target || row.path || ""
-          }];
-        })
-    }
-  });
-
-  return normalizeNativeExecutorDryRun(result);
-}
-
-export async function runNativeDryRunScopeValidation(host = globalThis) {
-  const capability = getNativeScannerCapability(host);
-  if (!capability.available) {
-    return {
-      available: false,
-      mode: "browser-setup",
-      realRunEnabled: false,
-      destructiveCommands: false,
-      entries: [],
-      warnings: ["Native dry-run scope validation is not available in the browser setup state."]
-    };
-  }
-
-  const result = await host.__TAURI__.core.invoke("simulate_cleanup_plan", {
-    request: {
-      actions: [
-        {
-          id: "windows-temp",
-          title: "Known temp allowed target",
-          bytes: 0,
-          route: "known-temp-delete",
-          targetPath: "%TEMP%, C:\\Windows\\Temp"
-        },
-        {
-          id: "downloads-forbidden-as-temp",
-          title: "Downloads forbidden as temp target",
-          bytes: 0,
-          route: "known-temp-delete",
-          targetPath: "%USERPROFILE%\\Downloads"
-        },
-        {
-          id: "browser-identity-forbidden",
-          title: "Browser identity forbidden as cache target",
-          bytes: 0,
-          route: "browser-cache-only",
-          targetPath: "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Cookies"
-        }
-      ]
-    }
-  });
-
-  return normalizeNativeExecutorDryRun(result);
-}
-
 export async function runNativeWriteBoundary(boundary = {}, host = globalThis) {
   const capability = getNativeScannerCapability(host);
   if (!capability.available) {
@@ -911,7 +817,6 @@ export async function getNativeRuntimeCapabilities(host = globalThis) {
       realRunEnabled: false,
       destructiveCommands: false,
       scanKnownRoots: false,
-      simulateCleanupPlan: false,
       executeCleanupPlan: false,
       openAiAgentAdvice: false,
       openAiAdvisorConfigured: false,
@@ -1164,41 +1069,6 @@ export function normalizeNativeVolume(volume = null) {
   };
 }
 
-export function normalizeNativeExecutorDryRun(result = {}) {
-  return {
-    available: true,
-    mode: result.mode || "native-dry-run",
-    realRunEnabled: Boolean(result.realRunEnabled || result.real_run_enabled),
-    destructiveCommands: Boolean(result.destructiveCommands || result.destructive_commands),
-    entries: Array.isArray(result.entries)
-      ? result.entries.map((entry) => ({
-          id: entry.id || "",
-          title: entry.title || "",
-          route: entry.route || "",
-          targetPath: entry.targetPath || entry.target_path || "",
-          targetScopeStatus: entry.targetScopeStatus || entry.target_scope_status || "",
-          rejectCode: entry.rejectCode || entry.reject_code || "",
-          result: entry.result || "dry-run",
-          bytes: Number(entry.bytes || 0),
-          candidateBytes: Number(entry.candidateBytes || entry.candidate_bytes || 0),
-          candidateCount: Number(entry.candidateCount || entry.candidate_count || 0),
-          skippedCount: Number(entry.skippedCount || entry.skipped_count || 0),
-          candidates: Array.isArray(entry.candidates)
-            ? entry.candidates.map((candidate) => ({
-                name: candidate.name || "",
-                path: candidate.path || "",
-                bytes: Number(candidate.bytes || 0),
-                result: candidate.result || "candidate",
-                note: candidate.note || ""
-              }))
-            : [],
-          note: entry.note || ""
-        }))
-      : [],
-    warnings: Array.isArray(result.warnings) ? result.warnings : []
-  };
-}
-
 export function normalizeNativeWriteBoundary(result = {}) {
   return {
     available: true,
@@ -1330,7 +1200,6 @@ export function normalizeNativeRuntimeCapabilities(result = {}) {
     realRunEnabled: Boolean(result.realRunEnabled || result.real_run_enabled) && !multiScopedFlagBlock,
     destructiveCommands: Boolean(result.destructiveCommands || result.destructive_commands) && !multiScopedFlagBlock,
     scanKnownRoots: Boolean(result.scanKnownRoots || result.scan_known_roots),
-    simulateCleanupPlan: Boolean(result.simulateCleanupPlan || result.simulate_cleanup_plan),
     executeCleanupPlan: Boolean(result.executeCleanupPlan || result.execute_cleanup_plan),
     openAiAgentAdvice: Boolean(result.openAiAgentAdvice || result.openaiAgentAdvice || result.openai_agent_advice),
     openAiAdvisorConfigured: Boolean(result.openAiAdvisorConfigured || result.openaiAdvisorConfigured || result.openai_advisor_configured),

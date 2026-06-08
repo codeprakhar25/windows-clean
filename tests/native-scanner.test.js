@@ -7,7 +7,17 @@ const GB = 1024 * MB;
 
 (async () => {
   const native = await import("../src/native-scanner.mjs");
+  const nativeAdapter = fs.readFileSync(path.join(__dirname, "..", "src", "native-scanner.mjs"), "utf8");
   const rustMain = fs.readFileSync(path.join(__dirname, "..", "src-tauri", "src", "main.rs"), "utf8");
+  const seedFixturesScript = fs.readFileSync(path.join(__dirname, "..", "scripts", "seed-spaceguard-fixtures.ps1"), "utf8");
+  const inspectFixturesScript = fs.readFileSync(path.join(__dirname, "..", "scripts", "inspect-spaceguard-fixtures.ps1"), "utf8");
+
+  assert(!nativeAdapter.includes("simulate_cleanup_plan"), "native adapter must not expose the removed simulation command");
+  assert(!nativeAdapter.includes("runNativeExecutorDryRun"), "native adapter must not expose executor simulation helpers");
+  assert(!nativeAdapter.includes("runNativeDryRunScopeValidation"), "native adapter must not expose dry-run scope validation helpers");
+  assert(!rustMain.includes("simulate_cleanup_plan"), "Tauri backend must not expose the removed simulation command");
+  assert(!seedFixturesScript.includes("dryRunScopeCases"), "fixture seed manifest must not include obsolete dry-run scope cases");
+  assert(!inspectFixturesScript.includes("DryRunScopeEvidencePath"), "fixture inspector must not accept obsolete dry-run scope evidence");
 
   assert(rustMain.includes("fn delete_npm_cache_target_at(root: &Path, now: SystemTime)"), "native npm executor should expose a clock-injected deleter for proof tests");
   assert(rustMain.includes("delete_npm_cache_target_at(root, SystemTime::now())"), "production npm executor should use the real clock for age gating");
@@ -67,9 +77,6 @@ const GB = 1024 * MB;
   assert.deepStrictEqual(unavailable.driveInventory, [], "browser fallback must not expose drive inventory evidence");
   assert.strictEqual(unavailable.writeCapability, false, "browser fallback must not expose write capability");
   assert.strictEqual(unavailable.destructiveCommands, false, "browser fallback must not expose destructive commands");
-  const executorUnavailable = await native.runNativeExecutorDryRun({ rows: [] }, {});
-  assert.strictEqual(executorUnavailable.available, false, "native executor dry-run should report unavailable outside Tauri");
-  assert.strictEqual(executorUnavailable.destructiveCommands, false, "native executor fallback must not expose destructive commands");
   const writeUnavailable = await native.runNativeWriteBoundary({ selectedRows: [] }, {});
   assert.strictEqual(writeUnavailable.available, false, "native write boundary should report unavailable outside Tauri");
   assert.strictEqual(writeUnavailable.accepted, false, "native write fallback must not accept execution");
@@ -82,6 +89,7 @@ const GB = 1024 * MB;
   assert.strictEqual(capabilityUnavailable.elevated, false, "browser runtime capability must not imply elevation");
   assert.strictEqual(capabilityUnavailable.realRunEnabled, false, "browser runtime capability must keep real run disabled");
   assert.strictEqual(capabilityUnavailable.executeCleanupPlan, false, "browser runtime capability must not expose write command");
+  assert(!Object.prototype.hasOwnProperty.call(capabilityUnavailable, "simulateCleanupPlan"), "browser runtime capability must not expose removed simulation command state");
   assert.strictEqual(capabilityUnavailable.executorScopeStatus, "no-scoped-flags", "browser runtime capability should expose a default executor scope status");
   assert.strictEqual(capabilityUnavailable.enabledScopedExecutorFlagCount, 0, "browser runtime capability should expose zero scoped executor flags");
   assert.deepStrictEqual(capabilityUnavailable.enabledScopedExecutorFlags, [], "browser runtime capability should expose an empty scoped flag list");
@@ -439,136 +447,6 @@ const GB = 1024 * MB;
   assert.strictEqual(native.normalizeNativeVolume({ drive: "C:", totalBytes: 10, freeBytes: 3 }).usedBytes, 7, "native volume should derive used bytes when needed");
   assert.strictEqual(native.normalizeNativeVolume({ totalBytes: 10, freeBytes: 3 }), null, "native volume should reject missing drive");
 
-  const dryRun = native.normalizeNativeExecutorDryRun({
-    mode: "native-dry-run",
-    real_run_enabled: false,
-    destructive_commands: false,
-    entries: [
-      {
-        id: "windows-temp",
-        title: "Windows temporary files",
-        route: "known-temp-delete",
-        target_path: "C:\\Windows\\Temp",
-        target_scope_status: "target-allowed",
-        reject_code: "",
-        result: "dry-run",
-        bytes: 123,
-        candidate_bytes: 100,
-        candidate_count: 1,
-        skipped_count: 2,
-        candidates: [{ name: "a.tmp", path: "C:\\Windows\\Temp\\a.tmp", bytes: 100, result: "candidate", note: "sample" }],
-        note: "No mutation"
-      }
-    ],
-    warnings: ["disabled"]
-  });
-  assert.strictEqual(dryRun.realRunEnabled, false, "native dry-run normalization should keep real run disabled");
-  assert.strictEqual(dryRun.destructiveCommands, false, "native dry-run normalization should keep destructive commands disabled");
-  assert.strictEqual(dryRun.entries[0].route, "known-temp-delete", "native dry-run route should be preserved");
-  assert.strictEqual(dryRun.entries[0].targetPath, "C:\\Windows\\Temp", "native dry-run target path should normalize");
-  assert.strictEqual(dryRun.entries[0].targetScopeStatus, "target-allowed", "native dry-run target scope status should normalize");
-  assert.strictEqual(dryRun.entries[0].rejectCode, "", "native dry-run target scope should omit reject code when allowed");
-  assert.strictEqual(dryRun.entries[0].candidateCount, 1, "native dry-run candidate count should normalize");
-  assert.strictEqual(dryRun.entries[0].skippedCount, 2, "native dry-run skipped count should normalize");
-  assert.strictEqual(dryRun.entries[0].candidates[0].name, "a.tmp", "native dry-run candidate samples should normalize");
-  const blockedDryRun = native.normalizeNativeExecutorDryRun({
-    entries: [
-      {
-        id: "bad-temp",
-        title: "Bad temp target",
-        route: "known-temp-delete",
-        target_path: "C:\\Users\\real\\Downloads",
-        target_scope_status: "target-blocked",
-        reject_code: "target-forbidden",
-        candidate_count: 0,
-        candidates: [],
-        note: "Target rejected"
-      }
-    ]
-  });
-  assert.strictEqual(blockedDryRun.entries[0].targetScopeStatus, "target-blocked", "native dry-run should preserve blocked target scope");
-  assert.strictEqual(blockedDryRun.entries[0].rejectCode, "target-forbidden", "native dry-run should preserve target-scope reject code");
-  assert.strictEqual(blockedDryRun.entries[0].candidateCount, 0, "blocked target scope should not normalize candidate rows");
-  let dryRunInvocation = null;
-  await native.runNativeExecutorDryRun(
-    { rows: [{ id: "windows-temp", title: "Windows temporary files", bytes: 123, route: "known-temp-delete", path: "C:\\Windows\\Temp", canSimulate: true }] },
-    {
-      __TAURI__: {
-        core: {
-          invoke(command, payload) {
-            dryRunInvocation = { command, payload };
-            return Promise.resolve({ entries: [], warnings: [] });
-          }
-        }
-      }
-    }
-  );
-  assert.strictEqual(dryRunInvocation.command, "simulate_cleanup_plan", "native dry-run should invoke simulate_cleanup_plan");
-  assert.strictEqual(dryRunInvocation.payload.request.actions[0].targetPath, "C:\\Windows\\Temp", "native dry-run should pass target path evidence");
-  let archiveDryRunInvocation = null;
-  await native.runNativeExecutorDryRun(
-    {
-      rows: [
-        {
-          id: "large-user-files",
-          title: "Large personal files",
-          bytes: 3 * GB,
-          route: "item-review-large-files",
-          canSimulate: true,
-          archiveTargets: [
-            {
-              id: "old-video",
-              name: "old-video.mov",
-              path: "C:\\Users\\real\\Videos\\old-video.mov",
-              bytes: 2 * GB
-            },
-            {
-              id: "old-export",
-              name: "old-export.zip",
-              path: "C:\\Users\\real\\Downloads\\old-export.zip",
-              bytes: GB
-            }
-          ]
-        }
-      ]
-    },
-    {
-      __TAURI__: {
-        core: {
-          invoke(command, payload) {
-            archiveDryRunInvocation = { command, payload };
-            return Promise.resolve({ entries: [], warnings: [] });
-          }
-        }
-      }
-    }
-  );
-  assert.strictEqual(archiveDryRunInvocation.command, "simulate_cleanup_plan", "archive dry-run should invoke simulate_cleanup_plan");
-  assert.strictEqual(archiveDryRunInvocation.payload.request.actions.length, 2, "archive dry-run should pass every reviewed archive target");
-  assert.deepStrictEqual(
-    archiveDryRunInvocation.payload.request.actions.map((action) => action.targetPath),
-    ["C:\\Users\\real\\Videos\\old-video.mov", "C:\\Users\\real\\Downloads\\old-export.zip"],
-    "archive dry-run should pass reviewed archive file paths, not the parent action row"
-  );
-  assert(
-    archiveDryRunInvocation.payload.request.actions.every((action) => action.route === "item-review-large-files"),
-    "archive dry-run should bind every reviewed file to the large-file archive route"
-  );
-  let scopeInvocation = null;
-  await native.runNativeDryRunScopeValidation({
-    __TAURI__: {
-      core: {
-        invoke(command, payload) {
-          scopeInvocation = { command, payload };
-          return Promise.resolve({ entries: [], warnings: [] });
-        }
-      }
-    }
-  });
-  assert.strictEqual(scopeInvocation.command, "simulate_cleanup_plan", "native scope validation should invoke simulate_cleanup_plan");
-  assert(scopeInvocation.payload.request.actions.some((action) => action.id === "windows-temp" && action.targetPath.includes("%TEMP%")), "native scope validation should include allowed temp scope");
-  assert(scopeInvocation.payload.request.actions.some((action) => action.id === "downloads-forbidden-as-temp" && action.targetPath.includes("Downloads")), "native scope validation should include forbidden Downloads scope");
-  assert(scopeInvocation.payload.request.actions.some((action) => action.id === "browser-identity-forbidden" && action.targetPath.includes("Cookies")), "native scope validation should include forbidden browser identity scope");
   let writeInvocation = null;
   const rejectedWrite = await native.runNativeWriteBoundary(
     {
@@ -1356,7 +1234,6 @@ const GB = 1024 * MB;
     real_run_enabled: true,
     destructive_commands: true,
     scan_known_roots: true,
-    simulate_cleanup_plan: true,
     execute_cleanup_plan: true,
     openai_agent_advice: true,
     openai_advisor_configured: true,
@@ -1404,7 +1281,7 @@ const GB = 1024 * MB;
     "native capabilities should normalize enabled scoped flag names"
   );
   assert.strictEqual(capabilities.scanKnownRoots, true, "native capabilities should expose scanner availability");
-  assert.strictEqual(capabilities.simulateCleanupPlan, true, "native capabilities should expose dry-run availability");
+  assert(!Object.prototype.hasOwnProperty.call(capabilities, "simulateCleanupPlan"), "native capabilities must not expose removed simulation command state");
   assert.strictEqual(capabilities.executeCleanupPlan, true, "native capabilities should expose route executor availability");
   assert.strictEqual(capabilities.openAiAgentAdvice, true, "native capabilities should expose OpenAI advisor availability");
   assert.strictEqual(capabilities.openAiAdvisorConfigured, true, "native capabilities should expose OpenAI key configuration without the key");
