@@ -118,6 +118,41 @@ const assert = require("assert");
   });
   assert.strictEqual(confirmedRecyclePrerequisites.ready, true, "Recycle Bin execution should unlock after explicit permanent-removal confirmation");
 
+  const inAppBundle = workflow.buildInAppSupportBundleReport({
+    generatedAt: "2026-06-08T19:30:00.000Z",
+    routeInput: "npm-cache",
+    selectedFlag: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
+    proofArtifacts: [
+      { fileName: "spaceguard-selected-route-proof-packet.md", written: true, path: "C:\\repo\\spaceguard-selected-route-proof-packet.md", bytes: 100 },
+      { fileName: "spaceguard-real-workflow-proof.md", written: true, path: "C:\\repo\\spaceguard-real-workflow-proof.md", bytes: 200 },
+      { fileName: "spaceguard-workflow-proof-check.json", written: true, path: "C:\\repo\\spaceguard-workflow-proof-check.json", bytes: 300 }
+    ],
+    workflowProofCheck: {
+      schemaVersion: "spaceguard-workflow-proof-check/v1",
+      status: "accepted",
+      canAccept: true,
+      primary: "Workflow proof for npm-cache is accepted.",
+      counts: {
+        reclaimedBytes: 1024,
+        blockers: 0
+      },
+      blockers: []
+    }
+  });
+  assert.strictEqual(inAppBundle.schemaVersion, "spaceguard-support-bundle/v1", "in-app support bundle should use the same stable schema as the CLI bundle");
+  assert.strictEqual(inAppBundle.status, "handoff-ready", "accepted in-app workflow proof should make the app support bundle handoff-ready");
+  assert.strictEqual(inAppBundle.readyForHandoff, true, "accepted in-app support bundle should clear handoff readiness");
+  assert.strictEqual(inAppBundle.selectedRoute, "npm-cache", "in-app support bundle should preserve route input");
+  assert.strictEqual(inAppBundle.selectedFlag, "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "in-app support bundle should preserve selected route flag");
+  assert(inAppBundle.nextStep.includes("archive this bundle"), "ready in-app support bundle should produce archive-ready next step");
+
+  const inAppBundleMarkdown = workflow.renderInAppSupportBundleMarkdown(inAppBundle);
+  assert(inAppBundleMarkdown.includes("spaceguard-support-bundle/v1"), "in-app support bundle markdown should include the schema");
+  assert(inAppBundleMarkdown.includes("spaceguard-selected-route-proof-packet.md"), "in-app support bundle markdown should list selected-route proof");
+  assert(inAppBundleMarkdown.includes("spaceguard-real-workflow-proof.md"), "in-app support bundle markdown should list workflow proof");
+  assert(inAppBundleMarkdown.includes("spaceguard-workflow-proof-check.json"), "in-app support bundle markdown should list workflow proof check");
+  assert(inAppBundleMarkdown.includes("Workflow proof for npm-cache is accepted."), "in-app support bundle markdown should include proof summary");
+
   const stillPresent = workflow.buildPostRunProof({
     candidate: selectedInstaller,
     executionRecord: {

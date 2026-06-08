@@ -612,6 +612,109 @@ export function buildExecutionPrerequisites({
   };
 }
 
+const SUPPORT_BUNDLE_PROOF_ARTIFACTS = [
+  "spaceguard-selected-route-proof-packet.md",
+  "spaceguard-real-workflow-proof.md",
+  "spaceguard-workflow-proof-check.json"
+];
+
+export function buildInAppSupportBundleReport({
+  generatedAt = new Date().toISOString(),
+  routeInput = "",
+  selectedFlag = "",
+  proofArtifacts = [],
+  workflowProofCheck = null
+} = {}) {
+  const artifacts = proofArtifacts.map(normalizeSupportBundleArtifact);
+  const requiredWritten = SUPPORT_BUNDLE_PROOF_ARTIFACTS.every((fileName) =>
+    artifacts.some((artifact) => artifact.fileName === fileName && artifact.written)
+  );
+  const accepted = Boolean(workflowProofCheck?.canAccept);
+  const readyForHandoff = Boolean(requiredWritten && accepted);
+  const blockers = Array.isArray(workflowProofCheck?.blockers)
+    ? workflowProofCheck.blockers.map((blocker) => ({
+        id: String(blocker?.id || ""),
+        label: String(blocker?.label || ""),
+        detail: String(blocker?.detail || "")
+      }))
+    : [];
+
+  return {
+    schemaVersion: "spaceguard-support-bundle/v1",
+    tool: "spaceguard-desktop-app",
+    generatedAt,
+    status: readyForHandoff ? "handoff-ready" : "handoff-blocked",
+    readyForHandoff,
+    selectedRoute: String(routeInput || workflowProofCheck?.routeInput || workflowProofCheck?.route || ""),
+    selectedFlag: String(selectedFlag || ""),
+    proofArtifacts: artifacts,
+    workflowProofCheck: {
+      schemaVersion: String(workflowProofCheck?.schemaVersion || ""),
+      status: String(workflowProofCheck?.status || "missing"),
+      canAccept: accepted,
+      primary: String(workflowProofCheck?.primary || ""),
+      blockers,
+      counts: {
+        reclaimedBytes: Number(workflowProofCheck?.counts?.reclaimedBytes || 0),
+        blockers: Number(workflowProofCheck?.counts?.blockers ?? blockers.length)
+      }
+    },
+    nextStep: buildInAppSupportBundleNextStep({ requiredWritten, accepted })
+  };
+}
+
+export function renderInAppSupportBundleMarkdown(report = {}) {
+  const artifacts = Array.isArray(report.proofArtifacts) ? report.proofArtifacts : [];
+  const blockers = Array.isArray(report.workflowProofCheck?.blockers) ? report.workflowProofCheck.blockers : [];
+  return [
+    "# SpaceGuard Support Bundle",
+    "",
+    `- Schema: ${report.schemaVersion || "spaceguard-support-bundle/v1"}`,
+    `- Generated: ${report.generatedAt || ""}`,
+    `- Status: ${report.status || "unknown"}`,
+    `- Route: ${report.selectedRoute || "unknown"}`,
+    `- Selected flag: ${report.selectedFlag || "none"}`,
+    `- Next step: ${report.nextStep || ""}`,
+    "",
+    "## Proof Artifacts",
+    "",
+    "| File | State | Size | Path |",
+    "| --- | --- | ---: | --- |",
+    ...artifacts.map((artifact) => `| ${artifact.fileName} | ${artifact.written ? "written" : "missing"} | ${formatBytes(artifact.bytes)} | ${artifact.path || ""} |`),
+    "",
+    "## Workflow Proof Check",
+    "",
+    `- Schema: ${report.workflowProofCheck?.schemaVersion || "missing"}`,
+    `- Status: ${report.workflowProofCheck?.status || "missing"}`,
+    `- Accepted: ${report.workflowProofCheck?.canAccept ? "yes" : "no"}`,
+    `- Reclaimed: ${formatBytes(report.workflowProofCheck?.counts?.reclaimedBytes || 0)}`,
+    `- Summary: ${report.workflowProofCheck?.primary || ""}`,
+    "",
+    "## Blockers",
+    "",
+    blockers.length
+      ? blockers.map((blocker) => `- ${blocker.label || blocker.id}: ${blocker.detail || ""}`).join("\n")
+      : "- None",
+    ""
+  ].join("\n");
+}
+
+function normalizeSupportBundleArtifact(value = {}) {
+  return {
+    fileName: String(value.fileName || value.file_name || ""),
+    written: Boolean(value.written ?? value.exists),
+    path: String(value.path || ""),
+    bytes: Number(value.bytes || 0),
+    reason: String(value.reason || "")
+  };
+}
+
+function buildInAppSupportBundleNextStep({ requiredWritten, accepted }) {
+  if (!requiredWritten) return "Export proof in the desktop app so all required proof artifacts are written before handoff.";
+  if (!accepted) return "Resolve workflow proof check blockers in the app, rerun post-run rescan if needed, then export proof again.";
+  return "You can archive this bundle with the three proof artifacts before enabling another cleanup route.";
+}
+
 function guardrailRow({ id, label, passed, detail }) {
   return {
     id,

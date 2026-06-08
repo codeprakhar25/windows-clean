@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildExecutionPrerequisites, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, formatBytes } from "./real-workflow.mjs";
+import { buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, formatBytes, renderInAppSupportBundleMarkdown } from "./real-workflow.mjs";
 import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -64,6 +64,7 @@ const DEFAULT_SCAN_REQUEST = {
 const PROOF_PACKET_FILE = "spaceguard-selected-route-proof-packet.md";
 const WORKFLOW_PROOF_FILE = "spaceguard-real-workflow-proof.md";
 const WORKFLOW_PROOF_CHECK_FILE = "spaceguard-workflow-proof-check.json";
+const SUPPORT_BUNDLE_FILE = "spaceguard-support-bundle.md";
 const CONFIRM_PREFIX = "RUN";
 
 const EXECUTOR_RECIPES = {
@@ -273,6 +274,7 @@ function App() {
   const [proofReviewed, setProofReviewed] = useState(false);
   const [workflowProofAccepted, setWorkflowProofAccepted] = useState(false);
   const [workflowProofCheck, setWorkflowProofCheck] = useState(null);
+  const [supportBundleWrite, setSupportBundleWrite] = useState(null);
   const [proofExportStatus, setProofExportStatus] = useState("idle");
   const [proofExportMessage, setProofExportMessage] = useState("");
   const [agentPrompt, setAgentPrompt] = useState("Find the safest next cleanup step from the current real scan.");
@@ -327,7 +329,8 @@ function App() {
       executionStatus !== "running"
   );
   const canExportProof = Boolean(postRunProof.status === "matched" && proofReviewed && executionRecord?.accepted);
-  const targetSwitchLocked = Boolean(executionRecord?.accepted && !workflowProofAccepted);
+  const supportBundleWritten = Boolean(workflowProofAccepted && supportBundleWrite?.written);
+  const targetSwitchLocked = Boolean(executionRecord?.accepted && !supportBundleWritten);
   const agentContext = useMemo(
     () => buildAgentContext({
       runtime,
@@ -394,6 +397,7 @@ function App() {
         setProofReviewed(false);
         setWorkflowProofAccepted(false);
         setWorkflowProofCheck(null);
+        setSupportBundleWrite(null);
         setProofExportStatus("idle");
         setProofExportMessage("");
       } else {
@@ -408,6 +412,7 @@ function App() {
         setProofReviewed(false);
         setWorkflowProofAccepted(false);
         setWorkflowProofCheck(null);
+        setSupportBundleWrite(null);
         setProofExportStatus("idle");
         setProofExportMessage("");
       }
@@ -426,6 +431,7 @@ function App() {
     setExecutionResult(null);
     setWorkflowProofAccepted(false);
     setWorkflowProofCheck(null);
+    setSupportBundleWrite(null);
     setProofExportStatus("idle");
     setProofExportMessage("");
     const planId = activePlanId || `plan-${Date.now()}-${selectedCandidate.id}`;
@@ -490,6 +496,7 @@ function App() {
     setProofExportMessage("");
     setWorkflowProofAccepted(false);
     setWorkflowProofCheck(null);
+    setSupportBundleWrite(null);
     try {
       const generatedAt = new Date().toISOString();
       const selectedRouteProof = buildSelectedRouteProofPacket({
@@ -520,13 +527,26 @@ function App() {
         route: selectedCandidate.route,
         proofKind: "workflow-proof-check"
       });
+      const supportBundleReport = buildInAppSupportBundleReport({
+        generatedAt,
+        routeInput: selectedCandidate.routeInput,
+        selectedFlag: selectedCandidate.envVar,
+        proofArtifacts: [selectedWrite, workflowWrite, proofCheckWrite],
+        workflowProofCheck: acceptedCheck
+      });
+      const supportBundleMarkdown = renderInAppSupportBundleMarkdown(supportBundleReport);
+      const supportWrite = await writeProofFile(SUPPORT_BUNDLE_FILE, supportBundleMarkdown, {
+        route: selectedCandidate.route,
+        proofKind: "support-bundle"
+      });
       setWorkflowProofCheck(acceptedCheck);
       setWorkflowProofAccepted(Boolean(acceptedCheck.canAccept));
+      setSupportBundleWrite(supportWrite);
       setProofExportStatus("complete");
       setProofExportMessage(
         acceptedCheck.canAccept
-          ? `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE}, ${workflowWrite.fileName || WORKFLOW_PROOF_FILE}, and ${proofCheckWrite.fileName || WORKFLOW_PROOF_CHECK_FILE} into the runner working directory. Workflow proof accepted by in-app verifier.`
-          : `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE}, ${workflowWrite.fileName || WORKFLOW_PROOF_FILE}, and ${proofCheckWrite.fileName || WORKFLOW_PROOF_CHECK_FILE} into the runner working directory. Workflow proof blocked by in-app verifier: ${acceptedCheck.blockers.length} blocker(s).`
+          ? `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE}, ${workflowWrite.fileName || WORKFLOW_PROOF_FILE}, ${proofCheckWrite.fileName || WORKFLOW_PROOF_CHECK_FILE}, and ${supportWrite.fileName || SUPPORT_BUNDLE_FILE} into the runner working directory. Workflow proof accepted by in-app verifier. Support bundle captured.`
+          : `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE}, ${workflowWrite.fileName || WORKFLOW_PROOF_FILE}, ${proofCheckWrite.fileName || WORKFLOW_PROOF_CHECK_FILE}, and ${supportWrite.fileName || SUPPORT_BUNDLE_FILE} into the runner working directory. Workflow proof blocked by in-app verifier: ${acceptedCheck.blockers.length} blocker(s).`
       );
     } catch (error) {
       setProofExportStatus("error");
@@ -610,6 +630,7 @@ function App() {
               setProofReviewed(false);
               setWorkflowProofAccepted(false);
               setWorkflowProofCheck(null);
+              setSupportBundleWrite(null);
               setProofExportStatus("idle");
               setProofExportMessage("");
             }}
@@ -1143,7 +1164,7 @@ function CleanupQueue({ candidates, selectedId, setSelectedId, scan, targetSwitc
         ) : candidates.length ? (
           <div className="grid gap-3">
             {targetSwitchLocked ? (
-              <Notice tone="review" icon={Lock} text="Export proof and let the in-app verifier accept it before selecting another cleanup target." />
+              <Notice tone="review" icon={Lock} text="Export proof, let the in-app verifier accept it, and capture the support bundle before selecting another cleanup target." />
             ) : null}
             {candidates.map((candidate) => (
               <button

@@ -26,10 +26,10 @@ Inside the desktop app:
 3. Review the target, check the consent box, and type the exact confirmation phrase.
 4. Execute selected cleanup.
 5. Run post-run rescan.
-6. Export `spaceguard-selected-route-proof-packet.md`, `spaceguard-real-workflow-proof.md`, and `spaceguard-workflow-proof-check.json`.
-7. Run `npm run support:bundle` to write `spaceguard-support-bundle.md` for handoff/debugging.
+6. Export proof. The app writes `spaceguard-selected-route-proof-packet.md`, `spaceguard-real-workflow-proof.md`, `spaceguard-workflow-proof-check.json`, and `spaceguard-support-bundle.md`.
+7. Keep another route disabled until the app confirms the in-app verifier accepted the workflow proof and the support bundle was captured.
 
-The app runs the workflow proof verifier during export. The CLI verifier below remains useful as an external audit.
+The app runs the workflow proof verifier and support-bundle capture during export. The CLI verifier below remains useful as an external audit.
 
 If the app opens in a normal browser, it will only show connection/setup steps. It will not scan local folders or run cleanup.
 

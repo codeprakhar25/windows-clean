@@ -855,6 +855,7 @@ fn allowed_proof_artifact_file_name(file_name: &str) -> bool {
         "spaceguard-selected-route-proof-packet.md"
             | "spaceguard-real-workflow-proof.md"
             | "spaceguard-workflow-proof-check.json"
+            | "spaceguard-support-bundle.md"
     )
 }
 

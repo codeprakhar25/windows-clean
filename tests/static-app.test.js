@@ -47,7 +47,8 @@ const requiredAppMarkers = [
   "Manual review findings",
   "spaceguard-selected-route-proof-packet.md",
   "spaceguard-real-workflow-proof.md",
-  "spaceguard-workflow-proof-check.json"
+  "spaceguard-workflow-proof-check.json",
+  "spaceguard-support-bundle.md"
 ];
 
 for (const marker of requiredAppMarkers) {
@@ -115,9 +116,13 @@ assert(app.includes("buildWorkflowProofCheck"), "proof export should run the sha
 assert(app.includes("workflowProofCheck"), "proof panel should render workflow proof validation output from the app");
 assert(app.includes("Workflow proof accepted by in-app verifier."), "proof export should report accepted in-app workflow proof validation");
 assert(app.includes("proofKind: \"workflow-proof-check\""), "proof export should persist the in-app verifier output as a restricted artifact");
+assert(app.includes("proofKind: \"support-bundle\""), "proof export should persist an in-app support bundle as a restricted artifact");
+assert(app.includes("buildInAppSupportBundleReport"), "proof export should build the support bundle inside the desktop app");
+assert(app.includes("renderInAppSupportBundleMarkdown"), "proof export should render support bundle markdown inside the desktop app");
+assert(app.includes("supportBundleWritten"), "cleanup queue should keep next route locked until support bundle capture succeeds");
 assert(app.includes("selected-route-proof-reviewed"), "app workflow proof should require reviewed selected-route proof export");
 assert(!app.includes("selected-route-proof-import"), "app workflow proof should not require obsolete selected-route proof import");
-assert(app.includes("Export proof and let the in-app verifier accept it before selecting another cleanup target."), "cleanup queue should explain the workflow proof validation lock");
+assert(app.includes("Export proof, let the in-app verifier accept it, and capture the support bundle before selecting another cleanup target."), "cleanup queue should explain the workflow proof and support bundle lock");
 assert(app.includes("disabled={targetSwitchLocked && candidate.id !== selectedId}"), "cleanup queue should disable other targets while proof export is pending");
 assert(!app.includes("npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted"), "proof panel should not rely on a manual CLI acceptance checkbox");
 assert(
@@ -159,6 +164,7 @@ assert(rustScanner.includes("fn write_proof_artifact"), "Rust backend should exp
 assert(rustScanner.includes("spaceguard-real-workflow-proof.md"), "Rust proof artifact writer should allow workflow proof export");
 assert(rustScanner.includes("spaceguard-selected-route-proof-packet.md"), "Rust proof artifact writer should allow selected-route proof export");
 assert(rustScanner.includes("spaceguard-workflow-proof-check.json"), "Rust proof artifact writer should allow workflow proof check export");
+assert(rustScanner.includes("spaceguard-support-bundle.md"), "Rust proof artifact writer should allow support bundle export");
 assert(rustScanner.includes("execute_cleanup_plan"), "Rust backend should expose the guarded executor command");
 assert(rustScanner.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "Rust backend should gate npm cleanup behind a route flag");
 assert(!rustScanner.includes("first-route-proof-required"), "Rust backend should not reject real-data routes behind seeded proof ceremony");
@@ -194,6 +200,7 @@ assert(gitignore.includes("evidence/"), ".gitignore should exclude generated Win
 assert(gitignore.includes("spaceguard-real-workflow-proof.md"), ".gitignore should exclude exported workflow proof artifacts");
 assert(gitignore.includes("spaceguard-selected-route-proof-packet.md"), ".gitignore should exclude selected-route proof packet exports");
 assert(gitignore.includes("spaceguard-workflow-proof-check.json"), ".gitignore should exclude workflow proof check exports");
+assert(gitignore.includes("spaceguard-support-bundle.md"), ".gitignore should exclude support bundle exports");
 assert(gitignore.includes("commands.ndjson"), ".gitignore should exclude copied command ledgers");
 
 assert(setupDoctorScript.includes("OPENAI_API_KEY"), "setup doctor should check OpenAI key configuration");
