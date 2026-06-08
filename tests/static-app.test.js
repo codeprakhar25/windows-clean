@@ -103,6 +103,9 @@ assert(app.includes("buildRouteReadiness"), "app should use tested route readine
 assert(app.includes("buildRouteSetupChecklist"), "app should use tested route setup checklist guardrails");
 assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
 assert(app.includes("executionRecord?.accepted"), "proof export should require an accepted native execution record");
+assert(app.includes("targetSwitchLocked"), "cleanup queue should lock target switching after accepted execution until proof export completes");
+assert(app.includes("Finish proof export before selecting another cleanup target."), "cleanup queue should explain the post-execution target switch lock");
+assert(app.includes("disabled={targetSwitchLocked && candidate.id !== selectedId}"), "cleanup queue should disable other targets while proof export is pending");
 assert(
   /setSelectedId=\{\(id\) => \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setPostRunScan\(null\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}\}/.test(app),
   "selecting a different cleanup target should clear stale execution, rescan, and proof export state"

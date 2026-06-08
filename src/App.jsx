@@ -316,6 +316,7 @@ function App() {
       executionStatus !== "running"
   );
   const canExportProof = Boolean(postRunProof.status === "matched" && proofReviewed && executionRecord?.accepted);
+  const targetSwitchLocked = Boolean(executionRecord?.accepted && proofExportStatus !== "complete");
   const agentContext = useMemo(
     () => buildAgentContext({
       runtime,
@@ -560,7 +561,9 @@ function App() {
           <CleanupQueue
             candidates={candidates}
             selectedId={selectedId}
+            targetSwitchLocked={targetSwitchLocked}
             setSelectedId={(id) => {
+              if (targetSwitchLocked && id !== selectedId) return;
               setSelectedId(id);
               setExecutionResult(null);
               setExecutionRecord(null);
@@ -1086,7 +1089,7 @@ function ScanPanel({ request, setRequest, scan, scanStatus, scanError, onRunScan
   );
 }
 
-function CleanupQueue({ candidates, selectedId, setSelectedId, scan }) {
+function CleanupQueue({ candidates, selectedId, setSelectedId, scan, targetSwitchLocked = false }) {
   return (
     <Card className="rounded-md">
       <CardHeader>
@@ -1101,12 +1104,16 @@ function CleanupQueue({ candidates, selectedId, setSelectedId, scan }) {
           <EmptyState icon={ScanLine} title="Run real scan first" detail="The queue is built only from native scan findings." />
         ) : candidates.length ? (
           <div className="grid gap-3">
+            {targetSwitchLocked ? (
+              <Notice tone="review" icon={Lock} text="Finish proof export before selecting another cleanup target." />
+            ) : null}
             {candidates.map((candidate) => (
               <button
                 key={candidate.id}
                 type="button"
+                disabled={targetSwitchLocked && candidate.id !== selectedId}
                 onClick={() => setSelectedId(candidate.id)}
-                className={`w-full rounded-md border p-4 text-left transition hover:border-primary ${
+                className={`w-full rounded-md border p-4 text-left transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-50 ${
                   selectedId === candidate.id ? "border-primary bg-primary/5" : "bg-background"
                 }`}
               >
