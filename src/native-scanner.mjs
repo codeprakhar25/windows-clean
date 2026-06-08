@@ -128,6 +128,15 @@ export async function runNativeExecutorDryRun(executorPlan, host = globalThis) {
               targetPath: target.path || ""
             }));
           }
+          if (Array.isArray(row.archiveTargets) && row.archiveTargets.length) {
+            return row.archiveTargets.map((target) => ({
+              id: target.id || row.id,
+              title: target.name || row.title,
+              bytes: Number(target.bytes || 0),
+              route: row.route,
+              targetPath: target.path || ""
+            }));
+          }
           return [{
             id: row.id,
             title: row.title,

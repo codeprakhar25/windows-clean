@@ -489,6 +489,55 @@ const path = require("path");
   );
   assert.strictEqual(dryRunInvocation.command, "simulate_cleanup_plan", "native dry-run should invoke simulate_cleanup_plan");
   assert.strictEqual(dryRunInvocation.payload.request.actions[0].targetPath, "C:\\Windows\\Temp", "native dry-run should pass target path evidence");
+  let archiveDryRunInvocation = null;
+  await native.runNativeExecutorDryRun(
+    {
+      rows: [
+        {
+          id: "large-user-files",
+          title: "Large personal files",
+          bytes: 3 * guard.GB,
+          route: "item-review-large-files",
+          canSimulate: true,
+          archiveTargets: [
+            {
+              id: "old-video",
+              name: "old-video.mov",
+              path: "C:\\Users\\real\\Videos\\old-video.mov",
+              bytes: 2 * guard.GB
+            },
+            {
+              id: "old-export",
+              name: "old-export.zip",
+              path: "C:\\Users\\real\\Downloads\\old-export.zip",
+              bytes: guard.GB
+            }
+          ]
+        }
+      ]
+    },
+    {
+      __TAURI__: {
+        core: {
+          invoke(command, payload) {
+            archiveDryRunInvocation = { command, payload };
+            return Promise.resolve({ entries: [], warnings: [] });
+          }
+        }
+      }
+    }
+  );
+  assert.strictEqual(archiveDryRunInvocation.command, "simulate_cleanup_plan", "archive dry-run should invoke simulate_cleanup_plan");
+  assert.strictEqual(archiveDryRunInvocation.payload.request.actions.length, 2, "archive dry-run should pass every reviewed archive target");
+  assert.deepStrictEqual(
+    archiveDryRunInvocation.payload.request.actions.map((action) => action.targetPath),
+    ["C:\\Users\\real\\Videos\\old-video.mov", "C:\\Users\\real\\Downloads\\old-export.zip"],
+    "archive dry-run should pass reviewed archive file paths, not the parent action row"
+  );
+  assert(
+    archiveDryRunInvocation.payload.request.actions.every((action) => action.route === "item-review-large-files"),
+    "archive dry-run should bind every reviewed file to the large-file archive route"
+  );
   let scopeInvocation = null;
   await native.runNativeDryRunScopeValidation({
     __TAURI__: {
