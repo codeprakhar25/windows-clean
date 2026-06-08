@@ -507,6 +507,12 @@ assert(packageJson.includes("\"validate:workflow-proof\""), "package scripts sho
 assert(gitignore.includes("evidence/"), ".gitignore should exclude generated Windows proof evidence folders");
 assert(gitignore.includes("spaceguard-real-workflow-proof.md"), ".gitignore should exclude exported workflow proof artifacts");
 assert(gitignore.includes("spaceguard-selected-route-proof-packet.md"), ".gitignore should exclude selected-route proof packet exports");
+assert(gitignore.includes("first-route-completion-check.json"), ".gitignore should exclude copied first-route completion checks");
+assert(gitignore.includes("selected-route-completion-check.json"), ".gitignore should exclude copied selected-route completion checks");
+assert(gitignore.includes("operator-preflight.json"), ".gitignore should exclude copied Windows operator preflight artifacts");
+assert(gitignore.includes("operator-preflight-check.json"), ".gitignore should exclude copied Windows operator preflight check artifacts");
+assert(gitignore.includes("private-demo-preflight.json"), ".gitignore should exclude copied private demo preflight artifacts");
+assert(gitignore.includes("commands.ndjson"), ".gitignore should exclude copied command ledgers");
 assert(gitignore.includes("spaceguard-support-bundle.md"), ".gitignore should exclude exported support bundles by default");
 assert(setupDoctorScript.includes("OPENAI_API_KEY"), "setup doctor should check OpenAI key configuration");
 assert(setupDoctorScript.includes("openai:smoke:fixture"), "setup doctor should expose the local fixture smoke command");
