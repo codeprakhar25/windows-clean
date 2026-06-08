@@ -6641,6 +6641,14 @@ fn large_file_archive_target_reject_code(
     value: &str,
     archive_destination: &str,
 ) -> Option<&'static str> {
+    large_file_archive_target_reject_code_at(value, archive_destination, SystemTime::now())
+}
+
+fn large_file_archive_target_reject_code_at(
+    value: &str,
+    archive_destination: &str,
+    now: SystemTime,
+) -> Option<&'static str> {
     let path = resolve_dry_run_target(value);
     if path.as_os_str().is_empty() {
         return Some("target-missing");
@@ -6678,7 +6686,7 @@ fn large_file_archive_target_reject_code(
     if !should_count_file(MeasureKind::LargeUserFiles, &path) {
         return Some("target-not-large-user-file");
     }
-    if path_age_days(&path).unwrap_or(0) < 90 {
+    if path_age_days_at(&path, now).unwrap_or(0) < 90 {
         return Some("target-too-recent");
     }
     if let Some(code) = archive_destination_reject_code(archive_destination) {
@@ -12470,6 +12478,126 @@ mod tests {
         let _ = fs::remove_dir(&folder_target);
         let _ = fs::remove_dir(&downloads);
         let _ = fs::remove_dir(user_profile.join("Desktop"));
+        let _ = fs::remove_dir(&user_profile);
+    }
+
+    #[test]
+    fn large_file_archive_target_validation_accepts_only_old_large_reviewed_files() {
+        let user_profile = unique_test_dir("large-file-target-proof");
+        let videos = user_profile.join("Videos");
+        let desktop = user_profile.join("Desktop");
+        let app_data = user_profile.join("AppData").join("Local");
+        let archive_destination = unique_test_dir("large-file-archive-destination");
+        let old_large_file = videos.join("old-export.mov");
+        let recent_large_file = videos.join("recent-export.mov");
+        let small_file = videos.join("small-export.mov");
+        let outside_large_file = user_profile.join("Projects").join("old-export.mov");
+        let folder_target = desktop.join("folder.mov");
+        let forbidden_destination = app_data.join("Archive");
+        let large_size = 1024_u64 * 1024 * 1024 + 1;
+
+        fs::create_dir_all(&videos).expect("create videos dir");
+        fs::create_dir_all(&desktop).expect("create desktop dir");
+        fs::create_dir_all(outside_large_file.parent().expect("outside parent"))
+            .expect("create outside dir");
+        fs::create_dir_all(&folder_target).expect("create folder target");
+        fs::create_dir_all(&archive_destination).expect("create archive destination");
+        fs::create_dir_all(&forbidden_destination).expect("create forbidden destination");
+        fs::File::create(&old_large_file)
+            .expect("create old large file")
+            .set_len(large_size)
+            .expect("size old large file");
+        fs::File::create(&recent_large_file)
+            .expect("create recent large file")
+            .set_len(large_size)
+            .expect("size recent large file");
+        fs::write(&small_file, b"small file").expect("write small file");
+        fs::File::create(&outside_large_file)
+            .expect("create outside large file")
+            .set_len(large_size)
+            .expect("size outside large file");
+
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _restore_profile = EnvRestore::set("USERPROFILE", &user_profile);
+        let _restore_home = EnvRestore::set("HOME", &user_profile);
+        let old_enough_now = SystemTime::now() + Duration::from_secs(91 * 24 * 60 * 60);
+        let archive_destination_text = path_to_string(&archive_destination);
+
+        assert_eq!(
+            large_file_archive_target_reject_code_at(
+                &path_to_string(&old_large_file),
+                &archive_destination_text,
+                old_enough_now
+            ),
+            None,
+            "old reviewed 1GB+ files in allowed user folders should be accepted"
+        );
+        assert_eq!(
+            large_file_archive_target_reject_code_at(
+                &path_to_string(&recent_large_file),
+                &archive_destination_text,
+                SystemTime::now()
+            ),
+            Some("target-too-recent"),
+            "recent large files should be blocked"
+        );
+        assert_eq!(
+            large_file_archive_target_reject_code_at(
+                &path_to_string(&small_file),
+                &archive_destination_text,
+                old_enough_now
+            ),
+            Some("target-too-small"),
+            "small files should be blocked"
+        );
+        assert_eq!(
+            large_file_archive_target_reject_code_at(
+                &path_to_string(&outside_large_file),
+                &archive_destination_text,
+                old_enough_now
+            ),
+            Some("target-not-user-review-folder"),
+            "files outside allowed review folders should be blocked"
+        );
+        assert_eq!(
+            large_file_archive_target_reject_code_at(
+                &path_to_string(&folder_target),
+                &archive_destination_text,
+                old_enough_now
+            ),
+            Some("target-link-or-not-file"),
+            "directory targets should be blocked"
+        );
+        assert_eq!(
+            large_file_archive_target_reject_code_at(
+                &path_to_string(&old_large_file),
+                &path_to_string(&forbidden_destination),
+                old_enough_now
+            ),
+            Some("archive-destination-forbidden"),
+            "AppData archive destinations should be blocked"
+        );
+        assert!(same_windows_drive(
+            "C:\\Users\\me\\Videos\\old.mov",
+            "C:\\Archive"
+        ));
+        assert!(!same_windows_drive(
+            "C:\\Users\\me\\Videos\\old.mov",
+            "D:\\Archive"
+        ));
+
+        let _ = fs::remove_file(&old_large_file);
+        let _ = fs::remove_file(&recent_large_file);
+        let _ = fs::remove_file(&small_file);
+        let _ = fs::remove_file(&outside_large_file);
+        let _ = fs::remove_dir(&folder_target);
+        let _ = fs::remove_dir(&videos);
+        let _ = fs::remove_dir(&desktop);
+        let _ = fs::remove_dir(user_profile.join("Projects"));
+        let _ = fs::remove_dir(&forbidden_destination);
+        let _ = fs::remove_dir(&app_data);
+        let _ = fs::remove_dir(user_profile.join("AppData"));
+        let _ = fs::remove_dir(&archive_destination);
         let _ = fs::remove_dir(&user_profile);
     }
 
