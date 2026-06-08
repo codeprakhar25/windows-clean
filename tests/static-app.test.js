@@ -540,6 +540,7 @@ assert(workflowProofScript.includes("--file"), "workflow proof verifier should a
 assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");
 assert(readme.includes("npm run validate:route -- --route npm-cache"), "README should document route validation packet usage");
 assert(readme.includes("selected-route proof packet export"), "README should document selected-route proof packet validation");
+assert(readme.includes("post-run rescan, proof export, Selected route proof import"), "README should document proof export before selected-route proof import in the compact workflow");
 assert(readme.includes("Selected route proof import"), "README should document selected route proof import");
 assert(readme.includes("native volume proof expectation"), "README should document native volume proof validation");
 assert(readme.includes("multi-flag-blocked"), "README should document multi-flag setup blocking");
@@ -550,6 +551,7 @@ assert(readme.includes("--route pnpm-store"), "README should document selected-r
 assert(realDataGuide.includes("npm run setup:route -- --route npm-cache"), "Windows setup guide should document route setup packet usage");
 assert(realDataGuide.includes("npm run validate:route -- --route npm-cache"), "Windows setup guide should document route validation packet usage");
 assert(realDataGuide.includes("Windows validation packet post-run proof checklist"), "Windows setup guide should document validation packet post-run proof checklist");
+assert(realDataGuide.includes("post-run rescan, proof export, Selected route proof import"), "Windows setup guide should document proof export before selected-route proof import in the compact workflow");
 assert(realDataGuide.includes("Selected route proof import"), "Windows setup guide should document selected route proof import");
 assert(realDataGuide.includes("multi-flag-blocked"), "Windows setup guide should document multi-flag setup blocking");
 assert(realDataGuide.includes("realWorkflow"), "Windows setup guide should document setup doctor's compact real workflow");
