@@ -52,9 +52,10 @@ cp .env.example .env
 # optional: set OPENAI_MODEL or OPENAI_REASONING_EFFORT
 npm run setup:doctor
 npm run proof:first-route
+# fastest full private V1 Windows proof:
+npm run demo:private-v1-windows -- -SelectedRoute npm-cache
+# lower-level recovery/manual commands:
 npm run proof:first-route:windows
-# after the Windows proof is accepted:
-# set SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK to the accepted completion check JSON path
 npm run openai:smoke:fixture -- --route npm-cache
 npm run openai:smoke -- --route npm-cache
 npm run setup:route -- --route npm-cache
@@ -89,6 +90,8 @@ For every route after the seeded temp fixture, `setup:route` stays at `first-rou
 When the completion verifier accepts that evidence, keep the generated first-route completion check JSON and set `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to that path before enabling `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR`, `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR`, or another non-temp route flag.
 
 After first-route proof is accepted, `npm run proof:route:windows -- -Route npm-cache` is the fastest selected-route proof path. It runs only on Windows, loads `.env`, requires `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to point at an accepted `spaceguard-first-route-completion-check/v1` file, forces all scoped executor flags off except the selected route flag, runs setup doctor, route-specific OpenAI fixture smoke, live OpenAI smoke when configured, route setup, route validation, writes `operator-preflight.json`, validates it into `operator-preflight-check.json`, writes `operator-app-handoff.md` and `commands.ndjson`, then launches `npm run native:dev`. It does not run cleanup itself; deletion still requires the desktop app's real scan, target selection, consent, executor button, native volume proof, post-run rescan, selected-route proof packet export, selected-route proof import, and workflow proof export. After the app exits cleanly, the runner validates the workflow proof and writes `selected-route-completion-check.json`; that completion artifact is the selected-route handoff for starting the next cleanup route.
+
+`npm run demo:private-v1-windows -- -SelectedRoute npm-cache` coordinates the private V1 Windows proof from the top: host preflight, seeded first-route proof, accepted first-route completion check binding through `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK`, first-route root proof export archival into evidence, and selected real-data route proof. It still never performs cleanup directly; it only runs the existing guarded proof runners and writes `private-v1-proof.json` when both route completions are accepted.
 
 If the app proof export is fixed after the selected-route desktop session closes, rerun only the post-app finalization against the existing evidence root:
 

@@ -22,8 +22,10 @@ export function buildPrivateDemoReadinessSummary({
   const tauriConfig = readJson(path.join(root, "src-tauri", "tauri.conf.json"));
   const firstRouteRunnerPath = path.join(root, "scripts", "run-first-route-proof-windows.ps1");
   const selectedRouteRunnerPath = path.join(root, "scripts", "run-route-proof-windows.ps1");
+  const privateV1RunnerPath = path.join(root, "scripts", "run-private-v1-windows-proof.ps1");
   const firstRouteRunner = readText(firstRouteRunnerPath);
   const selectedRouteRunner = readText(selectedRouteRunnerPath);
+  const privateV1Runner = readText(privateV1RunnerPath);
   const workflowProofCheck = readText(path.join(root, "scripts", "run-workflow-proof-check.mjs"));
   const firstRouteCompletionCheck = readText(path.join(root, "scripts", "run-first-route-completion-check.mjs"));
   const selectedRouteCompletionCheck = readText(path.join(root, "scripts", "run-route-completion-check.mjs"));
@@ -160,6 +162,18 @@ export function buildPrivateDemoReadinessSummary({
       detail: "Private demo readiness must provide one Windows host preflight command before fixture and npm-cache proof runs."
     }),
     buildCheck({
+      id: "windows-private-v1-proof-runner",
+      label: "Windows private V1 proof runner",
+      passed: scriptIncludes(packageJson, "demo:private-v1-windows", "run-private-v1-windows-proof.ps1") &&
+        fileReady(privateV1Runner) &&
+        privateV1Runner.includes("spaceguard-private-v1-windows-proof/v1") &&
+        privateV1Runner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK") &&
+        privateV1Runner.includes("npm run proof:first-route:windows -- -Route temp-fixture") &&
+        privateV1Runner.includes("npm run proof:route:windows -- -Route $SelectedRoute") &&
+        directDeleteFree(privateV1Runner),
+      detail: "Private demo readiness must expose a single Windows V1 proof command that binds first-route completion before selected real-data cleanup."
+    }),
+    buildCheck({
       id: "workflow-proof-validation",
       label: "Workflow proof validation",
       passed: scriptIncludes(packageJson, "validate:workflow-proof", "run-workflow-proof-check.mjs") &&
@@ -228,6 +242,7 @@ export function buildPrivateDemoReadinessSummary({
       "npm test",
       "npm run build",
       "npm run demo:private-readiness",
+      "npm run demo:private-v1-windows -- -SelectedRoute npm-cache",
       "npm run openai:smoke:fixture -- --route npm-cache",
       "npm run openai:smoke -- --route npm-cache",
       "npm run demo:private-windows-preflight",
@@ -236,7 +251,7 @@ export function buildPrivateDemoReadinessSummary({
       "npm run proof:route:windows -- -Route npm-cache"
     ],
     primary: ready
-      ? "Private Windows demo readiness is proven; attempt the compiled demo on Windows with the seeded first route before npm-cache."
+      ? "Private Windows demo readiness is proven; run the V1 Windows coordinator on a prepared Windows host for seeded first-route proof and npm-cache proof."
       : `Private Windows demo readiness is blocked by ${blockers.length} issue(s).`
   };
 }

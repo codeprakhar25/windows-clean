@@ -40,9 +40,10 @@ Copy-Item .env.example .env
 # optional: set OPENAI_MODEL=gpt-5.2 and OPENAI_REASONING_EFFORT=low
 npm run setup:doctor
 npm run proof:first-route
+# fastest full private V1 Windows proof:
+npm run demo:private-v1-windows -- -SelectedRoute npm-cache
+# lower-level recovery/manual commands:
 npm run proof:first-route:windows
-# after the Windows proof is accepted:
-# set SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK to the accepted completion check JSON path
 npm run openai:smoke:fixture -- --route npm-cache
 npm run openai:smoke -- --route npm-cache
 npm run setup:route -- --route npm-cache
@@ -77,6 +78,14 @@ For every route after the seeded temp fixture, `setup:route` stays at `first-rou
 When the completion verifier accepts that evidence, keep the generated first-route completion check JSON and set `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to that path before enabling `SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR`, `SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR`, or another non-temp route flag.
 
 After first-route proof is accepted, `npm run proof:route:windows -- -Route npm-cache` runs the selected-route operator preflight on Windows. It loads `.env`, requires `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` to point at an accepted `spaceguard-first-route-completion-check/v1` file, forces all scoped executor flags off except the selected route flag, runs setup doctor, route-specific OpenAI fixture smoke, live OpenAI smoke when configured, route setup, and route validation, then launches the Tauri app. It writes `operator-preflight.json`, validates it into `operator-preflight-check.json`, and writes `operator-app-handoff.md` plus `commands.ndjson` before launch. It does not clean anything outside the desktop workflow; the actual selected-route cleanup still requires in-app scan, target selection, consent, selected executor click, native volume proof, post-run rescan, selected-route proof packet export, selected-route proof import, and `spaceguard-real-workflow-proof.md` export. After the app exits cleanly, the runner validates the workflow proof and writes `selected-route-completion-check.json`; that completion artifact is the selected-route handoff for starting the next cleanup route.
+
+For the fastest private V1 proof on a prepared Windows host, run:
+
+```powershell
+npm run demo:private-v1-windows -- -SelectedRoute npm-cache
+```
+
+This coordinator runs the host preflight, launches the seeded first-route proof, verifies the accepted `first-route-completion-check.json`, sets `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK` for the current process, archives the first-route root proof exports into evidence, then launches the selected real-data route proof. It writes `private-v1-proof.json` only after both route completions are accepted. It does not add a new cleanup authority path; cleanup remains inside the desktop app's scoped executor, consent, proof export, and completion verifier workflow.
 
 ## First npm real-data proof checklist
 

@@ -25,6 +25,7 @@ operator-preflight.json
 operator-preflight-check.json
 private-demo-preflight.json
 private-demo-readiness.json
+private-v1-proof.json
 native-dev-exit.json
 workflow-proof-check.json
 commands.ndjson
