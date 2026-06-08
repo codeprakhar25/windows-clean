@@ -4109,6 +4109,8 @@ const assert = require("assert");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.route, "known-temp-delete", "proof packet should bind to the selected route");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.counts.ledgerEntries, 1, "proof packet should count selected-route ledger entries");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.rescanStatus, "matched", "proof packet should retain rescan comparison status");
+  assert.strictEqual(selectedRouteProofFlow.proofPacket.rescanRows[0].expectedRemainingBytes, 0, "proof packet should keep selected-route expected remaining bytes from rescan comparison");
+  assert.strictEqual(selectedRouteProofFlow.proofPacket.counts.expectedBytes, selectedRouteProofFlow.proofPacket.counts.reclaimedBytes, "proof packet rescan expected bytes should match reclaimed bytes");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.readyForNextRoute, false, "matched proof should still block the next route until validation import is complete");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.volumeProof.status, "measured", "proof packet should include native volume proof status");
   assert.strictEqual(selectedRouteProofFlow.proofPacket.validationImport.status, "needs-import", "proof packet should expose missing validation import status");
@@ -4119,6 +4121,7 @@ const assert = require("assert");
   assert(proofPacketMarkdown.includes("matched"), "proof packet markdown should include matched rescan evidence");
   assert(proofPacketMarkdown.includes("Ledger entries: 1"), "proof packet markdown should include ledger count");
   assert(proofPacketMarkdown.includes("Volume proof: measured"), "proof packet markdown should include volume proof status");
+  assert(proofPacketMarkdown.includes("Expected remaining:"), "proof packet markdown should include expected remaining bytes");
   const scopedTempLedgerWithVolumeProof = tempLedgerWithVolumeProof.map((entry) => ({
     ...entry,
     source: "native-temp-executor"

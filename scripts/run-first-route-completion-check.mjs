@@ -104,8 +104,9 @@ export function buildFirstRouteCompletionCheck({
 
   validateAfterFixtureEvidence(afterFixture, add);
   validateNativeExitEvidence(nativeExit, add);
-  validateSelectedRouteProofPacket(selectedRouteProofPacket, resolvedSelectedRouteProofPacketPath, add);
+  const selectedRouteProofSummary = validateSelectedRouteProofPacket(selectedRouteProofPacket, resolvedSelectedRouteProofPacketPath, add);
   validateWorkflowProof(workflowProof, add);
+  validateSelectedRouteProofParity(selectedRouteProofPacket, workflowProofObject, workflowProof, add);
   validateProofFreshness({
     afterFixture,
     selectedRouteProofPacket,
@@ -140,6 +141,9 @@ export function buildFirstRouteCompletionCheck({
       commandRecords: commandRecords.length,
       requiredPostAppCommands: REQUIRED_POST_APP_COMMANDS.length,
       postAppCommandsPassed: commandSummary.requiredPassed,
+      rescanExpectedBytes: selectedRouteProofSummary.rescanExpectedBytes,
+      rescanActualRemainingBytes: selectedRouteProofSummary.rescanActualRemainingBytes,
+      ledgerReclaimedBytes: selectedRouteProofSummary.ledgerReclaimedBytes,
       nativeLaunchStartedAt: commandSummary.nativeLaunchStartedAt,
       afterFixtureGeneratedAt: String(afterFixture?.generatedAt || ""),
       selectedRouteProofPacketGeneratedAt: String(selectedRouteProofPacket?.generatedAt || ""),
@@ -392,7 +396,13 @@ function validateNativeExitEvidence(evidence, add) {
 }
 
 function validateSelectedRouteProofPacket(packet, expectedProofPacketPath, add) {
-  if (!packet) return;
+  const summary = {
+    ledgerReclaimedBytes: 0,
+    rescanExpectedBytes: 0,
+    rescanActualRemainingBytes: 0,
+    matchedRescanRows: 0
+  };
+  if (!packet) return summary;
   if (packet.schemaVersion !== "spaceguard-selected-route-proof-packet/v1") {
     add("selected-route-proof-packet", "Selected-route proof schema mismatch", "Expected spaceguard-selected-route-proof-packet/v1.");
   }
@@ -421,6 +431,101 @@ function validateSelectedRouteProofPacket(packet, expectedProofPacketPath, add) 
   }
   if (packet.volumeProof?.status !== "measured") {
     add("selected-route-proof-packet", "Selected-route volume proof missing", "Selected-route proof packet must include measured native volume proof.");
+  }
+  validateSelectedRouteLedgerRows(packet, summary, add);
+  validateSelectedRouteRescanRows(packet, summary, add);
+  return summary;
+}
+
+function validateSelectedRouteLedgerRows(packet, summary, add) {
+  const rows = Array.isArray(packet?.ledgerEntries) ? packet.ledgerEntries : [];
+  const declaredReclaimedBytes = Number(packet?.counts?.reclaimedBytes || 0);
+  if (!rows.length) {
+    add("selected-route-ledger-rows", "Selected-route ledger rows missing", "Selected-route proof packet must include the scoped native execution ledger row.");
+    return;
+  }
+
+  for (const [index, row] of rows.entries()) {
+    if (String(row?.route || "") !== TEMP_ROUTE) {
+      add("selected-route-ledger-rows", "Selected-route ledger route mismatch", `Ledger row ${index + 1} must bind to ${TEMP_ROUTE}.`);
+    }
+    if (Number(row?.bytes || 0) < 0) {
+      add("selected-route-ledger-rows", "Selected-route ledger bytes invalid", `Ledger row ${index + 1} reports negative bytes.`);
+    }
+  }
+
+  summary.ledgerReclaimedBytes = rows.reduce((sum, row) => sum + Number(row?.bytes || 0), 0);
+  if (declaredReclaimedBytes > 0 && summary.ledgerReclaimedBytes !== declaredReclaimedBytes) {
+    add(
+      "selected-route-ledger-bytes",
+      "Selected-route ledger byte count mismatch",
+      `Ledger rows sum to ${summary.ledgerReclaimedBytes} byte(s), but the proof packet claims ${declaredReclaimedBytes}.`
+    );
+  }
+}
+
+function validateSelectedRouteRescanRows(packet, summary, add) {
+  const rows = Array.isArray(packet?.rescanRows) ? packet.rescanRows : [];
+  const declaredReclaimedBytes = Number(packet?.counts?.reclaimedBytes || 0);
+  const declaredMatchedRows = Number(packet?.counts?.matchedRows || 0);
+  if (!rows.length) {
+    add("selected-route-rescan-rows", "Selected-route rescan rows missing", "Selected-route proof packet must include selected-route post-run rescan rows.");
+    return;
+  }
+
+  for (const [index, row] of rows.entries()) {
+    const state = String(row?.state || "");
+    if (String(row?.route || "") !== TEMP_ROUTE) {
+      add("selected-route-rescan-rows", "Selected-route rescan route mismatch", `Rescan row ${index + 1} must bind to ${TEMP_ROUTE}.`);
+    }
+    if (state !== "matched" && state !== "skipped") {
+      add("selected-route-rescan-rows", "Selected-route rescan state invalid", `Rescan row ${index + 1} is ${state || "missing"}; first-route completion accepts only matched or skipped rows.`);
+    }
+    if (Number(row?.expectedBytes || 0) < 0 || Number(row?.actualBytes || 0) < 0) {
+      add("selected-route-rescan-rows", "Selected-route rescan bytes invalid", `Rescan row ${index + 1} reports negative bytes.`);
+    }
+  }
+
+  summary.rescanExpectedBytes = rows.reduce((sum, row) => sum + Number(row?.expectedBytes || 0), 0);
+  summary.rescanActualRemainingBytes = rows.reduce((sum, row) => sum + Number(row?.actualBytes || 0), 0);
+  summary.matchedRescanRows = rows.filter((row) => row?.state === "matched").length;
+
+  if (declaredMatchedRows > 0 && summary.matchedRescanRows !== declaredMatchedRows) {
+    add(
+      "selected-route-rescan-rows",
+      "Selected-route matched row count mismatch",
+      `Rescan rows include ${summary.matchedRescanRows} matched row(s), but the proof packet claims ${declaredMatchedRows}.`
+    );
+  }
+  if (declaredReclaimedBytes > 0 && summary.rescanExpectedBytes !== declaredReclaimedBytes) {
+    add(
+      "selected-route-rescan-bytes",
+      "Selected-route rescan byte count mismatch",
+      `Rescan rows expect ${summary.rescanExpectedBytes} reclaimed byte(s), but the proof packet claims ${declaredReclaimedBytes}.`
+    );
+  }
+}
+
+function validateSelectedRouteProofParity(packet, workflowProofObject, workflowProofCheck, add) {
+  if (!packet || !workflowProofObject) return;
+  const packetBytes = Number(packet?.counts?.reclaimedBytes || 0);
+  const workflowBytes = Number(workflowProofObject?.counts?.reclaimedBytes ?? workflowProofCheck?.counts?.reclaimedBytes ?? 0);
+  if (packetBytes !== workflowBytes) {
+    add(
+      "selected-route-proof-parity",
+      "Selected-route proof byte parity mismatch",
+      `Selected-route proof packet claims ${packetBytes} reclaimed byte(s), but workflow proof claims ${workflowBytes}.`
+    );
+  }
+
+  const packetMatchedRows = Number(packet?.counts?.matchedRows || 0);
+  const workflowMatchedRows = Number(workflowProofObject?.counts?.matchedRows ?? workflowProofCheck?.counts?.matchedRows ?? 0);
+  if (packetMatchedRows !== workflowMatchedRows) {
+    add(
+      "selected-route-proof-parity",
+      "Selected-route proof matched-row parity mismatch",
+      `Selected-route proof packet claims ${packetMatchedRows} matched row(s), but workflow proof claims ${workflowMatchedRows}.`
+    );
   }
 }
 

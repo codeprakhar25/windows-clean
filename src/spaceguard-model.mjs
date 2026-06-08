@@ -8714,6 +8714,7 @@ export function buildSelectedRouteProofPacketMarkdown(packet = null) {
           `- ${row.title}: ${row.state}`,
           `  - Route: ${row.route || "unknown"}`,
           `  - Expected removal: ${formatBytes(row.expectedBytes)}`,
+          `  - Expected remaining: ${formatBytes(row.expectedRemainingBytes)}`,
           `  - Native remaining: ${formatBytes(row.actualBytes)}`,
           `  - Evidence: ${row.evidence || "none"}`
         ].join("\n"))
@@ -9200,6 +9201,7 @@ function compactSelectedRouteProofRescanRow(row = {}) {
     path: row.path || "",
     state: row.state || "",
     expectedBytes: Number(row.expectedBytes || 0),
+    expectedRemainingBytes: Number(row.expectedRemainingBytes || 0),
     actualBytes: Number(row.actualBytes || 0),
     deltaBytes: Number(row.deltaBytes || 0),
     nativeStatus: row.nativeStatus || "",

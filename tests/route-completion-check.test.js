@@ -277,6 +277,8 @@ function createSelectedRouteEvidence(patch = {}) {
   assert.strictEqual(accepted.counts.routeCommandsPassed, 5, "completion should count required route command records");
   assert.strictEqual(accepted.counts.reclaimedBytes, 1048576, "completion should preserve workflow recovered bytes");
   assert.strictEqual(accepted.counts.selectedRouteProofPacketReclaimedBytes, 1048576, "completion should preserve selected-route packet recovered bytes");
+  assert.strictEqual(accepted.counts.rescanExpectedBytes, 1048576, "completion should expose selected-route rescan expected bytes");
+  assert.strictEqual(accepted.counts.rescanActualRemainingBytes, 0, "completion should expose selected-route rescan remaining bytes");
   assert.strictEqual(accepted.counts.nativeLaunchStartedAt, "2026-06-08T10:20:00.000Z", "completion should expose the native launch timestamp used for proof freshness");
 
   const missingNativeExitEvidence = createSelectedRouteEvidence();
@@ -299,6 +301,43 @@ function createSelectedRouteEvidence(patch = {}) {
   });
   assert.strictEqual(wrongRoute.status, "blocked", "completion should block selected-route proof route mismatch");
   assert(wrongRoute.blockers.some((blocker) => blocker.id === "selected-route-proof-packet"), "route mismatch blocker should name selected-route proof packet");
+
+  const wrongRescanRouteEvidence = createSelectedRouteEvidence({
+    selectedRouteProofPacket: {
+      rescanRows: [{ id: "npm-cache-cleanup", route: "bounded-cache-delete", state: "matched", actualBytes: 0, expectedBytes: 1048576 }]
+    }
+  });
+  const wrongRescanRoute = verifier.buildSelectedRouteCompletionCheck({
+    preflightPath: wrongRescanRouteEvidence.preflightPath,
+    workflowProofPath: wrongRescanRouteEvidence.workflowProofPath,
+    nativeExitPath: wrongRescanRouteEvidence.nativeExitPath
+  });
+  assert.strictEqual(wrongRescanRoute.status, "blocked", "completion should block rescan rows from another route");
+  assert(wrongRescanRoute.blockers.some((blocker) => blocker.id === "selected-route-rescan-rows"), "wrong rescan route blocker should be surfaced");
+
+  const rescanByteMismatchEvidence = createSelectedRouteEvidence({
+    selectedRouteProofPacket: {
+      rescanRows: [{ id: "npm-cache-cleanup", route: "bounded-npm-cache-delete", state: "matched", actualBytes: 0, expectedBytes: 128 }]
+    }
+  });
+  const rescanByteMismatch = verifier.buildSelectedRouteCompletionCheck({
+    preflightPath: rescanByteMismatchEvidence.preflightPath,
+    workflowProofPath: rescanByteMismatchEvidence.workflowProofPath,
+    nativeExitPath: rescanByteMismatchEvidence.nativeExitPath
+  });
+  assert.strictEqual(rescanByteMismatch.status, "blocked", "completion should block rescan bytes that do not match reclaimed bytes");
+  assert(rescanByteMismatch.blockers.some((blocker) => blocker.id === "selected-route-rescan-bytes"), "rescan byte mismatch blocker should be surfaced");
+
+  const workflowByteMismatchEvidence = createSelectedRouteEvidence({
+    workflowProof: { counts: { ledgerEntries: 1, matchedRows: 1, reclaimedBytes: 512 } }
+  });
+  const workflowByteMismatch = verifier.buildSelectedRouteCompletionCheck({
+    preflightPath: workflowByteMismatchEvidence.preflightPath,
+    workflowProofPath: workflowByteMismatchEvidence.workflowProofPath,
+    nativeExitPath: workflowByteMismatchEvidence.nativeExitPath
+  });
+  assert.strictEqual(workflowByteMismatch.status, "blocked", "completion should block workflow proof bytes that disagree with selected-route proof bytes");
+  assert(workflowByteMismatch.blockers.some((blocker) => blocker.id === "selected-route-proof-parity"), "selected-route/workflow byte parity blocker should be surfaced");
 
   const mismatchedImportPathEvidence = createSelectedRouteEvidence({
     selectedRouteProofPacket: {
