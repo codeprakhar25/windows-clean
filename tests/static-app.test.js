@@ -95,7 +95,10 @@ for (const marker of [
 assert(app.includes("requestOpenAIAgentAdvice"), "OpenAI advisor should be wired into the real desktop shell");
 assert(app.includes("./real-workflow.mjs"), "app should import tested real workflow helpers");
 assert(app.includes("buildRouteReadiness"), "app should use tested route readiness guardrails");
+assert(app.includes("buildRouteSetupChecklist"), "app should use tested route setup checklist guardrails");
 assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
+assert(app.includes("function ConnectionRequired({ runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist })"), "browser-only setup state should accept route setup wizard props");
+assert(/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup state should render the route setup wizard");
 assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context should keep a stable schema");
 assert(app.includes("redactPath"), "OpenAI context should redact local paths before provider calls");
 assert(app.includes("No local folders are scanned from this browser session."), "browser-only state should be setup-only");

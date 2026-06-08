@@ -191,6 +191,71 @@ const assert = require("assert");
   assert.strictEqual(tempRoute.canExecute, true, "known-temp-delete should not require prior first-route proof");
   assert.strictEqual(tempRoute.rows.find((row) => row.id === "first-route-proof").status, "not-required");
 
+  const npmSetup = workflow.buildRouteSetupChecklist({
+    route: {
+      routeInput: "npm-cache",
+      route: "bounded-npm-cache-delete",
+      label: "npm cache cleanup",
+      envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"
+    },
+    runtime: {
+      executorScopeStatus: "no-scoped-flags",
+      executorFlags: { npmCacheExecutor: false },
+      enabledScopedExecutorFlags: [],
+      firstRouteProof: { accepted: false, status: "missing" },
+      openAiAdvisorConfigured: true
+    }
+  });
+
+  assert.strictEqual(npmSetup.schemaVersion, "spaceguard-route-setup-checklist/v1", "route setup checklist should expose a stable schema");
+  assert.strictEqual(npmSetup.routeInput, "npm-cache", "route setup should preserve selected route input");
+  assert.strictEqual(npmSetup.ready, false, "npm setup should not be ready without route flag and first proof");
+  assert.strictEqual(npmSetup.requiresFirstRouteProof, true, "npm setup should require first-route proof");
+  assert(npmSetup.steps.some((step) => step.id === "route-flag" && step.command === "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1"), "setup should show exact env flag");
+  assert(npmSetup.steps.some((step) => step.command === "npm run setup:route -- --route npm-cache"), "setup should show route setup command");
+  assert(npmSetup.steps.some((step) => step.command === "npm run openai:smoke -- --route npm-cache"), "setup should show live OpenAI smoke command");
+  assert(npmSetup.steps.some((step) => step.command === "npm run v1:windows -- -SelectedRoute npm-cache"), "setup should show full V1 proof command");
+  assert(npmSetup.blockers.some((blocker) => blocker.id === "route-flag"), "missing route flag should be a blocker");
+  assert(npmSetup.blockers.some((blocker) => blocker.id === "first-route-proof"), "missing first-route proof should be a blocker");
+
+  const tempSetup = workflow.buildRouteSetupChecklist({
+    route: {
+      routeInput: "known-temp-delete",
+      route: "known-temp-delete",
+      label: "Windows temp cleanup",
+      envVar: "SPACEGUARD_ENABLE_TEMP_EXECUTOR"
+    },
+    runtime: {
+      executorScopeStatus: "single-scoped-flag",
+      executorFlags: { tempCleanupExecutor: true },
+      enabledScopedExecutorFlags: ["SPACEGUARD_ENABLE_TEMP_EXECUTOR"],
+      firstRouteProof: { accepted: false, status: "missing" },
+      openAiAdvisorConfigured: false
+    }
+  });
+
+  assert.strictEqual(tempSetup.requiresFirstRouteProof, false, "known-temp setup should not require prior first-route proof");
+  assert(tempSetup.steps.find((step) => step.id === "first-route-proof").status === "not-required", "known-temp first proof step should be not-required");
+
+  const multiFlagSetup = workflow.buildRouteSetupChecklist({
+    route: {
+      routeInput: "gradle-cache",
+      route: "bounded-cache-delete",
+      label: "Gradle cache cleanup",
+      envVar: "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR"
+    },
+    runtime: {
+      executorScopeStatus: "multiple-scoped-flags",
+      enabledScopedExecutorFlags: ["SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR"],
+      executorFlags: { gradleCacheExecutor: true },
+      firstRouteProof: { accepted: true, path: "C:\\proof\\first-route-completion-check.json" },
+      openAiAdvisorConfigured: true
+    }
+  });
+
+  assert.strictEqual(multiFlagSetup.ready, false, "multi-flag setup should not be ready");
+  assert(multiFlagSetup.blockers.find((blocker) => blocker.id === "single-route-scope").detail.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "multi-flag blocker should name enabled flags");
+
   console.log("real workflow ok");
 })().catch((error) => {
   console.error(error);

@@ -1,6 +1,139 @@
 export const MB = 1024 ** 2;
 export const RESCAN_TOLERANCE_BYTES = 64 * MB;
 
+export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
+  const routeInput = route.routeInput || route.route || "";
+  const envVar = route.envVar || "";
+  const flagKey = route.flagKey || envVarToFlagKey(envVar);
+  const enabledFlags = Array.isArray(runtime?.enabledScopedExecutorFlags)
+    ? runtime.enabledScopedExecutorFlags
+    : [];
+  const routeFlagEnabled = Boolean(runtime?.executorFlags?.[flagKey] || enabledFlags.includes(envVar));
+  const multipleFlags = runtime?.executorScopeStatus === "multiple-scoped-flags";
+  const requiresFirstRouteProof = route.route !== "known-temp-delete";
+  const firstRouteAccepted = Boolean(runtime?.firstRouteProof?.accepted);
+  const selectedRouteProofCommand = route.route === "known-temp-delete"
+    ? "npm run proof:first-route:windows -- -Route temp-fixture"
+    : `npm run v1:windows -- -SelectedRoute ${routeInput}`;
+
+  const steps = [
+    setupStep({
+      id: "native-desktop",
+      label: "Start desktop app",
+      status: runtime?.windows ? "passed" : "instruction",
+      command: "npm run native:dev",
+      detail: runtime?.windows ? "Windows desktop runtime is connected." : "Run the Tauri desktop shell on the Windows machine."
+    }),
+    setupStep({
+      id: "single-route-scope",
+      label: "Keep one route armed",
+      status: multipleFlags ? "blocked" : "passed",
+      command: "Disable every other SPACEGUARD_ENABLE_*_EXECUTOR flag",
+      detail: multipleFlags
+        ? `Enabled flags: ${enabledFlags.join(", ") || "multiple scoped flags"}.`
+        : "No competing scoped executor flags detected."
+    }),
+    setupStep({
+      id: "route-flag",
+      label: "Enable selected route",
+      status: routeFlagEnabled ? "passed" : "blocked",
+      command: `${envVar}=1`,
+      detail: routeFlagEnabled ? `${envVar}=1 is active.` : `Set ${envVar}=1 in .env and restart the desktop app.`
+    }),
+    requiresFirstRouteProof
+      ? setupStep({
+          id: "first-route-proof",
+          label: "Prove first safe route",
+          status: firstRouteAccepted ? "passed" : "blocked",
+          command: "npm run proof:first-route:windows -- -Route temp-fixture",
+          detail: firstRouteAccepted
+            ? `Accepted first-route proof: ${runtime?.firstRouteProof?.path || "configured path"}.`
+            : "Run and accept known-temp-delete proof before real-data cleanup routes."
+        })
+      : setupStep({
+          id: "first-route-proof",
+          label: "Prove first safe route",
+          status: "not-required",
+          command: "Not required for known-temp-delete",
+          detail: "This route is the first safe executor proof."
+        }),
+    setupStep({
+      id: "route-setup",
+      label: "Create route setup packet",
+      status: "instruction",
+      command: `npm run setup:route -- --route ${routeInput}`,
+      detail: "Confirms route metadata, selected env flag, and proof requirement."
+    }),
+    setupStep({
+      id: "openai-smoke",
+      label: "Check OpenAI advisor",
+      status: runtime?.openAiAdvisorConfigured ? "passed" : "instruction",
+      command: `npm run openai:smoke -- --route ${routeInput}`,
+      detail: runtime?.openAiAdvisorConfigured
+        ? "OpenAI key is configured for advisory checks."
+        : "Set OPENAI_API_KEY if you want advisory reasoning and V1 proof evidence."
+    }),
+    setupStep({
+      id: "app-workflow",
+      label: "Run guarded app workflow",
+      status: "instruction",
+      command: "Scan -> select route -> consent -> execute -> rescan -> export proof",
+      detail: "The app remains the only place where user consent and native execution are joined."
+    }),
+    setupStep({
+      id: "v1-proof",
+      label: "Capture proof packet",
+      status: "instruction",
+      command: selectedRouteProofCommand,
+      detail: "Use the full proof runner when you want command ledgers, native bundle evidence, OpenAI smoke, and verifier output."
+    })
+  ];
+  const blockers = steps.filter((step) => step.status === "blocked");
+
+  return {
+    schemaVersion: "spaceguard-route-setup-checklist/v1",
+    routeInput,
+    route: route.route || "",
+    label: route.label || routeInput,
+    envVar,
+    ready: blockers.length === 0,
+    requiresFirstRouteProof,
+    steps,
+    blockers
+  };
+}
+
+function setupStep({ id, label, status, command, detail }) {
+  return {
+    id,
+    label,
+    status,
+    passed: status === "passed" || status === "not-required",
+    command,
+    detail
+  };
+}
+
+function envVarToFlagKey(envVar = "") {
+  const map = {
+    SPACEGUARD_ENABLE_TEMP_EXECUTOR: "tempCleanupExecutor",
+    SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR: "projectDependencyExecutor",
+    SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR: "downloadsCleanupExecutor",
+    SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR: "largeFileArchiveExecutor",
+    SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR: "gradleCacheExecutor",
+    SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR: "userCacheExecutor",
+    SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR: "androidCacheExecutor",
+    SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR: "shaderCacheExecutor",
+    SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR: "pipCacheExecutor",
+    SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "npmCacheExecutor",
+    SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR: "pnpmStoreExecutor",
+    SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR: "recycleBinExecutor",
+    SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR: "browserCacheExecutor",
+    SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS: "toolNativePruneExecutors"
+  };
+  return map[envVar] || "";
+}
+
 export function buildRouteReadiness({ recipe = {}, finding = {}, runtime = {} } = {}) {
   const executable = Boolean(recipe.executor);
   if (!executable) {

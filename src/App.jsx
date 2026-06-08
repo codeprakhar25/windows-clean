@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildPostRunProof, buildRouteReadiness, formatBytes } from "./real-workflow.mjs";
+import { buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, formatBytes } from "./real-workflow.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
   targetDrive: "C:",
@@ -248,6 +248,8 @@ const MANUAL_RECIPE_LABELS = {
 };
 
 function App() {
+  const routeSetupOptions = useMemo(() => buildRouteSetupOptions(), []);
+  const [setupRouteInput, setSetupRouteInput] = useState("npm-cache");
   const [capability, setCapability] = useState(() => getNativeScannerCapability());
   const [runtime, setRuntime] = useState(null);
   const [runtimeStatus, setRuntimeStatus] = useState("loading");
@@ -285,6 +287,14 @@ function App() {
     [candidates, selectedId]
   );
   const manualFindings = useMemo(() => buildManualFindings(scan), [scan]);
+  const setupRoute = useMemo(
+    () => routeSetupOptions.find((route) => route.routeInput === setupRouteInput) || routeSetupOptions[0],
+    [routeSetupOptions, setupRouteInput]
+  );
+  const setupChecklist = useMemo(
+    () => buildRouteSetupChecklist({ route: setupRoute, runtime }),
+    [setupRoute, runtime]
+  );
   const scanFingerprint = useMemo(() => buildScanFingerprint(scan), [scan]);
   const postRunProof = useMemo(
     () => buildPostRunProof({ candidate: selectedCandidate, executionRecord, postRunScan }),
@@ -465,7 +475,14 @@ function App() {
         selectedCandidate={selectedCandidate}
         executionRecord={executionRecord}
       >
-        <ConnectionRequired runtimeError={runtimeError} onRefresh={refreshRuntime} />
+        <ConnectionRequired
+          runtimeError={runtimeError}
+          onRefresh={refreshRuntime}
+          routes={routeSetupOptions}
+          selectedRouteInput={setupRouteInput}
+          setSelectedRouteInput={setSetupRouteInput}
+          checklist={setupChecklist}
+        />
       </AppFrame>
     );
   }
@@ -494,7 +511,15 @@ function App() {
             scanError={scanError}
             onRunScan={() => runRealScan()}
           />
-          <RuntimePanel runtime={runtime} />
+          <div className="grid gap-5">
+            <RuntimePanel runtime={runtime} />
+            <RouteSetupPanel
+              routes={routeSetupOptions}
+              selectedRouteInput={setupRouteInput}
+              setSelectedRouteInput={setSetupRouteInput}
+              checklist={setupChecklist}
+            />
+          </div>
         </section>
         <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
           <CleanupQueue
@@ -613,7 +638,7 @@ function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, sel
   );
 }
 
-function ConnectionRequired({ runtimeError, onRefresh }) {
+function ConnectionRequired({ runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist }) {
   const setupSteps = [
     {
       label: "Install dependencies",
@@ -657,7 +682,7 @@ function ConnectionRequired({ runtimeError, onRefresh }) {
           Recheck
         </Button>
       </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
         <div className="space-y-3">
           {setupSteps.map((step, index) => (
             <Card key={step.label} className="rounded-md">
@@ -677,31 +702,33 @@ function ConnectionRequired({ runtimeError, onRefresh }) {
             </Card>
           ))}
         </div>
-        <Card className="rounded-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Terminal className="h-4 w-4" />
-              Required route flags
-            </CardTitle>
-            <CardDescription>Pick one before launching the app.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-xs">
-            {[
-              "SPACEGUARD_ENABLE_TEMP_EXECUTOR=1",
-              "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1",
-              "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR=1",
-              "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=1",
-              "SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR=1"
-            ].map((flag) => (
-              <code key={flag} className="block rounded border bg-muted/50 px-2 py-1">
-                {flag}
-              </code>
-            ))}
-            {runtimeError ? (
-              <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-red-700">{runtimeError}</div>
-            ) : null}
-          </CardContent>
-        </Card>
+        <div className="grid gap-4">
+          <RouteSetupPanel
+            routes={routes}
+            selectedRouteInput={selectedRouteInput}
+            setSelectedRouteInput={setSelectedRouteInput}
+            checklist={checklist}
+          />
+          <Card className="rounded-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Terminal className="h-4 w-4" />
+                Required route flags
+              </CardTitle>
+              <CardDescription>Pick one before launching the app.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-xs">
+              {routes.map((route) => (
+                <code key={route.envVar} className="block rounded border bg-muted/50 px-2 py-1">
+                  {route.envVar}=1
+                </code>
+              ))}
+              {runtimeError ? (
+                <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-red-700">{runtimeError}</div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </main>
   );
@@ -791,6 +818,61 @@ function RuntimePanel({ runtime }) {
               Routes after known-temp-delete require SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK.
             </p>
           )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, checklist }) {
+  return (
+    <Card className="rounded-md">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Terminal className="h-4 w-4" />
+          Route setup wizard
+        </CardTitle>
+        <CardDescription>Pick a route and follow the exact setup, proof, and command steps.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-2 sm:grid-cols-2">
+          {routes.map((route) => (
+            <button
+              key={route.routeInput}
+              type="button"
+              onClick={() => setSelectedRouteInput(route.routeInput)}
+              className={`rounded-md border px-3 py-2 text-left text-sm transition hover:border-primary ${
+                selectedRouteInput === route.routeInput ? "border-primary bg-primary/5" : "bg-background"
+              }`}
+            >
+              <span className="block truncate font-medium">{route.label}</span>
+              <span className="block truncate text-xs text-muted-foreground">{route.routeInput}</span>
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={checklist.ready ? "safe" : "review"}>{checklist.ready ? "route ready" : "setup blocked"}</Badge>
+          <Badge variant={checklist.requiresFirstRouteProof ? "review" : "outline"}>
+            {checklist.requiresFirstRouteProof ? "requires first proof" : "first proof route"}
+          </Badge>
+        </div>
+        <div className="grid gap-2">
+          {checklist.steps.map((step) => (
+            <div key={step.id} className="rounded-md border bg-background p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{step.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{step.detail}</p>
+                </div>
+                <Badge variant={step.status === "blocked" ? "restricted" : step.status === "instruction" ? "outline" : "safe"}>
+                  {step.status}
+                </Badge>
+              </div>
+              <code className="mt-2 block overflow-hidden text-ellipsis rounded border bg-muted/50 px-2 py-1 text-xs">
+                {step.command}
+              </code>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>
@@ -1270,6 +1352,25 @@ function buildCleanupCandidates(scan, runtime) {
   return rows
     .filter((row) => row.bytes > 0 || row.executor === "dockerBuildCache" || row.executor === "recycleBin")
     .sort((left, right) => Number(right.canExecute) - Number(left.canExecute) || right.bytes - left.bytes);
+}
+
+function buildRouteSetupOptions() {
+  const routeMap = new Map();
+  for (const recipe of [
+    ...Object.values(EXECUTOR_RECIPES),
+    ...Object.values(ITEM_REVIEW_RECIPES),
+    ARCHIVE_RECIPE
+  ]) {
+    if (!recipe.routeInput || routeMap.has(recipe.routeInput)) continue;
+    routeMap.set(recipe.routeInput, {
+      label: recipe.label,
+      route: recipe.route,
+      routeInput: recipe.routeInput,
+      flagKey: recipe.flagKey,
+      envVar: recipe.envVar
+    });
+  }
+  return Array.from(routeMap.values()).sort((left, right) => left.label.localeCompare(right.label));
 }
 
 function buildCandidateFromFinding(finding, recipe, runtime) {
