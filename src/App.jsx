@@ -311,7 +311,7 @@ function App() {
       (!selectedCandidate.requiresArchiveDestination || archiveDestination.trim()) &&
       executionStatus !== "running"
   );
-  const canExportProof = Boolean(postRunProof.status === "matched" && proofReviewed && executionRecord);
+  const canExportProof = Boolean(postRunProof.status === "matched" && proofReviewed && executionRecord?.accepted);
 
   async function refreshRuntime() {
     setRuntimeStatus("loading");
@@ -339,6 +339,9 @@ function App() {
       }
       if (afterExecution) {
         setPostRunScan(result);
+        setProofReviewed(false);
+        setProofExportStatus("idle");
+        setProofExportMessage("");
       } else {
         setScan(result);
         setPostRunScan(null);
@@ -349,6 +352,8 @@ function App() {
         setConfirmationText("");
         setPermanentRemovalConfirmed(false);
         setProofReviewed(false);
+        setProofExportStatus("idle");
+        setProofExportMessage("");
       }
       setScanStatus("complete");
       await refreshRuntime();
@@ -363,6 +368,8 @@ function App() {
     setExecutionStatus("running");
     setExecutionError("");
     setExecutionResult(null);
+    setProofExportStatus("idle");
+    setProofExportMessage("");
     const planId = `plan-${Date.now()}-${selectedCandidate.id}`;
     const executedAt = new Date().toISOString();
     try {
@@ -527,10 +534,18 @@ function App() {
             selectedId={selectedId}
             setSelectedId={(id) => {
               setSelectedId(id);
+              setExecutionResult(null);
+              setExecutionRecord(null);
+              setPostRunScan(null);
+              setExecutionStatus("idle");
+              setExecutionError("");
+              setArchiveDestination("");
               setConsentChecked(false);
               setConfirmationText("");
               setPermanentRemovalConfirmed(false);
               setProofReviewed(false);
+              setProofExportStatus("idle");
+              setProofExportMessage("");
             }}
             scan={scan}
           />

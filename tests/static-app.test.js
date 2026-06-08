@@ -101,6 +101,15 @@ assert(app.includes("./real-workflow.mjs"), "app should import tested real workf
 assert(app.includes("buildRouteReadiness"), "app should use tested route readiness guardrails");
 assert(app.includes("buildRouteSetupChecklist"), "app should use tested route setup checklist guardrails");
 assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
+assert(app.includes("executionRecord?.accepted"), "proof export should require an accepted native execution record");
+assert(
+  /setSelectedId=\{\(id\) => \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setPostRunScan\(null\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}\}/.test(app),
+  "selecting a different cleanup target should clear stale execution, rescan, and proof export state"
+);
+assert(
+  /if \(afterExecution\) \{[\s\S]*setPostRunScan\(result\);[\s\S]*setProofReviewed\(false\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}/.test(app),
+  "post-run rescan should force fresh proof review and clear stale export status"
+);
 assert(app.includes("buildManualFindingGuidance"), "app should use tested manual finding guidance");
 assert(app.includes("buildManualFindingReviewRows"), "app should use tested manual review row guidance");
 assert(app.includes("Recommended safe action"), "manual review panel should render recommended safe action copy");
