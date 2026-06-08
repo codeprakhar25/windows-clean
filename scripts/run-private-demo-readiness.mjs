@@ -82,8 +82,12 @@ export function buildPrivateDemoReadinessSummary({
         scriptIncludes(packageJson, "proof:route:windows", "run-route-proof-windows.ps1") &&
         scriptIncludes(packageJson, "proof:route:windows:finalize", "-FinalizeOnly") &&
         selectedRouteRunner.includes("spaceguard-selected-route-windows-operator/v1") &&
+        selectedRouteRunner.includes("Resolve-SelectedRouteSpecFromSetup") &&
+        selectedRouteRunner.includes("selected-route-setup.json") &&
+        selectedRouteRunner.includes("spaceguard-route-setup-packet/v1") &&
+        selectedRouteRunner.includes("selected-route-unknown") &&
         selectedRouteRunner.includes("npm-cache"),
-      detail: "The bounded npm-cache proof runner and finalize command must exist."
+      detail: "The selected-route proof runner, finalize command, and setup:route-backed route resolution must exist."
     }),
     buildCheck({
       id: "exact-proof-import-artifact",

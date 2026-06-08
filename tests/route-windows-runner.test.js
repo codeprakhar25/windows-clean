@@ -31,6 +31,19 @@ assert(runner.includes("[System.PlatformID]::Win32NT"), "runner should refuse no
 assert(runner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK"), "runner should require accepted first-route completion proof");
 assert(runner.includes("spaceguard-first-route-completion-check/v1"), "runner should validate the first-route completion schema");
 assert(runner.includes("Assert-AcceptedFirstRouteCompletion"), "runner should validate the proof file before route launch");
+assert(runner.includes("$RouteResolutionPath"), "runner should capture route-resolution evidence before selected-route proof");
+assert(runner.includes("selected-route-setup.json"), "runner should write selected-route setup resolution evidence");
+assert(runner.includes("Resolve-SelectedRouteSpecFromSetup"), "runner should resolve selected routes through setup:route");
+assert(runner.includes("spaceguard-route-setup-packet/v1"), "runner should validate the setup:route schema when resolving routes");
+assert(runner.includes("selected-route-unknown"), "runner should fail early on unknown selected routes");
+assert(runner.includes("selected-route-bootstrap-disallowed"), "runner should reject the temp bootstrap route as a selected real-data route");
+assert(runner.includes("resolve-selected-route"), "runner should log the route-resolution command");
+assert(
+  runner.indexOf("$RouteSpec = Resolve-SelectedRouteSpecFromSetup -InputRoute $Route -Path $RouteResolutionPath") <
+    runner.indexOf("Set-SelectedRouteExecutorEnvironment -Spec $RouteSpec"),
+  "runner should resolve route identity before enabling scoped executor flags"
+);
+assert(!runner.includes("switch ($key)"), "runner should not duplicate setup:route aliases in a hard-coded PowerShell switch");
 assert(runner.includes("Assert-CleanProofExportSlots"), "runner should reject stale root proof exports before a new app launch");
 assert(runner.includes("stale-proof-export"), "runner should name stale proof export blockers");
 assert(runner.includes("Assert-OneSelectedRouteFlag"), "runner should enforce exactly one scoped selected-route flag");

@@ -43,6 +43,7 @@ try {
   $SetupDoctorPath = Join-Path $EvidenceRoot "setup-doctor.json"
   $FixtureSmokePath = Join-Path $EvidenceRoot "openai-fixture-smoke.txt"
   $LiveSmokePath = Join-Path $EvidenceRoot "openai-live-smoke.txt"
+  $RouteResolutionPath = Join-Path $EvidenceRoot "selected-route-setup.json"
   $SetupRoutePath = Join-Path $EvidenceRoot "setup-route.json"
   $ValidateRoutePath = Join-Path $EvidenceRoot "validate-route.json"
   $CommandLogPath = Join-Path $EvidenceRoot "commands.ndjson"
@@ -92,28 +93,62 @@ try {
     }
   }
 
-  function Get-SelectedRouteSpec {
-    param([Parameter(Mandatory = $true)][string]$InputRoute)
+  function Resolve-SelectedRouteSpecFromSetup {
+    param(
+      [Parameter(Mandatory = $true)][string]$InputRoute,
+      [Parameter(Mandatory = $true)][string]$Path
+    )
 
-    $key = $InputRoute.Trim().ToLowerInvariant()
-    switch ($key) {
-      "project-deps" { return [PSCustomObject]@{ alias = "project-deps"; route = "item-review-project-cache"; envVar = "SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR"; requestMode = "execute-project-deps"; panelId = "project-dependency-executor-panel" } }
-      "project-dependencies" { return [PSCustomObject]@{ alias = "project-deps"; route = "item-review-project-cache"; envVar = "SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR"; requestMode = "execute-project-deps"; panelId = "project-dependency-executor-panel" } }
-      "downloads" { return [PSCustomObject]@{ alias = "downloads"; route = "item-review-recycle-bin"; envVar = "SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR"; requestMode = "execute-downloads-recycle-bin"; panelId = "downloads-cleanup-executor-panel" } }
-      "large-files" { return [PSCustomObject]@{ alias = "large-files"; route = "item-review-large-files"; envVar = "SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR"; requestMode = "execute-large-file-archive"; panelId = "large-file-archive-executor-panel" } }
-      "browser-cache" { return [PSCustomObject]@{ alias = "browser-cache"; route = "browser-cache-only"; envVar = "SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR"; requestMode = "execute-browser-cache"; panelId = "browser-cache-executor-panel" } }
-      "gradle-cache" { return [PSCustomObject]@{ alias = "gradle-cache"; route = "bounded-cache-delete"; envVar = "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR"; requestMode = "execute-gradle-cache"; panelId = "gradle-cache-executor-panel" } }
-      "user-cache" { return [PSCustomObject]@{ alias = "user-cache"; route = "bounded-user-cache-delete"; envVar = "SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR"; requestMode = "execute-user-cache"; panelId = "user-cache-executor-panel" } }
-      "android-cache" { return [PSCustomObject]@{ alias = "android-cache"; route = "bounded-android-cache-delete"; envVar = "SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR"; requestMode = "execute-android-cache"; panelId = "android-cache-executor-panel" } }
-      "shader-cache" { return [PSCustomObject]@{ alias = "shader-cache"; route = "launcher-cache-cleanup"; envVar = "SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR"; requestMode = "execute-shader-cache"; panelId = "shader-cache-executor-panel" } }
-      "pip-cache" { return [PSCustomObject]@{ alias = "pip-cache"; route = "bounded-pip-cache-delete"; envVar = "SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR"; requestMode = "execute-pip-cache"; panelId = "pip-cache-executor-panel" } }
-      "docker-build-cache" { return [PSCustomObject]@{ alias = "docker-build-cache"; route = "tool-native-docker-build-cache-prune"; envVar = "SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS"; requestMode = "execute-docker-build-cache"; panelId = "docker-build-cache-executor-panel" } }
-      "npm-cache" { return [PSCustomObject]@{ alias = "npm-cache"; route = "bounded-npm-cache-delete"; envVar = "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"; requestMode = "execute-npm-cache"; panelId = "npm-cache-executor-panel" } }
-      "pnpm-store" { return [PSCustomObject]@{ alias = "pnpm-store"; route = "bounded-pnpm-store-delete"; envVar = "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR"; requestMode = "execute-pnpm-store"; panelId = "pnpm-store-executor-panel" } }
-      "recycle-bin" { return [PSCustomObject]@{ alias = "recycle-bin"; route = "shell-recycle-bin"; envVar = "SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR"; requestMode = "execute-recycle-bin"; panelId = "recycle-bin-executor-panel" } }
-      default {
-        throw "Unsupported selected-route proof route '$InputRoute'. Use setup:route aliases such as npm-cache, pnpm-store, gradle-cache, user-cache, browser-cache, project-deps, downloads, large-files, or recycle-bin."
-      }
+    $startedAt = (Get-Date).ToUniversalTime().ToString("o")
+    $commandLine = "node scripts\run-setup-route.mjs --route `"$InputRoute`""
+    Write-Host "[resolve-selected-route] $commandLine"
+
+    $output = @(& node "scripts\run-setup-route.mjs" "--route" $InputRoute 2>&1)
+    $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+    $text = ($output | ForEach-Object { $_.ToString() }) -join "`r`n"
+    Set-Content -LiteralPath $Path -Value $text -Encoding UTF8
+    $endedAt = (Get-Date).ToUniversalTime().ToString("o")
+
+    Write-CommandRecord -Record ([PSCustomObject]@{
+        id = "resolve-selected-route"
+        command = $commandLine
+        outputPath = $Path
+        exitCode = $exitCode
+        startedAt = $startedAt
+        endedAt = $endedAt
+      })
+
+    if ($exitCode -ne 0) {
+      throw "selected-route-setup-failed: setup:route failed while resolving $InputRoute. See $Path"
+    }
+
+    try {
+      $packet = $text | ConvertFrom-Json
+    } catch {
+      throw "selected-route-setup-invalid-json: setup:route output could not be parsed while resolving $InputRoute. See $Path"
+    }
+
+    if ($packet.schemaVersion -ne "spaceguard-route-setup-packet/v1") {
+      throw "selected-route-setup-schema: expected spaceguard-route-setup-packet/v1."
+    }
+    if ($packet.status -eq "unknown-route" -or $packet.status -eq "route-required" -or $null -eq $packet.selected) {
+      throw "selected-route-unknown: Route must match one setup:route alias before selected-route proof starts. See $Path"
+    }
+    if ($packet.route -eq "known-temp-delete") {
+      throw "selected-route-bootstrap-disallowed: selected-route proof requires a real-data route; run proof:first-route:windows for temp-fixture."
+    }
+
+    $alias = $packet.route
+    if ($packet.selected.aliases -and $packet.selected.aliases.Count -gt 0) {
+      $alias = [string]$packet.selected.aliases[0]
+    }
+
+    return [PSCustomObject]@{
+      alias = $alias
+      route = [string]$packet.route
+      envVar = [string]$packet.selected.envVar
+      requestMode = [string]$packet.selected.requestMode
+      panelId = [string]$packet.selected.panelId
     }
   }
 
@@ -381,7 +416,7 @@ try {
   }
 
   Import-SpaceGuardDotEnv -Path (Join-Path $RepoRoot ".env")
-  $RouteSpec = Get-SelectedRouteSpec -InputRoute $Route
+  $RouteSpec = Resolve-SelectedRouteSpecFromSetup -InputRoute $Route -Path $RouteResolutionPath
   $FirstRouteCompletionPath = Assert-AcceptedFirstRouteCompletion
   Set-SelectedRouteExecutorEnvironment -Spec $RouteSpec
   Assert-OneSelectedRouteFlag -Spec $RouteSpec
@@ -456,6 +491,7 @@ try {
     }
     artifacts = [PSCustomObject]@{
       commandLog = $CommandLogPath
+      selectedRouteSetup = $RouteResolutionPath
       setupDoctor = $SetupDoctorPath
       setupRoute = $SetupRoutePath
       validateRoute = $ValidateRoutePath
