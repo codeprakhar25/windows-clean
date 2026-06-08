@@ -93,7 +93,6 @@ export function buildSetupDoctorReport({
   const routeValidationCommand = `npm run validate:route -- --route ${routeInput}`;
   const workflowProofValidationCommand = "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md";
   const routeCompletionValidationCommand = `npm run validate:route-completion -- --preflight evidence/route-proof-${routeInput}-YYYYMMDD-HHMMSS/operator-preflight.json --native-exit evidence/route-proof-${routeInput}-YYYYMMDD-HHMMSS/native-dev-exit.json --workflow-proof spaceguard-real-workflow-proof.md`;
-  const openAiFixtureSmokeCommand = `npm run openai:smoke:fixture -- --route ${routeInput}`;
   const openAiSmokeCommand = `npm run openai:smoke -- --route ${routeInput}`;
 
   return {
@@ -117,9 +116,7 @@ export function buildSetupDoctorReport({
       modelSource: model.source,
       reasoningEffort: reasoningEffort.value,
       reasoningEffortSource: reasoningEffort.source,
-      fixtureSmokeCommand: openAiFixtureSmokeCommand,
-      smokeCommand: openAiSmokeCommand,
-      fixtureSmokeValidates: ["task-queue", "recommendation-broker", "live-route-contract"]
+      smokeCommand: openAiSmokeCommand
     },
     scopedExecutors: {
       enabledCount: enabledFlags.length,
@@ -145,7 +142,6 @@ export function buildSetupDoctorReport({
       install: "npm install",
       test: "npm test",
       build: "npm run build",
-      openAiFixtureSmoke: openAiFixtureSmokeCommand,
       openAiSmoke: openAiSmokeCommand,
       routeSetup: routeSetupCommand,
       routeValidation: routeValidationCommand,
@@ -173,14 +169,12 @@ function getRouteForExecutorFlag(envVar) {
 
 function getScopedExecutorValidationStatus(enabledFlags, firstRouteProof = null) {
   if (enabledFlags.length > 1) return "multi-flag-blocked";
-  if (enabledFlags.length === 1 && firstRouteProof?.required && !firstRouteProof.accepted) return "first-route-proof-required";
   if (enabledFlags.length === 1) return "one-route-ready";
   return "readonly-ready";
 }
 
 function getScopedExecutorWarning(enabledFlags, firstRouteProof = null) {
   if (enabledFlags.length > 1) return "Multiple scoped executor flags are enabled. Validate and run one selected route at a time.";
-  if (enabledFlags.length === 1 && firstRouteProof?.required && !firstRouteProof.accepted) return "Accepted first-route completion proof is required before real-data route validation.";
   if (enabledFlags.length === 1) return "One scoped executor flag is enabled.";
   return "No scoped executor flags are enabled; native mode remains read-only.";
 }
@@ -213,16 +207,11 @@ function buildRealWorkflow({
     openAiConfigured,
     steps: [
       {
-        id: "fixture-openai-smoke",
-        command: `npm run openai:smoke:fixture -- --route ${routeInput}`,
-        detail: "Validate the deterministic task queue, recommendation broker, and live route contract locally before any real disk workflow."
-      },
-      {
         id: "openai-smoke",
         command: `npm run openai:smoke -- --route ${routeInput}`,
         detail: openAiConfigured
-          ? "Validate the .env OpenAI advisor path against fixture context."
-          : "Set OPENAI_API_KEY first, then validate the OpenAI advisor path against fixture context."
+          ? "Validate the .env OpenAI advisor path for the selected route."
+          : "Set OPENAI_API_KEY first if you want advisory reasoning for this route."
       },
       {
         id: "route-setup",
@@ -298,18 +287,16 @@ function buildNextSteps({ openAiConfigured, enabledFlags, routeInput = "npm-cach
   if (!fs.existsSync(dotenvPath)) {
     steps.push("Copy .env.example to .env before desktop setup.");
   }
-  steps.push(`Run npm run openai:smoke:fixture -- --route ${routeInput} to validate the local task queue, broker, and live route contract without an API key.`);
   if (!openAiConfigured) {
     steps.push(`Set OPENAI_API_KEY in .env or the process environment before running npm run openai:smoke -- --route ${routeInput}.`);
   } else {
-    steps.push(`Run npm run openai:smoke -- --route ${routeInput} to validate the fixture-only OpenAI advisor path.`);
+    steps.push(`Run npm run openai:smoke -- --route ${routeInput} to validate the OpenAI advisor path.`);
   }
   steps.push(`Run npm run setup:route -- --route ${routeInput} with the route you plan to validate before enabling a scoped executor.`);
   steps.push(`Run npm run validate:route -- --route ${routeInput} to capture the one-route Windows validation packet and proof checklist.`);
   if (!enabledFlags.length) {
-    steps.push("Run npm run native:dev for read-only scanning, or enable exactly one scoped executor flag for Windows fixture validation.");
+    steps.push("Run npm run native:dev for read-only scanning, or enable exactly one scoped executor flag for Windows real-route validation.");
   } else if (enabledFlags.length === 1) {
-    steps.push("If this is not the temp fixture route, set SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK to the accepted first-route completion check before real-data validation.");
     steps.push(`Launch npm run native:dev with ${enabledFlags[0]} enabled, export spaceguard-real-workflow-proof.md, then run npm run validate:route-completion -- --preflight evidence/route-proof-${routeInput}-YYYYMMDD-HHMMSS/operator-preflight.json --native-exit evidence/route-proof-${routeInput}-YYYYMMDD-HHMMSS/native-dev-exit.json --workflow-proof spaceguard-real-workflow-proof.md before enabling another route.`);
   } else {
     steps.push("Turn off all but one scoped executor flag before real cleanup validation.");

@@ -7,14 +7,12 @@ import { fileURLToPath } from "node:url";
 const SCRIPT_ID = "spaceguard-route-setup";
 const scriptPath = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(scriptPath), "..");
-const FIRST_ROUTE = "known-temp-delete";
-const FIRST_ROUTE_COMPLETION_SCHEMA = "spaceguard-first-route-completion-check/v1";
 const FIRST_ROUTE_COMPLETION_ENV = "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK";
 
 export const routeSpecs = [
   {
     route: "known-temp-delete",
-    aliases: ["temp", "known-temp", "known-temp-delete", "temp-fixture"],
+    aliases: ["temp", "known-temp", "known-temp-delete"],
     title: "Known temp cleanup",
     envVar: "SPACEGUARD_ENABLE_TEMP_EXECUTOR",
     requestMode: "execute-first-safe",
@@ -212,7 +210,7 @@ export function buildPacket({ routeInput = "", env = {} } = {}) {
       usage: "npm run setup:route -- --route npm-cache",
       nextSteps: [
         "Choose one route from routes[].aliases.",
-        "Run npm run setup:route -- --route npm-cache for a sample packet."
+        "Run npm run setup:route -- --route npm-cache for a route setup packet."
       ]
     };
   }
@@ -223,9 +221,7 @@ export function buildPacket({ routeInput = "", env = {} } = {}) {
   const status = otherEnabled.length
     ? "multiple-flags"
     : selectedEnabled
-      ? firstRouteProof.required && !firstRouteProof.accepted
-        ? "first-route-proof-required"
-        : "ready"
+      ? "ready"
       : "flag-disabled";
 
   return {
@@ -244,7 +240,6 @@ export function buildPacket({ routeInput = "", env = {} } = {}) {
       enablePowerShell: `$env:${selected.envVar}="1"`,
       disablePowerShell: `$env:${selected.envVar}="0"`,
       setupRoute: `npm run setup:route -- --route ${selected.aliases[0] || selected.route}`,
-      fixtureOpenAiSmoke: `npm run openai:smoke:fixture -- --route ${selected.aliases[0] || selected.route}`,
       openAiSmoke: `npm run openai:smoke -- --route ${selected.aliases[0] || selected.route}`,
       nativeDev: "npm run native:dev"
     },
@@ -278,13 +273,6 @@ function buildNextSteps({ status, selected, otherEnabled = [] }) {
       "Run setup:route again after narrowing to one route."
     ];
   }
-  if (status === "first-route-proof-required") {
-    return [
-      "Complete the seeded temp fixture proof before enabling real-data cleanup routes.",
-      `Set ${FIRST_ROUTE_COMPLETION_ENV} to the accepted first-route completion check JSON path.`,
-      "Run npm run proof:first-route:windows on a disposable Windows VM, then finalize the evidence root."
-    ];
-  }
   return [
     `Set ${selected.envVar}=1 for this route only.`,
     `PowerShell: $env:${selected.envVar}="1"`,
@@ -292,71 +280,18 @@ function buildNextSteps({ status, selected, otherEnabled = [] }) {
   ];
 }
 
-export function buildFirstRouteProofGate(selected = null, env = {}) {
-  const required = Boolean(selected?.route && selected.route !== FIRST_ROUTE);
-  if (!required) {
-    return {
-      required: false,
-      status: "not-required",
-      accepted: true,
-      envVar: FIRST_ROUTE_COMPLETION_ENV,
-      path: "",
-      detail: "The seeded temp fixture route is the first-route proof bootstrap."
-    };
-  }
-
-  const configuredPath = String(env[FIRST_ROUTE_COMPLETION_ENV] || "").trim();
-  if (!configuredPath) {
-    return {
-      required: true,
-      status: "missing",
-      accepted: false,
-      envVar: FIRST_ROUTE_COMPLETION_ENV,
-      path: "",
-      detail: `Set ${FIRST_ROUTE_COMPLETION_ENV} to an accepted first-route completion check before validating ${selected.route}.`
-    };
-  }
-
-  const resolvedPath = path.isAbsolute(configuredPath) ? configuredPath : path.resolve(root, configuredPath);
-  if (!fs.existsSync(resolvedPath)) {
-    return {
-      required: true,
-      status: "missing",
-      accepted: false,
-      envVar: FIRST_ROUTE_COMPLETION_ENV,
-      path: resolvedPath,
-      detail: `First-route completion check not found: ${resolvedPath}`
-    };
-  }
-
-  try {
-    const proof = JSON.parse(fs.readFileSync(resolvedPath, "utf8"));
-    const accepted = proof?.schemaVersion === FIRST_ROUTE_COMPLETION_SCHEMA &&
-      proof?.status === "accepted" &&
-      proof?.canStartNextRoute === true &&
-      proof?.route === FIRST_ROUTE &&
-      Number(proof?.counts?.reclaimedBytes || 0) > 0;
-    return {
-      required: true,
-      status: accepted ? "accepted" : "blocked",
-      accepted,
-      envVar: FIRST_ROUTE_COMPLETION_ENV,
-      path: resolvedPath,
-      route: String(proof?.route || ""),
-      detail: accepted
-        ? "Accepted first-route completion check clears real-data route validation."
-        : "First-route completion check exists but is not accepted for next-route handoff."
-    };
-  } catch (error) {
-    return {
-      required: true,
-      status: "invalid",
-      accepted: false,
-      envVar: FIRST_ROUTE_COMPLETION_ENV,
-      path: resolvedPath,
-      detail: error instanceof Error ? error.message : "First-route completion check could not be parsed."
-    };
-  }
+export function buildFirstRouteProofGate(selected = null) {
+  return {
+    required: false,
+    status: "not-required",
+    accepted: true,
+    envVar: FIRST_ROUTE_COMPLETION_ENV,
+    path: "",
+    route: selected?.route || "",
+    detail: selected?.route
+      ? "Route setup uses direct one-route native executor guardrails; no prior route proof is required."
+      : "No route selected."
+  };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath) {

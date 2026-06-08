@@ -137,7 +137,7 @@ const assert = require("assert");
   assert.strictEqual(readyStatus.canExecute, true, "ready route should pass every guardrail");
   assert.deepStrictEqual(
     readyStatus.rows.map((row) => row.id),
-    ["native-runtime", "executor-command", "single-route-scope", "route-flag", "real-run-authority", "first-route-proof", "native-finding-status"],
+    ["native-runtime", "executor-command", "single-route-scope", "route-flag", "real-run-authority", "native-finding-status"],
     "route readiness should expose each execution guardrail in order"
   );
   assert(readyStatus.rows.every((row) => row.passed), "ready route readiness rows should all pass");
@@ -176,8 +176,8 @@ const assert = require("assert");
       firstRouteProof: { accepted: false, status: "missing" }
     }
   });
-  assert.strictEqual(missingProof.canExecute, false, "real-data route should require first-route proof");
-  assert.strictEqual(missingProof.rows.find((row) => row.id === "first-route-proof").status, "blocked");
+  assert.strictEqual(missingProof.canExecute, true, "real-data routes should not require a seeded first-route proof");
+  assert.strictEqual(missingProof.rows.find((row) => row.id === "first-route-proof"), undefined, "route readiness should not expose seeded first-route proof guardrails");
 
   const tempRoute = workflow.buildRouteReadiness({
     recipe: { route: "known-temp-delete", flagKey: "tempCleanupExecutor", envVar: "SPACEGUARD_ENABLE_TEMP_EXECUTOR", executor: "temp" },
@@ -189,7 +189,7 @@ const assert = require("assert");
     }
   });
   assert.strictEqual(tempRoute.canExecute, true, "known-temp-delete should not require prior first-route proof");
-  assert.strictEqual(tempRoute.rows.find((row) => row.id === "first-route-proof").status, "not-required");
+  assert.strictEqual(tempRoute.rows.find((row) => row.id === "first-route-proof"), undefined, "known-temp readiness should not render first-route proof ceremony");
 
   const npmSetup = workflow.buildRouteSetupChecklist({
     route: {
@@ -209,21 +209,22 @@ const assert = require("assert");
 
   assert.strictEqual(npmSetup.schemaVersion, "spaceguard-route-setup-checklist/v1", "route setup checklist should expose a stable schema");
   assert.strictEqual(npmSetup.routeInput, "npm-cache", "route setup should preserve selected route input");
-  assert.strictEqual(npmSetup.ready, false, "npm setup should not be ready without route flag and first proof");
-  assert.strictEqual(npmSetup.requiresFirstRouteProof, true, "npm setup should require first-route proof");
+  assert.strictEqual(npmSetup.ready, false, "npm setup should not be ready without the route flag");
+  assert.strictEqual(npmSetup.requiresFirstRouteProof, false, "npm setup should not require seeded first-route proof");
   assert(npmSetup.steps.some((step) => step.id === "route-flag" && step.command === "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1"), "setup should show exact env flag");
   assert(npmSetup.steps.some((step) => step.command === "npm run setup:route -- --route npm-cache"), "setup should show route setup command");
   assert(npmSetup.steps.some((step) => step.command === "npm run openai:smoke -- --route npm-cache"), "setup should show live OpenAI smoke command");
-  assert(npmSetup.steps.some((step) => step.command === "npm run v1:windows -- -SelectedRoute npm-cache"), "setup should show full V1 proof command");
+  assert(npmSetup.steps.some((step) => step.command.includes("validate:workflow-proof")), "setup should show app proof export validation command");
   assert(npmSetup.blockers.some((blocker) => blocker.id === "route-flag"), "missing route flag should be a blocker");
-  assert(npmSetup.blockers.some((blocker) => blocker.id === "first-route-proof"), "missing first-route proof should be a blocker");
+  assert(!npmSetup.blockers.some((blocker) => blocker.id === "first-route-proof"), "seeded first-route proof must not block real route setup");
   assert.strictEqual(npmSetup.envBlock.schemaVersion, "spaceguard-route-env-block/v1", "route setup should expose a stable selected .env block schema");
   assert.strictEqual(npmSetup.envBlock.fileName, ".env", "route setup env block should target .env");
   assert.strictEqual(npmSetup.envBlock.selectedEnvVar, "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "route setup env block should mark the selected route flag");
   assert(npmSetup.envBlock.content.includes("OPENAI_API_KEY=sk-..."), "route setup env block should include the OpenAI placeholder");
   assert(npmSetup.envBlock.content.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1"), "route setup env block should enable the selected route");
   assert(npmSetup.envBlock.content.includes("SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR=0"), "route setup env block should disable competing route flags");
-  assert(npmSetup.envBlock.content.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK=C:\\path\\to\\first-route-completion-check.json"), "real-data route env block should show first-route proof path placeholder");
+  assert(npmSetup.envBlock.content.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK="), "real-data route env block should leave first-route proof unset");
+  assert(!npmSetup.envBlock.content.includes("first-route-completion-check.json"), "real-data route env block must not require seeded proof artifacts");
   assert.strictEqual(
     npmSetup.envBlock.executorFlagLines.filter((line) => line.endsWith("=1")).length,
     1,
@@ -248,7 +249,7 @@ const assert = require("assert");
   });
 
   assert.strictEqual(tempSetup.requiresFirstRouteProof, false, "known-temp setup should not require prior first-route proof");
-  assert(tempSetup.steps.find((step) => step.id === "first-route-proof").status === "not-required", "known-temp first proof step should be not-required");
+  assert.strictEqual(tempSetup.steps.find((step) => step.id === "first-route-proof"), undefined, "known-temp setup should not render first-route proof ceremony");
   assert(tempSetup.envBlock.content.includes("SPACEGUARD_ENABLE_TEMP_EXECUTOR=1"), "known-temp env block should enable the temp route");
   assert(tempSetup.envBlock.content.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK="), "known-temp env block should keep first-route proof empty");
 

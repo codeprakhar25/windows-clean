@@ -14,8 +14,6 @@ const DEFAULT_OPENAI_MODEL: &str = "gpt-5.2";
 const DEFAULT_OPENAI_ENDPOINT: &str = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_REASONING_EFFORT: &str = "low";
 const FIRST_ROUTE_PROOF_ENV: &str = "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK";
-const FIRST_ROUTE_COMPLETION_SCHEMA: &str = "spaceguard-first-route-completion-check/v1";
-const FIRST_ROUTE_PROOF_ROUTE: &str = "known-temp-delete";
 
 #[cfg(target_os = "windows")]
 use std::ffi::OsStr;
@@ -670,10 +668,6 @@ fn execute_cleanup_plan(request: Option<WriteExecutionRequest>) -> WriteExecutio
         if enabled_flags.len() > 1 {
             return reject_multiple_scoped_executor_flags(&request, &enabled_flags);
         }
-        let first_route_proof = first_route_proof_gate();
-        if request.route != FIRST_ROUTE_PROOF_ROUTE && !first_route_proof.accepted {
-            return reject_first_route_proof_required(&request, &first_route_proof);
-        }
     }
     let volume_probe = start_write_volume_probe(&request);
     if request.request_mode.as_deref() == Some("execute-first-safe") {
@@ -1154,100 +1148,6 @@ fn reject_multiple_scoped_executor_flags(
             format!(
                 "Only one scoped executor flag may be enabled for a real run. Turn off all but one before launching Tauri: {enabled_flags_label}."
             ),
-            "No filesystem mutation was attempted because native executor dispatch was blocked before route selection.".to_string(),
-        ],
-    }
-}
-
-fn reject_first_route_proof_required(
-    request: &WriteExecutionRequest,
-    proof: &FirstRouteProofGate,
-) -> WriteExecutionResponse {
-    let route = request.route.clone();
-    let plan_id = request.plan_id.clone();
-    let expected_bytes = request
-        .expected_bytes
-        .unwrap_or_else(|| request.actions.iter().map(|action| action.bytes).sum());
-    let proof_detail = if proof.detail.is_empty() {
-        "Accepted first-route completion proof is required before real-data route validation."
-            .to_string()
-    } else {
-        proof.detail.clone()
-    };
-    let contract_echo = WriteContractEcho {
-        schema_version: request
-            .schema_version
-            .clone()
-            .unwrap_or_else(|| "spaceguard-write-boundary-request/v1".to_string()),
-        request_mode: request
-            .request_mode
-            .clone()
-            .unwrap_or_else(|| "execute-cleanup".to_string()),
-        plan_id: plan_id.clone(),
-        route: route.clone(),
-        scan_fingerprint: request.scan_fingerprint.clone().unwrap_or_default(),
-        consent_plan_id: request.consent_plan_id.clone().unwrap_or_default(),
-        expected_bytes,
-        dry_run_only: request.dry_run_only.unwrap_or(true),
-        mutation_attempted: request.mutation_attempted.unwrap_or(false),
-        action_count: request.actions.len(),
-    };
-    let entries = request
-        .actions
-        .iter()
-        .map(|action| WriteExecutionEntry {
-            id: action.id.clone(),
-            title: action.title.clone(),
-            route: action.route.clone(),
-            result: "rejected".to_string(),
-            reject_code: "first-route-proof-required".to_string(),
-            bytes: 0,
-            preflight_status: "first-route-proof-blocked".to_string(),
-            preflight_checks: vec![
-                write_preflight_check(
-                    "first-route-proof",
-                    "First-route proof",
-                    "blocked",
-                    &proof_detail,
-                ),
-                write_preflight_check(
-                    "mutation-dispatch",
-                    "Mutation dispatch",
-                    "blocked",
-                    "Native executor dispatch was stopped before route selection.",
-                ),
-                write_preflight_check(
-                    "mutation-lock",
-                    "Mutation lock",
-                    "passed",
-                    "No filesystem mutation was attempted and all requested bytes remain untouched.",
-                ),
-            ],
-            note: format!(
-                "Real cleanup rejected before dispatch with code first-route-proof-required. Set {FIRST_ROUTE_PROOF_ENV} to an accepted {FIRST_ROUTE_COMPLETION_SCHEMA} proof for {FIRST_ROUTE_PROOF_ROUTE}. Plan {plan_id}; no bytes were removed or moved for this action."
-            ),
-        })
-        .collect::<Vec<_>>();
-
-    WriteExecutionResponse {
-        mode: "native-first-route-proof-rejected",
-        real_run_enabled: false,
-        destructive_commands: false,
-        accepted: false,
-        reason: "Native executor dispatch rejected the request because first-route completion proof is not accepted.".to_string(),
-        contract_echo,
-        executor_scaffold: write_executor_scaffold(&route),
-        entries,
-        volume_proof: write_volume_proof_not_collected(
-            "not-collected-rejected",
-            "",
-            "Volume proof was not collected because native executor dispatch was blocked before route selection.",
-        ),
-        warnings: vec![
-            format!(
-                "Set {FIRST_ROUTE_PROOF_ENV} to an accepted {FIRST_ROUTE_COMPLETION_SCHEMA} JSON before launching real-data routes."
-            ),
-            format!("Current first-route proof status: {}. {proof_detail}", proof.status),
             "No filesystem mutation was attempted because native executor dispatch was blocked before route selection.".to_string(),
         ],
     }
@@ -3955,7 +3855,7 @@ fn write_action_preflight(
             "validation-evidence",
             "Validation evidence",
             "waiting",
-            "Windows fixture validation, rollback/rescan proof, and release review must pass before mutation can be considered.",
+            "Windows route validation, rollback/rescan proof, and release review must pass before mutation can be considered.",
         ),
     ];
 
@@ -8717,91 +8617,12 @@ fn unquote_env_value(value: &str) -> String {
 }
 
 fn first_route_proof_gate() -> FirstRouteProofGate {
-    let Some((path, _source)) = runtime_env_value(&[FIRST_ROUTE_PROOF_ENV]) else {
-        return first_route_proof_status(
-            "missing",
-            false,
-            "",
-            "",
-            "Accepted first-route completion proof is required before real-data route validation.",
-        );
-    };
-
-    let content = match fs::read_to_string(PathBuf::from(&path)) {
-        Ok(content) => content,
-        Err(error) => {
-            return first_route_proof_status(
-                "missing",
-                false,
-                &path,
-                "",
-                &format!("Configured first-route completion proof could not be read: {error}."),
-            );
-        }
-    };
-
-    let payload: Value = match serde_json::from_str(&content) {
-        Ok(payload) => payload,
-        Err(error) => {
-            return first_route_proof_status(
-                "invalid",
-                false,
-                &path,
-                "",
-                &format!("Configured first-route completion proof is not valid JSON: {error}."),
-            );
-        }
-    };
-
-    let schema = json_string_field(&payload, "schemaVersion", "schema_version");
-    let route = json_string_field(&payload, "route", "route");
-    let status = json_string_field(&payload, "status", "status");
-    let can_start_next_route =
-        json_bool_field(&payload, "canStartNextRoute", "can_start_next_route");
-    let reclaimed_bytes = payload
-        .get("counts")
-        .and_then(|counts| {
-            counts
-                .get("reclaimedBytes")
-                .or_else(|| counts.get("reclaimed_bytes"))
-        })
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
-
-    if schema != FIRST_ROUTE_COMPLETION_SCHEMA {
-        return first_route_proof_status(
-            "invalid",
-            false,
-            &path,
-            &route,
-            &format!("Expected {FIRST_ROUTE_COMPLETION_SCHEMA} first-route completion proof."),
-        );
-    }
-    if route != FIRST_ROUTE_PROOF_ROUTE {
-        return first_route_proof_status(
-            "invalid",
-            false,
-            &path,
-            &route,
-            "First-route completion proof must be for known-temp-delete before real-data routes unlock.",
-        );
-    }
-    if status != "accepted" || !can_start_next_route || reclaimed_bytes == 0 {
-        return first_route_proof_status(
-            "blocked",
-            false,
-            &path,
-            &route,
-            "First-route completion proof is present but not accepted with positive reclaimed bytes.",
-        );
-    }
-
     first_route_proof_status(
-        "accepted",
+        "not-required",
         true,
-        &path,
-        &route,
-        "Accepted first-route completion proof clears real-data route validation.",
+        "",
+        "",
+        "Direct one-route executor validation is active; no prior route proof is required.",
     )
 }
 
@@ -8813,7 +8634,7 @@ fn first_route_proof_status(
     detail: &str,
 ) -> FirstRouteProofGate {
     FirstRouteProofGate {
-        required: true,
+        required: false,
         status: status.to_string(),
         accepted,
         env_var: FIRST_ROUTE_PROOF_ENV,
@@ -11039,7 +10860,6 @@ fn review_items_for_path(
     request: &ScanRequest,
 ) -> Vec<ScanItem> {
     match recipe_id {
-        "windows-temp" => temp_fixture_items(root, request),
         "downloads-installers" => top_file_items(recipe_id, root, kind, request, 12),
         "large-user-files" => large_user_file_items(root, request, 15),
         "node-modules-old" => vec![project_dependency_scan_item(recipe_id, root, stats.bytes)],
@@ -11047,81 +10867,6 @@ fn review_items_for_path(
         "installed-app-footprints" => top_child_items(recipe_id, root, request, 10),
         _ => Vec::new(),
     }
-}
-
-fn temp_fixture_items(root: &Path, request: &ScanRequest) -> Vec<ScanItem> {
-    if !is_current_user_temp_root(root) {
-        return Vec::new();
-    }
-
-    let fixture_root = root.join("spaceguard-fixture");
-    if is_path_protected(&fixture_root, &request.protected_paths) {
-        return Vec::new();
-    }
-
-    let Ok(metadata) = fs::symlink_metadata(&fixture_root) else {
-        return Vec::new();
-    };
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Vec::new();
-    }
-
-    let max_entries = request.max_entries_per_root.unwrap_or(25_000).min(500);
-    let mut queue = VecDeque::from([fixture_root]);
-    let mut visited = 0usize;
-    let mut items = Vec::new();
-
-    while let Some(path) = queue.pop_front() {
-        if visited >= max_entries || items.len() >= 16 {
-            break;
-        }
-        visited += 1;
-
-        let Ok(metadata) = fs::symlink_metadata(&path) else {
-            continue;
-        };
-        if metadata.file_type().is_symlink() {
-            continue;
-        }
-        if metadata.is_file() {
-            let mut item =
-                scan_item_from_path("windows-temp", &path, metadata.len(), "fixture temp file");
-            item.recommendation = "review".to_string();
-            item.reason =
-                "Disposable SpaceGuard temp fixture file; use only for executor proof.".to_string();
-            item.signals
-                .push(review_signal("fixture", "spaceguard-fixture", "safe"));
-            items.push(item);
-            continue;
-        }
-        if metadata.is_dir() {
-            if let Ok(entries) = fs::read_dir(&path) {
-                for entry in entries.flatten() {
-                    queue.push_back(entry.path());
-                }
-            }
-        }
-    }
-
-    items.sort_by(|a, b| b.bytes.cmp(&a.bytes));
-    items
-}
-
-fn is_current_user_temp_root(root: &Path) -> bool {
-    [env_path("TEMP"), env_path("TMP")]
-        .into_iter()
-        .flatten()
-        .any(|candidate| same_path_text(root, &candidate))
-}
-
-fn same_path_text(left: &Path, right: &Path) -> bool {
-    let left_text = path_to_string(left)
-        .trim_end_matches(['\\', '/'])
-        .to_ascii_lowercase();
-    let right_text = path_to_string(right)
-        .trim_end_matches(['\\', '/'])
-        .to_ascii_lowercase();
-    left_text == right_text
 }
 
 fn project_dependency_scan_item(recipe_id: &str, node_modules: &Path, bytes: u64) -> ScanItem {
@@ -11828,9 +11573,9 @@ mod tests {
         let _lock = ENV_LOCK.lock().expect("env lock");
         let root = unique_test_dir("temp-target-gate");
         let temp_root = root.join("Temp");
-        let fixture_root = temp_root.join("spaceguard-fixture");
+        let temp_child_root = temp_root.join("old-cache");
         let outside_root = root.join("outside-temp");
-        fs::create_dir_all(&fixture_root).expect("create fixture temp root");
+        fs::create_dir_all(&temp_child_root).expect("create temp child root");
         fs::create_dir_all(&outside_root).expect("create outside temp sibling");
         let _temp_restore = EnvRestore::set("TEMP", &temp_root);
         let _tmp_restore = EnvRestore::set("TMP", &temp_root);
@@ -11838,10 +11583,10 @@ mod tests {
         assert_eq!(
             write_action_target_reject_code(
                 "known-temp-delete",
-                &Some("%TEMP%\\spaceguard-fixture".to_string())
+                &Some("%TEMP%\\old-cache".to_string())
             ),
             None,
-            "scoped fixture target under TEMP should be allowed"
+            "scoped child target under TEMP should be allowed"
         );
         assert_eq!(
             write_action_target_reject_code(
@@ -11852,7 +11597,7 @@ mod tests {
             "parent traversal must not escape the TEMP root"
         );
 
-        let _ = fs::remove_dir(&fixture_root);
+        let _ = fs::remove_dir(&temp_child_root);
         let _ = fs::remove_dir(&temp_root);
         let _ = fs::remove_dir(&outside_root);
         let _ = fs::remove_dir(root);

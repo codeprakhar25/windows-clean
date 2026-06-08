@@ -42,15 +42,7 @@ npm run openai:smoke -- --route npm-cache
 npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md
 ```
 
-The full Windows V1 proof coordinator runs the preflight, first-route proof, selected-route proof, OpenAI smoke checks, native bundle capture, and final verifier:
-
-```powershell
-npm run v1:windows -- -SelectedRoute npm-cache
-npm run v1:windows -- -SelectedRoute gradle-cache
-npm run validate:v1-proof -- --file evidence/v1-proof-npm-cache-YYYYMMDD-HHMMSS/v1-proof.json
-```
-
-The V1 proof records native bundle artifact evidence. The preflight copies each native bundle artifact into the evidence folder and stores a SHA-256 hash for each copied native bundle artifact.
+For a real route test, use the desktop app as the control point: scan, select one ready route, consent, execute, rescan, and export proof.
 
 ## Safety Boundary
 

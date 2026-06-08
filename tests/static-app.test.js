@@ -54,6 +54,10 @@ for (const marker of requiredAppMarkers) {
 const forbiddenAppMarkers = [
   new RegExp(`\\b${removedDataWord}\\b`, "i"),
   new RegExp(`\\b${removedSampleWord}\\b`, "i"),
+  /temp-fixture/i,
+  /spaceguard-fixture/i,
+  /Seeded temp fixture/i,
+  /openai:smoke:fixture/i,
   /Review setup steps/i,
   /Legacy sample fixture/i,
   /buildLegacySampleActions/,
@@ -120,7 +124,7 @@ assert(rustScanner.includes("spaceguard-real-workflow-proof.md"), "Rust proof ar
 assert(rustScanner.includes("spaceguard-selected-route-proof-packet.md"), "Rust proof artifact writer should allow selected-route proof export");
 assert(rustScanner.includes("execute_cleanup_plan"), "Rust backend should expose the guarded executor command");
 assert(rustScanner.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "Rust backend should gate npm cleanup behind a route flag");
-assert(rustScanner.includes("FIRST_ROUTE_PROOF_ROUTE"), "Rust backend should keep the first-route proof gate");
+assert(!rustScanner.includes("first-route-proof-required"), "Rust backend should not reject real-data routes behind seeded proof ceremony");
 
 assert(openAiAgent.includes("https://api.openai.com/v1/responses"), "OpenAI adapter should use the Responses API endpoint");
 assert(openAiAgent.includes("OPENAI_API_KEY"), "OpenAI adapter should read the primary .env API key");
@@ -154,7 +158,10 @@ assert(workflowProofScript.includes("readyForNextRoute"), "workflow proof verifi
 assert(realWorkflow.includes("findPostRunTargetEvidence"), "real workflow helper should expose post-run target evidence matching");
 assert(realWorkflow.includes("reviewTarget?.path"), "real workflow helper should compare selected review item paths");
 assert(realWorkflow.includes("single-route-scope"), "real workflow helper should expose single route scope guardrail rows");
-assert(realWorkflow.includes("first-route-proof"), "real workflow helper should expose first-route proof guardrail rows");
+assert(!realWorkflow.includes("temp-fixture"), "real workflow helper must not point app setup at seeded fixture routes");
+assert(!realWorkflow.includes("first-route-proof"), "real workflow helper must not block real routes behind seeded first-route proof rows");
+assert(!nativeAdapter.includes("TEMP_FIXTURE_ACTION_ID"), "native scanner adapter must not expose seeded fixture cleanup action ids");
+assert(!nativeAdapter.includes("spaceguard-fixture"), "native scanner adapter must not promote seeded fixture paths into cleanup rows");
 
 assert(readme.includes("npm run native:dev"), "README should document the desktop shell");
 assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");

@@ -52,28 +52,25 @@ let routeSetup;
   assert.strictEqual(disabledPacket.selected.requestMode, "execute-npm-cache", "npm route should expose its native request mode");
   assert.strictEqual(disabledPacket.selected.panelId, "npm-cache-executor-panel", "npm route should expose its panel id");
   assert(disabledPacket.commands.enablePowerShell.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "route setup should print the PowerShell enable command");
-  assert(disabledPacket.commands.fixtureOpenAiSmoke.includes("npm run openai:smoke:fixture -- --route npm-cache"), "route setup should print route-specific fixture smoke command");
+  assert(!Object.prototype.hasOwnProperty.call(disabledPacket.commands, "fixtureOpenAiSmoke"), "route setup must not print fixture-only smoke commands for the real app");
   assert(disabledPacket.commands.openAiSmoke.includes("npm run openai:smoke -- --route npm-cache"), "route setup should print route-specific OpenAI smoke command");
 
-  const proofPath = writeAcceptedFirstRouteCompletion();
   const blockedWithoutFirstProof = runPacket(["--route", "npm-cache"], { SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1" });
-  assert.strictEqual(blockedWithoutFirstProof.status, "first-route-proof-required", "enabled real-data route should block until first-route proof is accepted");
-  assert.strictEqual(blockedWithoutFirstProof.firstRouteProof.required, true, "real-data route should require first-route proof");
-  assert.strictEqual(blockedWithoutFirstProof.firstRouteProof.status, "missing", "missing first-route proof should be surfaced");
-  assert(blockedWithoutFirstProof.nextSteps.some((step) => step.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK")), "blocked real-data route should tell the operator how to provide first-route proof");
+  assert.strictEqual(blockedWithoutFirstProof.status, "ready", "enabled real-data route should be ready without seeded first-route proof");
+  assert.strictEqual(blockedWithoutFirstProof.firstRouteProof.required, false, "real-data route should not require seeded first-route proof");
+  assert(!blockedWithoutFirstProof.nextSteps.some((step) => step.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK")), "real-data route setup must not point to seeded proof artifacts");
 
   const readyPacket = runPacket(["--route", "npm-cache"], {
-    SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1",
-    SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK: proofPath
+    SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1"
   });
   assert.strictEqual(readyPacket.status, "ready", "enabled npm route should be ready for native dev launch");
   assert.strictEqual(readyPacket.enabledFlags.length, 1, "ready packet should record the single enabled flag");
-  assert.strictEqual(readyPacket.firstRouteProof.status, "accepted", "ready real-data route should expose accepted first-route proof");
+  assert.strictEqual(readyPacket.firstRouteProof.status, "not-required", "ready real-data route should not expose seeded first-route proof");
   assert(readyPacket.nextSteps.some((step) => step.includes("npm run native:dev")), "ready packet should route to native dev launch");
 
-  const tempReadyPacket = runPacket(["--route", "temp-fixture"], { SPACEGUARD_ENABLE_TEMP_EXECUTOR: "1" });
-  assert.strictEqual(tempReadyPacket.status, "ready", "temp fixture route should remain the bootstrap proof route");
-  assert.strictEqual(tempReadyPacket.firstRouteProof.required, false, "temp fixture route should not require prior first-route proof");
+  const tempReadyPacket = runPacket(["--route", "known-temp-delete"], { SPACEGUARD_ENABLE_TEMP_EXECUTOR: "1" });
+  assert.strictEqual(tempReadyPacket.status, "ready", "known temp cleanup should remain launchable as a real route");
+  assert.strictEqual(tempReadyPacket.firstRouteProof.required, false, "known temp cleanup should not require prior first-route proof");
 
   const multiplePacket = runPacket(["--route", "npm-cache"], {
     SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1",

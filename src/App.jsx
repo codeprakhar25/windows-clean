@@ -809,15 +809,9 @@ function RuntimePanel({ runtime }) {
               <Badge variant="restricted">no route flag</Badge>
             )}
           </div>
-          {runtime?.firstRouteProof?.accepted ? (
-            <p className="mt-2 text-xs text-muted-foreground">
-              First-route proof accepted at {runtime.firstRouteProof.path || "configured path"}.
-            </p>
-          ) : (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Routes after known-temp-delete require SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK.
-            </p>
-          )}
+          <p className="mt-2 text-xs text-muted-foreground">
+            Real cleanup requires exactly one route flag, native scan evidence, explicit consent, and post-run proof.
+          </p>
         </div>
       </CardContent>
     </Card>
@@ -867,9 +861,7 @@ function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, ch
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={checklist.ready ? "safe" : "review"}>{checklist.ready ? "route ready" : "setup blocked"}</Badge>
-          <Badge variant={checklist.requiresFirstRouteProof ? "review" : "outline"}>
-            {checklist.requiresFirstRouteProof ? "requires first proof" : "first proof route"}
-          </Badge>
+          <Badge variant="outline">one route only</Badge>
         </div>
         <div className="rounded-md border bg-background">
           <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
@@ -1597,7 +1589,6 @@ async function dispatchExecutor(candidate, { planId, scanFingerprint, archiveDes
 }
 
 function buildSelectedRouteProofPacket({ candidate, executionRecord, postRunProof, generatedAt }) {
-  const selectedRoute = candidate.route !== "known-temp-delete";
   return {
     schemaVersion: "spaceguard-selected-route-proof-packet/v1",
     generatedAt,
@@ -1624,7 +1615,7 @@ function buildSelectedRouteProofPacket({ candidate, executionRecord, postRunProo
       matchedRows: postRunProof.matched ? 1 : 0,
       reclaimedBytes: Number(executionRecord.bytes || 0)
     },
-    volumeProof: normalizeProofVolumeProof(executionRecord.volumeProof, selectedRoute),
+    volumeProof: normalizeProofVolumeProof(executionRecord.volumeProof),
     validationImport: {
       status: postRunProof.matched ? "import-complete" : "needs-review",
       complete: postRunProof.matched,
@@ -1645,7 +1636,7 @@ function buildSelectedRouteProofPacket({ candidate, executionRecord, postRunProo
         bytes: Number(executionRecord.bytes || 0),
         result: executionRecord.accepted ? "accepted" : "rejected",
         executedAt: executionRecord.executedAt,
-        nativeVolumeProof: normalizeProofVolumeProof(executionRecord.volumeProof, selectedRoute)
+        nativeVolumeProof: normalizeProofVolumeProof(executionRecord.volumeProof)
       }
     ],
     checkpoints: [
@@ -1680,8 +1671,7 @@ function buildSelectedRouteProofPacket({ candidate, executionRecord, postRunProo
 }
 
 function buildRealWorkflowProofPacket({ selectedRouteProof, generatedAt }) {
-  const selectedRoute = selectedRouteProof.route !== "known-temp-delete";
-  const volumeCaptured = !selectedRoute || selectedRouteProof.volumeProof?.status === "measured" || selectedRouteProof.volumeProof?.measured === true;
+  const volumeCaptured = selectedRouteProof.volumeProof?.status === "measured" || selectedRouteProof.volumeProof?.measured === true;
   const ready = Boolean(
     selectedRouteProof.status === "proof-complete" &&
       selectedRouteProof.validationImport?.complete &&
@@ -1694,7 +1684,7 @@ function buildRealWorkflowProofPacket({ selectedRouteProof, generatedAt }) {
     { id: "selected-route-proof-import", label: "Selected-route proof import", passed: selectedRouteProof.validationImport?.complete === true, detail: selectedRouteProof.validationImport?.detail || "" },
     { id: "selected-route-proof-export", label: "Selected-route proof export", passed: true, detail: `${PROOF_PACKET_FILE} exported.` },
     { id: "reclaimed-bytes", label: "Positive recovered bytes", passed: Number(selectedRouteProof.counts?.reclaimedBytes || 0) > 0, detail: `${formatBytes(selectedRouteProof.counts?.reclaimedBytes || 0)} recovered.` },
-    ...(selectedRoute ? [{ id: "native-volume-proof", label: "Native volume proof", passed: volumeCaptured, detail: selectedRouteProof.volumeProof?.note || "Measured native volume proof captured." }] : []),
+    { id: "native-volume-proof", label: "Native volume proof", passed: volumeCaptured, detail: selectedRouteProof.volumeProof?.note || "Measured native volume proof captured." },
     { id: "next-route-clearance", label: "Next route clearance", passed: ready, detail: ready ? "The selected route can be validated for handoff." : "Workflow proof is blocked." }
   ];
   return {
@@ -1728,7 +1718,6 @@ function buildRealWorkflowProofPacket({ selectedRouteProof, generatedAt }) {
 }
 
 function buildAppCloseContract(route = "") {
-  const selectedRoute = route && route !== "known-temp-delete";
   const common = [
     "post-run-rescan-matched",
     "selected-route-proof-packet-exported",
@@ -1736,28 +1725,18 @@ function buildAppCloseContract(route = "") {
     "spaceguard-real-workflow-proof-exported"
   ];
   return {
-    schemaVersion: selectedRoute
-      ? "spaceguard-selected-route-app-close-contract/v1"
-      : "spaceguard-first-route-app-close-contract/v1",
+    schemaVersion: "spaceguard-selected-route-app-close-contract/v1",
     workflowProofPath: `.\\${WORKFLOW_PROOF_FILE}`,
     selectedRouteProofPacketPath: `.\\${PROOF_PACKET_FILE}`,
     expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
     minimumReclaimedBytes: 1,
-    nextRouteBlockedUntil: selectedRoute ? "validate:workflow-proof accepted" : "validate:first-route-completion accepted",
-    requiredBeforeClosingApp: selectedRoute ? ["native-volume-proof-captured", ...common] : common
+    nextRouteBlockedUntil: "validate:workflow-proof accepted",
+    requiredBeforeClosingApp: ["native-volume-proof-captured", ...common]
   };
 }
 
-function normalizeProofVolumeProof(volumeProof, selectedRoute) {
+function normalizeProofVolumeProof(volumeProof) {
   const measured = volumeProof?.status === "measured";
-  if (!selectedRoute && !measured) {
-    return {
-      status: "not-required",
-      measured: false,
-      freeBytesDelta: 0,
-      note: "Known-temp-delete first-route workflow does not require selected-route volume proof."
-    };
-  }
   return {
     status: measured ? "measured" : "not-collected",
     measured,

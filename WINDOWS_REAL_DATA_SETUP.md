@@ -58,18 +58,6 @@ Verify the exported workflow proof:
 npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md
 ```
 
-## Full V1 Proof
-
-Run the coordinator when you want the complete proof packet:
-
-```powershell
-npm run v1:windows -- -SelectedRoute npm-cache
-npm run v1:windows -- -SelectedRoute gradle-cache
-npm run validate:v1-proof -- --file evidence/v1-proof-npm-cache-YYYYMMDD-HHMMSS/v1-proof.json
-```
-
-The V1 proof includes native bundle artifact evidence. The preflight copies each native bundle artifact into the evidence folder and records a SHA-256 hash for each copied native bundle artifact.
-
 ## If The App Is Not Connected
 
 Use the setup panel in the app. It should tell you to install dependencies, set `OPENAI_API_KEY`, enable one scoped executor flag, and run `npm run native:dev`.

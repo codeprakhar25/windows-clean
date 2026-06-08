@@ -2,7 +2,6 @@ export const MB = 1024 ** 2;
 export const RESCAN_TOLERANCE_BYTES = 64 * MB;
 const DEFAULT_OPENAI_MODEL = "gpt-5.2";
 const DEFAULT_OPENAI_REASONING_EFFORT = "low";
-const FIRST_ROUTE_PROOF_PLACEHOLDER = "C:\\path\\to\\first-route-completion-check.json";
 const EXECUTOR_ENV_VARS = [
   "SPACEGUARD_ENABLE_TEMP_EXECUTOR",
   "SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR",
@@ -29,15 +28,7 @@ export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
     : [];
   const routeFlagEnabled = Boolean(runtime?.executorFlags?.[flagKey] || enabledFlags.includes(envVar));
   const multipleFlags = runtime?.executorScopeStatus === "multiple-scoped-flags";
-  const requiresFirstRouteProof = route.route !== "known-temp-delete";
-  const firstRouteAccepted = Boolean(runtime?.firstRouteProof?.accepted);
-  const selectedRouteProofCommand = route.route === "known-temp-delete"
-    ? "npm run proof:first-route:windows -- -Route temp-fixture"
-    : `npm run v1:windows -- -SelectedRoute ${routeInput}`;
-  const envBlock = buildRouteEnvBlock({
-    route,
-    firstRouteProofPath: firstRouteAccepted ? runtime?.firstRouteProof?.path : ""
-  });
+  const envBlock = buildRouteEnvBlock({ route });
 
   const steps = [
     setupStep({
@@ -72,29 +63,12 @@ export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
       command: `${envVar}=1`,
       detail: routeFlagEnabled ? `${envVar}=1 is active.` : `Set ${envVar}=1 in .env and restart the desktop app.`
     }),
-    requiresFirstRouteProof
-      ? setupStep({
-          id: "first-route-proof",
-          label: "Prove first safe route",
-          status: firstRouteAccepted ? "passed" : "blocked",
-          command: "npm run proof:first-route:windows -- -Route temp-fixture",
-          detail: firstRouteAccepted
-            ? `Accepted first-route proof: ${runtime?.firstRouteProof?.path || "configured path"}.`
-            : "Run and accept known-temp-delete proof before real-data cleanup routes."
-        })
-      : setupStep({
-          id: "first-route-proof",
-          label: "Prove first safe route",
-          status: "not-required",
-          command: "Not required for known-temp-delete",
-          detail: "This route is the first safe executor proof."
-        }),
     setupStep({
       id: "route-setup",
       label: "Create route setup packet",
       status: "instruction",
       command: `npm run setup:route -- --route ${routeInput}`,
-      detail: "Confirms route metadata, selected env flag, and proof requirement."
+      detail: "Confirms route metadata, selected env flag, and one-route launch status."
     }),
     setupStep({
       id: "openai-smoke",
@@ -103,7 +77,7 @@ export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
       command: `npm run openai:smoke -- --route ${routeInput}`,
       detail: runtime?.openAiAdvisorConfigured
         ? "OpenAI key is configured for advisory checks."
-        : "Set OPENAI_API_KEY if you want advisory reasoning and V1 proof evidence."
+        : "Set OPENAI_API_KEY if you want advisory reasoning during the real workflow."
     }),
     setupStep({
       id: "app-workflow",
@@ -116,8 +90,8 @@ export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
       id: "v1-proof",
       label: "Capture proof packet",
       status: "instruction",
-      command: selectedRouteProofCommand,
-      detail: "Use the full proof runner when you want command ledgers, native bundle evidence, OpenAI smoke, and verifier output."
+      command: "Export proof in the app, then run npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md",
+      detail: "The desktop app captures native execution, post-run rescan, and proof export for the selected real route."
     })
   ];
   const blockers = steps.filter((step) => step.status === "blocked");
@@ -130,19 +104,15 @@ export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
     envVar,
     envBlock,
     ready: blockers.length === 0,
-    requiresFirstRouteProof,
+    requiresFirstRouteProof: false,
     steps,
     blockers
   };
 }
 
-export function buildRouteEnvBlock({ route = {}, firstRouteProofPath = "" } = {}) {
+export function buildRouteEnvBlock({ route = {} } = {}) {
   const routeInput = route.routeInput || route.route || "";
   const selectedEnvVar = route.envVar || "";
-  const requiresFirstRouteProof = route.route !== "known-temp-delete";
-  const firstRouteProofValue = requiresFirstRouteProof
-    ? (firstRouteProofPath || FIRST_ROUTE_PROOF_PLACEHOLDER)
-    : "";
   const executorFlagLines = EXECUTOR_ENV_VARS.map((envVar) => `${envVar}=${envVar === selectedEnvVar ? "1" : "0"}`);
   const lines = [
     `# SpaceGuard selected route: ${routeInput}`,
@@ -150,7 +120,7 @@ export function buildRouteEnvBlock({ route = {}, firstRouteProofPath = "" } = {}
     `OPENAI_MODEL=${DEFAULT_OPENAI_MODEL}`,
     `OPENAI_REASONING_EFFORT=${DEFAULT_OPENAI_REASONING_EFFORT}`,
     "",
-    `SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK=${firstRouteProofValue}`,
+    "SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK=",
     "",
     ...executorFlagLines
   ];
@@ -161,7 +131,7 @@ export function buildRouteEnvBlock({ route = {}, firstRouteProofPath = "" } = {}
     routeInput,
     route: route.route || "",
     selectedEnvVar,
-    requiresFirstRouteProof,
+    requiresFirstRouteProof: false,
     executorFlagLines,
     content: lines.join("\n")
   };
@@ -360,8 +330,6 @@ export function buildRouteReadiness({ recipe = {}, finding = {}, runtime = {} } 
   const enabledFlags = Array.isArray(runtime?.enabledScopedExecutorFlags)
     ? runtime.enabledScopedExecutorFlags
     : [];
-  const firstRouteRequired = recipe.route !== "known-temp-delete";
-  const firstRouteAccepted = Boolean(runtime?.firstRouteProof?.accepted);
   const findingStatus = finding.status || "unknown";
 
   const rows = [
@@ -401,22 +369,6 @@ export function buildRouteReadiness({ recipe = {}, finding = {}, runtime = {} } 
         ? "Runtime allows exactly one scoped mutating executor."
         : "Runtime does not report real-run authority for the single selected route."
     }),
-    firstRouteRequired
-      ? guardrailRow({
-          id: "first-route-proof",
-          label: "First-route proof",
-          passed: firstRouteAccepted,
-          detail: firstRouteAccepted
-            ? `Accepted known-temp-delete proof: ${runtime?.firstRouteProof?.path || "configured path"}.`
-            : "Accepted known-temp-delete completion proof is required before this route."
-        })
-      : {
-          id: "first-route-proof",
-          label: "First-route proof",
-          status: "not-required",
-          passed: true,
-          detail: "Not required for known-temp-delete."
-        },
     guardrailRow({
       id: "native-finding-status",
       label: "Native finding status",

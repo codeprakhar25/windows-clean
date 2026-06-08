@@ -47,22 +47,20 @@ const script = path.join(root, "scripts", "run-setup-doctor.mjs");
   );
   assert(multiFlag.nextSteps.some((step) => step.includes("Turn off all but one")), "multi-flag setup should tell the operator to narrow flags");
 
-  const proofPath = writeAcceptedFirstRouteCompletion();
   const blockedOneFlag = runDoctor({
     SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1"
   });
-  assert.strictEqual(blockedOneFlag.scopedExecutors.validationStatus, "first-route-proof-required", "real-data route should block until first-route completion proof is accepted");
-  assert.strictEqual(blockedOneFlag.scopedExecutors.safeToLaunchWriteMode, false, "missing first-route proof should prevent write-mode launch");
-  assert.strictEqual(blockedOneFlag.realWorkflow.ready, false, "missing first-route proof should block the compact workflow");
-  assert(blockedOneFlag.nextSteps.some((step) => step.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK")), "setup doctor should point to the first-route completion proof env var");
+  assert.strictEqual(blockedOneFlag.scopedExecutors.validationStatus, "one-route-ready", "real-data route should be ready with one enabled route flag");
+  assert.strictEqual(blockedOneFlag.scopedExecutors.safeToLaunchWriteMode, true, "one route flag should be safe for write-mode launch");
+  assert.strictEqual(blockedOneFlag.realWorkflow.ready, true, "one route flag should make the compact workflow ready");
+  assert(!blockedOneFlag.nextSteps.some((step) => step.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK")), "setup doctor must not point to seeded first-route proof env vars");
 
   const oneFlag = runDoctor({
-    SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1",
-    SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK: proofPath
+    SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1"
   });
   assert.strictEqual(oneFlag.scopedExecutors.validationStatus, "one-route-ready", "one flag should be ready for one-route validation");
   assert.strictEqual(oneFlag.scopedExecutors.safeToLaunchWriteMode, true, "one flag should be safe to launch for one-route validation");
-  assert.strictEqual(oneFlag.scopedExecutors.firstRouteProof.status, "accepted", "setup doctor should expose the accepted first-route proof gate");
+  assert.strictEqual(oneFlag.scopedExecutors.firstRouteProof.status, "not-required", "setup doctor should not expose seeded first-route proof gates");
   assert.strictEqual(oneFlag.scopedExecutors.selectedFlag, "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "setup doctor should identify the selected route flag");
   assert.strictEqual(oneFlag.scopedExecutors.selectedRoute.routeInput, "npm-cache", "setup doctor should map the selected flag to its route alias");
   assert(oneFlag.commands.routeValidation.includes("npm run validate:route -- --route npm-cache"), "setup doctor should expose route validation command");
@@ -72,7 +70,7 @@ const script = path.join(root, "scripts", "run-setup-doctor.mjs");
   assert.strictEqual(oneFlag.realWorkflow.ready, true, "one-route setup should make the compact real workflow ready");
   assert.deepStrictEqual(
     oneFlag.realWorkflow.steps.map((step) => step.id),
-    ["fixture-openai-smoke", "openai-smoke", "route-setup", "route-validation", "native-scan", "arm-consent", "execute-route", "post-run-rescan", "proof-export", "proof-import", "workflow-proof-check", "route-completion-check", "next-route"],
+    ["openai-smoke", "route-setup", "route-validation", "native-scan", "arm-consent", "execute-route", "post-run-rescan", "proof-export", "proof-import", "workflow-proof-check", "route-completion-check", "next-route"],
     "setup doctor should emit the compact real cleanup workflow in order"
   );
   assert(oneFlag.realWorkflow.steps.find((step) => step.id === "proof-export").detail.includes("spaceguard-selected-route-proof-packet.md"), "compact workflow should export selected-route proof before import");
@@ -81,27 +79,24 @@ const script = path.join(root, "scripts", "run-setup-doctor.mjs");
   assert(oneFlag.realWorkflow.steps.find((step) => step.id === "route-completion-check").command.includes("validate:route-completion"), "compact workflow should validate selected-route completion before next route");
 
   const pnpmFlag = runDoctor({
-    SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR: "1",
-    SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK: proofPath
+    SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR: "1"
   });
   assert.strictEqual(pnpmFlag.scopedExecutors.selectedFlag, "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR", "setup doctor should identify pnpm as the selected route flag");
   assert.strictEqual(pnpmFlag.scopedExecutors.selectedRoute.routeInput, "pnpm-store", "setup doctor should map pnpm flag to pnpm-store route alias");
   assert(pnpmFlag.commands.routeSetup.includes("npm run setup:route -- --route pnpm-store"), "setup doctor should expose selected pnpm route setup command");
   assert(pnpmFlag.commands.routeValidation.includes("npm run validate:route -- --route pnpm-store"), "setup doctor should expose selected pnpm validation command");
-  assert(pnpmFlag.commands.openAiFixtureSmoke.includes("npm run openai:smoke:fixture -- --route pnpm-store"), "setup doctor should expose selected pnpm fixture smoke command");
+  assert(!Object.prototype.hasOwnProperty.call(pnpmFlag.commands, "openAiFixtureSmoke"), "setup doctor must not expose fixture-only smoke commands");
   assert(pnpmFlag.commands.openAiSmoke.includes("npm run openai:smoke -- --route pnpm-store"), "setup doctor should expose selected pnpm OpenAI smoke command");
   assert(pnpmFlag.commands.routeCompletionValidation.includes("validate:route-completion"), "setup doctor should expose selected pnpm completion validation command");
-  assert(pnpmFlag.openAi.fixtureSmokeCommand.includes("--route pnpm-store"), "setup doctor OpenAI summary should be route-specific");
-  assert(pnpmFlag.openAi.fixtureSmokeValidates.includes("live-route-contract"), "setup doctor should document live route contract validation in fixture smoke");
-  assert(pnpmFlag.realWorkflow.steps.find((step) => step.id === "fixture-openai-smoke").detail.includes("live route contract"), "real workflow should explain fixture smoke route-contract proof");
+  assert(!Object.prototype.hasOwnProperty.call(pnpmFlag.openAi, "fixtureSmokeCommand"), "setup doctor OpenAI summary must not expose fixture-only smoke commands");
   assert(pnpmFlag.nextSteps.some((step) => step.includes("pnpm-store")), "setup doctor next steps should name the selected route alias");
-  assert(pnpmFlag.nextSteps.some((step) => step.includes("live route contract")), "setup doctor next steps should mention route contract validation");
+  assert(!pnpmFlag.nextSteps.some((step) => /fixture|first-route/i.test(step)), "setup doctor next steps must stay real-route only");
 
   const tempFlag = runDoctor({
     SPACEGUARD_ENABLE_TEMP_EXECUTOR: "1"
   });
-  assert.strictEqual(tempFlag.scopedExecutors.validationStatus, "one-route-ready", "temp fixture should remain launchable as the first proof route");
-  assert.strictEqual(tempFlag.scopedExecutors.firstRouteProof.required, false, "temp fixture should not require prior first-route proof");
+  assert.strictEqual(tempFlag.scopedExecutors.validationStatus, "one-route-ready", "known temp cleanup should remain launchable as a real route");
+  assert.strictEqual(tempFlag.scopedExecutors.firstRouteProof.required, false, "known temp cleanup should not require prior first-route proof");
 
   const noFlag = runDoctor();
   assert.strictEqual(noFlag.scopedExecutors.validationStatus, "readonly-ready", "no flags should remain read-only ready");
