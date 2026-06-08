@@ -1398,7 +1398,11 @@ function buildExecutorRecommendationBrokerRow({ row, actionType, key, policy, co
   const consentPlanId = executionState.consentPlanId || execution.consentPlanId || "";
   const scanFingerprint = executionState.scanFingerprint || execution.scanFingerprint || "";
   const proofStatus = String(executionState.proofStatus || execution.proofStatus || "waiting-for-execution");
-  const proofAllowsExecution = proofStatus === "waiting-for-execution" || proofStatus === "proof-complete";
+  const proofAllowsExecution = typeof executionState.proofAllowsNextExecutor === "boolean"
+    ? executionState.proofAllowsNextExecutor
+    : typeof execution.proofAllowsNextExecutor === "boolean"
+      ? execution.proofAllowsNextExecutor
+      : proofStatus === "waiting-for-execution" || proofStatus === "proof-complete";
   const recommendedRoute = String(row.route || row.route_id || "").trim();
   const routeMatches = recommendedRoute === policy.route;
   const targets = getExecutorRecommendationTargets(policy, context);

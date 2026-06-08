@@ -107,6 +107,31 @@ const script = path.join(root, "scripts", "run-openai-advisor-smoke.mjs");
   });
   assert.strictEqual(appQueueReadyBroker.rows[0].status, "ready", "app-shaped OpenAI broker should route the recommendation after deterministic app gates pass");
 
+  const appQueueProofCompleteBlockedBroker = smoke.buildRouteContractRecommendationBroker({
+    context: {
+      ...appQueueContext,
+      execution: {
+        ...appQueueContext.execution,
+        consentPlanId: "plan-app-queue",
+        consentMatchesPlan: true,
+        proofStatus: "proof-complete",
+        proofAllowsNextExecutor: false,
+        supportBundleWritten: false
+      }
+    },
+    advice: appQueueAdvice,
+    route: smoke.resolveSmokeRoute("npm-cache"),
+    executionState: {
+      planId: "plan-app-queue",
+      scanFingerprint: "scan-app-queue",
+      consentPlanId: "plan-app-queue",
+      proofStatus: "proof-complete"
+    }
+  });
+  const proofBlockedBrokerRow = appQueueProofCompleteBlockedBroker.rows[0];
+  assert.strictEqual(proofBlockedBrokerRow.status, "blocked", "broker should block executor recommendations after proof-complete until support bundle handoff opens next executor");
+  assert(proofBlockedBrokerRow.checks.some((check) => check.id === "post-run-proof" && !check.passed), "broker should expose proof handoff as the blocker");
+
   const proofCompleteContext = agent.buildOpenAIAgentContext({
     executionProofHandoff: {
       status: "proof-complete",
