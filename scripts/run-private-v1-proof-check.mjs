@@ -58,8 +58,8 @@ export function buildPrivateV1ProofCheck({
 
   validatePreflight(preflight, add);
   const nativeBundleArtifactCount = validateNativeBundleArtifacts(preflight, add);
-  validateFirstRouteCompletion(firstRouteCompletion, proof, resolvedFirstRouteCompletionPath, add);
-  validateSelectedRouteCompletion(selectedRouteCompletion, proof, resolvedSelectedRouteCompletionPath, add);
+  const firstRouteProofCounts = validateFirstRouteCompletion(firstRouteCompletion, proof, resolvedFirstRouteCompletionPath, add);
+  const selectedRouteProofCounts = validateSelectedRouteCompletion(selectedRouteCompletion, proof, resolvedSelectedRouteCompletionPath, add);
   validateArchivedRootExports(proof, add);
 
   const selectedRoute = String(proof?.selectedRoute || selectedRouteCompletion?.routeInput || "");
@@ -88,7 +88,13 @@ export function buildPrivateV1ProofCheck({
       requiredCommandsPassed: commandSummary.requiredPassed,
       nativeBundleArtifacts: nativeBundleArtifactCount,
       firstRouteReclaimedBytes,
+      firstRouteLedgerReclaimedBytes: firstRouteProofCounts.ledgerReclaimedBytes,
+      firstRouteRescanExpectedBytes: firstRouteProofCounts.rescanExpectedBytes,
+      firstRouteRescanActualRemainingBytes: firstRouteProofCounts.rescanActualRemainingBytes,
       selectedRouteReclaimedBytes,
+      selectedRouteLedgerReclaimedBytes: selectedRouteProofCounts.ledgerReclaimedBytes,
+      selectedRouteRescanExpectedBytes: selectedRouteProofCounts.rescanExpectedBytes,
+      selectedRouteRescanActualRemainingBytes: selectedRouteProofCounts.rescanActualRemainingBytes,
       reclaimedBytes: selectedRouteReclaimedBytes
     },
     primary: canAcceptPrivateV1Proof
@@ -282,7 +288,8 @@ function validateNativeBundleArtifacts(preflight, add) {
 }
 
 function validateFirstRouteCompletion(completion, proof, resolvedPath, add) {
-  if (!completion) return;
+  const proofCounts = validateCompletionProofCounts(completion, "first-route", "First-route", add);
+  if (!completion) return proofCounts;
   if (completion.schemaVersion !== FIRST_ROUTE_COMPLETION_SCHEMA) {
     add("first-route-completion", "First-route completion schema mismatch", `Expected ${FIRST_ROUTE_COMPLETION_SCHEMA}.`);
   }
@@ -299,10 +306,13 @@ function validateFirstRouteCompletion(completion, proof, resolvedPath, add) {
   if (summary.status && summary.status !== completion.status) {
     add("first-route-completion-summary", "First-route completion summary mismatch", "Private V1 summary status must match first-route completion.");
   }
+  validateCompletionSummaryCounts(summary, proofCounts, "first-route", "First-route", add);
+  return proofCounts;
 }
 
 function validateSelectedRouteCompletion(completion, proof, resolvedPath, add) {
-  if (!completion) return;
+  const proofCounts = validateCompletionProofCounts(completion, "selected-route", "Selected-route", add);
+  if (!completion) return proofCounts;
   if (completion.schemaVersion !== SELECTED_ROUTE_COMPLETION_SCHEMA) {
     add("selected-route-completion", "Selected-route completion schema mismatch", `Expected ${SELECTED_ROUTE_COMPLETION_SCHEMA}.`);
   }
@@ -321,6 +331,72 @@ function validateSelectedRouteCompletion(completion, proof, resolvedPath, add) {
   }
   if (summary.status && summary.status !== completion.status) {
     add("selected-route-completion-summary", "Selected-route completion summary mismatch", "Private V1 summary status must match selected-route completion.");
+  }
+  validateCompletionSummaryCounts(summary, proofCounts, "selected-route", "Selected-route", add);
+  return proofCounts;
+}
+
+function validateCompletionProofCounts(completion, idPrefix, label, add) {
+  const counts = completion?.counts || {};
+  const proofCounts = {
+    reclaimedBytes: Number(counts.reclaimedBytes || 0),
+    selectedRouteProofPacketReclaimedBytes: Number(counts.selectedRouteProofPacketReclaimedBytes || 0),
+    ledgerReclaimedBytes: Number(counts.ledgerReclaimedBytes || 0),
+    rescanExpectedBytes: Number(counts.rescanExpectedBytes || 0),
+    rescanActualRemainingBytes: Number(counts.rescanActualRemainingBytes || 0)
+  };
+  if (!completion) return proofCounts;
+
+  const requiredCountKeys = [
+    "reclaimedBytes",
+    "selectedRouteProofPacketReclaimedBytes",
+    "ledgerReclaimedBytes",
+    "rescanExpectedBytes",
+    "rescanActualRemainingBytes"
+  ];
+  for (const key of requiredCountKeys) {
+    if (!Object.prototype.hasOwnProperty.call(counts, key)) {
+      add(`${idPrefix}-completion-parity`, `${label} completion parity count missing`, `${label} completion must include counts.${key}.`);
+    }
+  }
+
+  if (proofCounts.reclaimedBytes <= 0) return proofCounts;
+  const comparableFields = [
+    ["selectedRouteProofPacketReclaimedBytes", proofCounts.selectedRouteProofPacketReclaimedBytes],
+    ["ledgerReclaimedBytes", proofCounts.ledgerReclaimedBytes],
+    ["rescanExpectedBytes", proofCounts.rescanExpectedBytes]
+  ];
+  for (const [key, value] of comparableFields) {
+    if (value !== proofCounts.reclaimedBytes) {
+      add(
+        `${idPrefix}-completion-parity`,
+        `${label} completion byte parity mismatch`,
+        `${label} completion counts.${key} must equal reclaimedBytes.`
+      );
+    }
+  }
+  if (proofCounts.rescanActualRemainingBytes < 0) {
+    add(`${idPrefix}-completion-parity`, `${label} completion rescan remaining bytes invalid`, `${label} completion counts.rescanActualRemainingBytes must be non-negative.`);
+  }
+  return proofCounts;
+}
+
+function validateCompletionSummaryCounts(summary, proofCounts, idPrefix, label, add) {
+  if (!summary || typeof summary !== "object") return;
+  const fields = [
+    "reclaimedBytes",
+    "ledgerReclaimedBytes",
+    "rescanExpectedBytes",
+    "rescanActualRemainingBytes"
+  ];
+  for (const field of fields) {
+    if (!Object.prototype.hasOwnProperty.call(summary, field)) {
+      add(`${idPrefix}-completion-summary`, `${label} completion summary missing proof count`, `Private V1 summary must include ${field} for ${label.toLowerCase()} completion.`);
+      continue;
+    }
+    if (Number(summary[field] || 0) !== Number(proofCounts[field] || 0)) {
+      add(`${idPrefix}-completion-summary`, `${label} completion summary mismatch`, `Private V1 summary ${field} must match ${label.toLowerCase()} completion.`);
+    }
   }
 }
 

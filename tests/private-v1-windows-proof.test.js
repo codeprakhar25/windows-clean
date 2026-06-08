@@ -29,6 +29,9 @@ const windowsSetup = fs.readFileSync(path.join(root, "WINDOWS_REAL_DATA_SETUP.md
   assert(runner.includes("archived-first-route-root-exports"), "V1 proof coordinator should archive first-route root exports before selected-route launch");
   assert(runner.includes("npm run proof:route:windows -- -Route $SelectedRoute"), "V1 proof coordinator should run the selected real-data route");
   assert(runner.includes("selected-route-completion-check.json"), "V1 proof coordinator should capture selected-route completion");
+  assert(runner.includes("ledgerReclaimedBytes"), "V1 proof coordinator should summarize completion ledger reclaimed bytes");
+  assert(runner.includes("rescanExpectedBytes"), "V1 proof coordinator should summarize completion rescan expected bytes");
+  assert(runner.includes("rescanActualRemainingBytes"), "V1 proof coordinator should summarize completion rescan remaining bytes");
   assert(runner.includes("private-v1-proof.json"), "V1 proof coordinator should write the final V1 proof artifact");
   assert(runner.includes("commands.ndjson"), "V1 proof coordinator should keep a command ledger");
   assert(gitignore.includes("private-v1-proof.json"), ".gitignore should exclude copied private V1 proof artifacts");

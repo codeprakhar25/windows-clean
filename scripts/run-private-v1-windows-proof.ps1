@@ -239,6 +239,9 @@ try {
       status = $firstRouteCompletion.status
       canStartNextRoute = $firstRouteCompletion.canStartNextRoute
       reclaimedBytes = $firstRouteCompletion.counts.reclaimedBytes
+      ledgerReclaimedBytes = $firstRouteCompletion.counts.ledgerReclaimedBytes
+      rescanExpectedBytes = $firstRouteCompletion.counts.rescanExpectedBytes
+      rescanActualRemainingBytes = $firstRouteCompletion.counts.rescanActualRemainingBytes
     }
     selectedRouteCompletion = [PSCustomObject]@{
       path = $SelectedRouteCompletionPath
@@ -246,6 +249,9 @@ try {
       canStartNextRoute = $selectedRouteCompletion.canStartNextRoute
       route = $selectedRouteCompletion.route
       reclaimedBytes = $selectedRouteCompletion.counts.reclaimedBytes
+      ledgerReclaimedBytes = $selectedRouteCompletion.counts.ledgerReclaimedBytes
+      rescanExpectedBytes = $selectedRouteCompletion.counts.rescanExpectedBytes
+      rescanActualRemainingBytes = $selectedRouteCompletion.counts.rescanActualRemainingBytes
     }
     archivedRootExports = $archivedRootExports
     commands = $commands

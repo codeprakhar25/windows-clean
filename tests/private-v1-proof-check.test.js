@@ -64,7 +64,13 @@ function createPrivateV1Evidence(patch = {}) {
     status: "accepted",
     canStartNextRoute: true,
     route: "known-temp-delete",
-    counts: { reclaimedBytes: 8388608 },
+    counts: {
+      reclaimedBytes: 8388608,
+      selectedRouteProofPacketReclaimedBytes: 8388608,
+      ledgerReclaimedBytes: 8388608,
+      rescanExpectedBytes: 8388608,
+      rescanActualRemainingBytes: 0
+    },
     ...patch.firstRouteCompletion
   };
   const selectedRouteCompletion = {
@@ -73,7 +79,13 @@ function createPrivateV1Evidence(patch = {}) {
     canStartNextRoute: true,
     route: "bounded-npm-cache-delete",
     routeInput: "npm-cache",
-    counts: { reclaimedBytes: 1048576 },
+    counts: {
+      reclaimedBytes: 1048576,
+      selectedRouteProofPacketReclaimedBytes: 1048576,
+      ledgerReclaimedBytes: 1048576,
+      rescanExpectedBytes: 1048576,
+      rescanActualRemainingBytes: 0
+    },
     ...patch.selectedRouteCompletion
   };
   const commands = [
@@ -112,14 +124,20 @@ function createPrivateV1Evidence(patch = {}) {
       path: firstRouteCompletionPath,
       status: "accepted",
       canStartNextRoute: true,
-      reclaimedBytes: 8388608
+      reclaimedBytes: 8388608,
+      ledgerReclaimedBytes: 8388608,
+      rescanExpectedBytes: 8388608,
+      rescanActualRemainingBytes: 0
     },
     selectedRouteCompletion: {
       path: selectedRouteCompletionPath,
       status: "accepted",
       canStartNextRoute: true,
       route: "bounded-npm-cache-delete",
-      reclaimedBytes: 1048576
+      reclaimedBytes: 1048576,
+      ledgerReclaimedBytes: 1048576,
+      rescanExpectedBytes: 1048576,
+      rescanActualRemainingBytes: 0
     },
     archivedRootExports: [{ source: path.join(dir, "spaceguard-real-workflow-proof.md"), destination: archivedProofPath }],
     commands: {
@@ -163,6 +181,9 @@ function createPrivateV1Evidence(patch = {}) {
   assert.strictEqual(accepted.canAcceptPrivateV1Proof, true, "accepted private V1 proof should be marked usable");
   assert.strictEqual(accepted.selectedRoute, "npm-cache", "verifier should preserve the selected route alias");
   assert.strictEqual(accepted.counts.reclaimedBytes, 1048576, "verifier should report selected-route reclaimed bytes");
+  assert.strictEqual(accepted.counts.firstRouteRescanExpectedBytes, 8388608, "verifier should report first-route rescan expected bytes");
+  assert.strictEqual(accepted.counts.selectedRouteRescanExpectedBytes, 1048576, "verifier should report selected-route rescan expected bytes");
+  assert.strictEqual(accepted.counts.selectedRouteLedgerReclaimedBytes, 1048576, "verifier should report selected-route ledger reclaimed bytes");
   assert.strictEqual(accepted.counts.nativeBundleArtifacts, 1, "verifier should count native bundle artifacts");
   assert.strictEqual(accepted.counts.commandRecords, 5, "verifier should count command ledger records");
   assert.strictEqual(accepted.blockers.length, 0, "accepted V1 proof should not have blockers");
@@ -200,6 +221,37 @@ function createPrivateV1Evidence(patch = {}) {
   assert(
     selectedBlockedCheck.blockers.some((blocker) => blocker.id === "selected-route-completion"),
     "selected-route completion blocker should be explicit"
+  );
+
+  const missingSelectedRouteParity = createPrivateV1Evidence({
+    selectedRouteCompletion: {
+      counts: { reclaimedBytes: 1048576 }
+    }
+  });
+  const missingSelectedRouteParityCheck = verifier.buildPrivateV1ProofCheck({ proofPath: missingSelectedRouteParity.proofPath });
+  assert.strictEqual(missingSelectedRouteParityCheck.status, "blocked", "selected-route completion without rescan parity counts should block private V1 proof");
+  assert(
+    missingSelectedRouteParityCheck.blockers.some((blocker) => blocker.id === "selected-route-completion-parity"),
+    "selected-route completion parity blocker should be explicit"
+  );
+
+  const mismatchedFirstRouteSummary = createPrivateV1Evidence({
+    proof: {
+      firstRouteCompletion: {
+        status: "accepted",
+        canStartNextRoute: true,
+        reclaimedBytes: 8388608,
+        ledgerReclaimedBytes: 4096,
+        rescanExpectedBytes: 8388608,
+        rescanActualRemainingBytes: 0
+      }
+    }
+  });
+  const mismatchedFirstRouteSummaryCheck = verifier.buildPrivateV1ProofCheck({ proofPath: mismatchedFirstRouteSummary.proofPath });
+  assert.strictEqual(mismatchedFirstRouteSummaryCheck.status, "blocked", "private V1 summary bytes that disagree with first-route completion should block");
+  assert(
+    mismatchedFirstRouteSummaryCheck.blockers.some((blocker) => blocker.id === "first-route-completion-summary"),
+    "first-route completion summary parity blocker should be explicit"
   );
 
   const missingBundle = createPrivateV1Evidence({ preflight: { nativeBundleArtifacts: [] } });

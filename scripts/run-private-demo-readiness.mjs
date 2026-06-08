@@ -177,9 +177,12 @@ export function buildPrivateDemoReadinessSummary({
         privateV1Runner.includes("SPACEGUARD_FIRST_ROUTE_COMPLETION_CHECK") &&
         privateV1Runner.includes("npm run proof:first-route:windows -- -Route temp-fixture") &&
         privateV1Runner.includes("npm run proof:route:windows -- -Route $SelectedRoute") &&
+        privateV1Runner.includes("ledgerReclaimedBytes") &&
+        privateV1Runner.includes("rescanExpectedBytes") &&
+        privateV1Runner.includes("rescanActualRemainingBytes") &&
         privateV1Runner.includes("run-private-v1-proof-check.mjs --file") &&
         directDeleteFree(privateV1Runner),
-      detail: "Private demo readiness must expose a single Windows V1 proof command that binds first-route completion before selected real-data cleanup."
+      detail: "Private demo readiness must expose a single Windows V1 proof command that binds first-route completion and route/rescan parity before selected real-data cleanup."
     }),
     buildCheck({
       id: "private-v1-proof-validation",
@@ -188,8 +191,9 @@ export function buildPrivateDemoReadinessSummary({
         fileReady(privateV1ProofCheck) &&
         privateV1ProofCheck.includes("spaceguard-private-v1-proof-check/v1") &&
         privateV1ProofCheck.includes("spaceguard-private-v1-windows-proof/v1") &&
-        privateV1ProofCheck.includes("bind-first-route-completion"),
-      detail: "Private demo readiness must include an independent verifier for the final private V1 proof artifact."
+        privateV1ProofCheck.includes("bind-first-route-completion") &&
+        privateV1ProofCheck.includes("completion-parity"),
+      detail: "Private demo readiness must include an independent verifier for the final private V1 proof artifact and child route/rescan parity counts."
     }),
     buildCheck({
       id: "workflow-proof-validation",
