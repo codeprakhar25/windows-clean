@@ -97,6 +97,7 @@ export function buildFirstRouteCompletionCheck({
   const nativeExit = readOptionalJsonArtifact("native-exit", artifactNativeExitPath, add);
   const selectedRouteProofPacket = readOptionalJsonArtifact("selected-route-proof-packet", resolvedSelectedRouteProofPacketPath, add);
   const workflowProofText = readOptionalTextArtifact("workflow-proof", resolvedWorkflowProofPath, add);
+  const workflowProofObject = workflowProofText ? parseWorkflowProofObject(workflowProofText, add) : null;
   const workflowProof = workflowProofText
     ? buildWorkflowProofCheck({ evidenceText: workflowProofText, checkedAt })
     : buildWorkflowProofCheck({ evidenceObject: { schemaVersion: "" }, checkedAt });
@@ -105,6 +106,12 @@ export function buildFirstRouteCompletionCheck({
   validateNativeExitEvidence(nativeExit, add);
   validateSelectedRouteProofPacket(selectedRouteProofPacket, add);
   validateWorkflowProof(workflowProof, add);
+  validateProofFreshness({
+    afterFixture,
+    selectedRouteProofPacket,
+    workflowProofObject,
+    nativeLaunchStartedAt: commandSummary.nativeLaunchStartedAt
+  }, add);
 
   const reclaimedBytes = Number(workflowProof.counts?.reclaimedBytes || 0);
   const selectedRouteProofPacketReclaimedBytes = Number(selectedRouteProofPacket?.counts?.reclaimedBytes || 0);
@@ -133,6 +140,10 @@ export function buildFirstRouteCompletionCheck({
       commandRecords: commandRecords.length,
       requiredPostAppCommands: REQUIRED_POST_APP_COMMANDS.length,
       postAppCommandsPassed: commandSummary.requiredPassed,
+      nativeLaunchStartedAt: commandSummary.nativeLaunchStartedAt,
+      afterFixtureGeneratedAt: String(afterFixture?.generatedAt || ""),
+      selectedRouteProofPacketGeneratedAt: String(selectedRouteProofPacket?.generatedAt || ""),
+      workflowProofGeneratedAt: String(workflowProofObject?.generatedAt || ""),
       preflightBlockers: Number(preflight.counts?.blockers || 0),
       workflowProofBlockers: Number(workflowProof.counts?.blockers || 0),
       afterFixtureRecords: Array.isArray(afterFixture?.records) ? afterFixture.records.length : 0,
@@ -233,6 +244,15 @@ function parseJsonObject(text = "", label = "artifact") {
   throw new Error(`${label} could not be parsed as JSON.`);
 }
 
+function parseWorkflowProofObject(text = "", add) {
+  try {
+    return parseJsonObject(text, "workflow-proof");
+  } catch (error) {
+    add("workflow-proof", "Workflow proof parse failed", error instanceof Error ? error.message : "Workflow proof could not be parsed.");
+    return null;
+  }
+}
+
 function extractFirstJsonObject(text = "") {
   const start = text.indexOf("{");
   if (start < 0) return "";
@@ -301,6 +321,7 @@ function validateAfterFixtureEvidence(evidence, add) {
 
 function validatePostAppCommandRecords(records = [], add) {
   let requiredPassed = 0;
+  let nativeLaunchStartedAt = "";
   for (const id of REQUIRED_POST_APP_COMMANDS) {
     const record = findLatestCommandRecord(records, id);
     if (!record) {
@@ -313,6 +334,7 @@ function validatePostAppCommandRecords(records = [], add) {
         add(`command-${id}`, "Command not user-gated", "native-dev-launch must be recorded as userGated=true.");
         continue;
       }
+      nativeLaunchStartedAt = String(record.startedAt || "");
       requiredPassed += 1;
       continue;
     }
@@ -336,7 +358,7 @@ function validatePostAppCommandRecords(records = [], add) {
     }
     requiredPassed += 1;
   }
-  return { requiredPassed };
+  return { requiredPassed, nativeLaunchStartedAt };
 }
 
 function findLatestCommandRecord(records = [], id = "") {
@@ -415,6 +437,39 @@ function validateWorkflowProof(proofCheck, add) {
   if (proofCheck.readyForNextRoute !== true) {
     add("workflow-proof", "Next route not cleared", "Workflow proof must explicitly clear next-route handoff.");
   }
+}
+
+function validateProofFreshness({ afterFixture = null, selectedRouteProofPacket = null, workflowProofObject = null, nativeLaunchStartedAt = "" } = {}, add) {
+  const launchTime = parseTimestamp(nativeLaunchStartedAt);
+  if (!launchTime) {
+    add("proof-freshness", "Native launch timestamp missing", "commands.ndjson must record native-dev-launch.startedAt before first-route completion can prove fresh exports.");
+    return;
+  }
+
+  const checks = [
+    ["after-fixture generatedAt", afterFixture?.generatedAt],
+    ["selected-route proof generatedAt", selectedRouteProofPacket?.generatedAt],
+    ["selected-route proof latestExecutionAt", selectedRouteProofPacket?.latestExecutionAt],
+    ["selected-route proof scanGeneratedAt", selectedRouteProofPacket?.scanGeneratedAt],
+    ["workflow proof generatedAt", workflowProofObject?.generatedAt]
+  ];
+  for (const [label, value] of checks) {
+    const timestamp = parseTimestamp(value);
+    if (!timestamp) {
+      add("proof-freshness", "Proof timestamp missing", `${label} must be present and parseable for the current native app run.`);
+      continue;
+    }
+    if (timestamp < launchTime) {
+      add("proof-freshness", "Stale proof export", `${label} (${value}) is older than native-dev-launch.startedAt (${nativeLaunchStartedAt}).`);
+    }
+  }
+}
+
+function parseTimestamp(value) {
+  const clean = String(value || "").trim();
+  if (!clean) return null;
+  const timestamp = Date.parse(clean);
+  return Number.isFinite(timestamp) ? timestamp : null;
 }
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"))) {

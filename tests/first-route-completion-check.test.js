@@ -83,6 +83,7 @@ function createFirstRouteEvidence(patch = {}) {
   };
   const fixtureBefore = {
     schemaVersion: "spaceguard-fixture-evidence/v1",
+    generatedAt: "2026-06-07T13:10:00.000Z",
     passed: true,
     destructiveCommands: false,
     afterCleanupRoute: "",
@@ -94,6 +95,7 @@ function createFirstRouteEvidence(patch = {}) {
   };
   const fixtureAfter = {
     schemaVersion: "spaceguard-fixture-evidence/v1",
+    generatedAt: "2026-06-07T14:35:00.000Z",
     passed: true,
     destructiveCommands: false,
     afterCleanupRoute: "known-temp-delete",
@@ -157,6 +159,7 @@ function createFirstRouteEvidence(patch = {}) {
   };
   const workflowProof = {
     schemaVersion: "spaceguard-real-workflow-proof/v1",
+    generatedAt: "2026-06-07T14:45:00.000Z",
     status: "workflow-proven",
     route: "known-temp-delete",
     routeInput: "temp-fixture",
@@ -188,6 +191,7 @@ function createFirstRouteEvidence(patch = {}) {
   };
   const selectedRouteProofPacket = {
     schemaVersion: "spaceguard-selected-route-proof-packet/v1",
+    generatedAt: "2026-06-07T14:40:00.000Z",
     status: "proof-complete",
     route: "known-temp-delete",
     routeInput: "temp-fixture",
@@ -196,6 +200,8 @@ function createFirstRouteEvidence(patch = {}) {
     scopedNativeExecution: true,
     postRunScanEvidence: true,
     readyForNextRoute: true,
+    latestExecutionAt: "2026-06-07T14:30:00.000Z",
+    scanGeneratedAt: "2026-06-07T14:35:00.000Z",
     counts: { ledgerEntries: 1, matchedRows: 1, reclaimedBytes: 8388608 },
     volumeProof: { status: "measured", drive: "C:", freeBytesDelta: 8388608, source: "GetDiskFreeSpaceExW" },
     validationImport: { status: "import-complete", complete: true, route: "known-temp-delete", evidencePath: "evidence/selected-route-proof.md" },
@@ -224,14 +230,16 @@ function createFirstRouteEvidence(patch = {}) {
       command: "npm run native:dev",
       outputPath: "",
       exitCode: null,
-      userGated: true
+      userGated: true,
+      startedAt: "2026-06-07T14:20:00.000Z"
     },
     {
       id: "native-dev-exit",
       command: "npm run native:dev",
       outputPath: artifacts.nativeDevExit,
       exitCode: 0,
-      userGated: true
+      userGated: true,
+      endedAt: "2026-06-07T14:30:00.000Z"
     },
     {
       id: "finalize-after-app",
@@ -310,6 +318,7 @@ function createFirstRouteEvidence(patch = {}) {
   assert.strictEqual(accepted.counts.postAppCommandsPassed, 5, "completion check should count required post-app command records");
   assert.strictEqual(accepted.counts.reclaimedBytes, 8388608, "completion check should preserve recovered bytes");
   assert.strictEqual(accepted.counts.selectedRouteProofPacketReclaimedBytes, 8388608, "completion check should preserve selected-route proof packet recovered bytes");
+  assert.strictEqual(accepted.counts.nativeLaunchStartedAt, "2026-06-07T14:20:00.000Z", "completion should expose the native launch timestamp used for proof freshness");
 
   const retriedPostAppEvidence = createFirstRouteEvidence({
     commands: [
@@ -326,14 +335,16 @@ function createFirstRouteEvidence(patch = {}) {
         command: "npm run native:dev",
         outputPath: "",
         exitCode: null,
-        userGated: true
+        userGated: true,
+        startedAt: "2026-06-07T14:20:00.000Z"
       },
       {
         id: "native-dev-exit",
         command: "npm run native:dev",
         outputPath: path.join(os.tmpdir(), "native-dev-exit.json"),
         exitCode: 0,
-        userGated: true
+        userGated: true,
+        endedAt: "2026-06-07T14:30:00.000Z"
       },
       {
         id: "finalize-after-app",
@@ -452,6 +463,43 @@ function createFirstRouteEvidence(patch = {}) {
   });
   assert.strictEqual(zeroByte.status, "blocked", "completion should block zero-byte workflow proof");
   assert(zeroByte.blockers.some((blocker) => blocker.id === "workflow-proof"), "workflow proof blocker should be surfaced");
+
+  const staleAfterFixtureEvidence = createFirstRouteEvidence({
+    fixtureAfter: { generatedAt: "2026-06-07T14:10:00.000Z" }
+  });
+  const staleAfterFixture = verifier.buildFirstRouteCompletionCheck({
+    preflightPath: staleAfterFixtureEvidence.preflightPath,
+    afterFixturePath: staleAfterFixtureEvidence.afterFixturePath,
+    workflowProofPath: staleAfterFixtureEvidence.workflowProofPath
+  });
+  assert.strictEqual(staleAfterFixture.status, "blocked", "completion should block after-fixture evidence older than the native app launch");
+  assert(staleAfterFixture.blockers.some((blocker) => blocker.id === "proof-freshness"), "stale after-fixture blocker should be surfaced");
+
+  const staleSelectedRouteProofExportEvidence = createFirstRouteEvidence({
+    selectedRouteProofPacket: {
+      generatedAt: "2026-06-07T14:10:00.000Z",
+      latestExecutionAt: "2026-06-07T14:10:00.000Z",
+      scanGeneratedAt: "2026-06-07T14:10:00.000Z"
+    }
+  });
+  const staleSelectedRouteProofExport = verifier.buildFirstRouteCompletionCheck({
+    preflightPath: staleSelectedRouteProofExportEvidence.preflightPath,
+    afterFixturePath: staleSelectedRouteProofExportEvidence.afterFixturePath,
+    workflowProofPath: staleSelectedRouteProofExportEvidence.workflowProofPath
+  });
+  assert.strictEqual(staleSelectedRouteProofExport.status, "blocked", "completion should block selected-route proof exports older than the native app launch");
+  assert(staleSelectedRouteProofExport.blockers.some((blocker) => blocker.id === "proof-freshness"), "stale selected-route proof export blocker should be surfaced");
+
+  const staleWorkflowProofEvidence = createFirstRouteEvidence({
+    workflowProof: { generatedAt: "2026-06-07T14:10:00.000Z" }
+  });
+  const staleWorkflowProof = verifier.buildFirstRouteCompletionCheck({
+    preflightPath: staleWorkflowProofEvidence.preflightPath,
+    afterFixturePath: staleWorkflowProofEvidence.afterFixturePath,
+    workflowProofPath: staleWorkflowProofEvidence.workflowProofPath
+  });
+  assert.strictEqual(staleWorkflowProof.status, "blocked", "completion should block workflow proof older than the native app launch");
+  assert(staleWorkflowProof.blockers.some((blocker) => blocker.id === "proof-freshness"), "stale workflow proof blocker should be surfaced");
 
   const failedNativeEvidence = createFirstRouteEvidence({
     nativeDevExit: { exitCode: 1, success: false }
