@@ -4097,7 +4097,7 @@ export default function App() {
     const generatedAt = selectedRouteProofExportReceipt?.exportedAt || new Date().toISOString();
     const exportedPacket = { ...proofPacket, generatedAt };
     setRouteProofImportText(JSON.stringify(exportedPacket, null, 2));
-    setRouteProofImportArtifact(`selected-route-proof:${exportedPacket.route || "route"}:${generatedAt}`);
+    setRouteProofImportArtifact("spaceguard-selected-route-proof-packet.md");
     setRouteProofImportResult(null);
     focusWorkflowPanel("validation-evidence-panel");
     return true;

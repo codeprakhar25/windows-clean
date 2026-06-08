@@ -205,7 +205,7 @@ function createFirstRouteEvidence(patch = {}) {
     scanGeneratedAt: "2026-06-07T14:35:00.000Z",
     counts: { ledgerEntries: 1, matchedRows: 1, reclaimedBytes: 8388608 },
     volumeProof: { status: "measured", drive: "C:", freeBytesDelta: 8388608, source: "GetDiskFreeSpaceExW" },
-    validationImport: { status: "import-complete", complete: true, route: "known-temp-delete", evidencePath: "evidence/selected-route-proof.md" },
+    validationImport: { status: "import-complete", complete: true, route: "known-temp-delete", evidencePath: artifacts.selectedRouteProofPacket },
     ledgerEntries: [{ id: "temp-fixture-cleanup", route: "known-temp-delete", result: "executed", bytes: 8388608 }],
     rescanRows: [{ id: "temp-fixture-cleanup", route: "known-temp-delete", state: "matched", actualBytes: 0, expectedBytes: 8388608 }]
   };
@@ -453,6 +453,24 @@ function createFirstRouteEvidence(patch = {}) {
   });
   assert.strictEqual(staleSelectedRouteProof.status, "blocked", "completion should block stale proof packets exported before validation import");
   assert(staleSelectedRouteProof.blockers.some((blocker) => blocker.id === "selected-route-proof-packet"), "stale selected-route proof packet blocker should be surfaced");
+
+  const mismatchedImportPathEvidence = createFirstRouteEvidence({
+    selectedRouteProofPacket: {
+      validationImport: {
+        status: "import-complete",
+        complete: true,
+        route: "known-temp-delete",
+        evidencePath: "other-selected-route-proof-packet.md"
+      }
+    }
+  });
+  const mismatchedImportPath = verifier.buildFirstRouteCompletionCheck({
+    preflightPath: mismatchedImportPathEvidence.preflightPath,
+    afterFixturePath: mismatchedImportPathEvidence.afterFixturePath,
+    workflowProofPath: mismatchedImportPathEvidence.workflowProofPath
+  });
+  assert.strictEqual(mismatchedImportPath.status, "blocked", "completion should block proof imports that point to another selected-route artifact");
+  assert(mismatchedImportPath.blockers.some((blocker) => blocker.id === "selected-route-proof-packet"), "mismatched selected-route proof import path blocker should be surfaced");
 
   const zeroByteEvidence = createFirstRouteEvidence({
     workflowProof: { counts: { ledgerEntries: 1, matchedRows: 1, reclaimedBytes: 0 } }

@@ -80,7 +80,13 @@ export function buildSelectedRouteCompletionCheck({
   const expectedRoute = String(preflightObject?.route || preflightCheck.route || "");
   const expectedRouteInput = String(preflightObject?.routeInput || preflightCheck.routeInput || expectedRoute);
   validateNativeExitEvidence(nativeExit, add);
-  validateSelectedRouteProofPacket(selectedRouteProofPacket, expectedRoute, expectedRouteInput, add);
+  validateSelectedRouteProofPacket(
+    selectedRouteProofPacket,
+    expectedRoute,
+    expectedRouteInput,
+    resolvedSelectedRouteProofPacketPath,
+    add
+  );
   validateWorkflowProof(workflowProof, expectedRoute, add);
   validateProofFreshness({
     selectedRouteProofPacket,
@@ -333,7 +339,7 @@ function validateNativeExitEvidence(evidence, add) {
   }
 }
 
-function validateSelectedRouteProofPacket(packet, expectedRoute, expectedRouteInput, add) {
+function validateSelectedRouteProofPacket(packet, expectedRoute, expectedRouteInput, expectedProofPacketPath, add) {
   if (!packet) return;
   if (packet.schemaVersion !== SELECTED_ROUTE_PROOF_PACKET_SCHEMA) {
     add("selected-route-proof-packet", "Selected-route proof schema mismatch", `Expected ${SELECTED_ROUTE_PROOF_PACKET_SCHEMA}.`);
@@ -356,6 +362,7 @@ function validateSelectedRouteProofPacket(packet, expectedRoute, expectedRouteIn
   if (packet.readyForNextRoute !== true || packet.validationImport?.status !== "import-complete" || packet.validationImport?.complete !== true) {
     add("selected-route-proof-packet", "Selected-route proof import incomplete", "Selected-route proof packet must be re-exported after validation import is complete.");
   }
+  validateSelectedRouteProofImportPath(packet.validationImport?.evidencePath, expectedProofPacketPath, add);
   if (
     Number(packet.counts?.ledgerEntries || 0) < 1 ||
     Number(packet.counts?.matchedRows || 0) < 1 ||
@@ -366,6 +373,29 @@ function validateSelectedRouteProofPacket(packet, expectedRoute, expectedRouteIn
   if (packet.volumeProof?.status !== "measured") {
     add("selected-route-proof-packet", "Selected-route volume proof missing", "Selected-route proof packet must include measured native volume proof.");
   }
+}
+
+function validateSelectedRouteProofImportPath(evidencePath, expectedProofPacketPath, add) {
+  const normalizedEvidencePath = normalizeProofArtifactPath(evidencePath, path.dirname(expectedProofPacketPath || process.cwd()));
+  const normalizedExpectedPath = normalizeProofArtifactPath(expectedProofPacketPath);
+  if (!normalizedEvidencePath || !normalizedExpectedPath) {
+    add("selected-route-proof-packet", "Selected-route proof import path missing", "Selected-route proof import must reference the exported selected-route proof packet path.");
+    return;
+  }
+  if (normalizeComparablePath(normalizedEvidencePath) !== normalizeComparablePath(normalizedExpectedPath)) {
+    add(
+      "selected-route-proof-packet",
+      "Selected-route proof import path mismatch",
+      `Selected-route proof import must reference ${expectedProofPacketPath}.`
+    );
+  }
+}
+
+function normalizeProofArtifactPath(value = "", baseDir = process.cwd()) {
+  const clean = String(value || "").trim();
+  if (!clean) return "";
+  const platformPath = clean.replace(/\\/g, path.sep);
+  return path.isAbsolute(platformPath) ? path.normalize(platformPath) : path.normalize(path.resolve(baseDir, platformPath));
 }
 
 function validateWorkflowProof(proofCheck, expectedRoute, add) {

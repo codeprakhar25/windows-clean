@@ -300,6 +300,24 @@ function createSelectedRouteEvidence(patch = {}) {
   assert.strictEqual(wrongRoute.status, "blocked", "completion should block selected-route proof route mismatch");
   assert(wrongRoute.blockers.some((blocker) => blocker.id === "selected-route-proof-packet"), "route mismatch blocker should name selected-route proof packet");
 
+  const mismatchedImportPathEvidence = createSelectedRouteEvidence({
+    selectedRouteProofPacket: {
+      validationImport: {
+        status: "import-complete",
+        complete: true,
+        route: "bounded-npm-cache-delete",
+        evidencePath: "other-selected-route-proof-packet.md"
+      }
+    }
+  });
+  const mismatchedImportPath = verifier.buildSelectedRouteCompletionCheck({
+    preflightPath: mismatchedImportPathEvidence.preflightPath,
+    workflowProofPath: mismatchedImportPathEvidence.workflowProofPath,
+    nativeExitPath: mismatchedImportPathEvidence.nativeExitPath
+  });
+  assert.strictEqual(mismatchedImportPath.status, "blocked", "completion should block selected-route proof imports that point to another artifact");
+  assert(mismatchedImportPath.blockers.some((blocker) => blocker.id === "selected-route-proof-packet"), "mismatched selected-route proof import path blocker should be surfaced");
+
   const skippedFinalizeEvidence = createSelectedRouteEvidence({
     commands: [
       { id: "setup-doctor", exitCode: 0 },
