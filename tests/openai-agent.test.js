@@ -414,6 +414,132 @@ const assert = require("assert");
   assert.strictEqual(manualContext.reviewedDownloadsTargets[0].id, "setup-old", "OpenAI Downloads context should preserve item-level target ids");
   assert.strictEqual(manualContext.largeFileArchiveTargets[0].route, "item-review-large-files", "OpenAI context should include reviewed large-file archive targets");
   assert.strictEqual(manualContext.largeFileArchiveTargets[0].decision, "archive", "OpenAI context should preserve archive decisions");
+  const archiveMissingDestinationContext = openai.buildOpenAIAgentContext({
+    scanSession: { status: "current", currentFingerprint: "scan-archive-missing-destination" },
+    planSnapshot: { id: "plan-archive-missing-destination", scanMode: "native-readonly" },
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      realRunEnabled: true,
+      executorFlags: { largeFileArchiveExecutor: true }
+    },
+    executorPlan: {
+      rows: [
+        {
+          id: "large-user-files",
+          title: "Large personal files",
+          route: "item-review-large-files",
+          archiveTargets: [
+            {
+              id: "old-video",
+              name: "old-video.mov",
+              path: "C:\\Users\\real\\Videos\\old-video.mov",
+              bytes: 2 * 1024 ** 3,
+              decision: "archive"
+            }
+          ]
+        }
+      ]
+    },
+    consentReceipt: { planId: "plan-archive-missing-destination" },
+    writeReadiness: { status: "ready-for-real-execution", readyForRealExecution: true },
+    executionProofHandoff: { status: "waiting-for-execution" }
+  });
+  const archiveMissingDestinationTask = archiveMissingDestinationContext.agentTaskQueue.rows.find((row) => row.actionType === "run-large-file-archive-executor");
+  assert.strictEqual(archiveMissingDestinationTask.status, "needs-user-review", "OpenAI task queue should block archive execution until a destination is set");
+  assert.strictEqual(archiveMissingDestinationTask.blocker, "archive-destination", "archive blocker should name missing destination");
+  const archiveReadyContext = openai.buildOpenAIAgentContext({
+    scanSession: { status: "current", currentFingerprint: "scan-archive-ready" },
+    planSnapshot: { id: "plan-archive-ready", scanMode: "native-readonly" },
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      realRunEnabled: true,
+      executorFlags: { largeFileArchiveExecutor: true }
+    },
+    executorPlan: {
+      rows: [
+        {
+          id: "large-user-files",
+          title: "Large personal files",
+          route: "item-review-large-files",
+          archiveTargets: [
+            {
+              id: "old-video",
+              name: "old-video.mov",
+              path: "C:\\Users\\real\\Videos\\old-video.mov",
+              bytes: 2 * 1024 ** 3,
+              decision: "archive"
+            }
+          ]
+        }
+      ]
+    },
+    largeFileArchiveDestination: "D:\\SpaceGuardArchive",
+    consentReceipt: { planId: "plan-archive-ready" },
+    writeReadiness: { status: "ready-for-real-execution", readyForRealExecution: true },
+    executionProofHandoff: { status: "waiting-for-execution" }
+  });
+  assert.strictEqual(archiveReadyContext.execution.archiveDestinationReady, true, "OpenAI execution context should expose archive destination readiness");
+  const archiveReadyTask = archiveReadyContext.agentTaskQueue.rows.find((row) => row.actionType === "run-large-file-archive-executor");
+  assert.strictEqual(archiveReadyTask.status, "ready", "OpenAI task queue should mark archive execution ready after destination is set");
+  assert(archiveReadyTask.checks.some((check) => check.id === "archive-destination" && check.passed), "archive task should carry passed destination evidence");
+  const recycleMissingConfirmationContext = openai.buildOpenAIAgentContext({
+    scanSession: { status: "current", currentFingerprint: "scan-recycle-missing-confirmation" },
+    planSnapshot: { id: "plan-recycle-missing-confirmation", scanMode: "native-readonly" },
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      realRunEnabled: true,
+      executorFlags: { recycleBinExecutor: true }
+    },
+    nativeScan: {
+      findings: [
+        {
+          recipeId: "recycle-bin",
+          title: "Recycle Bin",
+          path: "C:\\$Recycle.Bin",
+          bytes: 1024 ** 3,
+          status: "measured"
+        }
+      ]
+    },
+    consentReceipt: { planId: "plan-recycle-missing-confirmation" },
+    writeReadiness: { status: "ready-for-real-execution", readyForRealExecution: true },
+    executionProofHandoff: { status: "waiting-for-execution" }
+  });
+  const recycleMissingConfirmationTask = recycleMissingConfirmationContext.agentTaskQueue.rows.find((row) => row.actionType === "run-recycle-bin-executor");
+  assert.strictEqual(recycleMissingConfirmationTask.status, "needs-user-review", "OpenAI task queue should block Recycle Bin execution until permanent removal is confirmed");
+  assert.strictEqual(recycleMissingConfirmationTask.blocker, "permanent-confirmation", "Recycle Bin blocker should name missing permanent confirmation");
+  const recycleReadyContext = openai.buildOpenAIAgentContext({
+    scanSession: { status: "current", currentFingerprint: "scan-recycle-ready" },
+    planSnapshot: { id: "plan-recycle-ready", scanMode: "native-readonly" },
+    runtimeCapabilities: {
+      available: true,
+      windows: true,
+      realRunEnabled: true,
+      executorFlags: { recycleBinExecutor: true }
+    },
+    nativeScan: {
+      findings: [
+        {
+          recipeId: "recycle-bin",
+          title: "Recycle Bin",
+          path: "C:\\$Recycle.Bin",
+          bytes: 1024 ** 3,
+          status: "measured"
+        }
+      ]
+    },
+    approvals: { permanentConfirm: true },
+    consentReceipt: { planId: "plan-recycle-ready" },
+    writeReadiness: { status: "ready-for-real-execution", readyForRealExecution: true },
+    executionProofHandoff: { status: "waiting-for-execution" }
+  });
+  assert.strictEqual(recycleReadyContext.execution.permanentRemovalConfirmed, true, "OpenAI execution context should expose permanent-removal confirmation");
+  const recycleReadyTask = recycleReadyContext.agentTaskQueue.rows.find((row) => row.actionType === "run-recycle-bin-executor");
+  assert.strictEqual(recycleReadyTask.status, "ready", "OpenAI task queue should mark Recycle Bin execution ready after permanent confirmation");
+  assert(recycleReadyTask.checks.some((check) => check.id === "permanent-confirmation" && check.passed), "Recycle Bin task should carry passed permanent-confirmation evidence");
   assert.strictEqual(manualContext.userCacheTargets[0].route, "bounded-user-cache-delete", "OpenAI context should include scanned user .cache targets");
   assert.strictEqual(manualContext.androidCacheTargets[0].route, "bounded-android-cache-delete", "OpenAI context should include scanned Android cache targets");
   assert.strictEqual(manualContext.shaderCacheTargets[0].route, "launcher-cache-cleanup", "OpenAI context should include scanned shader cache targets");

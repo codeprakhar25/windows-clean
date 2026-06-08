@@ -128,7 +128,9 @@ export function buildOpenAIAgentContext({
   rescanComparison,
   planSnapshot,
   liveValidationManifest,
-  scopedExecutorCommandFlow
+  scopedExecutorCommandFlow,
+  largeFileArchiveDestination = "",
+  permanentRemovalConfirmed = false
 } = {}) {
   const selected = actionList
     .filter((action) => selectedIds.has(action.id))
@@ -414,6 +416,9 @@ export function buildOpenAIAgentContext({
     openAiKeySource: runtimeCapabilities?.openAiKeySource || "missing"
   };
   const executionSummary = {
+    largeFileArchiveDestination: String(largeFileArchiveDestination || "").trim(),
+    archiveDestinationReady: Boolean(String(largeFileArchiveDestination || "").trim()),
+    permanentRemovalConfirmed: Boolean(permanentRemovalConfirmed || approvals?.permanentConfirm),
     planId: planSnapshot?.id || "",
     scanFingerprint: scanSession?.currentFingerprint || "",
     scanFingerprintPresent: Boolean(scanSession?.currentFingerprint),
@@ -1029,30 +1034,38 @@ function getOpenAIExecutorTaskStatus({ policy, runtime = {}, execution = {}, liv
     ...(liveRouteCheck ? [liveRouteCheck] : []),
     buildBrokerCheck("scan-fingerprint", "Scan fingerprint", Boolean(execution.scanFingerprintPresent), execution.scanFingerprintPresent ? "current scan fingerprint present" : "scan fingerprint missing"),
     buildBrokerCheck("consent", "Consent receipt", Boolean(execution.consentMatchesPlan), execution.consentMatchesPlan ? "consent matches current plan" : "current plan consent missing"),
-    buildBrokerCheck("post-run-proof", "Post-run proof", Boolean(execution.proofAllowsNextExecutor), execution.proofAllowsNextExecutor ? `proof=${execution.proofStatus || "waiting-for-execution"}` : `proof=${execution.proofStatus || "blocked"}`)
+    buildBrokerCheck("post-run-proof", "Post-run proof", Boolean(execution.proofAllowsNextExecutor), execution.proofAllowsNextExecutor ? `proof=${execution.proofStatus || "waiting-for-execution"}` : `proof=${execution.proofStatus || "blocked"}`),
+    ...(policy.requiresArchiveDestination
+      ? [
+          buildBrokerCheck(
+            "archive-destination",
+            "Archive destination",
+            Boolean(execution.archiveDestinationReady),
+            execution.archiveDestinationReady
+              ? String(execution.largeFileArchiveDestination || "archive destination set")
+              : "Choose an archive destination before recommending the large-file archive executor."
+          )
+        ]
+      : []),
+    ...(policy.requiresPermanentConfirmation
+      ? [
+          buildBrokerCheck(
+            "permanent-confirmation",
+            "Permanent-removal confirmation",
+            Boolean(execution.permanentRemovalConfirmed),
+            execution.permanentRemovalConfirmed
+              ? "Permanent-removal confirmation is present."
+              : "Require explicit permanent-removal confirmation before recommending Recycle Bin emptying."
+          )
+        ]
+      : [])
   ];
   const failed = checks.find((check) => !check.passed);
   if (failed) {
     return {
-      status: "blocked",
+      status: failed.id === "archive-destination" || failed.id === "permanent-confirmation" ? "needs-user-review" : "blocked",
       blocker: failed.id,
       reason: failed.detail,
-      checks
-    };
-  }
-  if (policy.requiresArchiveDestination) {
-    return {
-      status: "needs-user-review",
-      blocker: "archive-destination",
-      reason: "Choose an archive destination before recommending the large-file archive executor.",
-      checks
-    };
-  }
-  if (policy.requiresPermanentConfirmation) {
-    return {
-      status: "needs-user-review",
-      blocker: "permanent-confirmation",
-      reason: "Require explicit permanent-removal confirmation before recommending Recycle Bin emptying.",
       checks
     };
   }

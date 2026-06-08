@@ -1661,7 +1661,9 @@ export default function App() {
         executionProofHandoff,
         rescanComparison,
         planSnapshot,
-        scopedExecutorCommandFlow
+        scopedExecutorCommandFlow,
+        largeFileArchiveDestination,
+        permanentRemovalConfirmed: approvals.permanentConfirm
       }),
     [
       profile,
@@ -1690,7 +1692,9 @@ export default function App() {
       executionProofHandoff,
       rescanComparison,
       planSnapshot,
-      scopedExecutorCommandFlow
+      scopedExecutorCommandFlow,
+      largeFileArchiveDestination,
+      approvals.permanentConfirm
     ]
   );
   const openAiRecommendationExecutionState = useMemo(
