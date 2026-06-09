@@ -114,6 +114,7 @@ assert(app.includes("./real-workflow.mjs"), "app should import tested real workf
 assert(app.includes("buildAppAgentTaskQueue"), "app should build a deterministic task queue for OpenAI advisor context");
 assert(app.includes("buildRouteReadiness"), "app should use tested route readiness guardrails");
 assert(app.includes("buildCleanupCandidates(scan, runtime, setupRouteInput)"), "app cleanup candidates should be gated by the selected route setup");
+assert(app.includes("buildExecutionLedgerRows"), "app should normalize native execution ledger rows for rendering");
 assert(app.includes("buildExecutionGate"), "app should use tested execution dispatch gate guardrails");
 assert(app.includes("buildExecutionPrerequisites"), "app should use tested route-specific execution prerequisites");
 assert(app.includes("buildWorkflowGuide"), "app should use the tested single workflow guide");
@@ -136,6 +137,10 @@ assert(app.includes("Execution prerequisites"), "user gate should render route-s
 assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
 assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
+assert(app.includes("Native execution ledger"), "decision panel should render the native execution ledger after dispatch");
+assert(app.includes("Preflight checks"), "decision panel should render native preflight checks after dispatch");
+assert(app.includes("executionLedger.warnings"), "decision panel should render native executor warnings");
+assert(app.includes("entry.rejectCode"), "decision panel should render native reject codes");
 assert(app.includes("workflowLocks"), "execution gate should receive workflow lock state for proof handoff repeat-dispatch blocking");
 assert(app.includes("activeScanGeneratedAt: scan?.generatedAt || \"\""), "execution gate should receive active scan timestamp for stale-baseline blocking");
 assert(app.includes("executionRecord?.accepted"), "proof export should require an accepted native execution record");

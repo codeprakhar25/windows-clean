@@ -1068,6 +1068,63 @@ export function buildBaselinePromotion({
   };
 }
 
+export function buildExecutionLedgerRows(result = {}) {
+  const source = result && typeof result === "object" ? result : {};
+  const rows = (Array.isArray(source.entries) ? source.entries : []).map((entry, index) => {
+    const checks = Array.isArray(entry?.preflightChecks)
+      ? entry.preflightChecks
+      : Array.isArray(entry?.preflight_checks)
+        ? entry.preflight_checks
+        : [];
+    return {
+      id: String(entry?.id || `entry-${index + 1}`),
+      title: String(entry?.title || "Native execution entry"),
+      route: String(entry?.route || ""),
+      result: String(entry?.result || "unknown"),
+      rejectCode: String(entry?.rejectCode || entry?.reject_code || ""),
+      bytes: Number(entry?.bytes || 0),
+      preflightStatus: String(entry?.preflightStatus || entry?.preflight_status || "unknown"),
+      note: String(entry?.note || ""),
+      checks: checks.map((check, checkIndex) => ({
+        id: String(check?.id || `check-${checkIndex + 1}`),
+        label: String(check?.label || "Preflight check"),
+        status: String(check?.status || "unknown"),
+        detail: String(check?.detail || "")
+      }))
+    };
+  });
+  const warnings = (Array.isArray(source.warnings) ? source.warnings : [])
+    .map((warning) => String(warning || "").trim())
+    .filter(Boolean);
+  const accepted = Boolean(source.accepted);
+  const rejectedCount = rows.filter((row) => row.result === "rejected" || row.rejectCode).length;
+  const executedCount = rows.filter((row) => row.result === "executed" || row.result === "no-op").length;
+  const reclaimedBytes = rows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+  const status = accepted ? "accepted" : rejectedCount ? "rejected" : rows.length ? "review" : "empty";
+
+  return {
+    schemaVersion: "spaceguard-execution-ledger/v1",
+    status,
+    accepted,
+    mode: String(source.mode || ""),
+    reason: String(source.reason || ""),
+    warnings,
+    rows,
+    counts: {
+      entries: rows.length,
+      executed: executedCount,
+      rejected: rejectedCount,
+      warnings: warnings.length,
+      reclaimedBytes
+    },
+    primary: accepted
+      ? `Native executor accepted ${executedCount} ledger entr${executedCount === 1 ? "y" : "ies"}.`
+      : rejectedCount
+        ? `Native executor rejected ${rejectedCount} ledger entr${rejectedCount === 1 ? "y" : "ies"}.`
+        : "Native execution ledger has no accepted or rejected entries."
+  };
+}
+
 const SUPPORT_BUNDLE_PROOF_ARTIFACTS = [
   "spaceguard-selected-route-proof-packet.md",
   "spaceguard-real-workflow-proof.md",

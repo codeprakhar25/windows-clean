@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowAgentTargetId, buildWorkflowGuide, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, renderInAppSupportBundleMarkdown, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
+import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowAgentTargetId, buildWorkflowGuide, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, renderInAppSupportBundleMarkdown, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
 import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -1579,6 +1579,7 @@ function DecisionPanel({
   executionResult,
   onExecute
 }) {
+  const executionLedger = buildExecutionLedgerRows(executionResult);
   return (
     <Card className="rounded-md">
       <CardHeader>
@@ -1645,6 +1646,69 @@ function DecisionPanel({
                 </div>
                 {executionResult.accepted && !volumeProofMeasured(executionResult.volumeProof) ? (
                   <Notice tone="restricted" icon={AlertTriangle} text="Native volume proof missing. Export can capture the blocker, but the workflow verifier will not clear the next route until measured volume proof exists." />
+                ) : null}
+                {executionLedger.warnings.length ? (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900">
+                    <p className="text-xs font-medium">Native executor warnings</p>
+                    <ul className="mt-2 space-y-1">
+                      {executionLedger.warnings.map((warning) => (
+                        <li key={warning} className="text-xs">{warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {executionLedger.rows.length ? (
+                  <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium">Native execution ledger</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{executionLedger.primary}</p>
+                      </div>
+                      <Badge variant={executionLedger.accepted ? "safe" : "restricted"}>{executionLedger.status}</Badge>
+                    </div>
+                    <div className="grid gap-2">
+                      {executionLedger.rows.map((entry) => (
+                        <div key={`${entry.id}-${entry.route}`} className="rounded-md border bg-background p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-medium">{entry.title}</p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">{entry.route || "route missing"}</p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant={entry.result === "executed" || entry.result === "no-op" ? "safe" : entry.result === "rejected" ? "restricted" : "outline"}>
+                                {entry.result}
+                              </Badge>
+                              <Badge variant="outline">{formatBytes(entry.bytes)}</Badge>
+                            </div>
+                          </div>
+                          {entry.rejectCode ? (
+                            <p className="mt-2 text-xs text-red-600">Reject code: {entry.rejectCode}</p>
+                          ) : null}
+                          {entry.note ? (
+                            <p className="mt-2 text-xs text-muted-foreground">{entry.note}</p>
+                          ) : null}
+                          {entry.checks.length ? (
+                            <div className="mt-3">
+                              <p className="text-xs font-medium">Preflight checks</p>
+                              <div className="mt-2 grid gap-2">
+                                {entry.checks.map((check) => (
+                                  <div key={`${entry.id}-${check.id}`} className="flex items-start justify-between gap-3 rounded border px-3 py-2">
+                                    <div className="min-w-0">
+                                      <p className="truncate text-xs font-medium">{check.label}</p>
+                                      <p className="mt-0.5 text-xs text-muted-foreground">{check.detail}</p>
+                                    </div>
+                                    <Badge variant={check.status === "passed" || check.status === "executed" ? "safe" : check.status === "blocked" ? "restricted" : "outline"}>
+                                      {check.status}
+                                    </Badge>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 ) : null}
               </div>
             ) : null}

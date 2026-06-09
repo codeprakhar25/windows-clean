@@ -159,6 +159,37 @@ const assert = require("assert");
     "broker recommendations should not resolve when the executor route does not match"
   );
 
+  const executionLedger = workflow.buildExecutionLedgerRows({
+    accepted: false,
+    mode: "native-npm-cache-executor-rejected",
+    reason: "npm cache executor rejected the request before mutation.",
+    warnings: ["SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR is not enabled."],
+    entries: [
+      {
+        id: "npm-cache",
+        title: "npm cache",
+        route: "bounded-npm-cache-delete",
+        result: "rejected",
+        rejectCode: "real-executor-disabled",
+        bytes: 0,
+        preflightStatus: "target-blocked",
+        note: "No bytes were removed.",
+        preflightChecks: [
+          {
+            id: "feature-flag",
+            label: "Executor feature flag",
+            status: "blocked",
+            detail: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR is not enabled."
+          }
+        ]
+      }
+    ]
+  });
+  assert.strictEqual(executionLedger.status, "rejected", "execution ledger should keep rejected native executor status");
+  assert.strictEqual(executionLedger.rows[0].rejectCode, "real-executor-disabled", "execution ledger should expose native reject codes");
+  assert.strictEqual(executionLedger.rows[0].checks[0].status, "blocked", "execution ledger should preserve preflight check status");
+  assert(executionLedger.warnings[0].includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "execution ledger should expose native executor warnings");
+
   const setupMismatchRuntime = {
     windows: true,
     executeCleanupPlan: true,
