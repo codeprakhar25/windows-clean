@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Bot,
@@ -331,6 +331,32 @@ function App() {
   );
   const canExportProof = Boolean(postRunProof.status === "matched" && proofReviewed && executionRecord?.accepted);
   const supportBundleWritten = Boolean(workflowProofAccepted && supportBundleWrite?.written);
+  const agentContextKey = useMemo(
+    () => buildAgentContextKey({
+      runtime,
+      scanFingerprint,
+      selectedCandidate,
+      executionRecord,
+      postRunProof,
+      workflowProofAccepted,
+      workflowProofCheck,
+      supportBundleWritten,
+      setupRouteInput,
+      archiveDestination,
+      permanentRemovalConfirmed,
+      agentPrompt
+    }),
+    [runtime, scanFingerprint, selectedCandidate, executionRecord, postRunProof, workflowProofAccepted, workflowProofCheck, supportBundleWritten, setupRouteInput, archiveDestination, permanentRemovalConfirmed, agentPrompt]
+  );
+  const agentContextKeyRef = useRef(agentContextKey);
+
+  useEffect(() => {
+    agentContextKeyRef.current = agentContextKey;
+    setAgentAdvice(null);
+    setAgentError("");
+    setAgentStatus("idle");
+  }, [agentContextKey]);
+
   const workflowLocks = useMemo(
     () => buildWorkflowLocks({ executionRecord, workflowProofAccepted, supportBundleWritten }),
     [executionRecord, workflowProofAccepted, supportBundleWritten]
@@ -374,11 +400,12 @@ function App() {
     }),
     [runtime, scan, candidates, manualFindings, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted, workflowProofCheck, supportBundleWritten, workflowLocks]
   );
+  const currentAgentAdvice = agentAdvice?.contextKey === agentContextKey ? agentAdvice : null;
   const agentBroker = useMemo(
     () => {
-      if (!agentAdvice?.advice) return null;
+      if (!currentAgentAdvice?.advice) return null;
       return buildOpenAIAgentRecommendationBroker({
-        advice: agentAdvice.advice,
+        advice: currentAgentAdvice.advice,
         context: agentContext,
         executionState: {
           planId: activePlanId,
@@ -390,7 +417,7 @@ function App() {
         }
       });
     },
-    [agentAdvice, agentContext, activePlanId, scanFingerprint, canExecute, executionRecord, postRunProof, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted]
+    [currentAgentAdvice, agentContext, activePlanId, scanFingerprint, canExecute, executionRecord, postRunProof, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted]
   );
 
   async function refreshRuntime() {
@@ -520,6 +547,7 @@ function App() {
   }
 
   async function askOpenAI() {
+    const requestContextKey = agentContextKey;
     setAgentStatus("running");
     setAgentError("");
     setAgentAdvice(null);
@@ -528,9 +556,11 @@ function App() {
         context: agentContext,
         userPrompt: agentPrompt
       });
-      setAgentAdvice(result);
+      if (agentContextKeyRef.current !== requestContextKey) return;
+      setAgentAdvice({ ...result, contextKey: requestContextKey });
       setAgentStatus("complete");
     } catch (error) {
+      if (agentContextKeyRef.current !== requestContextKey) return;
       setAgentStatus("error");
       setAgentError(error instanceof Error ? error.message : "OpenAI advisor failed.");
     }
@@ -750,7 +780,7 @@ function App() {
             setPrompt={setAgentPrompt}
             status={agentStatus}
             error={agentError}
-            advice={agentAdvice}
+            advice={currentAgentAdvice}
             agentBroker={agentBroker}
             onAsk={askOpenAI}
           />
@@ -2416,6 +2446,70 @@ function buildScanFingerprint(scan) {
     scan.totalBytes || 0,
     scan.volume?.freeBytes || 0
   ].join(":");
+}
+
+function buildAgentContextKey({
+  runtime,
+  scanFingerprint = "",
+  selectedCandidate,
+  executionRecord,
+  postRunProof,
+  workflowProofAccepted = false,
+  workflowProofCheck = null,
+  supportBundleWritten = false,
+  setupRouteInput = "",
+  archiveDestination = "",
+  permanentRemovalConfirmed = false,
+  agentPrompt = ""
+}) {
+  const selectedTargetHash = hashContextValue([
+    selectedCandidate?.id || "",
+    selectedCandidate?.targetPath || "",
+    selectedCandidate?.reviewTarget?.path || ""
+  ].join("|"));
+  const executionHash = hashContextValue([
+    executionRecord?.planId || "",
+    executionRecord?.id || "",
+    executionRecord?.targetPath || "",
+    executionRecord?.executedAt || ""
+  ].join("|"));
+  const archiveHash = archiveDestination ? hashContextValue(redactPath(archiveDestination)) : "archive-missing";
+  return [
+    scanFingerprint || "scan-missing",
+    setupRouteInput || "route-missing",
+    runtime?.available ? "native-ready" : "native-missing",
+    runtime?.windows ? "windows" : "not-windows",
+    runtime?.realRunEnabled ? "real-run" : "real-run-blocked",
+    runtime?.executorScopeStatus || "scope-unknown",
+    runtime?.openAiAdvisorConfigured ? "openai-configured" : "openai-missing",
+    selectedCandidate?.recipeId || "target-missing",
+    selectedCandidate?.routeInput || "target-route-missing",
+    selectedCandidate?.actionType || "target-action-missing",
+    selectedCandidate?.canExecute ? "target-executable" : "target-blocked",
+    Number(selectedCandidate?.bytes || 0),
+    selectedTargetHash,
+    executionRecord?.accepted ? "execution-accepted" : "execution-open",
+    Number(executionRecord?.bytes || 0),
+    executionHash,
+    postRunProof?.status || "proof-not-run",
+    postRunProof?.scanGeneratedAt || "proof-scan-missing",
+    workflowProofAccepted ? "workflow-proof-accepted" : "workflow-proof-open",
+    workflowProofCheck?.status || "workflow-proof-check-open",
+    supportBundleWritten ? "support-bundle-written" : "support-bundle-open",
+    permanentRemovalConfirmed ? "permanent-confirmed" : "permanent-unconfirmed",
+    archiveHash,
+    hashContextValue(agentPrompt)
+  ].join("|");
+}
+
+function hashContextValue(value = "") {
+  let hash = 2166136261;
+  const text = String(value || "");
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 function buildProofCandidateFromExecutionRecord(executionRecord) {

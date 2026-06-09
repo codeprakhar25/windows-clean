@@ -105,6 +105,11 @@ for (const marker of [
 
 assert(app.includes("requestOpenAIAgentAdvice"), "OpenAI advisor should be wired into the real desktop shell");
 assert(app.includes("buildOpenAIAgentRecommendationBroker"), "OpenAI advisor should broker model recommendations through deterministic app gates");
+assert(app.includes("useRef"), "OpenAI advisor should track the active workflow context across async requests");
+assert(app.includes("buildAgentContextKey"), "OpenAI advisor should key advice to the current real workflow context");
+assert(app.includes("agentContextKeyRef.current !== requestContextKey"), "OpenAI advisor should ignore stale async responses after workflow context changes");
+assert(app.includes("agentAdvice?.contextKey === agentContextKey"), "OpenAI advisor should hide advice from stale scan, target, proof, or prompt context");
+assert(app.includes("advice={currentAgentAdvice}"), "OpenAI panel should only render advice for the active workflow context");
 assert(app.includes("./real-workflow.mjs"), "app should import tested real workflow helpers");
 assert(app.includes("buildAppAgentTaskQueue"), "app should build a deterministic task queue for OpenAI advisor context");
 assert(app.includes("buildRouteReadiness"), "app should use tested route readiness guardrails");
