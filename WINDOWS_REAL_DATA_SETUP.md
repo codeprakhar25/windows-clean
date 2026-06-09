@@ -15,17 +15,16 @@ Use these steps on the Windows machine you want to test.
 npm install
 Copy-Item .env.example .env
 notepad .env
+npm run route:arm -- --route npm-cache
 ```
 
-Set:
+Set your key in `.env`:
 
 ```powershell
 OPENAI_API_KEY=sk-...
-SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1
 ```
 
-Keep only one `SPACEGUARD_ENABLE_*_EXECUTOR` flag enabled while testing a route.
-The route setup wizard in the app shows a copyable selected `.env` block for the route you pick.
+The `route:arm` command keeps only one `SPACEGUARD_ENABLE_*_EXECUTOR` flag enabled while testing a route.
 
 ## Launch
 
@@ -40,6 +39,7 @@ The desktop app should show the native bridge as connected. A normal browser tab
 ```powershell
 npm run setup:doctor
 npm run setup:route -- --route npm-cache
+npm run openai:smoke -- --local-contract --route npm-cache
 npm run openai:smoke -- --route npm-cache
 ```
 

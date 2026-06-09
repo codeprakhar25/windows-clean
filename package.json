@@ -14,6 +14,7 @@
     "real-app:shell": "node tests/real-app-shell.test.js",
     "native:executor-coverage": "node scripts/run-native-executor-coverage.mjs",
     "openai:smoke": "node scripts/run-openai-advisor-smoke.mjs",
+    "route:arm": "node scripts/arm-route.mjs",
     "setup:doctor": "node scripts/run-setup-doctor.mjs",
     "setup:route": "node scripts/run-setup-route.mjs",
     "validate:workflow-proof": "node scripts/run-workflow-proof-check.mjs",

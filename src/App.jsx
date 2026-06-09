@@ -826,8 +826,8 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh, r
     },
     {
       label: "Enable exactly one route",
-      command: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1",
-      detail: "Pick one route flag from the wizard. Leave every other SPACEGUARD_ENABLE_* flag at 0."
+      command: "npm run route:arm -- --route npm-cache",
+      detail: "This updates .env so one cleanup type is enabled and every other cleanup flag is off."
     },
     {
       label: "Launch the desktop app",

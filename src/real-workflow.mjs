@@ -34,12 +34,12 @@ export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
   const steps = [
     setupStep({
       id: "env-block",
-      label: "Copy selected .env block",
+      label: "Arm selected cleanup type",
       status: routeFlagEnabled && !multipleFlags ? "passed" : "instruction",
-      command: "Copy selected .env block into .env",
+      command: `npm run route:arm -- --route ${routeInput}`,
       detail: routeFlagEnabled && !multipleFlags
         ? "The selected route flag is active and no competing route flag is detected."
-        : "Paste the generated block into .env, then restart the desktop app."
+        : "Run the arm command, set OPENAI_API_KEY if needed, then restart the desktop app."
     }),
     setupStep({
       id: "native-desktop",
@@ -62,7 +62,7 @@ export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
       label: "Enable selected route",
       status: routeFlagEnabled ? "passed" : "blocked",
       command: `${envVar}=1`,
-      detail: routeFlagEnabled ? `${envVar}=1 is active.` : `Set ${envVar}=1 in .env and restart the desktop app.`
+      detail: routeFlagEnabled ? `${envVar}=1 is active.` : `Run npm run route:arm -- --route ${routeInput} and restart the desktop app.`
     }),
     setupStep({
       id: "route-setup",
@@ -129,9 +129,15 @@ export function buildWindowsRealTestRunbook({ route = {}, envBlock = buildRouteE
     }),
     runbookCommand({
       id: "edit-env",
-      label: "Paste selected route block",
+      label: "Set OpenAI key",
       command: "notepad .env",
-      expected: `${selectedEnvVar}=1 is the only enabled route flag and OPENAI_API_KEY is set.`
+      expected: "OPENAI_API_KEY is set if you want live advisory reasoning."
+    }),
+    runbookCommand({
+      id: "arm-route",
+      label: "Arm one cleanup type",
+      command: `npm run route:arm -- --route ${routeInput}`,
+      expected: `${selectedEnvVar}=1 is enabled and every other cleanup route flag is set to 0.`
     }),
     runbookCommand({
       id: "setup-doctor",

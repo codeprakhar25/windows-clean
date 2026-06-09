@@ -657,6 +657,7 @@ const assert = require("assert");
   assert.strictEqual(npmSetup.runbook.schemaVersion, "spaceguard-windows-real-test-runbook/v1", "route setup should expose a Windows test runbook");
   assert.strictEqual(npmSetup.runbook.routeInput, "npm-cache", "Windows test runbook should preserve route input");
   assert(npmSetup.runbook.commands.some((row) => row.command === "npm run setup:doctor"), "Windows test runbook should include setup doctor");
+  assert(npmSetup.runbook.commands.some((row) => row.command === "npm run route:arm -- --route npm-cache"), "Windows test runbook should include route arming");
   assert(npmSetup.runbook.commands.some((row) => row.command === "npm run openai:smoke -- --local-contract --route npm-cache"), "Windows test runbook should include offline route-contract smoke");
   assert(npmSetup.runbook.commands.some((row) => row.command === "npm run openai:smoke -- --route npm-cache"), "Windows test runbook should include live OpenAI smoke");
   assert(npmSetup.runbook.commands.some((row) => row.command === "npm run native:dev"), "Windows test runbook should launch the desktop app");
@@ -677,7 +678,7 @@ const assert = require("assert");
     1,
     "route setup env block should enable exactly one executor flag"
   );
-  assert(npmSetup.steps.some((step) => step.id === "env-block" && step.command === "Copy selected .env block into .env"), "setup should include a copy-env step before launch");
+  assert(npmSetup.steps.some((step) => step.id === "env-block" && step.command === "npm run route:arm -- --route npm-cache"), "setup should include route arming before launch");
 
   const tempSetup = workflow.buildRouteSetupChecklist({
     route: {
