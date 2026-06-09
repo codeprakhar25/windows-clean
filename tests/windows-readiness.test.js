@@ -1,4 +1,6 @@
 const assert = require("assert");
+const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const { pathToFileURL } = require("url");
 
@@ -10,6 +12,30 @@ const script = path.join(root, "scripts", "run-windows-readiness.mjs");
   const routeEnv = {
     SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1"
   };
+  const missingDependencyCheck = readiness.buildWindowsToolchainCheck({
+    platform: "win32",
+    projectRoot: path.join(os.tmpdir(), "spaceguard-missing-node-modules"),
+    env: {
+      npm_execpath: process.env.npm_execpath || __filename,
+      npm_config_user_agent: "npm/10.8.2 node/v18.20.8"
+    }
+  });
+  assert(missingDependencyCheck.missing.includes("tauri-cli"), "toolchain check should require the local Tauri CLI dependency");
+  assert(missingDependencyCheck.nextStep.includes("npm install"), "missing local dependencies should tell the user to run npm install");
+
+  const fakeProject = fs.mkdtempSync(path.join(os.tmpdir(), "spaceguard-ready-deps-"));
+  fs.mkdirSync(path.join(fakeProject, "node_modules", ".bin"), { recursive: true });
+  fs.mkdirSync(path.join(fakeProject, "node_modules", "@tauri-apps", "cli"), { recursive: true });
+  fs.writeFileSync(path.join(fakeProject, "node_modules", ".bin", "tauri.cmd"), "");
+  const installedDependencyCheck = readiness.buildWindowsToolchainCheck({
+    platform: "win32",
+    projectRoot: fakeProject,
+    env: {
+      npm_execpath: process.env.npm_execpath || __filename,
+      npm_config_user_agent: "npm/10.8.2 node/v18.20.8"
+    }
+  });
+  assert(!installedDependencyCheck.missing.includes("tauri-cli"), "installed Tauri CLI dependency should satisfy readiness");
 
   const missingToolchain = readiness.buildWindowsReadinessReport({
     routeInput: "npm-cache",

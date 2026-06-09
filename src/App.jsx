@@ -839,7 +839,7 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh, r
     {
       label: "Check Windows readiness",
       command: `npm run windows:ready -- --route ${routeInput}`,
-      detail: "This blocks early if the Windows toolchain, route flag, or local route contract is not ready."
+      detail: "This blocks early if npm dependencies, the Windows toolchain, route flag, or local route contract is not ready."
     },
     {
       label: "Launch the desktop app",

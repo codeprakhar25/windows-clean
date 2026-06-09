@@ -75,13 +75,14 @@ function checkTool({ id, label, command, args = [] }) {
     stdio: ["ignore", "pipe", "pipe"]
   });
   const output = String(result.stdout || result.stderr || "").trim().split(/\r?\n/)[0] || "";
+  const available = result.status === 0 && !result.error;
   return {
     id,
     label,
     command: [command, ...args].join(" "),
-    available: result.status === 0,
-    version: result.status === 0 ? output : "",
-    error: result.status === 0 ? "" : result.error?.message || output || "command failed"
+    available,
+    version: available ? output : "",
+    error: available ? "" : result.error?.message || output || "command failed"
   };
 }
 
@@ -103,10 +104,27 @@ function checkNpmTool({ platform = process.platform, env = process.env } = {}) {
   return checkTool({ id: "npm", label: "npm", command: npmCommand, args: ["--version"] });
 }
 
-export function buildWindowsToolchainCheck({ platform = process.platform, env = process.env } = {}) {
+function checkLocalTauriCli({ platform = process.platform, projectRoot = root } = {}) {
+  const command = platform === "win32"
+    ? path.join(projectRoot, "node_modules", ".bin", "tauri.cmd")
+    : path.join(projectRoot, "node_modules", ".bin", "tauri");
+  const packageDir = path.join(projectRoot, "node_modules", "@tauri-apps", "cli");
+  const available = fs.existsSync(command) && fs.existsSync(packageDir);
+  return {
+    id: "tauri-cli",
+    label: "Tauri CLI dependency",
+    command,
+    available,
+    version: available ? "local dependency installed" : "",
+    error: available ? "" : "Run npm install so node_modules/.bin/tauri is available."
+  };
+}
+
+export function buildWindowsToolchainCheck({ platform = process.platform, env = process.env, projectRoot = root } = {}) {
   const checks = [
     checkTool({ id: "node", label: "Node.js", command: process.execPath, args: ["--version"] }),
     checkNpmTool({ platform, env }),
+    checkLocalTauriCli({ platform, projectRoot }),
     checkTool({ id: "rustc", label: "Rust compiler", command: "rustc", args: ["--version"] }),
     checkTool({ id: "cargo", label: "Cargo", command: "cargo", args: ["--version"] })
   ];
@@ -119,7 +137,7 @@ export function buildWindowsToolchainCheck({ platform = process.platform, env = 
     missing: missing.map((row) => row.id),
     missingLabels: missing.map((row) => row.label),
     nextStep: missing.length
-      ? "Install Node.js, Rustup/Cargo, and the Tauri Windows prerequisites before launching the desktop shell."
+      ? "Run npm install, then install or repair Node.js, Rustup/Cargo, and the Tauri Windows prerequisites before launching the desktop shell."
       : "Required local toolchain commands are available."
   };
 }
@@ -133,7 +151,8 @@ export function buildWindowsReadinessReport({
   dryRun = false,
   simulatedRouteArm = false,
   platform = process.platform,
-  toolchain = buildWindowsToolchainCheck({ platform })
+  projectRoot = root,
+  toolchain = buildWindowsToolchainCheck({ platform, env, projectRoot })
 } = {}) {
   const routePacket = buildPacket({
     routeInput,
@@ -222,7 +241,8 @@ function buildReadinessNextSteps({ status, routeInput, routePacket, doctor, wind
   }
   if (windowsHost && !toolchain?.ready) {
     steps.push(`Install or repair missing desktop toolchain command(s): ${(toolchain?.missingLabels || toolchain?.missing || []).join(", ")}.`);
-    steps.push("After installing Rustup/Cargo and Tauri Windows prerequisites, restart the terminal and rerun npm run windows:ready.");
+    steps.push("Run npm install after pulling this repo, then restart the terminal after installing Rustup/Cargo or Tauri Windows prerequisites.");
+    steps.push("Rerun npm run windows:ready before launching the desktop app.");
   }
   if (!routePacket.selected) {
     steps.push("Choose a supported route with npm run setup:route -- --list.");
