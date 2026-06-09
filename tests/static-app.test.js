@@ -30,7 +30,7 @@ const requiredAppMarkers = [
   "Real Windows cleanup",
   "Connect the Windows desktop app",
   "No local folders are scanned from this browser session.",
-  "npm run native:dev",
+  "npm run windows:dev -- --route npm-cache",
   "OPENAI_API_KEY",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Run real scan",
@@ -304,12 +304,12 @@ for (const removedPath of [
   assert(!fs.existsSync(path.join(root, removedPath)), `${removedPath} should be removed from the real-app repo surface`);
 }
 
-assert(readme.includes("npm run native:dev"), "README should document the desktop shell");
+assert(readme.includes("npm run windows:dev -- --route npm-cache"), "README should document the guarded Windows desktop launcher");
 assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");
 assert(readme.includes("npm run validate:workflow-proof -- --file"), "README should document workflow proof verifier usage");
 assert(readme.includes("spaceguard-workflow-proof-check.json"), "README should document persisted workflow proof check output");
 assert(readme.includes("npm run support:bundle"), "README should document support bundle capture");
-assert(realDataGuide.includes("npm run native:dev"), "Windows setup guide should document the desktop shell");
+assert(realDataGuide.includes("npm run windows:dev -- --route npm-cache"), "Windows setup guide should document the guarded Windows desktop launcher");
 assert(realDataGuide.includes("OPENAI_API_KEY"), "Windows setup guide should document OpenAI key setup");
 assert(realDataGuide.includes("npm run validate:workflow-proof -- --file"), "Windows setup guide should document workflow proof verifier usage");
 assert(realDataGuide.includes("spaceguard-workflow-proof-check.json"), "Windows setup guide should document persisted workflow proof check output");

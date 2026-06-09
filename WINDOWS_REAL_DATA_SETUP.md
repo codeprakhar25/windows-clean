@@ -29,10 +29,10 @@ The `windows:dev` command keeps one route armed, checks readiness, and launches 
 ## Launch
 
 ```powershell
-npm run native:dev
+npm run windows:dev -- --route npm-cache
 ```
 
-You can still launch the desktop app manually with `npm run native:dev` after `npm run windows:ready -- --route npm-cache` reports ready. The desktop app should show the native bridge as connected. A normal browser tab is setup-only and cannot scan local folders.
+The desktop app should show the native bridge as connected. A normal browser tab is setup-only and cannot scan local folders.
 
 ## Test A Route
 
@@ -63,4 +63,4 @@ npm run support:bundle
 
 ## If The App Is Not Connected
 
-Use the setup panel in the app. It should tell you to install dependencies, set `OPENAI_API_KEY`, enable one scoped executor flag, and run `npm run native:dev`.
+Use the setup panel in the app. It should tell you to install dependencies, set `OPENAI_API_KEY`, arm one scoped executor route, and run `npm run windows:dev -- --route npm-cache`.

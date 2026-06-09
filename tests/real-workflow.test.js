@@ -660,7 +660,7 @@ const assert = require("assert");
   assert(npmSetup.runbook.commands.some((row) => row.command === "npm run route:arm -- --route npm-cache"), "Windows test runbook should include route arming");
   assert(npmSetup.runbook.commands.some((row) => row.command === "npm run openai:smoke -- --local-contract --route npm-cache"), "Windows test runbook should include offline route-contract smoke");
   assert(npmSetup.runbook.commands.some((row) => row.command === "npm run openai:smoke -- --route npm-cache"), "Windows test runbook should include live OpenAI smoke");
-  assert(npmSetup.runbook.commands.some((row) => row.command === "npm run native:dev"), "Windows test runbook should launch the desktop app");
+  assert(npmSetup.runbook.commands.some((row) => row.command === "npm run windows:dev -- --route npm-cache"), "Windows test runbook should launch the guarded desktop app");
   assert(npmSetup.runbook.commands.some((row) => row.command === "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md"), "Windows test runbook should include proof verifier");
   assert(npmSetup.runbook.commands.some((row) => row.command === "npm run support:bundle"), "Windows test runbook should include support bundle capture");
   assert(npmSetup.runbook.appSteps.some((row) => row.id === "execute-route"), "Windows test runbook should include the app execution step");

@@ -59,8 +59,8 @@ export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
       id: "native-desktop",
       label: "Start desktop app",
       status: runtime?.windows ? "passed" : "instruction",
-      command: "npm run native:dev",
-      detail: runtime?.windows ? "Windows desktop runtime is connected." : "Run the Tauri desktop shell on the Windows machine."
+      command: `npm run windows:dev -- --route ${routeInput}`,
+      detail: runtime?.windows ? "Windows desktop runtime is connected." : "Run the guarded Windows desktop launcher on the Windows machine."
     }),
     setupStep({
       id: "single-route-scope",
@@ -180,8 +180,8 @@ export function buildWindowsRealTestRunbook({ route = {}, envBlock = buildRouteE
     runbookCommand({
       id: "launch-app",
       label: "Launch desktop app",
-      command: "npm run native:dev",
-      expected: "The app shows Windows native shell connected; browser-only setup state is not used."
+      command: `npm run windows:dev -- --route ${routeInput}`,
+      expected: "The guarded launcher opens the app with one route armed; browser-only setup state is not used."
     }),
     runbookCommand({
       id: "verify-proof",

@@ -831,8 +831,8 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh, r
     },
     {
       label: "Launch the desktop app",
-      command: "npm run native:dev",
-      detail: "Real scan, cleanup, rescan, and proof export are available only inside the Tauri desktop shell."
+      command: "npm run windows:dev -- --route npm-cache",
+      detail: "This arms one route, checks readiness, and opens the Tauri desktop shell."
     },
     {
       label: "Run the real workflow",
