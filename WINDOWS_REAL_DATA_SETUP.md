@@ -69,3 +69,25 @@ npm run support:bundle
 ## If The App Is Not Connected
 
 Use the setup panel in the app. It should tell you to install dependencies, set `OPENAI_API_KEY`, arm one scoped executor route, and run `npm run windows:dev -- --route npm-cache`.
+
+## If Tauri Reports A Missing Icon
+
+If Windows build output says:
+
+```powershell
+`icons/icon.ico` not found; required for generating a Windows Resource file during tauri-build
+```
+
+pull the latest project files or confirm this file exists:
+
+```powershell
+Test-Path .\src-tauri\icons\icon.ico
+```
+
+Then retry:
+
+```powershell
+npm run native:dev
+```
+
+The repo includes `src-tauri/icons/icon.ico` and default PNG app icons so the Windows resource build can start.

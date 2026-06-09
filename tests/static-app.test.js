@@ -21,9 +21,19 @@ const workflowProofScript = fs.readFileSync(path.join(root, "scripts", "run-work
 const supportBundleScript = fs.readFileSync(path.join(root, "scripts", "run-support-bundle.mjs"), "utf8");
 const workflowProofModule = fs.readFileSync(path.join(root, "src", "workflow-proof-check.mjs"), "utf8");
 const realWorkflow = fs.readFileSync(path.join(root, "src", "real-workflow.mjs"), "utf8");
+const tauriIcons = [
+  path.join(root, "src-tauri", "icons", "icon.ico"),
+  path.join(root, "src-tauri", "icons", "32x32.png"),
+  path.join(root, "src-tauri", "icons", "128x128.png"),
+  path.join(root, "src-tauri", "icons", "128x128@2x.png")
+];
 const removedDataWord = "de" + "mo";
 const removedSampleWord = "sce" + "nario";
 const removedModelImportPattern = new RegExp(`\\.\\/spaceguard-${"model"}\\.mjs`);
+
+for (const iconPath of tauriIcons) {
+  assert(fs.existsSync(iconPath), `${path.relative(root, iconPath)} should exist for Tauri desktop builds`);
+}
 
 const requiredAppMarkers = [
   "SpaceGuard",
