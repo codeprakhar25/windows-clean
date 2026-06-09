@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -68,6 +69,61 @@ function buildLocalContractCheck(routeInput) {
   };
 }
 
+function checkTool({ id, label, command, args = [] }) {
+  const result = spawnSync(command, args, {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  const output = String(result.stdout || result.stderr || "").trim().split(/\r?\n/)[0] || "";
+  return {
+    id,
+    label,
+    command: [command, ...args].join(" "),
+    available: result.status === 0,
+    version: result.status === 0 ? output : "",
+    error: result.status === 0 ? "" : result.error?.message || output || "command failed"
+  };
+}
+
+function checkNpmTool({ platform = process.platform, env = process.env } = {}) {
+  const execPath = String(env.npm_execpath || "").trim();
+  const userAgent = String(env.npm_config_user_agent || "").trim();
+  const versionMatch = userAgent.match(/npm\/([^\s]+)/i);
+  if (execPath && fs.existsSync(execPath)) {
+    return {
+      id: "npm",
+      label: "npm",
+      command: platform === "win32" ? "npm.cmd --version" : "npm --version",
+      available: true,
+      version: versionMatch ? versionMatch[1] : "npm available",
+      error: ""
+    };
+  }
+  const npmCommand = platform === "win32" ? "npm.cmd" : "npm";
+  return checkTool({ id: "npm", label: "npm", command: npmCommand, args: ["--version"] });
+}
+
+export function buildWindowsToolchainCheck({ platform = process.platform, env = process.env } = {}) {
+  const checks = [
+    checkTool({ id: "node", label: "Node.js", command: process.execPath, args: ["--version"] }),
+    checkNpmTool({ platform, env }),
+    checkTool({ id: "rustc", label: "Rust compiler", command: "rustc", args: ["--version"] }),
+    checkTool({ id: "cargo", label: "Cargo", command: "cargo", args: ["--version"] })
+  ];
+  const missing = checks.filter((row) => !row.available);
+  return {
+    schemaVersion: "spaceguard-windows-toolchain-check/v1",
+    status: missing.length ? "missing-tools" : "ready",
+    ready: missing.length === 0,
+    checks,
+    missing: missing.map((row) => row.id),
+    missingLabels: missing.map((row) => row.label),
+    nextStep: missing.length
+      ? "Install Node.js, Rustup/Cargo, and the Tauri Windows prerequisites before launching the desktop shell."
+      : "Required local toolchain commands are available."
+  };
+}
+
 export function buildWindowsReadinessReport({
   routeInput = "npm-cache",
   env = process.env,
@@ -75,7 +131,9 @@ export function buildWindowsReadinessReport({
   envFilePresent = fs.existsSync(dotenvPath),
   generatedAt = new Date().toISOString(),
   dryRun = false,
-  simulatedRouteArm = false
+  simulatedRouteArm = false,
+  platform = process.platform,
+  toolchain = buildWindowsToolchainCheck({ platform })
 } = {}) {
   const routePacket = buildPacket({
     routeInput,
@@ -91,21 +149,24 @@ export function buildWindowsReadinessReport({
     generatedAt
   });
   const contract = buildLocalContractCheck(routeInput);
-  const windowsHost = process.platform === "win32";
+  const windowsHost = platform === "win32";
   const routeArmed = routePacket.status === "ready";
   const singleRouteReady = doctor.scopedExecutors.validationStatus === "one-route-ready";
-  const readyForNativeDev = Boolean(windowsHost && routeArmed && singleRouteReady && contract.passed);
+  const toolchainReady = Boolean(toolchain.ready);
+  const readyForNativeDev = Boolean(windowsHost && toolchainReady && routeArmed && singleRouteReady && contract.passed);
   const status = readyForNativeDev
     ? "ready-for-native-dev"
     : !windowsHost
       ? "host-not-windows"
-      : routePacket.status === "multiple-flags" || doctor.scopedExecutors.validationStatus === "multi-flag-blocked"
-        ? "multi-route-blocked"
-        : !routeArmed
-          ? "route-arm-required"
-          : contract.passed
-            ? "setup-review-required"
-            : "local-contract-blocked";
+      : !toolchainReady
+        ? "toolchain-blocked"
+        : routePacket.status === "multiple-flags" || doctor.scopedExecutors.validationStatus === "multi-flag-blocked"
+          ? "multi-route-blocked"
+          : !routeArmed
+            ? "route-arm-required"
+            : contract.passed
+              ? "setup-review-required"
+              : "local-contract-blocked";
 
   return {
     schemaVersion: "spaceguard-windows-readiness/v1",
@@ -117,13 +178,14 @@ export function buildWindowsReadinessReport({
     readyForNativeDev,
     routeInput,
     platform: {
-      os: process.platform,
+      os: platform,
       windowsHost
     },
     env: {
       envFilePresent,
       envFilePath: ".env"
     },
+    toolchain,
     route: {
       status: routePacket.status,
       route: routePacket.route,
@@ -146,16 +208,21 @@ export function buildWindowsReadinessReport({
       routePacket,
       doctor,
       windowsHost,
-      contract
+      contract,
+      toolchain
     })
   };
 }
 
-function buildReadinessNextSteps({ status, routeInput, routePacket, doctor, windowsHost, contract }) {
+function buildReadinessNextSteps({ status, routeInput, routePacket, doctor, windowsHost, contract, toolchain }) {
   const armCommand = routePacket.commands?.armRoute || `npm run route:arm -- --route ${routeInput}`;
   const steps = [];
   if (!windowsHost) {
     steps.push("Run this readiness command again on the Windows PC before launching the desktop app.");
+  }
+  if (windowsHost && !toolchain?.ready) {
+    steps.push(`Install or repair missing desktop toolchain command(s): ${(toolchain?.missingLabels || toolchain?.missing || []).join(", ")}.`);
+    steps.push("After installing Rustup/Cargo and Tauri Windows prerequisites, restart the terminal and rerun npm run windows:ready.");
   }
   if (!routePacket.selected) {
     steps.push("Choose a supported route with npm run setup:route -- --list.");

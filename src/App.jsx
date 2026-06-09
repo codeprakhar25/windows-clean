@@ -814,6 +814,7 @@ function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, sel
 }
 
 function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist, routeSetupLocked = false }) {
+  const routeInput = selectedRouteInput || "npm-cache";
   const setupSteps = [
     {
       label: "Install project dependencies",
@@ -832,12 +833,17 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh, r
     },
     {
       label: "Enable exactly one route",
-      command: "npm run route:arm -- --route npm-cache",
+      command: `npm run route:arm -- --route ${routeInput}`,
       detail: "This updates .env so one cleanup type is enabled and every other cleanup flag is off."
     },
     {
+      label: "Check Windows readiness",
+      command: `npm run windows:ready -- --route ${routeInput}`,
+      detail: "This blocks early if the Windows toolchain, route flag, or local route contract is not ready."
+    },
+    {
       label: "Launch the desktop app",
-      command: "npm run windows:dev -- --route npm-cache",
+      command: `npm run windows:dev -- --route ${routeInput}`,
       detail: "This arms one route, checks readiness, and opens the Tauri desktop shell."
     },
     {

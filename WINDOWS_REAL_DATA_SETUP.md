@@ -15,6 +15,7 @@ Use these steps on the Windows machine you want to test.
 npm install
 Copy-Item .env.example .env
 notepad .env
+npm run windows:ready -- --route npm-cache
 npm run windows:dev -- --route npm-cache
 ```
 
@@ -25,6 +26,7 @@ OPENAI_API_KEY=sk-...
 ```
 
 The `windows:dev` command keeps one route armed, checks readiness, and launches the desktop app only when the selected Windows route is ready.
+If `windows:ready` reports `toolchain-blocked`, install or repair Node.js, Rustup/Cargo, and the Tauri Windows prerequisites, restart PowerShell, and run readiness again.
 
 ## Launch
 

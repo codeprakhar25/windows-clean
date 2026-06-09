@@ -109,6 +109,8 @@ function printReadinessSummary(report) {
     readinessStatus: report.status,
     readyForNativeDev: report.readyForNativeDev,
     platform: report.platform,
+    toolchainStatus: report.toolchain?.status || "unknown",
+    missingTools: report.toolchain?.missing || [],
     dryRun: report.dryRun,
     simulatedRouteArm: report.simulatedRouteArm,
     envFilePresent: report.env.envFilePresent,

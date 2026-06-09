@@ -27,7 +27,8 @@ for (const marker of forbiddenRuntimeMarkers) {
 const requiredRealShellMarkers = [
   "Connect the Windows desktop app",
   "No local folders are scanned from this browser session.",
-  "npm run windows:dev -- --route npm-cache",
+  "npm run windows:ready -- --route ${routeInput}",
+  "npm run windows:dev -- --route ${routeInput}",
   "OPENAI_API_KEY",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Run real scan",
