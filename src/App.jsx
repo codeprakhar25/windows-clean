@@ -1441,13 +1441,20 @@ function DecisionPanel({
             </Button>
             {executionError ? <Notice tone="restricted" icon={AlertTriangle} text={executionError} /> : null}
             {executionResult ? (
-              <div className="rounded-md border bg-background p-3 text-sm">
+              <div className="space-y-3 rounded-md border bg-background p-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-medium">{executionResult.accepted ? "Native executor accepted" : "Native executor rejected"}</span>
                   <Badge variant={executionResult.accepted ? "safe" : "restricted"}>{executionResult.mode}</Badge>
                 </div>
-                <p className="mt-2 text-muted-foreground">{executionResult.reason}</p>
-                <p className="mt-2 font-medium">Recovered {formatBytes(totalEntryBytes(executionResult.entries))}</p>
+                <p className="text-muted-foreground">{executionResult.reason}</p>
+                <div className="grid gap-2 md:grid-cols-3">
+                  <Metric label="Recovered" value={formatBytes(totalEntryBytes(executionResult.entries))} />
+                  <Metric label="Volume proof" value={formatVolumeProofStatus(executionResult.volumeProof)} />
+                  <Metric label="Free-space delta" value={formatSignedBytes(executionResult.volumeProof?.freeBytesDelta || 0)} />
+                </div>
+                {executionResult.accepted && !volumeProofMeasured(executionResult.volumeProof) ? (
+                  <Notice tone="restricted" icon={AlertTriangle} text="Native volume proof missing. Export can capture the blocker, but the workflow verifier will not clear the next route until measured volume proof exists." />
+                ) : null}
               </div>
             ) : null}
           </>
@@ -1509,11 +1516,15 @@ function ProofPanel({
           <EmptyState icon={Lock} title="Execution required" detail="Proof export stays locked until a native executor returns a ledger." />
         ) : (
           <>
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
               <Metric label="Route" value={selectedCandidate?.routeInput || executionRecord.routeInput} />
               <Metric label="Recovered" value={formatBytes(executionRecord.bytes)} />
+              <Metric label="Volume proof" value={formatVolumeProofStatus(executionRecord.volumeProof)} />
               <Metric label="Rescan state" value={postRunProof.status} />
             </div>
+            {executionRecord.accepted && !volumeProofMeasured(executionRecord.volumeProof) ? (
+              <Notice tone="restricted" icon={AlertTriangle} text="Native volume proof is missing. Run post-run rescan and export proof to capture the blocker; do not enable another route until the verifier accepts the workflow proof." />
+            ) : null}
             {workflowLocks?.noOpExecution ? (
               <Notice tone="review" icon={AlertTriangle} text={workflowLocks.primary} />
             ) : null}
@@ -1769,6 +1780,22 @@ function Metric({ label, value }) {
       <p className="mt-1 truncate text-sm font-semibold">{value}</p>
     </div>
   );
+}
+
+function volumeProofMeasured(volumeProof = null) {
+  return volumeProof?.status === "measured";
+}
+
+function formatVolumeProofStatus(volumeProof = null) {
+  if (volumeProofMeasured(volumeProof)) return `measured ${volumeProof.drive || ""}`.trim();
+  return volumeProof?.status || "missing";
+}
+
+function formatSignedBytes(value = 0) {
+  const bytes = Number(value || 0);
+  if (!bytes) return formatBytes(0);
+  const sign = bytes > 0 ? "+" : "-";
+  return `${sign}${formatBytes(Math.abs(bytes))}`;
 }
 
 function StatusDot({ state }) {

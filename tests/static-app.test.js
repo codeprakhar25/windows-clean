@@ -39,6 +39,8 @@ const requiredAppMarkers = [
   "User gate",
   "Type the confirmation phrase",
   "Execute selected cleanup",
+  "Volume proof",
+  "Native volume proof missing.",
   "Run post-run rescan",
   "Export proof packet",
   "Proof target",
