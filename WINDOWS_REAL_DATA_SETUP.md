@@ -15,8 +15,7 @@ Use these steps on the Windows machine you want to test.
 npm install
 Copy-Item .env.example .env
 notepad .env
-npm run route:arm -- --route npm-cache
-npm run windows:ready -- --route npm-cache
+npm run windows:dev -- --route npm-cache
 ```
 
 Set your key in `.env`:
@@ -25,7 +24,7 @@ Set your key in `.env`:
 OPENAI_API_KEY=sk-...
 ```
 
-The `route:arm` command keeps only one `SPACEGUARD_ENABLE_*_EXECUTOR` flag enabled while testing a route.
+The `windows:dev` command keeps one route armed, checks readiness, and launches the desktop app only when the selected Windows route is ready.
 
 ## Launch
 
@@ -33,7 +32,7 @@ The `route:arm` command keeps only one `SPACEGUARD_ENABLE_*_EXECUTOR` flag enabl
 npm run native:dev
 ```
 
-The desktop app should show the native bridge as connected. A normal browser tab is setup-only and cannot scan local folders.
+You can still launch the desktop app manually with `npm run native:dev` after `npm run windows:ready -- --route npm-cache` reports ready. The desktop app should show the native bridge as connected. A normal browser tab is setup-only and cannot scan local folders.
 
 ## Test A Route
 

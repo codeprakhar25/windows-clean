@@ -8,12 +8,10 @@ SpaceGuard is a real Windows desktop cleanup app. The browser build is setup-onl
 npm install
 Copy-Item .env.example .env
 notepad .env
-npm run route:arm -- --route npm-cache
-npm run windows:ready -- --route npm-cache
-npm run native:dev
+npm run windows:dev -- --route npm-cache
 ```
 
-Set `OPENAI_API_KEY` in `.env` before using the OpenAI cleanup advisor. `npm run route:arm -- --route npm-cache` enables the selected cleanup type and turns every other cleanup route flag off.
+Set `OPENAI_API_KEY` in `.env` before using the OpenAI cleanup advisor. `npm run windows:dev -- --route npm-cache` arms the selected cleanup type, checks readiness, and launches the desktop app only when the Windows route is ready.
 
 Inside the desktop app:
 
@@ -37,6 +35,7 @@ npm test
 npm run build
 npm run route:arm -- --route npm-cache --dry-run
 npm run windows:ready -- --route npm-cache
+npm run windows:dev -- --route npm-cache --dry-run
 npm run setup:doctor
 npm run setup:route -- --route npm-cache
 npm run openai:smoke -- --route npm-cache

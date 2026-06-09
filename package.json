@@ -16,6 +16,7 @@
     "openai:smoke": "node scripts/run-openai-advisor-smoke.mjs",
     "route:arm": "node scripts/arm-route.mjs",
     "windows:ready": "node scripts/run-windows-readiness.mjs",
+    "windows:dev": "node scripts/run-windows-dev.mjs",
     "setup:doctor": "node scripts/run-setup-doctor.mjs",
     "setup:route": "node scripts/run-setup-route.mjs",
     "validate:workflow-proof": "node scripts/run-workflow-proof-check.mjs",
