@@ -26,6 +26,15 @@ function parseArgs(argv = []) {
   return args;
 }
 
+function resolveRouteSpec(routeInput = "") {
+  const clean = String(routeInput || "").trim().toLowerCase();
+  if (!clean) return null;
+  return routeSpecs.find((route) =>
+    route.route.toLowerCase() === clean ||
+    route.aliases.some((alias) => alias.toLowerCase() === clean)
+  ) || null;
+}
+
 function runNodeScript(scriptName, args = []) {
   return spawnSync(process.execPath, [path.join(root, "scripts", scriptName), ...args], {
     cwd: root,
@@ -72,6 +81,16 @@ export function buildWindowsLaunchEnv({ env = process.env, dotenv = {} } = {}) {
   return launchEnv;
 }
 
+function applyArmedRouteToDotEnv(dotenv = {}, routeInput = "") {
+  const selected = resolveRouteSpec(routeInput);
+  if (!selected) return dotenv;
+  const next = { ...dotenv };
+  for (const envVar of routeEnvVars) {
+    next[envVar] = envVar === selected.envVar ? "1" : "0";
+  }
+  return next;
+}
+
 function runNpmScript(scriptName, args = [], env = process.env) {
   const command = process.platform === "win32" ? "npm.cmd" : "npm";
   return spawnSync(command, ["run", scriptName, "--", ...args], {
@@ -90,6 +109,8 @@ function printReadinessSummary(report) {
     readinessStatus: report.status,
     readyForNativeDev: report.readyForNativeDev,
     platform: report.platform,
+    dryRun: report.dryRun,
+    simulatedRouteArm: report.simulatedRouteArm,
     envFilePresent: report.env.envFilePresent,
     selectedEnvVar: report.route.selectedEnvVar,
     enabledFlags: report.route.enabledFlags,
@@ -110,13 +131,18 @@ function main() {
     }
   }
 
-  const dotenv = readLauncherDotEnv(dotenvPath);
+  const dotenvFromDisk = readLauncherDotEnv(dotenvPath);
+  const dotenv = args.dryRun && !args.skipArm
+    ? applyArmedRouteToDotEnv(dotenvFromDisk, routeInput)
+    : dotenvFromDisk;
   const launchEnv = buildWindowsLaunchEnv({ env: process.env, dotenv });
   const readiness = buildWindowsReadinessReport({
     routeInput,
     env: launchEnv,
     dotenv,
-    envFilePresent: fs.existsSync(dotenvPath)
+    envFilePresent: fs.existsSync(dotenvPath),
+    dryRun: args.dryRun,
+    simulatedRouteArm: Boolean(args.dryRun && !args.skipArm)
   });
   printReadinessSummary(readiness);
   if (args.dryRun) return;

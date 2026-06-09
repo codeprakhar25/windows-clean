@@ -73,7 +73,9 @@ export function buildWindowsReadinessReport({
   env = process.env,
   dotenv = readDotEnv(dotenvPath),
   envFilePresent = fs.existsSync(dotenvPath),
-  generatedAt = new Date().toISOString()
+  generatedAt = new Date().toISOString(),
+  dryRun = false,
+  simulatedRouteArm = false
 } = {}) {
   const routePacket = buildPacket({
     routeInput,
@@ -109,6 +111,8 @@ export function buildWindowsReadinessReport({
     schemaVersion: "spaceguard-windows-readiness/v1",
     tool: SCRIPT_ID,
     generatedAt,
+    dryRun: Boolean(dryRun),
+    simulatedRouteArm: Boolean(simulatedRouteArm),
     status,
     readyForNativeDev,
     routeInput,
