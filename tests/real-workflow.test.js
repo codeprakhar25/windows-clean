@@ -485,6 +485,24 @@ const assert = require("assert");
   assert.strictEqual(executeNextGuide.primaryTargetBytes, 512 * 1024 * 1024, "workflow guide should expose selected target expected bytes before execution");
   assert.strictEqual(executeNextGuide.actionEnabled, true, "workflow guide should allow execute only once the execution gate is ready");
 
+  const noOpCompleteGuide = workflow.buildWorkflowGuide({
+    nativeConnected: true,
+    scan: { generatedAt: "2026-06-08T14:59:00.000Z" },
+    candidates: [gateCandidate],
+    selectedCandidate: gateCandidate,
+    executionGate: readyExecutionGate,
+    executionRecord: { accepted: true, bytes: 0, resultMode: "native-npm-cache-executor" },
+    postRunProof: { status: "needs-rescan", scanGeneratedAt: "" },
+    proofReviewed: false,
+    workflowProofAccepted: false,
+    supportBundleWritten: false,
+    canExportProof: false
+  });
+  assert.strictEqual(noOpCompleteGuide.status, "complete", "accepted no-op workflow should complete without impossible positive-byte proof");
+  assert.strictEqual(noOpCompleteGuide.currentStepId, "next-route", "accepted no-op workflow should release route switching without post-run proof");
+  assert.strictEqual(noOpCompleteGuide.primaryAction, "Ready for next route", "accepted no-op workflow should show the next-route handoff");
+  assert(noOpCompleteGuide.primaryDetail.includes("proof handoff is not required"), "accepted no-op workflow should explain why proof export is skipped");
+
   const exportNextGuide = workflow.buildWorkflowGuide({
     nativeConnected: true,
     scan: { generatedAt: "2026-06-08T14:59:00.000Z" },

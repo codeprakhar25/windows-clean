@@ -157,6 +157,7 @@ assert(app.includes("proofKind: \"workflow-proof-check\""), "proof export should
 assert(app.includes("proofKind: \"support-bundle\""), "proof export should persist an in-app support bundle as a restricted artifact");
 assert(app.includes("buildInAppSupportBundleReport"), "proof export should build the support bundle inside the desktop app");
 assert(app.includes("renderInAppSupportBundleMarkdown"), "proof export should render support bundle markdown inside the desktop app");
+assert(realWorkflow.includes("proof handoff is not required"), "accepted no-op executions should explain that proof export is skipped");
 assert(app.includes("supportBundleWritten"), "cleanup queue should keep next route locked until support bundle capture succeeds");
 assert(app.includes("supportBundleWritten: Boolean(supportBundleWritten)"), "OpenAI context should receive support bundle completion state");
 assert(app.includes("proofAllowsNextExecutor: workflowLocks.proofAllowsNextExecutor"), "OpenAI context should use the tested workflow lock policy for next-executor allowance");

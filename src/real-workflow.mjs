@@ -872,7 +872,8 @@ export function buildWorkflowGuide({
   const executed = Boolean(executionRecord);
   const proofScanCaptured = Boolean(postRunProof?.scanGeneratedAt);
   const proofMatched = postRunProof?.status === "matched";
-  const handoffComplete = Boolean(workflowProofAccepted && supportBundleWritten);
+  const noOpExecution = Boolean(executionRecord?.accepted && Number(executionRecord?.bytes || 0) <= 0);
+  const handoffComplete = Boolean(noOpExecution || (workflowProofAccepted && supportBundleWritten));
 
   let currentStepId = "connect";
   let primaryAction = "Connect Windows desktop app";
@@ -906,6 +907,12 @@ export function buildWorkflowGuide({
     primaryActionKind = "execute-cleanup";
     actionEnabled = Boolean(executionGate?.ready);
     primaryDetail = "Run the scoped native executor only after the selected target and consent gate are ready.";
+  } else if (nativeConnected && noOpExecution) {
+    currentStepId = "next-route";
+    primaryAction = "Ready for next route";
+    primaryActionKind = "next-route";
+    actionEnabled = false;
+    primaryDetail = "The accepted native executor reclaimed 0 bytes, so proof handoff is not required before another route can be considered.";
   } else if (nativeConnected && executed && !proofScanCaptured) {
     currentStepId = "rescan";
     primaryAction = "Run post-run rescan";
@@ -1018,7 +1025,7 @@ export function buildWorkflowLocks({
     targetSwitchLocked,
     routeSetupLocked,
     primary: noOpExecution
-      ? "Native executor accepted but reclaimed 0 bytes; proof handoff is not locked."
+      ? "Native executor accepted but reclaimed 0 bytes; proof handoff is not required and route switching is unlocked."
       : proofHandoffRequired
         ? "Positive reclaimed bytes require proof export and support bundle capture before another route."
         : "Workflow route and target switching are unlocked."
