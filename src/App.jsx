@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, renderInAppSupportBundleMarkdown } from "./real-workflow.mjs";
+import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowGuide, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, renderInAppSupportBundleMarkdown } from "./real-workflow.mjs";
 import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -376,6 +376,22 @@ function App() {
     }),
     [selectedCandidate, consentChecked, confirmationText, expectedConfirmation, executionPrerequisites, scanFingerprint, executionStatus, workflowLocks, executionRecord, scan]
   );
+  const workflowGuide = useMemo(
+    () => buildWorkflowGuide({
+      nativeConnected,
+      scan,
+      candidates,
+      selectedCandidate,
+      executionGate,
+      executionRecord,
+      postRunProof,
+      proofReviewed,
+      workflowProofAccepted,
+      supportBundleWritten,
+      canExportProof
+    }),
+    [nativeConnected, scan, candidates, selectedCandidate, executionGate, executionRecord, postRunProof, proofReviewed, workflowProofAccepted, supportBundleWritten, canExportProof]
+  );
   const canExecute = executionGate.ready;
   const targetSwitchLocked = workflowLocks.targetSwitchLocked;
   const routeSetupLocked = workflowLocks.routeSetupLocked;
@@ -687,6 +703,7 @@ function App() {
           scan={scan}
           onRefreshRuntime={refreshRuntime}
         />
+        <WorkflowGuidePanel workflowGuide={workflowGuide} />
         <section className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
           <ScanPanel
             request={scanRequest}
@@ -1022,6 +1039,69 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
         </Button>
       </div>
     </header>
+  );
+}
+
+function WorkflowGuidePanel({ workflowGuide }) {
+  const current = workflowGuide.steps.find((step) => step.id === workflowGuide.currentStepId) || workflowGuide.steps[0];
+  return (
+    <Card className="rounded-md">
+      <CardHeader className="pb-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardCheck className="h-4 w-4" />
+              Guided workflow
+            </CardTitle>
+            <CardDescription>One current action for the real scan, cleanup, rescan, and proof sequence.</CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant={workflowGuide.status === "complete" ? "safe" : "review"}>{workflowGuide.status}</Badge>
+            <Badge variant="outline">{workflowGuide.currentStepId}</Badge>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="rounded-md border bg-background p-3">
+          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">{workflowGuide.primaryAction}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{workflowGuide.primaryDetail}</p>
+            </div>
+            <Badge variant="outline">{current?.label || "Current step"}</Badge>
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-9">
+          {workflowGuide.steps.map((step, index) => (
+            <div
+              key={step.id}
+              className={`min-h-[104px] rounded-md border p-3 ${
+                step.status === "current"
+                  ? "border-primary bg-primary/5"
+                  : step.status === "done"
+                    ? "bg-emerald-50/70"
+                    : "bg-muted/30"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded border bg-background text-xs font-medium">
+                  {index + 1}
+                </span>
+                {step.status === "done" ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                ) : step.status === "current" ? (
+                  <ChevronRight className="h-4 w-4 text-primary" />
+                ) : (
+                  <Lock className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+              <p className="mt-2 truncate text-xs font-medium">{step.shortLabel}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{step.label}</p>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

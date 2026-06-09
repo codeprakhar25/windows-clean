@@ -266,6 +266,72 @@ const assert = require("assert");
   assert.strictEqual(readyExecutionGate.schemaVersion, "spaceguard-execution-gate/v1", "execution gate should expose a stable schema");
   assert.strictEqual(readyExecutionGate.ready, true, "execution gate should pass only when all dispatch prerequisites are ready");
 
+  const scanNextGuide = workflow.buildWorkflowGuide({
+    nativeConnected: true,
+    scan: null,
+    candidates: [],
+    selectedCandidate: null,
+    executionGate: missingConsentGate,
+    executionRecord: null,
+    postRunProof: { status: "not-run", scanGeneratedAt: "" },
+    proofReviewed: false,
+    workflowProofAccepted: false,
+    supportBundleWritten: false,
+    canExportProof: false
+  });
+  assert.strictEqual(scanNextGuide.schemaVersion, "spaceguard-workflow-guide/v1", "workflow guide should expose a stable schema");
+  assert.strictEqual(scanNextGuide.currentStepId, "scan", "workflow guide should point connected users at the real scan before target selection");
+  assert.strictEqual(scanNextGuide.primaryAction, "Run real scan", "workflow guide should name the next real action");
+  assert(scanNextGuide.steps.some((step) => step.id === "scan" && step.status === "current"), "workflow guide should mark the scan step as current");
+
+  const executeNextGuide = workflow.buildWorkflowGuide({
+    nativeConnected: true,
+    scan: { generatedAt: "2026-06-08T14:59:00.000Z" },
+    candidates: [gateCandidate],
+    selectedCandidate: gateCandidate,
+    executionGate: readyExecutionGate,
+    executionRecord: null,
+    postRunProof: { status: "not-run", scanGeneratedAt: "" },
+    proofReviewed: false,
+    workflowProofAccepted: false,
+    supportBundleWritten: false,
+    canExportProof: false
+  });
+  assert.strictEqual(executeNextGuide.currentStepId, "execute", "workflow guide should move to execution once consent gate is ready");
+  assert.strictEqual(executeNextGuide.primaryAction, "Execute selected cleanup", "workflow guide should tell the user to execute only after gates pass");
+
+  const exportNextGuide = workflow.buildWorkflowGuide({
+    nativeConnected: true,
+    scan: { generatedAt: "2026-06-08T14:59:00.000Z" },
+    candidates: [gateCandidate],
+    selectedCandidate: gateCandidate,
+    executionGate: readyExecutionGate,
+    executionRecord: { accepted: true, bytes: 1024 },
+    postRunProof: { status: "matched", scanGeneratedAt: "2026-06-08T15:01:00.000Z" },
+    proofReviewed: true,
+    workflowProofAccepted: false,
+    supportBundleWritten: false,
+    canExportProof: true
+  });
+  assert.strictEqual(exportNextGuide.currentStepId, "export-proof", "workflow guide should require proof export after reviewed matched rescan");
+  assert.strictEqual(exportNextGuide.primaryAction, "Export proof packet", "workflow guide should name proof export as the next handoff action");
+
+  const completeGuide = workflow.buildWorkflowGuide({
+    nativeConnected: true,
+    scan: { generatedAt: "2026-06-08T15:02:00.000Z" },
+    candidates: [],
+    selectedCandidate: null,
+    executionGate: readyExecutionGate,
+    executionRecord: { accepted: true, bytes: 1024 },
+    postRunProof: { status: "matched", scanGeneratedAt: "2026-06-08T15:01:00.000Z" },
+    proofReviewed: true,
+    workflowProofAccepted: true,
+    supportBundleWritten: true,
+    canExportProof: false
+  });
+  assert.strictEqual(completeGuide.status, "complete", "workflow guide should mark handoff complete after accepted proof and support bundle");
+  assert.strictEqual(completeGuide.currentStepId, "next-route", "workflow guide should release the operator to the next route after proof handoff");
+
   const repeatDuringProofHandoffGate = workflow.buildExecutionGate({
     candidate: gateCandidate,
     consentChecked: true,
@@ -691,6 +757,7 @@ const assert = require("assert");
   assert(npmSetup.runbook.appSteps.some((row) => row.id === "support-bundle"), "Windows test runbook should include support bundle app step");
   assert(npmSetup.runbook.guardrails.some((row) => row.id === "one-route"), "Windows test runbook should keep the one-route guardrail visible");
   assert(npmSetup.runbook.content.includes("Windows real-route test runbook"), "Windows test runbook should expose copyable markdown");
+  assert(!npmSetup.runbook.commands.some((row) => row.command === "Copy-Item .env.example .env"), "Windows test runbook should rely on route:arm to create or update .env");
   assert(!npmSetup.runbook.content.includes("validate:route"), "Windows test runbook must not include removed validation commands");
   assert(npmSetup.envBlock.content.includes("OPENAI_API_KEY=sk-..."), "route setup env block should include the OpenAI placeholder");
   assert(npmSetup.envBlock.content.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1"), "route setup env block should enable the selected route");

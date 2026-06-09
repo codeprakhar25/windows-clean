@@ -136,22 +136,16 @@ export function buildWindowsRealTestRunbook({ route = {}, envBlock = buildRouteE
       expected: "npm dependencies are installed in the project folder."
     }),
     runbookCommand({
-      id: "create-env",
-      label: "Create local .env",
-      command: "Copy-Item .env.example .env",
-      expected: ".env exists and is local-only."
+      id: "arm-route",
+      label: "Arm one cleanup type",
+      command: `npm run route:arm -- --route ${routeInput}`,
+      expected: `.env exists, ${selectedEnvVar}=1 is enabled, and every other cleanup route flag is set to 0.`
     }),
     runbookCommand({
       id: "edit-env",
       label: "Set OpenAI key",
       command: "notepad .env",
       expected: "OPENAI_API_KEY is set if you want live advisory reasoning."
-    }),
-    runbookCommand({
-      id: "arm-route",
-      label: "Arm one cleanup type",
-      command: `npm run route:arm -- --route ${routeInput}`,
-      expected: `${selectedEnvVar}=1 is enabled and every other cleanup route flag is set to 0.`
     }),
     runbookCommand({
       id: "setup-doctor",
@@ -796,6 +790,104 @@ export function buildExecutionGate({
       ? `Execution is blocked by ${blockers.length} dispatch gate(s).`
       : "Execution dispatch gate is ready."
   };
+}
+
+export function buildWorkflowGuide({
+  nativeConnected = false,
+  scan = null,
+  candidates = [],
+  selectedCandidate = null,
+  executionGate = null,
+  executionRecord = null,
+  postRunProof = null,
+  proofReviewed = false,
+  workflowProofAccepted = false,
+  supportBundleWritten = false,
+  canExportProof = false
+} = {}) {
+  const scanReady = Boolean(scan?.generatedAt);
+  const candidateRows = Array.isArray(candidates) ? candidates : [];
+  const hasSelectableTargets = candidateRows.length > 0;
+  const targetSelected = Boolean(selectedCandidate);
+  const executed = Boolean(executionRecord);
+  const proofScanCaptured = Boolean(postRunProof?.scanGeneratedAt);
+  const proofMatched = postRunProof?.status === "matched";
+  const handoffComplete = Boolean(workflowProofAccepted && supportBundleWritten);
+
+  let currentStepId = "connect";
+  let primaryAction = "Connect Windows desktop app";
+  let primaryDetail = "Start the guarded Tauri desktop shell on the Windows PC before scanning local folders.";
+
+  if (nativeConnected && !scanReady) {
+    currentStepId = "scan";
+    primaryAction = "Run real scan";
+    primaryDetail = "Measure C: through the native read-only scanner before selecting a cleanup target.";
+  } else if (nativeConnected && scanReady && !targetSelected && !executed) {
+    currentStepId = "select";
+    primaryAction = hasSelectableTargets ? "Select cleanup target" : "Review findings or choose cleanup type";
+    primaryDetail = hasSelectableTargets
+      ? "Pick one measured cleanup row that matches the armed route."
+      : "The current scan has no selectable cleanup row for this route; review manual findings or arm another route.";
+  } else if (nativeConnected && scanReady && targetSelected && !executed && !executionGate?.ready) {
+    currentStepId = "consent";
+    primaryAction = "Resolve user gate";
+    primaryDetail = executionGate?.primary || "Review route readiness, check consent, and type the confirmation phrase.";
+  } else if (nativeConnected && scanReady && targetSelected && !executed) {
+    currentStepId = "execute";
+    primaryAction = "Execute selected cleanup";
+    primaryDetail = "Run the scoped native executor only after the selected target and consent gate are ready.";
+  } else if (nativeConnected && executed && !proofScanCaptured) {
+    currentStepId = "rescan";
+    primaryAction = "Run post-run rescan";
+    primaryDetail = "Capture a newer native scan before exporting proof or enabling another route.";
+  } else if (nativeConnected && executed && (!proofMatched || !proofReviewed)) {
+    currentStepId = "review-proof";
+    primaryAction = proofMatched ? "Review post-run proof" : "Resolve rescan mismatch";
+    primaryDetail = proofMatched
+      ? "Review the native ledger and matched post-run scan, then check the proof review box."
+      : postRunProof?.detail || "The post-run scan has not matched the selected execution ledger.";
+  } else if (nativeConnected && executed && !handoffComplete) {
+    currentStepId = "export-proof";
+    primaryAction = canExportProof ? "Export proof packet" : "Resolve proof export blockers";
+    primaryDetail = canExportProof
+      ? "Write the selected-route proof, real workflow proof, verifier output, and support bundle."
+      : "Proof export remains locked until the matched rescan and proof review are complete.";
+  } else if (nativeConnected && handoffComplete) {
+    currentStepId = "next-route";
+    primaryAction = "Ready for next route";
+    primaryDetail = "The workflow proof and support bundle handoff are complete; another route can be considered.";
+  }
+
+  const order = [
+    workflowGuideStep("connect", "Connect", "Desktop bridge", "Start the Windows desktop shell."),
+    workflowGuideStep("scan", "Scan", "Real scan", "Run a native read-only scan."),
+    workflowGuideStep("select", "Select", "Cleanup target", "Choose one measured target."),
+    workflowGuideStep("consent", "Consent", "User gate", "Review guardrails and confirm."),
+    workflowGuideStep("execute", "Execute", "Native executor", "Run the scoped cleanup."),
+    workflowGuideStep("rescan", "Rescan", "Post-run scan", "Capture fresh evidence."),
+    workflowGuideStep("review-proof", "Review", "Proof review", "Review matched ledger evidence."),
+    workflowGuideStep("export-proof", "Export", "Proof handoff", "Write proof and support artifacts."),
+    workflowGuideStep("next-route", "Next", "Next route", "Unlock route switching.")
+  ];
+  const currentIndex = Math.max(0, order.findIndex((step) => step.id === currentStepId));
+  const steps = order.map((step, index) => ({
+    ...step,
+    status: index < currentIndex ? "done" : index === currentIndex ? "current" : "locked",
+    passed: index < currentIndex || (currentStepId === "next-route" && index === currentIndex)
+  }));
+
+  return {
+    schemaVersion: "spaceguard-workflow-guide/v1",
+    status: handoffComplete ? "complete" : "active",
+    currentStepId,
+    primaryAction,
+    primaryDetail,
+    steps
+  };
+}
+
+function workflowGuideStep(id, shortLabel, label, detail) {
+  return { id, shortLabel, label, detail };
 }
 
 export function buildWorkflowLocks({

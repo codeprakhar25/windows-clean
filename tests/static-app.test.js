@@ -116,10 +116,13 @@ assert(app.includes("buildRouteReadiness"), "app should use tested route readine
 assert(app.includes("buildCleanupCandidates(scan, runtime, setupRouteInput)"), "app cleanup candidates should be gated by the selected route setup");
 assert(app.includes("buildExecutionGate"), "app should use tested execution dispatch gate guardrails");
 assert(app.includes("buildExecutionPrerequisites"), "app should use tested route-specific execution prerequisites");
+assert(app.includes("buildWorkflowGuide"), "app should use the tested single workflow guide");
 assert(app.includes("buildWorkflowLocks"), "app should use tested workflow lock policy for proof handoff");
 assert(app.includes("buildBaselinePromotion"), "app should use tested baseline promotion after proof handoff");
 assert(app.includes("buildRouteSetupChecklist"), "app should use tested route setup checklist guardrails");
 assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
+assert(app.includes("Guided workflow"), "app should render a single workflow guide before detailed cleanup panels");
+assert(app.includes("workflowGuide.currentStepId"), "workflow guide should expose the current step in the renderer");
 assert(app.includes("Execution prerequisites"), "user gate should render route-specific execution prerequisite blockers");
 assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
