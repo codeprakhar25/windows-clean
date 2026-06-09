@@ -491,6 +491,7 @@ function App() {
         recipeId: selectedCandidate.recipeId,
         route: selectedCandidate.route,
         routeInput: selectedCandidate.routeInput,
+        envVar: selectedCandidate.envVar,
         targetPath: selectedCandidate.targetPath,
         expectedBytes: selectedCandidate.bytes,
         bytes: reclaimedBytes,
@@ -531,7 +532,8 @@ function App() {
   }
 
   async function exportProofPacket() {
-    if (!selectedCandidate || !executionRecord) return;
+    const exportCandidate = selectedCandidate || proofCandidate;
+    if (!exportCandidate || !executionRecord) return;
     setProofExportStatus("running");
     setProofExportMessage("");
     setWorkflowProofAccepted(false);
@@ -540,7 +542,7 @@ function App() {
     try {
       const generatedAt = new Date().toISOString();
       const selectedRouteProof = buildSelectedRouteProofPacket({
-        candidate: selectedCandidate,
+        candidate: exportCandidate,
         executionRecord,
         postRunProof,
         generatedAt
@@ -552,11 +554,11 @@ function App() {
       const selectedRouteMarkdown = toProofMarkdown("SpaceGuard Selected Route Proof Packet", selectedRouteProof);
       const workflowMarkdown = toProofMarkdown("SpaceGuard Real Workflow Proof", workflowProof);
       const selectedWrite = await writeProofFile(PROOF_PACKET_FILE, selectedRouteMarkdown, {
-        route: selectedCandidate.route,
+        route: exportCandidate.route,
         proofKind: "selected-route-proof-packet"
       });
       const workflowWrite = await writeProofFile(WORKFLOW_PROOF_FILE, workflowMarkdown, {
-        route: selectedCandidate.route,
+        route: exportCandidate.route,
         proofKind: "real-workflow-proof"
       });
       const acceptedCheck = buildWorkflowProofCheck({
@@ -564,19 +566,19 @@ function App() {
         checkedAt: new Date().toISOString()
       });
       const proofCheckWrite = await writeProofFile(WORKFLOW_PROOF_CHECK_FILE, JSON.stringify(acceptedCheck, null, 2), {
-        route: selectedCandidate.route,
+        route: exportCandidate.route,
         proofKind: "workflow-proof-check"
       });
       const supportBundleReport = buildInAppSupportBundleReport({
         generatedAt,
-        routeInput: selectedCandidate.routeInput,
-        selectedFlag: selectedCandidate.envVar,
+        routeInput: exportCandidate.routeInput,
+        selectedFlag: exportCandidate.envVar,
         proofArtifacts: [selectedWrite, workflowWrite, proofCheckWrite],
         workflowProofCheck: acceptedCheck
       });
       const supportBundleMarkdown = renderInAppSupportBundleMarkdown(supportBundleReport);
       const supportWrite = await writeProofFile(SUPPORT_BUNDLE_FILE, supportBundleMarkdown, {
-        route: selectedCandidate.route,
+        route: exportCandidate.route,
         proofKind: "support-bundle"
       });
       const supportBundleWrittenNow = Boolean(acceptedCheck.canAccept && supportWrite?.written);
@@ -621,6 +623,8 @@ function App() {
         executionRecord={executionRecord}
       >
         <ConnectionRequired
+          runtime={runtime}
+          runtimeStatus={runtimeStatus}
           runtimeError={runtimeError}
           onRefresh={refreshRuntime}
           routes={routeSetupOptions}
@@ -803,97 +807,146 @@ function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, sel
   );
 }
 
-function ConnectionRequired({ runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist, routeSetupLocked = false }) {
+function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist, routeSetupLocked = false }) {
   const setupSteps = [
     {
-      label: "Install dependencies",
+      label: "Install project dependencies",
       command: "npm install",
-      detail: "Run from the SpaceGuard project folder."
+      detail: "Run this from the SpaceGuard project folder on the Windows PC you want to clean."
     },
     {
-      label: "Create local environment",
+      label: "Create the local .env file",
+      command: "Copy-Item .env.example .env",
+      detail: "Open .env in Notepad after copying it. This file is ignored by git."
+    },
+    {
+      label: "Add your OpenAI key",
       command: "OPENAI_API_KEY=sk-...",
-      detail: "Put the key in .env. Keep it server/native only."
+      detail: "The key powers advisory reasoning only. It cannot approve or execute cleanup."
     },
     {
-      label: "Enable exactly one cleanup route",
+      label: "Enable exactly one route",
       command: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1",
-      detail: "Use one route flag at a time, then restart the app."
+      detail: "Pick one route flag from the wizard. Leave every other SPACEGUARD_ENABLE_* flag at 0."
     },
     {
-      label: "Start the Windows desktop shell",
+      label: "Launch the desktop app",
       command: "npm run native:dev",
-      detail: "The browser page cannot scan or clean local files."
+      detail: "Real scan, cleanup, rescan, and proof export are available only inside the Tauri desktop shell."
     },
     {
-      label: "Run the app workflow",
-      command: "Scan -> select route -> consent -> execute -> rescan -> export proof",
-      detail: "Every real action happens through the desktop bridge."
+      label: "Run the real workflow",
+      command: "Scan -> select -> consent -> execute -> rescan -> export proof",
+      detail: "If this setup screen is still visible, the native bridge is not connected yet."
     }
   ];
+  const setupMetrics = [
+    ["Native bridge", runtime?.available ? "connected" : "not connected"],
+    ["Mode", runtime?.mode || "browser-setup"],
+    ["Platform", runtime?.platform || "browser"],
+    ["Status", runtimeStatus || "loading"]
+  ];
+  const unlocks = [
+    "Read-only C: scan",
+    "Measured cleanup queue",
+    "Explicit user consent",
+    "Scoped native executor",
+    "Post-run rescan",
+    "Proof and support export"
+  ];
+
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-center px-5 py-8">
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <div>
-          <Badge variant="restricted">desktop required</Badge>
-          <h1 className="mt-3 text-3xl font-semibold tracking-normal">Connect the Windows desktop app</h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            No local folders are scanned from this browser session. Start the Tauri shell on Windows to unlock real scan,
-            user consent, native cleanup, post-run rescan, and proof export.
-          </p>
+    <main className="min-h-screen bg-background px-5 py-6 text-foreground lg:px-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
+        <div className="flex flex-col justify-between gap-4 rounded-md border bg-card p-5 shadow-sm lg:flex-row lg:items-center">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="restricted">desktop required</Badge>
+              <Badge variant="outline">setup only</Badge>
+            </div>
+            <h1 className="mt-3 text-3xl font-semibold tracking-normal">Connect the Windows desktop app</h1>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+              No local folders are scanned from this browser session. Start the Tauri shell on Windows to unlock real scan,
+              user consent, native cleanup, post-run rescan, and proof export.
+            </p>
+          </div>
+          <Button variant="outline" onClick={onRefresh} disabled={runtimeStatus === "loading"}>
+            <RefreshCcw className="h-4 w-4" />
+            {runtimeStatus === "loading" ? "Checking" : "Recheck"}
+          </Button>
         </div>
-        <Button variant="outline" onClick={onRefresh}>
-          <RefreshCcw className="h-4 w-4" />
-          Recheck
-        </Button>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
-        <div className="space-y-3">
-          {setupSteps.map((step, index) => (
-            <Card key={step.label} className="rounded-md">
-              <CardContent className="flex gap-4 p-4">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background text-sm font-semibold">
-                  {index + 1}
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(380px,1.1fr)]">
+          <div className="space-y-4">
+            <Card className="rounded-md">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Terminal className="h-4 w-4" />
+                  Windows launch steps
+                </CardTitle>
+                <CardDescription>This screen contains no preloaded cleanup data and cannot touch local files.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {setupMetrics.map(([label, value]) => (
+                    <Metric key={label} label={label} value={value} />
+                  ))}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-medium">{step.label}</p>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    <code className="rounded bg-muted px-2 py-1 text-xs">{step.command}</code>
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">{step.detail}</p>
+                <div className="space-y-3">
+                  {setupSteps.map((step, index) => (
+                    <div key={step.label} className="rounded-md border bg-background p-3">
+                      <div className="flex gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-muted text-sm font-semibold">
+                          {index + 1}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium">{step.label}</p>
+                          <code className="mt-2 block overflow-hidden text-ellipsis rounded border bg-muted/50 px-2 py-1 text-xs">
+                            {step.command}
+                          </code>
+                          <p className="mt-2 text-sm text-muted-foreground">{step.detail}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+                {runtimeError ? (
+                  <Notice tone="restricted" icon={AlertTriangle} text={runtimeError} />
+                ) : (
+                  <Notice
+                    tone="review"
+                    icon={Lock}
+                    text="This setup page is intentionally non-executable. Start the desktop shell to test real Windows data."
+                  />
+                )}
               </CardContent>
             </Card>
-          ))}
-        </div>
-        <div className="grid gap-4">
-          <RouteSetupPanel
-            routes={routes}
-            selectedRouteInput={selectedRouteInput}
-            setSelectedRouteInput={setSelectedRouteInput}
-            checklist={checklist}
-            routeSetupLocked={routeSetupLocked}
-          />
-          <Card className="rounded-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Terminal className="h-4 w-4" />
-                Required route flags
-              </CardTitle>
-              <CardDescription>Pick one before launching the app.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 text-xs">
-              {routes.map((route) => (
-                <code key={route.envVar} className="block rounded border bg-muted/50 px-2 py-1">
-                  {route.envVar}=1
-                </code>
-              ))}
-              {runtimeError ? (
-                <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-red-700">{runtimeError}</div>
-              ) : null}
-            </CardContent>
-          </Card>
+            <Card className="rounded-md">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4" />
+                  What unlocks after connection
+                </CardTitle>
+                <CardDescription>The real app appears only when the Tauri bridge is detected.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
+                {unlocks.map((item) => (
+                  <div key={item} className="flex items-center gap-2 rounded-md border bg-background px-3 py-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+          <div className="grid gap-4">
+            <RouteSetupPanel
+              routes={routes}
+              selectedRouteInput={selectedRouteInput}
+              setSelectedRouteInput={setSelectedRouteInput}
+              checklist={checklist}
+              routeSetupLocked={routeSetupLocked}
+            />
+          </div>
         </div>
       </div>
     </main>
@@ -988,6 +1041,8 @@ function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, ch
   const [copyStatus, setCopyStatus] = useState("idle");
   const [copyRunbookStatus, setCopyRunbookStatus] = useState("idle");
   const runbook = checklist.runbook || { commands: [], appSteps: [], guardrails: [], content: "" };
+  const selectedRoute = routes.find((route) => route.routeInput === selectedRouteInput) || routes[0] || {};
+  const blockerRows = checklist.blockers?.length ? checklist.blockers : checklist.steps.filter((step) => step.status === "blocked");
 
   useEffect(() => {
     setCopyStatus("idle");
@@ -1017,9 +1072,9 @@ function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, ch
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Terminal className="h-4 w-4" />
-          Route setup wizard
+          Cleanup workflow setup
         </CardTitle>
-        <CardDescription>Pick a route and follow the exact setup, proof, and command steps.</CardDescription>
+        <CardDescription>Every cleanup type follows the same scan, review, consent, execute, rescan, and proof workflow.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {routeSetupLocked ? (
@@ -1029,28 +1084,41 @@ function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, ch
             text="Current route is locked until proof export and support bundle capture finish."
           />
         ) : null}
-        <div className="grid gap-2 sm:grid-cols-2">
-          {routes.map((route) => (
-            <button
-              key={route.routeInput}
-              type="button"
-              disabled={routeSetupLocked && route.routeInput !== selectedRouteInput}
-              onClick={() => {
-                if (routeSetupLocked && route.routeInput !== selectedRouteInput) return;
-                setSelectedRouteInput(route.routeInput);
-              }}
-              className={`rounded-md border px-3 py-2 text-left text-sm transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-50 ${
-                selectedRouteInput === route.routeInput ? "border-primary bg-primary/5" : "bg-background"
-              }`}
-            >
-              <span className="block truncate font-medium">{route.label}</span>
-              <span className="block truncate text-xs text-muted-foreground">{route.routeInput}</span>
-            </button>
-          ))}
+        <div className="rounded-md border bg-background p-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Selected cleanup type</p>
+              <p className="mt-1 truncate text-lg font-semibold">{selectedRoute.label || selectedRouteInput}</p>
+              <p className="mt-1 truncate text-xs text-muted-foreground">{selectedRoute.routeInput || selectedRouteInput}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant={checklist.ready ? "safe" : "review"}>{checklist.ready ? "ready" : "needs setup"}</Badge>
+              <Badge variant="outline">one workflow</Badge>
+              <Badge variant="outline">one route flag</Badge>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={checklist.ready ? "safe" : "review"}>{checklist.ready ? "route ready" : "setup blocked"}</Badge>
-          <Badge variant="outline">one route only</Badge>
+        <div>
+          <p className="mb-2 text-sm font-medium">Choose cleanup type</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {routes.map((route) => (
+              <button
+                key={route.routeInput}
+                type="button"
+                disabled={routeSetupLocked && route.routeInput !== selectedRouteInput}
+                onClick={() => {
+                  if (routeSetupLocked && route.routeInput !== selectedRouteInput) return;
+                  setSelectedRouteInput(route.routeInput);
+                }}
+                className={`rounded-md border px-3 py-2 text-left text-sm transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-50 ${
+                  selectedRouteInput === route.routeInput ? "border-primary bg-primary/5" : "bg-background"
+                }`}
+              >
+                <span className="block truncate font-medium">{route.label}</span>
+                <span className="block truncate text-xs text-muted-foreground">{route.routeInput}</span>
+              </button>
+            ))}
+          </div>
         </div>
         <div className="rounded-md border bg-background">
           <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
@@ -1070,48 +1138,75 @@ function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, ch
             <p className="border-t px-3 py-2 text-xs text-red-600">Copy failed. Select the block manually.</p>
           ) : null}
         </div>
-        <div className="rounded-md border bg-background">
-          <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">Windows test runbook</p>
-              <p className="truncate text-xs text-muted-foreground">
-                Includes npm run openai:smoke -- --local-contract --route before desktop launch.
-              </p>
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={copyRunbook}>
-              <ClipboardCheck className="h-4 w-4" />
-              {copyRunbookStatus === "copied" ? "Copied" : "Copy"}
-            </Button>
+        <div className="rounded-md border bg-background p-3">
+          <p className="text-sm font-medium">App workflow</p>
+          <div className="mt-3 grid gap-2">
+            {runbook.appSteps.map((row, index) => (
+              <div key={row.id} className="flex gap-3 rounded-md border bg-muted/25 p-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded border bg-background text-xs font-medium">
+                  {index + 1}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium">{row.label}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{row.detail}</p>
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="max-h-[32rem] overflow-auto p-3">
-            <div className="grid gap-2">
-              {runbook.commands.map((row, index) => (
-                <div key={row.id} className="rounded-md border bg-muted/25 p-2">
-                  <div className="flex items-start gap-2">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded border bg-background text-xs font-medium">
-                      {index + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium">{row.label}</p>
-                      <code className="mt-1 block overflow-hidden text-ellipsis rounded border bg-background px-2 py-1 text-xs">
-                        {row.command}
-                      </code>
-                      <p className="mt-1 text-xs text-muted-foreground">{row.expected}</p>
+        </div>
+        {blockerRows.length ? (
+          <div className="grid gap-2">
+            {blockerRows.map((step) => (
+              <div key={step.id} className="rounded-md border bg-background p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{step.label}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{step.detail}</p>
+                  </div>
+                  <Badge variant="restricted">{step.status}</Badge>
+                </div>
+                <code className="mt-2 block overflow-hidden text-ellipsis rounded border bg-muted/50 px-2 py-1 text-xs">
+                  {step.command}
+                </code>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        <details className="rounded-md border bg-background">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Windows test runbook</summary>
+          <div className="border-t">
+            <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Command checklist</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  Includes npm run openai:smoke -- --local-contract --route before desktop launch.
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={copyRunbook}>
+                <ClipboardCheck className="h-4 w-4" />
+                {copyRunbookStatus === "copied" ? "Copied" : "Copy"}
+              </Button>
+            </div>
+            <div className="max-h-[24rem] overflow-auto p-3">
+              <div className="grid gap-2">
+                {runbook.commands.map((row, index) => (
+                  <div key={row.id} className="rounded-md border bg-muted/25 p-2">
+                    <div className="flex items-start gap-2">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded border bg-background text-xs font-medium">
+                        {index + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium">{row.label}</p>
+                        <code className="mt-1 block overflow-hidden text-ellipsis rounded border bg-background px-2 py-1 text-xs">
+                          {row.command}
+                        </code>
+                        <p className="mt-1 text-xs text-muted-foreground">{row.expected}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <div className="rounded-md border bg-muted/20 p-3">
-                <p className="text-xs font-medium">App steps</p>
-                <ol className="mt-2 space-y-1 text-xs text-muted-foreground">
-                  {runbook.appSteps.map((row) => (
-                    <li key={row.id}>{row.label}: {row.detail}</li>
-                  ))}
-                </ol>
+                ))}
               </div>
-              <div className="rounded-md border bg-muted/20 p-3">
+              <div className="mt-3 rounded-md border bg-muted/20 p-3">
                 <p className="text-xs font-medium">Guardrails</p>
                 <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
                   {runbook.guardrails.map((row) => (
@@ -1119,30 +1214,12 @@ function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, ch
                   ))}
                 </ul>
               </div>
+              {copyRunbookStatus === "failed" ? (
+                <p className="mt-3 text-xs text-red-600">Copy failed. Select the runbook manually.</p>
+              ) : null}
             </div>
           </div>
-          {copyRunbookStatus === "failed" ? (
-            <p className="border-t px-3 py-2 text-xs text-red-600">Copy failed. Select the runbook manually.</p>
-          ) : null}
-        </div>
-        <div className="grid gap-2">
-          {checklist.steps.map((step) => (
-            <div key={step.id} className="rounded-md border bg-background p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{step.label}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{step.detail}</p>
-                </div>
-                <Badge variant={step.status === "blocked" ? "restricted" : step.status === "instruction" ? "outline" : "safe"}>
-                  {step.status}
-                </Badge>
-              </div>
-              <code className="mt-2 block overflow-hidden text-ellipsis rounded border bg-muted/50 px-2 py-1 text-xs">
-                {step.command}
-              </code>
-            </div>
-          ))}
-        </div>
+        </details>
       </CardContent>
     </Card>
   );
@@ -2237,6 +2314,7 @@ function buildProofCandidateFromExecutionRecord(executionRecord) {
     recipeId: executionRecord.recipeId,
     route: executionRecord.route,
     routeInput: executionRecord.routeInput,
+    envVar: executionRecord.envVar,
     targetPath: executionRecord.targetPath,
     bytes: Number(executionRecord.expectedBytes || executionRecord.bytes || 0),
     sourceFinding: executionRecord.sourceFinding || null,

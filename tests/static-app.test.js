@@ -143,6 +143,9 @@ assert(app.includes("Current route is locked until proof export and support bund
 assert(app.includes("workflowLocks?.noOpExecution"), "proof panel should render accepted zero-byte no-op handoff state");
 assert(app.includes("buildProofCandidateFromExecutionRecord"), "proof panel should preserve executed target proof context after baseline promotion");
 assert(app.includes("recipeId: selectedCandidate.recipeId"), "execution records should preserve recipe id for post-run proof matching");
+assert(app.includes("envVar: selectedCandidate.envVar"), "execution records should preserve selected route flag for proof/support re-export");
+assert(app.includes("const exportCandidate = selectedCandidate || proofCandidate"), "proof export should use preserved execution context after baseline promotion clears queue selection");
+assert(!app.includes("if (!selectedCandidate || !executionRecord) return;"), "proof export should not silently stop after baseline promotion clears selected candidate");
 assert(app.includes("setScan(baselinePromotion.activeScan)"), "proof export should promote accepted post-run scan to active cleanup baseline");
 assert(app.includes("Post-run scan promoted as the active cleanup baseline."), "proof export should tell the operator when baseline promotion succeeds");
 assert(!app.includes("npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted"), "proof panel should not rely on a manual CLI acceptance checkbox");
@@ -167,7 +170,12 @@ assert(app.includes("Windows test runbook"), "route setup panel should render th
 assert(app.includes("copyRunbook"), "route setup panel should expose a copy action for the Windows runbook");
 assert(app.includes("navigator.clipboard.writeText(checklist.runbook.content)"), "route setup runbook copy action should copy the tested runbook");
 assert(app.includes("npm run openai:smoke -- --local-contract --route"), "route setup panel should show offline OpenAI route-contract smoke");
-assert(app.includes("function ConnectionRequired({ runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist, routeSetupLocked = false })"), "browser-only setup state should accept route setup wizard props");
+assert(app.includes("function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist, routeSetupLocked = false })"), "browser-only setup state should accept route setup wizard props and runtime status");
+assert(app.includes("This screen contains no preloaded cleanup data and cannot touch local files."), "browser-only setup state should explicitly avoid bundled cleanup data");
+assert(app.includes("This setup page is intentionally non-executable. Start the desktop shell to test real Windows data."), "browser-only setup state should explain that real execution requires the desktop shell");
+assert(/if \(!nativeConnected\) \{[\s\S]*return \(\s*<AppFrame[\s\S]*<ConnectionRequired/.test(app), "browser-only setup state should keep the pinned sidebar while rendering non-executable setup content");
+assert(app.includes("Cleanup workflow setup"), "route setup should present one workflow instead of separate cleanup methods");
+assert(app.includes("one workflow"), "route setup should reinforce the unified workflow model");
 assert(/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup state should render the route setup wizard");
 assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context should keep a stable schema");
 assert(app.includes("Recommendation broker"), "OpenAI panel should render deterministic broker status");
