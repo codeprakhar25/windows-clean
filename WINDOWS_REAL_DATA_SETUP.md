@@ -15,6 +15,7 @@ Use these steps on the Windows machine you want to test.
 npm install
 Copy-Item .env.example .env
 notepad .env
+npm run route:arm -- --route npm-cache
 npm run windows:ready -- --route npm-cache
 npm run windows:dev -- --route npm-cache
 ```
@@ -26,6 +27,7 @@ OPENAI_API_KEY=sk-...
 ```
 
 The `windows:dev` command keeps one route armed, checks readiness, and launches the desktop app only when the selected Windows route is ready.
+Run `route:arm` before `windows:ready`; otherwise readiness correctly reports `route-arm-required` because no write route is enabled yet.
 If `windows:ready` reports `toolchain-blocked`, run `npm install`, install or repair Node.js, Rustup/Cargo, and the Tauri Windows prerequisites, restart PowerShell, and run readiness again.
 
 ## Launch
@@ -40,6 +42,7 @@ The desktop app should show the native bridge as connected. A normal browser tab
 
 ```powershell
 npm run setup:doctor
+npm run route:arm -- --route npm-cache
 npm run setup:route -- --route npm-cache
 npm run windows:ready -- --route npm-cache
 npm run openai:smoke -- --local-contract --route npm-cache

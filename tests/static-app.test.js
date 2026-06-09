@@ -318,10 +318,14 @@ for (const removedPath of [
 
 assert(readme.includes("npm run windows:dev -- --route npm-cache"), "README should document the guarded Windows desktop launcher");
 assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");
+assert(readme.indexOf("npm run route:arm -- --route npm-cache") < readme.indexOf("npm run windows:ready -- --route npm-cache"), "README quick start should arm the route before readiness");
+assert(readme.includes("route-arm-required"), "README should explain the readiness state when a route has not been armed");
 assert(readme.includes("npm run validate:workflow-proof -- --file"), "README should document workflow proof verifier usage");
 assert(readme.includes("spaceguard-workflow-proof-check.json"), "README should document persisted workflow proof check output");
 assert(readme.includes("npm run support:bundle"), "README should document support bundle capture");
 assert(realDataGuide.includes("npm run windows:dev -- --route npm-cache"), "Windows setup guide should document the guarded Windows desktop launcher");
+assert(realDataGuide.indexOf("npm run route:arm -- --route npm-cache") < realDataGuide.indexOf("npm run windows:ready -- --route npm-cache"), "Windows setup guide should arm the route before readiness");
+assert(realDataGuide.includes("route-arm-required"), "Windows setup guide should explain the readiness state when a route has not been armed");
 assert(realDataGuide.includes("OPENAI_API_KEY"), "Windows setup guide should document OpenAI key setup");
 assert(realDataGuide.includes("npm run validate:workflow-proof -- --file"), "Windows setup guide should document workflow proof verifier usage");
 assert(realDataGuide.includes("spaceguard-workflow-proof-check.json"), "Windows setup guide should document persisted workflow proof check output");
