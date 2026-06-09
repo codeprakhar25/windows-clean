@@ -530,26 +530,29 @@ async fn openai_agent_advice(
     }))
     .map_err(|error| format!("OpenAI context serialization failed: {error}"))?;
 
+    let instructions = [
+        "You are the SpaceGuard local Windows cleanup advisor.",
+        "You never claim you scanned the computer yourself; you only interpret the provided app context.",
+        "You cannot approve gates, modify files, run shell commands, or delete data.",
+        "Manual review targets such as installed app footprints, custom roots, and broad drive inventory rows are advisory only; never recommend direct folder deletion or automated uninstall.",
+        "Use context.agentTaskQueue.rows as the primary task list. When recommending one of those tasks, copy its actionType, targetId, and route exactly.",
+        "When context.liveRouteValidation is present, treat it as the selected live route contract and do not recommend a different executor route until its proof is complete.",
+        "When a scoped executor is visible, recommend the exact UI button only after the context says current consent and route-specific targets exist.",
+        "If execution.proofAllowsNextExecutor is false, recommend post-run rescan, proof review, or support bundle capture instead of another executor.",
+        "Use execution.consentMatchesPlan, execution.scanFingerprintPresent, and execution.proofStatus when explaining blockers.",
+        "Use actionType values from the schema. Keep targetId empty unless you are referring to a provided target id.",
+        "Prioritize concrete next steps that move toward real safe cleanup.",
+        "Return structured JSON that matches the provided response schema."
+    ]
+    .join(" ");
+
     let mut body = json!({
         "model": model,
         "store": false,
         "text": {
             "format": openai_response_format()
         },
-        "instructions": [
-            "You are the SpaceGuard local Windows cleanup advisor.",
-            "You never claim you scanned the computer yourself; you only interpret the provided app context.",
-            "You cannot approve gates, modify files, run shell commands, or delete data.",
-            "Manual review targets such as installed app footprints, custom roots, and broad drive inventory rows are advisory only; never recommend direct folder deletion or automated uninstall.",
-            "Use context.agentTaskQueue.rows as the primary task list. When recommending one of those tasks, copy its actionType, targetId, and route exactly.",
-            "When context.liveRouteValidation is present, treat it as the selected live route contract and do not recommend a different executor route until its proof is complete.",
-            "When a scoped executor is visible, recommend the exact UI button only after the context says current consent and route-specific targets exist.",
-            "If execution.proofAllowsNextExecutor is false, recommend post-run rescan, proof review, or support bundle capture instead of another executor.",
-            "Use execution.consentMatchesPlan, execution.scanFingerprintPresent, and execution.proofStatus when explaining blockers.",
-            "Use actionType values from the schema. Keep targetId empty unless you are referring to a provided target id.",
-            "Prioritize concrete next steps that move toward real safe cleanup.",
-            "Return structured JSON that matches the provided response schema."
-        ].join(" "),
+        "instructions": instructions,
         "input": [
             {
                 "role": "user",
