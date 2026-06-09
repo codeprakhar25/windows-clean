@@ -123,6 +123,9 @@ assert(app.includes("buildRouteSetupChecklist"), "app should use tested route se
 assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
 assert(app.includes("Guided workflow"), "app should render a single workflow guide before detailed cleanup panels");
 assert(app.includes("workflowGuide.currentStepId"), "workflow guide should expose the current step in the renderer");
+assert(app.includes("runWorkflowGuideAction"), "workflow guide should route enabled actions through existing guarded app handlers");
+assert(app.includes("workflowGuide.primaryActionKind"), "workflow guide renderer should branch on the tested current action kind");
+assert(app.includes("disabled={!workflowGuide.actionEnabled}"), "workflow guide action button should stay disabled when the current step is review-only");
 assert(app.includes("Execution prerequisites"), "user gate should render route-specific execution prerequisite blockers");
 assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");

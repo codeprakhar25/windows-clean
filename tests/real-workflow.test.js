@@ -282,6 +282,8 @@ const assert = require("assert");
   assert.strictEqual(scanNextGuide.schemaVersion, "spaceguard-workflow-guide/v1", "workflow guide should expose a stable schema");
   assert.strictEqual(scanNextGuide.currentStepId, "scan", "workflow guide should point connected users at the real scan before target selection");
   assert.strictEqual(scanNextGuide.primaryAction, "Run real scan", "workflow guide should name the next real action");
+  assert.strictEqual(scanNextGuide.primaryActionKind, "run-scan", "workflow guide should expose the scan action kind");
+  assert.strictEqual(scanNextGuide.actionEnabled, true, "workflow guide should allow the primary scan action when connected");
   assert(scanNextGuide.steps.some((step) => step.id === "scan" && step.status === "current"), "workflow guide should mark the scan step as current");
 
   const executeNextGuide = workflow.buildWorkflowGuide({
@@ -299,6 +301,8 @@ const assert = require("assert");
   });
   assert.strictEqual(executeNextGuide.currentStepId, "execute", "workflow guide should move to execution once consent gate is ready");
   assert.strictEqual(executeNextGuide.primaryAction, "Execute selected cleanup", "workflow guide should tell the user to execute only after gates pass");
+  assert.strictEqual(executeNextGuide.primaryActionKind, "execute-cleanup", "workflow guide should expose the guarded execute action kind");
+  assert.strictEqual(executeNextGuide.actionEnabled, true, "workflow guide should allow execute only once the execution gate is ready");
 
   const exportNextGuide = workflow.buildWorkflowGuide({
     nativeConnected: true,
@@ -315,6 +319,8 @@ const assert = require("assert");
   });
   assert.strictEqual(exportNextGuide.currentStepId, "export-proof", "workflow guide should require proof export after reviewed matched rescan");
   assert.strictEqual(exportNextGuide.primaryAction, "Export proof packet", "workflow guide should name proof export as the next handoff action");
+  assert.strictEqual(exportNextGuide.primaryActionKind, "export-proof", "workflow guide should expose the proof export action kind");
+  assert.strictEqual(exportNextGuide.actionEnabled, true, "workflow guide should allow proof export only when the proof export gate is ready");
 
   const completeGuide = workflow.buildWorkflowGuide({
     nativeConnected: true,

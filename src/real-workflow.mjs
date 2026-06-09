@@ -816,45 +816,63 @@ export function buildWorkflowGuide({
 
   let currentStepId = "connect";
   let primaryAction = "Connect Windows desktop app";
+  let primaryActionKind = "connect-desktop";
+  let actionEnabled = false;
   let primaryDetail = "Start the guarded Tauri desktop shell on the Windows PC before scanning local folders.";
 
   if (nativeConnected && !scanReady) {
     currentStepId = "scan";
     primaryAction = "Run real scan";
+    primaryActionKind = "run-scan";
+    actionEnabled = true;
     primaryDetail = "Measure C: through the native read-only scanner before selecting a cleanup target.";
   } else if (nativeConnected && scanReady && !targetSelected && !executed) {
     currentStepId = "select";
     primaryAction = hasSelectableTargets ? "Select cleanup target" : "Review findings or choose cleanup type";
+    primaryActionKind = "select-target";
+    actionEnabled = false;
     primaryDetail = hasSelectableTargets
       ? "Pick one measured cleanup row that matches the armed route."
       : "The current scan has no selectable cleanup row for this route; review manual findings or arm another route.";
   } else if (nativeConnected && scanReady && targetSelected && !executed && !executionGate?.ready) {
     currentStepId = "consent";
     primaryAction = "Resolve user gate";
+    primaryActionKind = "resolve-user-gate";
+    actionEnabled = false;
     primaryDetail = executionGate?.primary || "Review route readiness, check consent, and type the confirmation phrase.";
   } else if (nativeConnected && scanReady && targetSelected && !executed) {
     currentStepId = "execute";
     primaryAction = "Execute selected cleanup";
+    primaryActionKind = "execute-cleanup";
+    actionEnabled = Boolean(executionGate?.ready);
     primaryDetail = "Run the scoped native executor only after the selected target and consent gate are ready.";
   } else if (nativeConnected && executed && !proofScanCaptured) {
     currentStepId = "rescan";
     primaryAction = "Run post-run rescan";
+    primaryActionKind = "run-post-run-rescan";
+    actionEnabled = true;
     primaryDetail = "Capture a newer native scan before exporting proof or enabling another route.";
   } else if (nativeConnected && executed && (!proofMatched || !proofReviewed)) {
     currentStepId = "review-proof";
     primaryAction = proofMatched ? "Review post-run proof" : "Resolve rescan mismatch";
+    primaryActionKind = proofMatched ? "review-proof" : "resolve-proof-mismatch";
+    actionEnabled = false;
     primaryDetail = proofMatched
       ? "Review the native ledger and matched post-run scan, then check the proof review box."
       : postRunProof?.detail || "The post-run scan has not matched the selected execution ledger.";
   } else if (nativeConnected && executed && !handoffComplete) {
     currentStepId = "export-proof";
     primaryAction = canExportProof ? "Export proof packet" : "Resolve proof export blockers";
+    primaryActionKind = "export-proof";
+    actionEnabled = Boolean(canExportProof);
     primaryDetail = canExportProof
       ? "Write the selected-route proof, real workflow proof, verifier output, and support bundle."
       : "Proof export remains locked until the matched rescan and proof review are complete.";
   } else if (nativeConnected && handoffComplete) {
     currentStepId = "next-route";
     primaryAction = "Ready for next route";
+    primaryActionKind = "next-route";
+    actionEnabled = false;
     primaryDetail = "The workflow proof and support bundle handoff are complete; another route can be considered.";
   }
 
@@ -881,6 +899,8 @@ export function buildWorkflowGuide({
     status: handoffComplete ? "complete" : "active",
     currentStepId,
     primaryAction,
+    primaryActionKind,
+    actionEnabled,
     primaryDetail,
     steps
   };

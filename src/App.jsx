@@ -663,6 +663,25 @@ function App() {
     }
   }
 
+  async function runWorkflowGuideAction() {
+    if (!workflowGuide.actionEnabled) return;
+    if (workflowGuide.primaryActionKind === "run-scan") {
+      await runRealScan();
+      return;
+    }
+    if (workflowGuide.primaryActionKind === "execute-cleanup") {
+      await executeSelectedCleanup();
+      return;
+    }
+    if (workflowGuide.primaryActionKind === "run-post-run-rescan") {
+      await runRealScan({ afterExecution: true });
+      return;
+    }
+    if (workflowGuide.primaryActionKind === "export-proof") {
+      await exportProofPacket();
+    }
+  }
+
   if (!nativeConnected) {
     return (
       <AppFrame
@@ -703,7 +722,7 @@ function App() {
           scan={scan}
           onRefreshRuntime={refreshRuntime}
         />
-        <WorkflowGuidePanel workflowGuide={workflowGuide} />
+        <WorkflowGuidePanel workflowGuide={workflowGuide} onPrimaryAction={runWorkflowGuideAction} />
         <section className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
           <ScanPanel
             request={scanRequest}
@@ -1042,8 +1061,14 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
   );
 }
 
-function WorkflowGuidePanel({ workflowGuide }) {
+function WorkflowGuidePanel({ workflowGuide, onPrimaryAction }) {
   const current = workflowGuide.steps.find((step) => step.id === workflowGuide.currentStepId) || workflowGuide.steps[0];
+  const ActionIcon =
+    workflowGuide.primaryActionKind === "run-scan" || workflowGuide.primaryActionKind === "run-post-run-rescan"
+      ? RefreshCcw
+      : workflowGuide.primaryActionKind === "export-proof"
+        ? Download
+        : Play;
   return (
     <Card className="rounded-md">
       <CardHeader className="pb-3">
@@ -1068,7 +1093,18 @@ function WorkflowGuidePanel({ workflowGuide }) {
               <p className="text-sm font-medium">{workflowGuide.primaryAction}</p>
               <p className="mt-1 text-sm text-muted-foreground">{workflowGuide.primaryDetail}</p>
             </div>
-            <Badge variant="outline">{current?.label || "Current step"}</Badge>
+            <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
+              <Badge variant="outline">{current?.label || "Current step"}</Badge>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!workflowGuide.actionEnabled}
+                onClick={onPrimaryAction}
+              >
+                <ActionIcon className="h-4 w-4" />
+                {workflowGuide.primaryAction}
+              </Button>
+            </div>
           </div>
         </div>
         <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-9">
