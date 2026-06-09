@@ -813,6 +813,8 @@ export function buildWorkflowGuide({
   const hasSelectableTargets = candidateRows.length > 0;
   const recommendedTarget = candidateRows.find((candidate) => candidate?.canExecute) || candidateRows[0] || null;
   const targetSelected = Boolean(selectedCandidate);
+  const guideTarget = selectedCandidate || recommendedTarget || executionRecord || null;
+  const guideTargetPath = guideTarget?.targetPath || guideTarget?.reviewTarget?.path || guideTarget?.sourceFinding?.path || "";
   const executed = Boolean(executionRecord);
   const proofScanCaptured = Boolean(postRunProof?.scanGeneratedAt);
   const proofMatched = postRunProof?.status === "matched";
@@ -912,6 +914,10 @@ export function buildWorkflowGuide({
     primaryAction,
     primaryActionKind,
     primaryTargetId: recommendedTarget?.id || "",
+    primaryTargetTitle: guideTarget?.title || "",
+    primaryTargetRouteInput: guideTarget?.routeInput || "",
+    primaryTargetBytes: Number(guideTarget?.bytes ?? guideTarget?.expectedBytes ?? 0),
+    primaryTargetPath: redactWorkflowGuidePath(guideTargetPath),
     actionBusy,
     actionEnabled,
     primaryDetail,
@@ -921,6 +927,15 @@ export function buildWorkflowGuide({
 
 function workflowGuideStep(id, shortLabel, label, detail) {
   return { id, shortLabel, label, detail };
+}
+
+function redactWorkflowGuidePath(value = "") {
+  return String(value || "")
+    .replace(/[A-Za-z]:\\Users\\[^\\]+/gi, "%USERPROFILE%")
+    .replace(/[A-Za-z]:\\Windows/gi, "%WINDIR%")
+    .replace(/[A-Za-z]:\\Program Files \(x86\)/gi, "%PROGRAMFILES(X86)%")
+    .replace(/[A-Za-z]:\\Program Files/gi, "%PROGRAMFILES%")
+    .replace(/[A-Za-z]:\\ProgramData/gi, "%PROGRAMDATA%");
 }
 
 export function buildWorkflowLocks({

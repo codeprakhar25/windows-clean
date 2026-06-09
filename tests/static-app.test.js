@@ -127,6 +127,9 @@ assert(app.includes("runWorkflowGuideAction"), "workflow guide should route enab
 assert(app.includes("workflowGuide.primaryActionKind"), "workflow guide renderer should branch on the tested current action kind");
 assert(app.includes("selectWorkflowCandidate"), "workflow guide target selection should reuse the guarded selection reset helper");
 assert(app.includes("workflowGuide.primaryTargetId"), "workflow guide selection should use the tested recommended target id");
+assert(app.includes("workflowGuide.primaryTargetTitle"), "workflow guide should render the target title for the current guided action");
+assert(app.includes("workflowGuide.primaryTargetBytes"), "workflow guide should render expected reclaim bytes for the current guided action");
+assert(app.includes("Guide target"), "workflow guide should label the target summary");
 assert(app.includes("workflowGuide.actionBusy"), "workflow guide action button should render busy state from the tested workflow guide");
 assert(app.includes("disabled={!workflowGuide.actionEnabled || workflowGuide.actionBusy}"), "workflow guide action button should stay disabled during running actions");
 assert(app.includes("Execution prerequisites"), "user gate should render route-specific execution prerequisite blockers");

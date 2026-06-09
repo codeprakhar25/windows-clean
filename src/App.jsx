@@ -1118,6 +1118,19 @@ function WorkflowGuidePanel({ workflowGuide, onPrimaryAction }) {
               </Button>
             </div>
           </div>
+          {workflowGuide.primaryTargetTitle || workflowGuide.primaryTargetBytes ? (
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              <Metric label="Guide target" value={workflowGuide.primaryTargetTitle || "selected target"} />
+              <Metric label="Expected reclaim" value={formatBytes(workflowGuide.primaryTargetBytes || 0)} />
+              <Metric label="Route" value={workflowGuide.primaryTargetRouteInput || workflowGuide.currentStepId} />
+              {workflowGuide.primaryTargetPath ? (
+                <div className="rounded-md border bg-muted/25 p-3 md:col-span-3">
+                  <p className="text-xs text-muted-foreground">Target path</p>
+                  <p className="mt-1 truncate text-sm font-medium">{workflowGuide.primaryTargetPath}</p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-9">
           {workflowGuide.steps.map((step, index) => (

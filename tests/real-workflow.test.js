@@ -201,6 +201,8 @@ const assert = require("assert");
     id: "npm-cache:C:\\Users\\LocalUser\\AppData\\Local\\npm-cache\\_cacache",
     title: "npm cache",
     routeInput: "npm-cache",
+    targetPath: "C:\\Users\\LocalUser\\AppData\\Local\\npm-cache\\_cacache",
+    bytes: 512 * 1024 * 1024,
     canExecute: true
   };
   const missingConsentGate = workflow.buildExecutionGate({
@@ -309,7 +311,14 @@ const assert = require("assert");
     scan: { generatedAt: "2026-06-08T14:59:00.000Z" },
     candidates: [
       { id: "blocked-target", title: "blocked target", canExecute: false },
-      { id: "ready-target", title: "ready target", canExecute: true }
+      {
+        id: "ready-target",
+        title: "ready target",
+        routeInput: "npm-cache",
+        targetPath: "C:\\Users\\LocalUser\\AppData\\Local\\npm-cache\\_cacache",
+        bytes: 256 * 1024 * 1024,
+        canExecute: true
+      }
     ],
     selectedCandidate: null,
     executionGate: missingConsentGate,
@@ -323,6 +332,10 @@ const assert = require("assert");
   assert.strictEqual(selectNextGuide.currentStepId, "select", "workflow guide should move to target selection after a scan finds candidates");
   assert.strictEqual(selectNextGuide.primaryActionKind, "select-target", "workflow guide should expose the select-target action kind");
   assert.strictEqual(selectNextGuide.primaryTargetId, "ready-target", "workflow guide should recommend the first executable target when available");
+  assert.strictEqual(selectNextGuide.primaryTargetTitle, "ready target", "workflow guide should name the recommended target before selection");
+  assert.strictEqual(selectNextGuide.primaryTargetRouteInput, "npm-cache", "workflow guide should expose the recommended target route");
+  assert.strictEqual(selectNextGuide.primaryTargetBytes, 256 * 1024 * 1024, "workflow guide should expose expected reclaim bytes for the recommended target");
+  assert(selectNextGuide.primaryTargetPath.includes("%USERPROFILE%"), "workflow guide should redact the recommended target path");
   assert.strictEqual(selectNextGuide.actionEnabled, true, "workflow guide should allow selecting the recommended target");
 
   const emptySelectGuide = workflow.buildWorkflowGuide({
@@ -357,6 +370,8 @@ const assert = require("assert");
   assert.strictEqual(executeNextGuide.currentStepId, "execute", "workflow guide should move to execution once consent gate is ready");
   assert.strictEqual(executeNextGuide.primaryAction, "Execute selected cleanup", "workflow guide should tell the user to execute only after gates pass");
   assert.strictEqual(executeNextGuide.primaryActionKind, "execute-cleanup", "workflow guide should expose the guarded execute action kind");
+  assert.strictEqual(executeNextGuide.primaryTargetTitle, "npm cache", "workflow guide should name the selected target before execution");
+  assert.strictEqual(executeNextGuide.primaryTargetBytes, 512 * 1024 * 1024, "workflow guide should expose selected target expected bytes before execution");
   assert.strictEqual(executeNextGuide.actionEnabled, true, "workflow guide should allow execute only once the execution gate is ready");
 
   const exportNextGuide = workflow.buildWorkflowGuide({
