@@ -118,6 +118,47 @@ const assert = require("assert");
   });
   assert.strictEqual(confirmedRecyclePrerequisites.ready, true, "Recycle Bin execution should unlock after explicit permanent-removal confirmation");
 
+  const brokerCandidate = {
+    id: "npm-cache:C:\\Users\\LocalUser\\AppData\\Local\\npm-cache\\_cacache",
+    title: "npm cache",
+    route: "bounded-npm-cache-delete",
+    routeInput: "npm-cache",
+    actionType: "run-npm-cache-executor",
+    targetPath: "C:\\Users\\LocalUser\\AppData\\Local\\npm-cache\\_cacache",
+    bytes: 512 * 1024 * 1024
+  };
+  assert.strictEqual(
+    workflow.buildWorkflowAgentTargetId(brokerCandidate, 0),
+    "npm-cache-1",
+    "workflow agent target ids should match the OpenAI cleanup queue target ids"
+  );
+  assert.strictEqual(
+    workflow.resolveWorkflowAgentBrokerCandidate(
+      {
+        kind: "scoped-executor",
+        actionType: "run-npm-cache-executor",
+        targetId: "npm-cache-1",
+        executorRoute: "bounded-npm-cache-delete"
+      },
+      [brokerCandidate]
+    )?.id,
+    brokerCandidate.id,
+    "broker recommendations should resolve back to the exact guarded cleanup candidate"
+  );
+  assert.strictEqual(
+    workflow.resolveWorkflowAgentBrokerCandidate(
+      {
+        kind: "scoped-executor",
+        actionType: "run-npm-cache-executor",
+        targetId: "npm-cache-1",
+        executorRoute: "bounded-pnpm-store-delete"
+      },
+      [brokerCandidate]
+    ),
+    null,
+    "broker recommendations should not resolve when the executor route does not match"
+  );
+
   const setupMismatchRuntime = {
     windows: true,
     executeCleanupPlan: true,

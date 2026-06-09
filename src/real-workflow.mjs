@@ -33,6 +33,43 @@ export function parseWorkflowTimestamp(value = "") {
   return Date.parse(text);
 }
 
+export function buildWorkflowAgentTargetId(candidate = {}, index = 0) {
+  const base = candidate.routeInput || candidate.actionType || candidate.route || candidate.recipeId || candidate.id || "cleanup-target";
+  const position = Number.isFinite(Number(index)) ? Number(index) + 1 : 1;
+  return `${slugifyWorkflowId(base)}-${position}`;
+}
+
+export function resolveWorkflowAgentBrokerCandidate(row = {}, candidates = []) {
+  const targetId = String(row.targetId || row.target_id || row.id || "").trim();
+  if (!targetId) return null;
+  const route = String(row.executorRoute || row.executor_route || row.recommendedRoute || row.recommended_route || row.route || row.route_id || "").trim();
+  const actionType = String(row.actionType || row.action_type || "").trim();
+  const requiresActionMatch = actionType.startsWith("run-") && actionType.endsWith("-executor");
+  const rows = Array.isArray(candidates) ? candidates : [];
+
+  return rows.find((candidate, index) => {
+    const candidateIds = [
+      candidate.id,
+      candidate.targetId,
+      candidate.target_id,
+      buildWorkflowAgentTargetId(candidate, index)
+    ].map((value) => String(value || "").trim());
+    const targetMatches = candidateIds.includes(targetId);
+    const routeMatches = !route || route === candidate.route || route === candidate.routeInput;
+    const actionMatches = !requiresActionMatch || actionType === candidate.actionType;
+    return targetMatches && routeMatches && actionMatches;
+  }) || null;
+}
+
+function slugifyWorkflowId(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    || "cleanup-target";
+}
+
 export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
   const routeInput = route.routeInput || route.route || "";
   const envVar = route.envVar || "";

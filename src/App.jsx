@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowGuide, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, renderInAppSupportBundleMarkdown } from "./real-workflow.mjs";
+import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowAgentTargetId, buildWorkflowGuide, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, renderInAppSupportBundleMarkdown, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
 import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -689,6 +689,30 @@ function App() {
     }
   }
 
+  async function runAgentBrokerAction(row) {
+    if (!row?.canAct) return;
+    if (row.kind === "scan") {
+      const targetId = String(row.targetId || row.target_id || row.id || "").trim();
+      const route = String(row.route || row.route_id || "").trim();
+      const afterExecution = targetId === "post-run-rescan" || route === "post-run-proof" || row.targetPanel === "execution-proof-handoff-panel";
+      await runRealScan({ afterExecution });
+      return;
+    }
+
+    const brokerCandidate = resolveWorkflowAgentBrokerCandidate(row, candidates);
+    if (brokerCandidate && brokerCandidate.id !== selectedId) {
+      selectWorkflowCandidate(brokerCandidate.id);
+      return;
+    }
+
+    if (row.kind === "scoped-executor") {
+      await executeSelectedCleanup();
+      return;
+    }
+
+    focusAgentBrokerPanel(row);
+  }
+
   function selectWorkflowCandidate(id) {
     if (!id) return;
     if (targetSwitchLocked && id !== selectedId) return;
@@ -829,6 +853,7 @@ function App() {
             advice={currentAgentAdvice}
             agentBroker={agentBroker}
             onAsk={askOpenAI}
+            onBrokerAction={runAgentBrokerAction}
           />
         </section>
         <ManualReviewPanel findings={manualFindings} />
@@ -1476,7 +1501,7 @@ function ScanPanel({ request, setRequest, scan, scanStatus, scanError, onRunScan
 
 function CleanupQueue({ candidates, selectedId, setSelectedId, scan, targetSwitchLocked = false }) {
   return (
-    <Card className="rounded-md">
+    <Card id="cleanup-actions-panel" className="rounded-md">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Trash2 className="h-4 w-4" />
@@ -1669,7 +1694,7 @@ function ProofPanel({
   onExportProof
 }) {
   return (
-    <Card className="rounded-md">
+    <Card id="execution-proof-handoff-panel" className="rounded-md">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileJson className="h-4 w-4" />
@@ -1752,7 +1777,7 @@ function ProofPanel({
   );
 }
 
-function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedCandidate, prompt, setPrompt, status, error, advice, agentBroker, onAsk }) {
+function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedCandidate, prompt, setPrompt, status, error, advice, agentBroker, onAsk, onBrokerAction }) {
   const visibleTargets = Number(candidates?.length || 0) + Number(manualFindings?.length || 0);
   const canAsk = Boolean(runtime?.openAiAgentAdvice && runtime?.openAiAdvisorConfigured && scan && visibleTargets);
   const assistant = advice?.advice;
@@ -1821,6 +1846,12 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
                   {row.blockedReason ? (
                     <p className="mt-1 text-xs text-red-600">{row.blockedReason}</p>
                   ) : null}
+                  {canRunAgentBrokerAction(row) ? (
+                    <Button className="mt-2" size="sm" variant="secondary" onClick={() => onBrokerAction(row)}>
+                      <ChevronRight className="h-3.5 w-3.5" />
+                      {row.buttonLabel || "Use recommendation"}
+                    </Button>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -1831,9 +1862,19 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
   );
 }
 
+function canRunAgentBrokerAction(row = {}) {
+  return Boolean(row.canAct && row.kind);
+}
+
+function focusAgentBrokerPanel(row = {}) {
+  const panelId = String(row.targetPanel || "").trim();
+  if (!panelId || typeof document === "undefined") return;
+  document.getElementById(panelId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function ManualReviewPanel({ findings }) {
   return (
-    <Card className="rounded-md">
+    <Card id="item-review-panel" className="rounded-md">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <HardDrive className="h-4 w-4" />
@@ -2522,8 +2563,7 @@ function buildAgentContext({
 }
 
 function buildAgentCleanupTargetId(candidate = {}, index = 0) {
-  const base = candidate.routeInput || candidate.actionType || candidate.route || candidate.recipeId || "cleanup-target";
-  return `${slugifyId(base)}-${index + 1}`;
+  return buildWorkflowAgentTargetId(candidate, index);
 }
 
 function buildAgentManualTargetId(finding = {}, index = 0) {

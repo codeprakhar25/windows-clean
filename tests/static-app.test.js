@@ -210,6 +210,10 @@ assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context shoul
 assert(app.includes("Recommendation broker"), "OpenAI panel should render deterministic broker status");
 assert(app.includes("agentBroker.rows"), "OpenAI panel should render broker rows for recommendations");
 assert(app.includes("row.blockedReason"), "OpenAI panel should expose broker blockers");
+assert(app.includes("runAgentBrokerAction"), "OpenAI broker recommendations should route through guarded app actions");
+assert(app.includes("resolveWorkflowAgentBrokerCandidate"), "OpenAI broker actions should resolve model target ids to real cleanup candidates");
+assert(app.includes("onBrokerAction(row)"), "OpenAI panel should expose a user-clicked broker action button");
+assert(app.includes("row.buttonLabel || \"Use recommendation\""), "OpenAI broker action button should use the broker-provided action label");
 assert(app.includes("redactPath"), "OpenAI context should redact local paths before provider calls");
 assert(app.includes("No local folders are scanned from this browser session."), "browser-only state should be setup-only");
 assert(app.includes("Native proof artifact writer is required"), "proof export should block when the native artifact writer does not write proof files");
