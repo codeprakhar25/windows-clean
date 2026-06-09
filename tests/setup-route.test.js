@@ -34,6 +34,7 @@ let routeSetup;
   assert.strictEqual(disabledPacket.selected.envVar, "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "npm route should expose its feature flag");
   assert.strictEqual(disabledPacket.selected.requestMode, "execute-npm-cache", "npm route should expose its native request mode");
   assert.strictEqual(disabledPacket.selected.panelId, "npm-cache-executor-panel", "npm route should expose its panel id");
+  assert(disabledPacket.commands.armRoute.includes("npm run route:arm -- --route npm-cache"), "route setup should print the route arming command");
   assert(disabledPacket.commands.enablePowerShell.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "route setup should print the PowerShell enable command");
   assert(!Object.prototype.hasOwnProperty.call(disabledPacket.commands, "fixtureOpenAiSmoke"), "route setup must not print fixture-only smoke commands for the real app");
   assert(disabledPacket.commands.openAiSmoke.includes("npm run openai:smoke -- --route npm-cache"), "route setup should print route-specific OpenAI smoke command");
@@ -60,7 +61,7 @@ let routeSetup;
   });
   assert.strictEqual(multiplePacket.status, "multiple-flags", "multiple enabled flags should block route setup");
   assert.strictEqual(multiplePacket.enabledFlags.length, 2, "multiple flag packet should list both enabled flags");
-  assert(multiplePacket.nextSteps.some((step) => step.includes("Turn off all but")), "multiple flag packet should tell the operator to narrow scope");
+  assert(multiplePacket.nextSteps.some((step) => step.includes("npm run route:arm -- --route npm-cache")), "multiple flag packet should tell the operator to narrow scope with route arming");
 
   const listedRoutes = runPacket(["--list"]);
   assert.strictEqual(listedRoutes.status, "route-list", "route list should emit route-list status");

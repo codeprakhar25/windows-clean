@@ -234,6 +234,7 @@ export function buildPacket({ routeInput = "", env = {} } = {}) {
     enabledFlags,
     conflictingFlags: otherEnabled,
     commands: {
+      armRoute: `npm run route:arm -- --route ${selected.aliases[0] || selected.route}`,
       enablePowerShell: `$env:${selected.envVar}="1"`,
       disablePowerShell: `$env:${selected.envVar}="0"`,
       setupRoute: `npm run setup:route -- --route ${selected.aliases[0] || selected.route}`,
@@ -265,14 +266,14 @@ function buildNextSteps({ status, selected, otherEnabled = [] }) {
   }
   if (status === "multiple-flags") {
     return [
-      `Turn off all but ${selected.envVar} before launching native dev.`,
+      `Run npm run route:arm -- --route ${selected.aliases[0] || selected.route} to turn off all but ${selected.envVar}.`,
       `Currently conflicting flag(s): ${otherEnabled.join(", ")}.`,
       "Run setup:route again after narrowing to one route."
     ];
   }
   return [
-    `Set ${selected.envVar}=1 for this route only.`,
-    `PowerShell: $env:${selected.envVar}="1"`,
+    `Run npm run route:arm -- --route ${selected.aliases[0] || selected.route} to enable this route and disable competing route flags.`,
+    `This sets ${selected.envVar}=1 in .env.`,
     "Run setup:route again, then launch npm run native:dev."
   ];
 }

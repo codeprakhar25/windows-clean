@@ -81,6 +81,7 @@ export function buildSetupDoctorReport({
   const selectedRoute = enabledFlags.length === 1 ? getRouteForExecutorFlag(enabledFlags[0]) : null;
   const validationStatus = getScopedExecutorValidationStatus(enabledFlags);
   const routeInput = selectedRoute?.routeInput || "npm-cache";
+  const routeArmCommand = `npm run route:arm -- --route ${routeInput}`;
   const routeSetupCommand = `npm run setup:route -- --route ${routeInput}`;
   const workflowProofValidationCommand = "npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md";
   const supportBundleCommand = "npm run support:bundle";
@@ -131,13 +132,14 @@ export function buildSetupDoctorReport({
       install: "npm install",
       test: "npm test",
       build: "npm run build",
+      routeArm: routeArmCommand,
       openAiSmoke: openAiSmokeCommand,
       routeSetup: routeSetupCommand,
       workflowProofValidation: workflowProofValidationCommand,
       supportBundle: supportBundleCommand,
       nativeDev: "npm run native:dev"
     },
-    nextSteps: buildNextSteps({ openAiConfigured: openAiKey.source !== "missing", enabledFlags, routeInput })
+    nextSteps: buildNextSteps({ openAiConfigured: openAiKey.source !== "missing", enabledFlags, routeInput, routeArmCommand })
   };
 }
 
@@ -192,6 +194,11 @@ function buildRealWorkflow({
     panelId,
     openAiConfigured,
     steps: [
+      {
+        id: "route-arm",
+        command: `npm run route:arm -- --route ${routeInput}`,
+        detail: "Write .env with exactly one selected cleanup route enabled and every other cleanup route flag off."
+      },
       {
         id: "openai-smoke",
         command: `npm run openai:smoke -- --route ${routeInput}`,
@@ -251,19 +258,22 @@ function buildRealWorkflow({
   };
 }
 
-function buildNextSteps({ openAiConfigured, enabledFlags, routeInput = "npm-cache" }) {
+function buildNextSteps({ openAiConfigured, enabledFlags, routeInput = "npm-cache", routeArmCommand = `npm run route:arm -- --route ${routeInput}` }) {
   const steps = [];
   if (!fs.existsSync(dotenvPath)) {
     steps.push("Copy .env.example to .env before desktop setup.");
+  }
+  if (enabledFlags.length !== 1) {
+    steps.push(`Run ${routeArmCommand} to enable exactly one cleanup route before Windows execution.`);
   }
   if (!openAiConfigured) {
     steps.push(`Set OPENAI_API_KEY in .env or the process environment before running npm run openai:smoke -- --route ${routeInput}.`);
   } else {
     steps.push(`Run npm run openai:smoke -- --route ${routeInput} to validate the OpenAI advisor path.`);
   }
-  steps.push(`Run npm run setup:route -- --route ${routeInput} with the route you plan to validate before enabling a scoped executor.`);
+  steps.push(`Run npm run setup:route -- --route ${routeInput} with the route you plan to validate.`);
   if (!enabledFlags.length) {
-    steps.push("Run npm run native:dev for read-only scanning, or enable exactly one scoped executor flag for Windows real-route validation.");
+    steps.push("Run npm run native:dev after route:arm for Windows real-route validation.");
   } else if (enabledFlags.length === 1) {
     steps.push(`Launch npm run native:dev with ${enabledFlags[0]} enabled, run one scoped executor, export proof in the app, then run npm run support:bundle before enabling another route.`);
   } else {
