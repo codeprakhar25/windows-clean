@@ -258,8 +258,8 @@ const assert = require("assert");
     runtime: setupMismatchRuntime,
     selectedRouteInput: "gradle-cache"
   });
-  assert.strictEqual(mismatchedRouteReadiness.canExecute, false, "route readiness should block execution when selected route setup points at a different route");
-  assert(mismatchedRouteReadiness.rows.some((row) => row.id === "selected-route-setup" && !row.passed), "route readiness should expose selected route setup mismatch as a blocker");
+  assert.strictEqual(mismatchedRouteReadiness.canExecute, true, "route readiness should not block built-in allowlisted cleanup because a different setup route is selected");
+  assert(!mismatchedRouteReadiness.rows.some((row) => row.id === "selected-route-setup"), "route readiness should not expose selected route setup as a production cleanup blocker");
 
   const matchedRouteReadiness = workflow.buildRouteReadiness({
     recipe: setupMismatchRecipe,
@@ -267,7 +267,7 @@ const assert = require("assert");
     runtime: setupMismatchRuntime,
     selectedRouteInput: "npm-cache"
   });
-  assert.strictEqual(matchedRouteReadiness.canExecute, true, "route readiness should allow execution when selected route setup matches the target route");
+  assert.strictEqual(matchedRouteReadiness.canExecute, true, "route readiness should allow execution when native allowlist, runtime, and finding status pass");
 
   const zeroByteNoOpLocks = workflow.buildWorkflowLocks({
     executionRecord: {
@@ -291,10 +291,10 @@ const assert = require("assert");
     workflowProofAccepted: false,
     supportBundleWritten: false
   });
-  assert.strictEqual(positiveExecutionLocks.proofHandoffRequired, true, "positive accepted executions should require proof handoff");
-  assert.strictEqual(positiveExecutionLocks.proofAllowsNextExecutor, false, "positive accepted executions should block next executor until support bundle handoff");
-  assert.strictEqual(positiveExecutionLocks.targetSwitchLocked, true, "positive accepted executions should lock target switching before support bundle handoff");
-  assert.strictEqual(positiveExecutionLocks.routeSetupLocked, true, "positive accepted executions should lock route setup before support bundle handoff");
+  assert.strictEqual(positiveExecutionLocks.proofHandoffRequired, false, "positive accepted executions should not require proof handoff in the production cleanup flow");
+  assert.strictEqual(positiveExecutionLocks.proofAllowsNextExecutor, true, "positive accepted executions should keep the next cleanup target unlocked");
+  assert.strictEqual(positiveExecutionLocks.targetSwitchLocked, false, "positive accepted executions should not lock target switching");
+  assert.strictEqual(positiveExecutionLocks.routeSetupLocked, false, "positive accepted executions should not lock route setup switching");
 
   const handedOffLocks = workflow.buildWorkflowLocks({
     executionRecord: {
@@ -304,9 +304,9 @@ const assert = require("assert");
     workflowProofAccepted: true,
     supportBundleWritten: true
   });
-  assert.strictEqual(handedOffLocks.proofAllowsNextExecutor, true, "support bundle handoff should allow the next executor");
-  assert.strictEqual(handedOffLocks.targetSwitchLocked, false, "support bundle handoff should unlock target switching");
-  assert.strictEqual(handedOffLocks.routeSetupLocked, false, "support bundle handoff should unlock route setup switching");
+  assert.strictEqual(handedOffLocks.proofAllowsNextExecutor, true, "optional support bundle state should keep the next executor allowed");
+  assert.strictEqual(handedOffLocks.targetSwitchLocked, false, "optional support bundle state should leave target switching unlocked");
+  assert.strictEqual(handedOffLocks.routeSetupLocked, false, "optional support bundle state should leave route setup switching unlocked");
 
   const gateCandidate = {
     id: "npm-cache:C:\\Users\\LocalUser\\AppData\\Local\\npm-cache\\_cacache",
@@ -319,8 +319,6 @@ const assert = require("assert");
   const missingConsentGate = workflow.buildExecutionGate({
     candidate: gateCandidate,
     consentChecked: false,
-    confirmationText: "RUN npm-cache",
-    expectedConfirmation: "RUN npm-cache",
     executionPrerequisites: { ready: true },
     scanFingerprint: "scan-123",
     executionStatus: "idle"
@@ -328,23 +326,19 @@ const assert = require("assert");
   assert.strictEqual(missingConsentGate.ready, false, "execution gate should block without explicit consent");
   assert(missingConsentGate.rows.some((row) => row.id === "consent-checkbox" && !row.passed), "execution gate should name missing consent");
 
-  const wrongPhraseGate = workflow.buildExecutionGate({
+  const confirmedGate = workflow.buildExecutionGate({
     candidate: gateCandidate,
     consentChecked: true,
-    confirmationText: "RUN gradle-cache",
-    expectedConfirmation: "RUN npm-cache",
     executionPrerequisites: { ready: true },
     scanFingerprint: "scan-123",
     executionStatus: "idle"
   });
-  assert.strictEqual(wrongPhraseGate.ready, false, "execution gate should block when confirmation text does not match the selected route");
-  assert(wrongPhraseGate.rows.some((row) => row.id === "confirmation-phrase" && !row.passed), "execution gate should expose confirmation mismatch");
+  assert.strictEqual(confirmedGate.ready, true, "execution gate should not require a typed confirmation phrase in the production cleanup flow");
+  assert(!confirmedGate.rows.some((row) => row.id === "confirmation-phrase"), "execution gate should not expose a typed confirmation row");
 
   const missingScanGate = workflow.buildExecutionGate({
     candidate: gateCandidate,
     consentChecked: true,
-    confirmationText: "RUN npm-cache",
-    expectedConfirmation: "RUN npm-cache",
     executionPrerequisites: { ready: true },
     scanFingerprint: "",
     executionStatus: "idle"
@@ -355,8 +349,6 @@ const assert = require("assert");
   const blockedPrerequisiteGate = workflow.buildExecutionGate({
     candidate: gateCandidate,
     consentChecked: true,
-    confirmationText: "RUN npm-cache",
-    expectedConfirmation: "RUN npm-cache",
     executionPrerequisites: {
       ready: false,
       blockers: [{ id: "archive-destination" }]
@@ -370,8 +362,6 @@ const assert = require("assert");
   const readyExecutionGate = workflow.buildExecutionGate({
     candidate: gateCandidate,
     consentChecked: true,
-    confirmationText: "RUN npm-cache",
-    expectedConfirmation: "RUN npm-cache",
     executionPrerequisites: { ready: true },
     scanFingerprint: "scan-123",
     executionStatus: "idle"
@@ -499,11 +489,11 @@ const assert = require("assert");
     canExportProof: false
   });
   assert.strictEqual(noOpCompleteGuide.status, "complete", "accepted no-op workflow should complete without impossible positive-byte proof");
-  assert.strictEqual(noOpCompleteGuide.currentStepId, "next-route", "accepted no-op workflow should release route switching without post-run proof");
-  assert.strictEqual(noOpCompleteGuide.primaryAction, "Ready for next route", "accepted no-op workflow should show the next-route handoff");
-  assert(noOpCompleteGuide.primaryDetail.includes("proof handoff is not required"), "accepted no-op workflow should explain why proof export is skipped");
+  assert.strictEqual(noOpCompleteGuide.currentStepId, "next-route", "accepted no-op workflow should release target switching without post-clean rescan");
+  assert.strictEqual(noOpCompleteGuide.primaryAction, "Ready for next route", "accepted no-op workflow should show the next-target state");
+  assert(noOpCompleteGuide.primaryDetail.includes("no post-clean evidence is needed"), "accepted no-op workflow should explain why rescan is skipped");
 
-  const exportNextGuide = workflow.buildWorkflowGuide({
+  const rescanCompleteGuide = workflow.buildWorkflowGuide({
     nativeConnected: true,
     scan: { generatedAt: "2026-06-08T14:59:00.000Z" },
     candidates: [gateCandidate],
@@ -516,12 +506,13 @@ const assert = require("assert");
     supportBundleWritten: false,
     canExportProof: true
   });
-  assert.strictEqual(exportNextGuide.currentStepId, "export-proof", "workflow guide should require proof export after reviewed matched rescan");
-  assert.strictEqual(exportNextGuide.primaryAction, "Export proof packet", "workflow guide should name proof export as the next handoff action");
-  assert.strictEqual(exportNextGuide.primaryActionKind, "export-proof", "workflow guide should expose the proof export action kind");
-  assert.strictEqual(exportNextGuide.actionEnabled, true, "workflow guide should allow proof export only when the proof export gate is ready");
+  assert.strictEqual(rescanCompleteGuide.status, "complete", "workflow guide should complete once cleanup history and post-clean rescan exist");
+  assert.strictEqual(rescanCompleteGuide.currentStepId, "next-route", "workflow guide should unlock the next cleanup target after post-clean rescan");
+  assert.strictEqual(rescanCompleteGuide.primaryAction, "Ready for next route", "workflow guide should show the next target state after rescan");
+  assert.strictEqual(rescanCompleteGuide.primaryActionKind, "next-route", "workflow guide should not require proof export as the next handoff action");
+  assert.strictEqual(rescanCompleteGuide.actionEnabled, false, "workflow guide should not dispatch optional proof export as the primary cleanup action");
 
-  const exportBusyGuide = workflow.buildWorkflowGuide({
+  const proofExportBusyGuide = workflow.buildWorkflowGuide({
     nativeConnected: true,
     scan: { generatedAt: "2026-06-08T14:59:00.000Z" },
     candidates: [gateCandidate],
@@ -535,9 +526,9 @@ const assert = require("assert");
     canExportProof: true,
     proofExportStatus: "running"
   });
-  assert.strictEqual(exportBusyGuide.currentStepId, "export-proof", "workflow guide should keep export as current while proof export is running");
-  assert.strictEqual(exportBusyGuide.actionBusy, true, "workflow guide should mark proof export busy during export");
-  assert.strictEqual(exportBusyGuide.actionEnabled, false, "workflow guide should not allow duplicate proof export dispatch");
+  assert.strictEqual(proofExportBusyGuide.currentStepId, "next-route", "workflow guide should keep the cleanup flow released while optional proof export is running");
+  assert.strictEqual(proofExportBusyGuide.actionBusy, false, "optional proof export should not make the primary cleanup guide busy");
+  assert.strictEqual(proofExportBusyGuide.actionEnabled, false, "next-route state should not dispatch a primary action");
 
   const completeGuide = workflow.buildWorkflowGuide({
     nativeConnected: true,
@@ -552,27 +543,23 @@ const assert = require("assert");
     supportBundleWritten: true,
     canExportProof: false
   });
-  assert.strictEqual(completeGuide.status, "complete", "workflow guide should mark handoff complete after accepted proof and support bundle");
-  assert.strictEqual(completeGuide.currentStepId, "next-route", "workflow guide should release the operator to the next route after proof handoff");
+  assert.strictEqual(completeGuide.status, "complete", "workflow guide should mark cleanup complete after accepted cleanup and post-clean rescan");
+  assert.strictEqual(completeGuide.currentStepId, "next-route", "workflow guide should release the operator to the next target after rescan");
 
-  const repeatDuringProofHandoffGate = workflow.buildExecutionGate({
+  const repeatAfterCleanupGate = workflow.buildExecutionGate({
     candidate: gateCandidate,
     consentChecked: true,
-    confirmationText: "RUN npm-cache",
-    expectedConfirmation: "RUN npm-cache",
     executionPrerequisites: { ready: true },
     scanFingerprint: "scan-123",
     executionStatus: "complete",
     workflowLocks: positiveExecutionLocks
   });
-  assert.strictEqual(repeatDuringProofHandoffGate.ready, false, "execution gate should block repeat dispatch while proof handoff is required");
-  assert(repeatDuringProofHandoffGate.rows.some((row) => row.id === "proof-handoff" && !row.passed), "execution gate should expose proof handoff as the repeat-dispatch blocker");
+  assert.strictEqual(repeatAfterCleanupGate.ready, true, "execution gate should not block dispatch on proof handoff after accepted cleanup");
+  assert(!repeatAfterCleanupGate.rows.some((row) => row.id === "proof-handoff"), "execution gate should not expose proof handoff as a dispatch blocker");
 
   const noOpRepeatGate = workflow.buildExecutionGate({
     candidate: gateCandidate,
     consentChecked: true,
-    confirmationText: "RUN npm-cache",
-    expectedConfirmation: "RUN npm-cache",
     executionPrerequisites: { ready: true },
     scanFingerprint: "scan-123",
     executionStatus: "complete",
@@ -583,8 +570,6 @@ const assert = require("assert");
   const staleBaselineAfterHandoffGate = workflow.buildExecutionGate({
     candidate: gateCandidate,
     consentChecked: true,
-    confirmationText: "RUN npm-cache",
-    expectedConfirmation: "RUN npm-cache",
     executionPrerequisites: { ready: true },
     scanFingerprint: "scan-before-execution",
     executionStatus: "complete",
@@ -596,14 +581,12 @@ const assert = require("assert");
     },
     activeScanGeneratedAt: "2026-06-08T14:59:00.000Z"
   });
-  assert.strictEqual(staleBaselineAfterHandoffGate.ready, false, "execution gate should block next dispatch when the active scan baseline predates the accepted execution");
-  assert(staleBaselineAfterHandoffGate.rows.some((row) => row.id === "baseline-scan-current" && !row.passed), "execution gate should expose stale active scan baseline as the blocker");
+  assert.strictEqual(staleBaselineAfterHandoffGate.ready, true, "execution gate should leave post-clean rescan guidance to the workflow guide instead of hard-blocking dispatch");
+  assert(!staleBaselineAfterHandoffGate.rows.some((row) => row.id === "baseline-scan-current"), "execution gate should not expose stale baseline as a dispatch blocker");
 
   const currentBaselineAfterHandoffGate = workflow.buildExecutionGate({
     candidate: gateCandidate,
     consentChecked: true,
-    confirmationText: "RUN npm-cache",
-    expectedConfirmation: "RUN npm-cache",
     executionPrerequisites: { ready: true },
     scanFingerprint: "scan-after-execution",
     executionStatus: "complete",
@@ -899,7 +882,7 @@ const assert = require("assert");
   assert.strictEqual(readyStatus.canExecute, true, "ready route should pass every guardrail");
   assert.deepStrictEqual(
     readyStatus.rows.map((row) => row.id),
-    ["native-runtime", "executor-command", "single-route-scope", "route-flag", "selected-route-setup", "real-run-authority", "native-finding-status"],
+    ["native-runtime", "executor-command", "built-in-allowlist", "production-cleanup", "native-finding-status"],
     "route readiness should expose each execution guardrail in order"
   );
   assert(readyStatus.rows.every((row) => row.passed), "ready route readiness rows should all pass");
@@ -913,10 +896,10 @@ const assert = require("assert");
       realRunEnabled: false
     }
   });
-  assert.strictEqual(missingFlag.canExecute, false, "missing route flag should block execution");
-  assert.strictEqual(missingFlag.blockedReason, "Set SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1 in .env and restart the desktop app.");
-  assert.strictEqual(missingFlag.rows.find((row) => row.id === "route-flag").status, "blocked", "route flag row should fail explicitly");
-  assert(missingFlag.rows.find((row) => row.id === "route-flag").detail.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR=1"), "route flag row should show exact env var");
+  assert.strictEqual(missingFlag.canExecute, false, "missing built-in allowlist entry should block execution");
+  assert.strictEqual(missingFlag.blockedReason, "This cleanup executor is not available in the current runtime.");
+  assert.strictEqual(missingFlag.rows.find((row) => row.id === "built-in-allowlist").status, "blocked", "built-in allowlist row should fail explicitly");
+  assert(missingFlag.rows.find((row) => row.id === "built-in-allowlist").detail.includes("not available"), "built-in allowlist row should explain unavailable executor state");
 
   const multiFlag = workflow.buildRouteReadiness({
     recipe: npmRecipe,
@@ -927,8 +910,8 @@ const assert = require("assert");
       enabledScopedExecutorFlags: ["SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR"]
     }
   });
-  assert.strictEqual(multiFlag.canExecute, false, "multiple route flags should block execution");
-  assert(multiFlag.rows.find((row) => row.id === "single-route-scope").detail.includes("SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR"), "scope row should show enabled flags");
+  assert.strictEqual(multiFlag.canExecute, true, "legacy multiple route flags should not block built-in production cleanup");
+  assert(!multiFlag.rows.some((row) => row.id === "single-route-scope"), "route readiness should no longer expose single-route scope as an execution guardrail");
 
   const tempRoute = workflow.buildRouteReadiness({
     recipe: { route: "known-temp-delete", flagKey: "tempCleanupExecutor", envVar: "SPACEGUARD_ENABLE_TEMP_EXECUTOR", executor: "temp" },

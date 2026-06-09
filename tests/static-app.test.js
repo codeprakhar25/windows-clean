@@ -40,19 +40,19 @@ const requiredAppMarkers = [
   "Real Windows cleanup",
   "Connect the Windows desktop app",
   "No local folders are scanned from this browser session.",
-  "npm run windows:dev -- --route ${routeInput}",
-  "npm run windows:ready -- --route ${routeInput}",
+  "npm run native:dev",
+  "npm run windows:ready",
   "OPENAI_API_KEY",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Run real scan",
   "Real cleanup queue",
-  "User gate",
-  "Type the confirmation phrase",
-  "Execute selected cleanup",
+  "Explore C: allocation",
+  "Confirm cleanup",
+  "Clean selected target",
   "Volume proof",
-  "Native volume proof missing.",
-  "Run post-run rescan",
-  "Export proof packet",
+  "Native volume proof was not measured.",
+  "Run post-clean rescan",
+  "Cleanup history",
   "Proof target",
   "selected item",
   "Route readiness",
@@ -123,17 +123,17 @@ assert(app.includes("advice={currentAgentAdvice}"), "OpenAI panel should only re
 assert(app.includes("./real-workflow.mjs"), "app should import tested real workflow helpers");
 assert(app.includes("buildAppAgentTaskQueue"), "app should build a deterministic task queue for OpenAI advisor context");
 assert(app.includes("buildRouteReadiness"), "app should use tested route readiness guardrails");
-assert(app.includes("buildCleanupCandidates(scan, runtime, setupRouteInput)"), "app cleanup candidates should be gated by the selected route setup");
+assert(app.includes("buildCleanupCandidates(scan, runtime)"), "app cleanup candidates should come from measured native findings and built-in allowlists");
 assert(app.includes("buildExecutionLedgerRows"), "app should normalize native execution ledger rows for rendering");
 assert(app.includes("buildExecutionGate"), "app should use tested execution dispatch gate guardrails");
 assert(app.includes("buildExecutionPrerequisites"), "app should use tested route-specific execution prerequisites");
-assert(app.includes("resolveRuntimeRouteInput"), "app should sync the selected cleanup route from the single enabled runtime flag");
-assert(app.includes("setSetupRouteInput(runtimeRouteInput)"), "app should update the in-app route when the launcher armed a different route");
-assert(app.includes("resetWorkflowForRouteChange"), "app should clear stale selected target and proof state when runtime route sync changes route");
+assert(!app.includes("resolveRuntimeRouteInput"), "app shell should not sync cleanup selection from legacy route flags");
+assert(!app.includes("setSetupRouteInput"), "app shell should not require route arming before native cleanup");
+assert(app.includes("resetWorkflowForRouteChange"), "app should keep a shared reset helper for workflow state resets");
 assert(app.includes("buildWorkflowGuide"), "app should use the tested single workflow guide");
-assert(app.includes("buildWorkflowLocks"), "app should use tested workflow lock policy for proof handoff");
-assert(app.includes("buildBaselinePromotion"), "app should use tested baseline promotion after proof handoff");
-assert(app.includes("buildRouteSetupChecklist"), "app should use tested route setup checklist guardrails");
+assert(app.includes("buildWorkflowLocks"), "app should use tested workflow lock policy for cleanup continuation");
+assert(app.includes("buildBaselinePromotion"), "app should use tested baseline promotion after optional proof export");
+assert(!app.includes("buildRouteSetupChecklist"), "app shell should not render the legacy route setup checklist");
 assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
 assert(app.includes("Guided workflow"), "app should render a single workflow guide before detailed cleanup panels");
 assert(app.includes("workflowGuide.currentStepId"), "workflow guide should expose the current step in the renderer");
@@ -154,12 +154,12 @@ assert(app.includes("Native execution ledger"), "decision panel should render th
 assert(app.includes("Preflight checks"), "decision panel should render native preflight checks after dispatch");
 assert(app.includes("executionLedger.warnings"), "decision panel should render native executor warnings");
 assert(app.includes("entry.rejectCode"), "decision panel should render native reject codes");
-assert(app.includes("workflowLocks"), "execution gate should receive workflow lock state for proof handoff repeat-dispatch blocking");
-assert(app.includes("activeScanGeneratedAt: scan?.generatedAt || \"\""), "execution gate should receive active scan timestamp for stale-baseline blocking");
+assert(app.includes("workflowLocks"), "execution gate should receive workflow lock state from the shared cleanup policy");
+assert(app.includes("activeScanGeneratedAt: scan?.generatedAt || \"\""), "execution gate should receive active scan timestamp for execution context");
 assert(app.includes("executionRecord?.accepted"), "proof export should require an accepted native execution record");
-assert(app.includes("targetSwitchLocked"), "cleanup queue should lock target switching after accepted execution until proof export completes");
-assert(app.includes("routeSetupLocked"), "route setup should share the proof handoff lock after accepted execution");
-assert(app.includes("workflowProofAccepted"), "cleanup queue should require accepted workflow proof validation before unlocking another target");
+assert(!app.includes("targetSwitchLocked"), "cleanup queue should not lock target switching behind proof export");
+assert(!app.includes("routeSetupLocked"), "app shell should not carry route setup locks in the production flow");
+assert(app.includes("workflowProofAccepted"), "optional proof export should still track in-app verifier state");
 assert(app.includes("buildWorkflowProofCheck"), "proof export should run the shared workflow proof verifier inside the app");
 assert(app.includes("workflowProofCheck"), "proof panel should render workflow proof validation output from the app");
 assert(app.includes("Workflow proof accepted by in-app verifier."), "proof export should report accepted in-app workflow proof validation");
@@ -167,8 +167,8 @@ assert(app.includes("proofKind: \"workflow-proof-check\""), "proof export should
 assert(app.includes("proofKind: \"support-bundle\""), "proof export should persist an in-app support bundle as a restricted artifact");
 assert(app.includes("buildInAppSupportBundleReport"), "proof export should build the support bundle inside the desktop app");
 assert(app.includes("renderInAppSupportBundleMarkdown"), "proof export should render support bundle markdown inside the desktop app");
-assert(realWorkflow.includes("proof handoff is not required"), "accepted no-op executions should explain that proof export is skipped");
-assert(app.includes("supportBundleWritten"), "cleanup queue should keep next route locked until support bundle capture succeeds");
+assert(realWorkflow.includes("no post-clean evidence is needed"), "accepted no-op executions should explain that post-clean rescan is skipped");
+assert(app.includes("supportBundleWritten"), "optional proof export should keep support bundle completion state");
 assert(app.includes("supportBundleWritten: Boolean(supportBundleWritten)"), "OpenAI context should receive support bundle completion state");
 assert(app.includes("proofAllowsNextExecutor: workflowLocks.proofAllowsNextExecutor"), "OpenAI context should use the tested workflow lock policy for next-executor allowance");
 assert(app.includes("noOpExecution: Boolean(workflowLocks.noOpExecution)"), "OpenAI context should expose accepted zero-byte no-op handoff state");
@@ -180,10 +180,10 @@ assert(app.includes("Drive inventory:"), "drive inventory rows should be visible
 assert(app.includes("slugifyId"), "drive inventory manual finding ids should be stable and normalized");
 assert(app.includes("selected-route-proof-reviewed"), "app workflow proof should require reviewed selected-route proof export");
 assert(!app.includes("selected-route-proof-import"), "app workflow proof should not require obsolete selected-route proof import");
-assert(app.includes("Export proof, let the in-app verifier accept it, and capture the support bundle before selecting another cleanup target."), "cleanup queue should explain the workflow proof and support bundle lock");
-assert(app.includes("disabled={targetSwitchLocked && candidate.id !== selectedId}"), "cleanup queue should disable other targets while proof export is pending");
-assert(app.includes("disabled={routeSetupLocked && route.routeInput !== selectedRouteInput}"), "route setup should disable other routes while proof export is pending");
-assert(app.includes("Current route is locked until proof export and support bundle capture finish."), "route setup should explain proof handoff route lock");
+assert(!app.includes("Export proof, let the in-app verifier accept it, and capture the support bundle before selecting another cleanup target."), "cleanup queue should not describe proof export as a target-switch lock");
+assert(!app.includes("disabled={targetSwitchLocked && candidate.id !== selectedId}"), "cleanup queue should not disable other targets behind proof export");
+assert(!app.includes("disabled={routeSetupLocked && route.routeInput !== selectedRouteInput}"), "route setup locks should not exist in the app shell");
+assert(!app.includes("Current route is locked until proof export and support bundle capture finish."), "route setup proof lock copy should not render in the app shell");
 assert(app.includes("workflowLocks?.noOpExecution"), "proof panel should render accepted zero-byte no-op handoff state");
 assert(app.includes("buildProofCandidateFromExecutionRecord"), "proof panel should preserve executed target proof context after baseline promotion");
 assert(app.includes("recipeId: selectedCandidate.recipeId"), "execution records should preserve recipe id for post-run proof matching");
@@ -199,7 +199,7 @@ assert(
 );
 assert(
   /if \(afterExecution\) \{[\s\S]*setPostRunScan\(result\);[\s\S]*setProofReviewed\(false\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}/.test(app),
-  "post-run rescan should force fresh proof review and clear stale export status"
+  "post-clean rescan should force fresh proof review and clear stale export status"
 );
 assert(app.includes("buildManualFindingGuidance"), "app should use tested manual finding guidance");
 assert(app.includes("buildManualFindingReviewRows"), "app should use tested manual review row guidance");
@@ -211,20 +211,20 @@ assert(app.includes("Recommended safe action"), "manual review panel should rend
 assert(app.includes("Review candidates"), "manual review panel should render visible review candidates");
 assert(app.includes("Usage evidence"), "manual review panel should render candidate usage evidence");
 assert(app.includes("Blocked actions"), "manual review panel should render blocked action guardrails");
-assert(app.includes("Selected .env block"), "route setup panel should render a copyable selected .env block");
-assert(app.includes("copyEnvBlock"), "route setup panel should expose a copy action for selected .env content");
-assert(app.includes("navigator.clipboard.writeText(checklist.envBlock.content)"), "route setup copy action should copy the tested env block");
-assert(app.includes("Windows test runbook"), "route setup panel should render the Windows test runbook");
-assert(app.includes("copyRunbook"), "route setup panel should expose a copy action for the Windows runbook");
-assert(app.includes("navigator.clipboard.writeText(checklist.runbook.content)"), "route setup runbook copy action should copy the tested runbook");
-assert(app.includes("npm run openai:smoke -- --local-contract --route"), "route setup panel should show offline OpenAI route-contract smoke");
-assert(app.includes("function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist, routeSetupLocked = false })"), "browser-only setup state should accept route setup wizard props and runtime status");
+assert(!app.includes("Selected .env block"), "app shell should not ask users to copy route-specific env blocks");
+assert(!app.includes("copyEnvBlock"), "app shell should not expose route setup copy actions");
+assert(!app.includes("navigator.clipboard.writeText(checklist.envBlock.content)"), "app shell should not copy route setup env content");
+assert(!app.includes("Windows test runbook"), "app shell should not render the legacy route test runbook");
+assert(!app.includes("copyRunbook"), "app shell should not expose route runbook copy actions");
+assert(!app.includes("navigator.clipboard.writeText(checklist.runbook.content)"), "app shell should not copy route setup runbooks");
+assert(!app.includes("npm run openai:smoke -- --local-contract --route"), "app shell should not show route-contract smoke setup steps");
+assert(app.includes("function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh })"), "browser-only setup state should accept only runtime status and refresh props");
 assert(app.includes("This screen contains no preloaded cleanup data and cannot touch local files."), "browser-only setup state should explicitly avoid bundled cleanup data");
 assert(app.includes("This setup page is intentionally non-executable. Start the desktop shell to test real Windows data."), "browser-only setup state should explain that real execution requires the desktop shell");
 assert(/if \(!nativeConnected\) \{[\s\S]*return \(\s*<AppFrame[\s\S]*<ConnectionRequired/.test(app), "browser-only setup state should keep the pinned sidebar while rendering non-executable setup content");
-assert(app.includes("Cleanup workflow setup"), "route setup should present one workflow instead of separate cleanup methods");
-assert(app.includes("one workflow"), "route setup should reinforce the unified workflow model");
-assert(/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup state should render the route setup wizard");
+assert(app.includes("Windows launch steps"), "browser-only setup state should present the desktop launch checklist");
+assert(app.includes("Scan -> explore -> select -> confirm -> clean -> rescan"), "browser-only setup should describe the simplified cleanup flow");
+assert(!/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup state should not render the route setup wizard");
 assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context should keep a stable schema");
 assert(app.includes("Recommendation broker"), "OpenAI panel should render deterministic broker status");
 assert(app.includes("agentBroker.rows"), "OpenAI panel should render broker rows for recommendations");
@@ -302,11 +302,11 @@ assert(workflowProofModule.includes("selected-route-proof-reviewed"), "workflow 
 assert(!workflowProofModule.includes("selected-route-proof-import"), "workflow proof verifier should not require obsolete selected-route proof import");
 assert(realWorkflow.includes("findPostRunTargetEvidence"), "real workflow helper should expose post-run target evidence matching");
 assert(realWorkflow.includes("reviewTarget?.path"), "real workflow helper should compare selected review item paths");
-assert(realWorkflow.includes("single-route-scope"), "real workflow helper should expose single route scope guardrail rows");
-assert(realWorkflow.includes("selected-route-setup"), "real workflow helper should expose selected route setup as an execution guardrail");
+assert(realWorkflow.includes("built-in-allowlist"), "real workflow helper should expose built-in allowlists as execution guardrails");
+assert(realWorkflow.includes("production-cleanup"), "real workflow helper should expose production cleanup authority as an execution guardrail");
 assert(realWorkflow.includes("spaceguard-execution-gate/v1"), "real workflow helper should expose a stable execution gate schema");
-assert(realWorkflow.includes("proof-handoff"), "execution gate should expose proof handoff as a dispatch guardrail");
-assert(realWorkflow.includes("baseline-scan-current"), "execution gate should expose active scan freshness as a dispatch guardrail");
+assert(!realWorkflow.includes("proof-handoff"), "execution gate should not block dispatch behind proof handoff");
+assert(!realWorkflow.includes("baseline-scan-current"), "execution gate should not block dispatch behind stale-baseline proof handoff");
 assert(realWorkflow.includes("spaceguard-workflow-locks/v1"), "real workflow helper should expose a stable workflow lock schema");
 assert(realWorkflow.includes("spaceguard-baseline-promotion/v1"), "real workflow helper should expose a stable baseline promotion schema");
 assert(!realWorkflow.includes("temp-fixture"), "real workflow helper must not point app setup at seeded fixture routes");
@@ -357,16 +357,16 @@ for (const removedPath of [
   assert(!fs.existsSync(path.join(root, removedPath)), `${removedPath} should be removed from the real-app repo surface`);
 }
 
-assert(readme.includes("npm run windows:dev -- --route npm-cache"), "README should document the guarded Windows desktop launcher");
+assert(readme.includes("npm run native:dev"), "README should document the Tauri Windows desktop launcher");
 assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");
-assert(readme.indexOf("npm run route:arm -- --route npm-cache") < readme.indexOf("npm run windows:ready -- --route npm-cache"), "README quick start should arm the route before readiness");
-assert(readme.includes("route-arm-required"), "README should explain the readiness state when a route has not been armed");
+assert(readme.indexOf("npm run windows:ready") < readme.indexOf("npm run native:dev"), "README quick start should check Windows readiness before launch");
+assert(readme.includes("Cleanup does not require route arming"), "README should explain that production cleanup uses built-in allowlists");
 assert(readme.includes("npm run validate:workflow-proof -- --file"), "README should document workflow proof verifier usage");
 assert(readme.includes("spaceguard-workflow-proof-check.json"), "README should document persisted workflow proof check output");
 assert(readme.includes("npm run support:bundle"), "README should document support bundle capture");
-assert(realDataGuide.includes("npm run windows:dev -- --route npm-cache"), "Windows setup guide should document the guarded Windows desktop launcher");
-assert(realDataGuide.indexOf("npm run route:arm -- --route npm-cache") < realDataGuide.indexOf("npm run windows:ready -- --route npm-cache"), "Windows setup guide should arm the route before readiness");
-assert(realDataGuide.includes("route-arm-required"), "Windows setup guide should explain the readiness state when a route has not been armed");
+assert(realDataGuide.includes("npm run native:dev"), "Windows setup guide should document the Tauri Windows desktop launcher");
+assert(realDataGuide.indexOf("npm run windows:ready") < realDataGuide.indexOf("npm run native:dev"), "Windows setup guide should check readiness before launch");
+assert(realDataGuide.includes("Cleanup does not require route arming"), "Windows setup guide should explain built-in allowlists");
 assert(realDataGuide.includes("OPENAI_API_KEY"), "Windows setup guide should document OpenAI key setup");
 assert(realDataGuide.includes("npm run validate:workflow-proof -- --file"), "Windows setup guide should document workflow proof verifier usage");
 assert(realDataGuide.includes("spaceguard-workflow-proof-check.json"), "Windows setup guide should document persisted workflow proof check output");

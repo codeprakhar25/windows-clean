@@ -13,10 +13,9 @@ Use these steps on the Windows machine you want to test.
 
 ```powershell
 npm install
-npm run route:arm -- --route npm-cache
 notepad .env
-npm run windows:ready -- --route npm-cache
-npm run windows:dev -- --route npm-cache
+npm run windows:ready
+npm run native:dev
 ```
 
 Set your key in `.env`:
@@ -25,15 +24,14 @@ Set your key in `.env`:
 OPENAI_API_KEY=sk-...
 ```
 
-`route:arm` creates or updates `.env`, enables one selected cleanup type, and disables every other cleanup flag. The `windows:dev` command keeps one route armed, checks readiness, and launches the desktop app only when the selected Windows route is ready.
-Run `route:arm` before `windows:ready`; otherwise readiness correctly reports `route-arm-required` because no write route is enabled yet.
-`windows:ready` exits nonzero until the selected route can launch the native Windows desktop app; treat that as a stop signal and follow the JSON `nextSteps`.
+Cleanup does not require route arming. The desktop runtime exposes shipped native allowlists and validates each selected target before deletion.
+`windows:ready` exits nonzero until the Windows desktop app can launch; treat that as a stop signal and follow the JSON `nextSteps`.
 If `windows:ready` reports `toolchain-blocked`, run `npm install`, install or repair Node.js, Rustup/Cargo, and the Tauri Windows prerequisites, restart PowerShell, and run readiness again.
 
 ## Launch
 
 ```powershell
-npm run windows:dev -- --route npm-cache
+npm run native:dev
 ```
 
 The desktop app should show the native bridge as connected. A normal browser tab is setup-only and cannot scan local folders.
@@ -42,9 +40,8 @@ The desktop app should show the native bridge as connected. A normal browser tab
 
 ```powershell
 npm run setup:doctor
-npm run route:arm -- --route npm-cache
 npm run setup:route -- --route npm-cache
-npm run windows:ready -- --route npm-cache
+npm run windows:ready
 npm run openai:smoke -- --local-contract --route npm-cache
 npm run openai:smoke -- --route npm-cache
 ```
@@ -52,14 +49,13 @@ npm run openai:smoke -- --route npm-cache
 Then in the app:
 
 1. Run real scan.
-2. Select `npm-cache` if it is ready.
-3. Review the target and confirmation phrase.
-4. Execute selected cleanup.
-5. Run post-run rescan.
-6. Export proof. The app writes `spaceguard-selected-route-proof-packet.md`, `spaceguard-real-workflow-proof.md`, `spaceguard-workflow-proof-check.json`, and `spaceguard-support-bundle.md`.
-7. Keep another route disabled until the app confirms the in-app verifier accepted the workflow proof and captured the support bundle.
+2. Open Explore C: or the cleanup queue and select a ready target.
+3. Review the target and check the consent box.
+4. Clean the selected target.
+5. Run post-clean rescan.
+6. Continue with another allowlisted target if needed.
 
-The app runs the workflow proof verifier and support-bundle capture during export. Use the CLI verifier as an external audit if needed:
+Optional audit export can write `spaceguard-selected-route-proof-packet.md`, `spaceguard-real-workflow-proof.md`, `spaceguard-workflow-proof-check.json`, and `spaceguard-support-bundle.md`. Use the CLI verifier as an external audit if needed:
 
 ```powershell
 npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md
@@ -68,7 +64,7 @@ npm run support:bundle
 
 ## If The App Is Not Connected
 
-Use the setup panel in the app. It should tell you to install dependencies, set `OPENAI_API_KEY`, arm one scoped executor route, and run `npm run windows:dev -- --route npm-cache`.
+Use the setup panel in the app. It should tell you to install dependencies, optionally set `OPENAI_API_KEY`, run `npm run windows:ready`, and launch with `npm run native:dev`.
 
 ## If Tauri Reports A Missing Icon
 
