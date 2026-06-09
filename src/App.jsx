@@ -852,19 +852,14 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh, r
       detail: "Run this from the SpaceGuard project folder on the Windows PC you want to clean."
     },
     {
-      label: "Create the local .env file",
-      command: "Copy-Item .env.example .env",
-      detail: "Open .env in Notepad after copying it. This file is ignored by git."
+      label: "Arm one cleanup route",
+      command: `npm run route:arm -- --route ${routeInput}`,
+      detail: "This creates or updates .env, enables one cleanup type, and turns every other cleanup flag off."
     },
     {
       label: "Add your OpenAI key",
       command: "OPENAI_API_KEY=sk-...",
-      detail: "The key powers advisory reasoning only. It cannot approve or execute cleanup."
-    },
-    {
-      label: "Enable exactly one route",
-      command: `npm run route:arm -- --route ${routeInput}`,
-      detail: "This updates .env so one cleanup type is enabled and every other cleanup flag is off."
+      detail: "Open .env in Notepad after route arming. The key powers advisory reasoning only and cannot approve cleanup."
     },
     {
       label: "Check Windows readiness",

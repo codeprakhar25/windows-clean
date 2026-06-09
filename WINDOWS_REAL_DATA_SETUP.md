@@ -13,9 +13,8 @@ Use these steps on the Windows machine you want to test.
 
 ```powershell
 npm install
-Copy-Item .env.example .env
-notepad .env
 npm run route:arm -- --route npm-cache
+notepad .env
 npm run windows:ready -- --route npm-cache
 npm run windows:dev -- --route npm-cache
 ```
@@ -26,7 +25,7 @@ Set your key in `.env`:
 OPENAI_API_KEY=sk-...
 ```
 
-The `windows:dev` command keeps one route armed, checks readiness, and launches the desktop app only when the selected Windows route is ready.
+`route:arm` creates or updates `.env`, enables one selected cleanup type, and disables every other cleanup flag. The `windows:dev` command keeps one route armed, checks readiness, and launches the desktop app only when the selected Windows route is ready.
 Run `route:arm` before `windows:ready`; otherwise readiness correctly reports `route-arm-required` because no write route is enabled yet.
 `windows:ready` exits nonzero until the selected route can launch the native Windows desktop app; treat that as a stop signal and follow the JSON `nextSteps`.
 If `windows:ready` reports `toolchain-blocked`, run `npm install`, install or repair Node.js, Rustup/Cargo, and the Tauri Windows prerequisites, restart PowerShell, and run readiness again.
