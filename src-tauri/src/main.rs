@@ -11441,11 +11441,11 @@ fn same_normalized_path(left: &Path, right: &Path) -> bool {
 }
 
 fn generated_at() -> String {
-    let seconds = SystemTime::now()
+    let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
+        .map(|duration| duration.as_millis())
         .unwrap_or(0);
-    format!("unix:{seconds}")
+    format!("unix-ms:{millis}")
 }
 
 #[cfg(test)]

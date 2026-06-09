@@ -22,6 +22,10 @@ const EXECUTOR_ENV_VARS = [
 export function parseWorkflowTimestamp(value = "") {
   const text = String(value || "").trim();
   if (!text) return NaN;
+  const unixMsMatch = text.match(/^unix-ms:(\d+)$/i);
+  if (unixMsMatch) {
+    return Number(unixMsMatch[1]);
+  }
   const unixMatch = text.match(/^unix:(\d+)$/i);
   if (unixMatch) {
     return Number(unixMatch[1]) * 1000;
