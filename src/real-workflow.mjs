@@ -19,6 +19,16 @@ const EXECUTOR_ENV_VARS = [
   "SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR"
 ];
 
+export function parseWorkflowTimestamp(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return NaN;
+  const unixMatch = text.match(/^unix:(\d+)$/i);
+  if (unixMatch) {
+    return Number(unixMatch[1]) * 1000;
+  }
+  return Date.parse(text);
+}
+
 export function buildRouteSetupChecklist({ route = {}, runtime = {} } = {}) {
   const routeInput = route.routeInput || route.route || "";
   const envVar = route.envVar || "";
@@ -649,8 +659,8 @@ export function buildExecutionGate({
     : [];
   const acceptedPositiveExecution = Boolean(executionRecord?.accepted && Number(executionRecord?.bytes || 0) > 0);
   const baselineRequired = Boolean(acceptedPositiveExecution && workflowLocks?.proofAllowsNextExecutor !== false);
-  const activeScanTime = Date.parse(activeScanGeneratedAt || "");
-  const executionTime = Date.parse(executionRecord?.executedAt || "");
+  const activeScanTime = parseWorkflowTimestamp(activeScanGeneratedAt);
+  const executionTime = parseWorkflowTimestamp(executionRecord?.executedAt);
   const baselineCurrent = !baselineRequired || (
     Number.isFinite(activeScanTime) &&
     Number.isFinite(executionTime) &&
@@ -772,8 +782,8 @@ export function buildBaselinePromotion({
   workflowProofAccepted = false,
   supportBundleWritten = false
 } = {}) {
-  const executionTime = Date.parse(executionRecord?.executedAt || "");
-  const postRunTime = Date.parse(postRunScan?.generatedAt || "");
+  const executionTime = parseWorkflowTimestamp(executionRecord?.executedAt);
+  const postRunTime = parseWorkflowTimestamp(postRunScan?.generatedAt);
   const acceptedPositiveExecution = Boolean(executionRecord?.accepted && Number(executionRecord?.bytes || 0) > 0);
   const postRunScanCurrent = Boolean(
     Number.isFinite(executionTime) &&
@@ -1112,8 +1122,8 @@ export function buildPostRunProof({ candidate, executionRecord, postRunScan }) {
   const beforeBytes = Number(candidate.bytes || 0);
   const actualBytes = Number(targetEvidence.bytes || 0);
   const reclaimedBytes = Number(executionRecord.bytes || 0);
-  const generatedAt = Date.parse(postRunScan.generatedAt || "");
-  const executedAt = Date.parse(executionRecord.executedAt || "");
+  const generatedAt = parseWorkflowTimestamp(postRunScan.generatedAt);
+  const executedAt = parseWorkflowTimestamp(executionRecord.executedAt);
   const newerScan = Number.isFinite(generatedAt) && Number.isFinite(executedAt) && generatedAt >= executedAt;
   const expectedRemaining = Math.max(0, beforeBytes - reclaimedBytes);
   const matched = Boolean(newerScan && reclaimedBytes > 0 && actualBytes <= expectedRemaining + RESCAN_TOLERANCE_BYTES);

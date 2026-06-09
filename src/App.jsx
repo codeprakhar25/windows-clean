@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowLocks, formatBytes, renderInAppSupportBundleMarkdown } from "./real-workflow.mjs";
+import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, renderInAppSupportBundleMarkdown } from "./real-workflow.mjs";
 import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -2343,8 +2343,9 @@ function totalEntryBytes(entries = []) {
 
 function formatShortDate(value = "") {
   if (!value) return "not run";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+  const timestamp = parseWorkflowTimestamp(value);
+  if (!Number.isFinite(timestamp)) return value;
+  const date = new Date(timestamp);
   return date.toLocaleString();
 }
 
