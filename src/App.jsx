@@ -1907,19 +1907,47 @@ function buildItemCandidates(finding, recipe, runtime, options = {}) {
 }
 
 function buildManualFindings(scan) {
-  if (!scan?.findings?.length) return [];
-  return scan.findings
+  if (!scan) return [];
+  const findingRows = (scan.findings || [])
     .filter((finding) => {
       if (EXECUTOR_RECIPES[finding.recipeId] || ITEM_REVIEW_RECIPES[finding.recipeId]) return false;
       return Boolean(MANUAL_RECIPE_LABELS[finding.recipeId] || finding.recipeId.startsWith("custom-root-") || finding.recipeId.startsWith("drive-"));
     })
-    .map((finding) => ({
-      ...finding,
-      title: MANUAL_RECIPE_LABELS[finding.recipeId] || finding.title || "Manual review",
-      manualGuidance: buildManualFindingGuidance(finding),
-      reviewRows: buildManualFindingReviewRows(finding)
-    }))
-    .sort((left, right) => right.bytes - left.bytes);
+    .map((finding) => decorateManualFinding(finding));
+  const driveRows = (scan.driveInventory || [])
+    .filter((row) => row && (row.name || row.path) && Number(row.bytes || 0) > 0)
+    .slice(0, 8)
+    .map((row) => decorateManualFinding({
+      recipeId: `drive-${slugifyId(row.id || row.name || row.path || "inventory")}`,
+      title: `Drive inventory: ${row.name || row.path || "top-level entry"}`,
+      path: row.path || row.name || "",
+      bytes: Number(row.bytes || 0),
+      status: row.status || "unknown",
+      files: Number(row.files || 0),
+      dirs: Number(row.dirs || 0),
+      errors: Number(row.errors || 0),
+      note: row.note || `Top-level drive inventory classification: ${row.classification || "manual review"}.`,
+      items: []
+    }));
+  return [...findingRows, ...driveRows].sort((left, right) => right.bytes - left.bytes);
+}
+
+function decorateManualFinding(finding) {
+  return {
+    ...finding,
+    title: MANUAL_RECIPE_LABELS[finding.recipeId] || finding.title || "Manual review",
+    manualGuidance: buildManualFindingGuidance(finding),
+    reviewRows: buildManualFindingReviewRows(finding)
+  };
+}
+
+function slugifyId(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    || "entry";
 }
 
 async function dispatchExecutor(candidate, { planId, scanFingerprint, archiveDestination, permanentRemovalConfirmed }) {

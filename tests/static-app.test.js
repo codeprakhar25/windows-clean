@@ -136,6 +136,9 @@ assert(app.includes("noOpExecution: Boolean(workflowLocks.noOpExecution)"), "Ope
 assert(app.includes("agentTaskQueue"), "OpenAI context should include the app task queue that the advisor instructions require");
 assert(app.includes("manualReviewTargets"), "OpenAI context should include manual review targets");
 assert(app.includes("visibleTargets"), "OpenAI panel should unlock for executable or manual review findings");
+assert(app.includes("scan.driveInventory"), "manual findings should include native drive inventory evidence");
+assert(app.includes("Drive inventory:"), "drive inventory rows should be visible as manual review cards");
+assert(app.includes("slugifyId"), "drive inventory manual finding ids should be stable and normalized");
 assert(app.includes("selected-route-proof-reviewed"), "app workflow proof should require reviewed selected-route proof export");
 assert(!app.includes("selected-route-proof-import"), "app workflow proof should not require obsolete selected-route proof import");
 assert(app.includes("Export proof, let the in-app verifier accept it, and capture the support bundle before selecting another cleanup target."), "cleanup queue should explain the workflow proof and support bundle lock");
