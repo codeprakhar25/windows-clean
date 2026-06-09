@@ -206,6 +206,7 @@ assert(rustScanner.includes("spaceguard-real-workflow-proof.md"), "Rust proof ar
 assert(rustScanner.includes("spaceguard-selected-route-proof-packet.md"), "Rust proof artifact writer should allow selected-route proof export");
 assert(rustScanner.includes("spaceguard-workflow-proof-check.json"), "Rust proof artifact writer should allow workflow proof check export");
 assert(rustScanner.includes("spaceguard-support-bundle.md"), "Rust proof artifact writer should allow support bundle export");
+assert(rustScanner.includes("support bundle capture instead of another executor"), "native OpenAI advisor should recommend support bundle handoff while next executor is locked");
 assert(rustScanner.includes("execute_cleanup_plan"), "Rust backend should expose the guarded executor command");
 assert(rustScanner.includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "Rust backend should gate npm cleanup behind a route flag");
 assert(!rustScanner.includes("first-route-proof-required"), "Rust backend should not reject real-data routes behind seeded proof ceremony");
