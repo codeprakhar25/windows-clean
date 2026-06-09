@@ -49,7 +49,7 @@ let routeSetup;
   });
   assert.strictEqual(readyPacket.status, "ready", "enabled npm route should be ready for native dev launch");
   assert.strictEqual(readyPacket.enabledFlags.length, 1, "ready packet should record the single enabled flag");
-  assert(readyPacket.nextSteps.some((step) => step.includes("npm run native:dev")), "ready packet should route to native dev launch");
+  assert(readyPacket.nextSteps.some((step) => step.includes("npm run windows:dev -- --route npm-cache")), "ready packet should route to Windows dev launch");
 
   const tempReadyPacket = runPacket(["--route", "known-temp-delete"], { SPACEGUARD_ENABLE_TEMP_EXECUTOR: "1" });
   assert.strictEqual(tempReadyPacket.status, "ready", "known temp cleanup should remain launchable as a real route");

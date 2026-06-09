@@ -140,7 +140,7 @@ function main() {
     nextSteps: [
       "Set OPENAI_API_KEY in .env if it is still blank.",
       `Run npm run setup:route -- --route ${selected.aliases[0] || selected.route}.`,
-      "Run npm run native:dev and complete scan, review, consent, execute, rescan, export proof in the app."
+      `Run npm run windows:dev -- --route ${selected.aliases[0] || selected.route} and complete scan, review, consent, execute, rescan, export proof in the app.`
     ]
   }, null, 2));
 }

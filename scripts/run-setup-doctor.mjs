@@ -137,6 +137,7 @@ export function buildSetupDoctorReport({
       routeSetup: routeSetupCommand,
       workflowProofValidation: workflowProofValidationCommand,
       supportBundle: supportBundleCommand,
+      windowsDev: `npm run windows:dev -- --route ${routeInput}`,
       nativeDev: "npm run native:dev"
     },
     nextSteps: buildNextSteps({ openAiConfigured: openAiKey.source !== "missing", enabledFlags, routeInput, routeArmCommand })
@@ -213,7 +214,7 @@ function buildRealWorkflow({
       },
       {
         id: "native-scan",
-        command: "npm run native:dev",
+        command: `npm run windows:dev -- --route ${routeInput}`,
         panel: "real-data-readiness-panel",
         detail: "Launch the desktop shell, run a native read-only scan, and confirm scan fingerprint and target evidence."
       },
@@ -273,9 +274,9 @@ function buildNextSteps({ openAiConfigured, enabledFlags, routeInput = "npm-cach
   }
   steps.push(`Run npm run setup:route -- --route ${routeInput} with the route you plan to validate.`);
   if (!enabledFlags.length) {
-    steps.push("Run npm run native:dev after route:arm for Windows real-route validation.");
+    steps.push(`Run npm run windows:dev -- --route ${routeInput} after route:arm for Windows real-route validation.`);
   } else if (enabledFlags.length === 1) {
-    steps.push(`Launch npm run native:dev with ${enabledFlags[0]} enabled, run one scoped executor, export proof in the app, then run npm run support:bundle before enabling another route.`);
+    steps.push(`Launch npm run windows:dev -- --route ${routeInput} with ${enabledFlags[0]} enabled, run one scoped executor, export proof in the app, then run npm run support:bundle before enabling another route.`);
   } else {
     steps.push("Turn off all but one scoped executor flag before real cleanup validation.");
   }

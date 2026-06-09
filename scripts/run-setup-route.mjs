@@ -239,6 +239,7 @@ export function buildPacket({ routeInput = "", env = {} } = {}) {
       disablePowerShell: `$env:${selected.envVar}="0"`,
       setupRoute: `npm run setup:route -- --route ${selected.aliases[0] || selected.route}`,
       openAiSmoke: `npm run openai:smoke -- --route ${selected.aliases[0] || selected.route}`,
+      windowsDev: `npm run windows:dev -- --route ${selected.aliases[0] || selected.route}`,
       nativeDev: "npm run native:dev"
     },
     nextSteps: buildNextSteps({ status, selected, otherEnabled })
@@ -259,7 +260,7 @@ export function buildRouteListPacket({ env = {} } = {}) {
 function buildNextSteps({ status, selected, otherEnabled = [] }) {
   if (status === "ready") {
     return [
-      `Launch npm run native:dev with only ${selected.envVar}=1 enabled.`,
+      `Launch npm run windows:dev -- --route ${selected.aliases[0] || selected.route} with only ${selected.envVar}=1 enabled.`,
       `In the app, select route ${selected.route} and use ${selected.panelId}.`,
       "Run exactly one scoped executor, then complete post-run native rescan proof before enabling another route."
     ];
@@ -274,7 +275,7 @@ function buildNextSteps({ status, selected, otherEnabled = [] }) {
   return [
     `Run npm run route:arm -- --route ${selected.aliases[0] || selected.route} to enable this route and disable competing route flags.`,
     `This sets ${selected.envVar}=1 in .env.`,
-    "Run setup:route again, then launch npm run native:dev."
+    "Run setup:route again, then launch npm run windows:dev."
   ];
 }
 

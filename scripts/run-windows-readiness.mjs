@@ -168,10 +168,10 @@ function buildReadinessNextSteps({ status, routeInput, routePacket, doctor, wind
     steps.push(`Run npm run openai:smoke -- --local-contract --route ${routeInput} and fix the reported local contract blocker.`);
   }
   if (status === "ready-for-native-dev") {
-    steps.push("Run npm run native:dev.");
+    steps.push(`Run npm run windows:dev -- --route ${routeInput}.`);
     steps.push("In the app: scan, select one ready row, consent, execute, post-run rescan, export proof.");
   } else if (windowsHost && routePacket.status === "ready" && contract.passed) {
-    steps.push("Run npm run native:dev after resolving any setup warnings above.");
+    steps.push(`Run npm run windows:dev -- --route ${routeInput} after resolving any setup warnings above.`);
   }
   return steps;
 }
