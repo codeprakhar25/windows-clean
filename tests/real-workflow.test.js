@@ -286,6 +286,24 @@ const assert = require("assert");
   assert.strictEqual(scanNextGuide.actionEnabled, true, "workflow guide should allow the primary scan action when connected");
   assert(scanNextGuide.steps.some((step) => step.id === "scan" && step.status === "current"), "workflow guide should mark the scan step as current");
 
+  const scanBusyGuide = workflow.buildWorkflowGuide({
+    nativeConnected: true,
+    scan: null,
+    scanStatus: "scanning",
+    candidates: [],
+    selectedCandidate: null,
+    executionGate: missingConsentGate,
+    executionRecord: null,
+    postRunProof: { status: "not-run", scanGeneratedAt: "" },
+    proofReviewed: false,
+    workflowProofAccepted: false,
+    supportBundleWritten: false,
+    canExportProof: false
+  });
+  assert.strictEqual(scanBusyGuide.currentStepId, "scan", "workflow guide should still show scan as current while scan is running");
+  assert.strictEqual(scanBusyGuide.actionBusy, true, "workflow guide should mark scan action busy while native scan is running");
+  assert.strictEqual(scanBusyGuide.actionEnabled, false, "workflow guide should not allow duplicate scan dispatch while scan is running");
+
   const selectNextGuide = workflow.buildWorkflowGuide({
     nativeConnected: true,
     scan: { generatedAt: "2026-06-08T14:59:00.000Z" },
@@ -358,6 +376,24 @@ const assert = require("assert");
   assert.strictEqual(exportNextGuide.primaryAction, "Export proof packet", "workflow guide should name proof export as the next handoff action");
   assert.strictEqual(exportNextGuide.primaryActionKind, "export-proof", "workflow guide should expose the proof export action kind");
   assert.strictEqual(exportNextGuide.actionEnabled, true, "workflow guide should allow proof export only when the proof export gate is ready");
+
+  const exportBusyGuide = workflow.buildWorkflowGuide({
+    nativeConnected: true,
+    scan: { generatedAt: "2026-06-08T14:59:00.000Z" },
+    candidates: [gateCandidate],
+    selectedCandidate: gateCandidate,
+    executionGate: readyExecutionGate,
+    executionRecord: { accepted: true, bytes: 1024 },
+    postRunProof: { status: "matched", scanGeneratedAt: "2026-06-08T15:01:00.000Z" },
+    proofReviewed: true,
+    workflowProofAccepted: false,
+    supportBundleWritten: false,
+    canExportProof: true,
+    proofExportStatus: "running"
+  });
+  assert.strictEqual(exportBusyGuide.currentStepId, "export-proof", "workflow guide should keep export as current while proof export is running");
+  assert.strictEqual(exportBusyGuide.actionBusy, true, "workflow guide should mark proof export busy during export");
+  assert.strictEqual(exportBusyGuide.actionEnabled, false, "workflow guide should not allow duplicate proof export dispatch");
 
   const completeGuide = workflow.buildWorkflowGuide({
     nativeConnected: true,

@@ -795,15 +795,18 @@ export function buildExecutionGate({
 export function buildWorkflowGuide({
   nativeConnected = false,
   scan = null,
+  scanStatus = "idle",
   candidates = [],
   selectedCandidate = null,
   executionGate = null,
+  executionStatus = "idle",
   executionRecord = null,
   postRunProof = null,
   proofReviewed = false,
   workflowProofAccepted = false,
   supportBundleWritten = false,
-  canExportProof = false
+  canExportProof = false,
+  proofExportStatus = "idle"
 } = {}) {
   const scanReady = Boolean(scan?.generatedAt);
   const candidateRows = Array.isArray(candidates) ? candidates : [];
@@ -876,6 +879,13 @@ export function buildWorkflowGuide({
     actionEnabled = false;
     primaryDetail = "The workflow proof and support bundle handoff are complete; another route can be considered.";
   }
+  const actionBusy = Boolean(
+    (primaryActionKind === "run-scan" && scanStatus === "scanning") ||
+    (primaryActionKind === "run-post-run-rescan" && scanStatus === "rescanning") ||
+    (primaryActionKind === "execute-cleanup" && executionStatus === "running") ||
+    (primaryActionKind === "export-proof" && proofExportStatus === "running")
+  );
+  actionEnabled = Boolean(actionEnabled && !actionBusy);
 
   const order = [
     workflowGuideStep("connect", "Connect", "Desktop bridge", "Start the Windows desktop shell."),
@@ -902,6 +912,7 @@ export function buildWorkflowGuide({
     primaryAction,
     primaryActionKind,
     primaryTargetId: recommendedTarget?.id || "",
+    actionBusy,
     actionEnabled,
     primaryDetail,
     steps

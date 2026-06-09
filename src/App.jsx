@@ -380,17 +380,20 @@ function App() {
     () => buildWorkflowGuide({
       nativeConnected,
       scan,
+      scanStatus,
       candidates,
       selectedCandidate,
       executionGate,
+      executionStatus,
       executionRecord,
       postRunProof,
       proofReviewed,
       workflowProofAccepted,
       supportBundleWritten,
-      canExportProof
+      canExportProof,
+      proofExportStatus
     }),
-    [nativeConnected, scan, candidates, selectedCandidate, executionGate, executionRecord, postRunProof, proofReviewed, workflowProofAccepted, supportBundleWritten, canExportProof]
+    [nativeConnected, scan, scanStatus, candidates, selectedCandidate, executionGate, executionStatus, executionRecord, postRunProof, proofReviewed, workflowProofAccepted, supportBundleWritten, canExportProof, proofExportStatus]
   );
   const canExecute = executionGate.ready;
   const targetSwitchLocked = workflowLocks.targetSwitchLocked;
@@ -1071,7 +1074,9 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
 function WorkflowGuidePanel({ workflowGuide, onPrimaryAction }) {
   const current = workflowGuide.steps.find((step) => step.id === workflowGuide.currentStepId) || workflowGuide.steps[0];
   const ActionIcon =
-    workflowGuide.primaryActionKind === "run-scan" || workflowGuide.primaryActionKind === "run-post-run-rescan"
+    workflowGuide.actionBusy
+      ? Loader2
+      : workflowGuide.primaryActionKind === "run-scan" || workflowGuide.primaryActionKind === "run-post-run-rescan"
       ? RefreshCcw
       : workflowGuide.primaryActionKind === "export-proof"
         ? Download
@@ -1105,10 +1110,10 @@ function WorkflowGuidePanel({ workflowGuide, onPrimaryAction }) {
               <Button
                 type="button"
                 size="sm"
-                disabled={!workflowGuide.actionEnabled}
+                disabled={!workflowGuide.actionEnabled || workflowGuide.actionBusy}
                 onClick={onPrimaryAction}
               >
-                <ActionIcon className="h-4 w-4" />
+                <ActionIcon className={`h-4 w-4 ${workflowGuide.actionBusy ? "animate-spin" : ""}`} />
                 {workflowGuide.primaryAction}
               </Button>
             </div>
