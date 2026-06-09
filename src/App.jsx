@@ -2184,31 +2184,41 @@ function buildAgentContext({
   supportBundleWritten = false,
   workflowLocks = buildWorkflowLocks({ executionRecord, workflowProofAccepted, supportBundleWritten })
 }) {
-  const cleanupQueue = candidates.slice(0, 24).map((candidate) => ({
-    id: candidate.id,
-    title: candidate.title,
-    route: candidate.route,
-    routeInput: candidate.routeInput,
-    actionType: candidate.actionType,
-    targetId: candidate.id,
-    bytes: Number(candidate.bytes || 0),
-    canExecute: Boolean(candidate.canExecute),
-    blockedReason: candidate.blockedReason || "",
-    targetPath: redactPath(candidate.targetPath || "")
-  }));
-  const manualReviewTargets = manualFindings.slice(0, 24).map((finding) => ({
-    id: `manual:${finding.recipeId || "finding"}:${finding.path || finding.title || ""}`,
-    title: finding.title || "Manual review",
-    route: finding.manualGuidance?.kind || "manual-review",
-    actionType: "manual-only",
-    targetId: `manual:${finding.recipeId || "finding"}:${finding.path || finding.title || ""}`,
-    bytes: Number(finding.bytes || 0),
-    status: finding.status || "unknown",
-    confidence: finding.manualGuidance?.confidence || "manual-only",
-    targetPath: redactPath(finding.path || ""),
-    reason: finding.manualGuidance?.primaryAction || finding.note || "Manual review only.",
-    blockedActions: Array.isArray(finding.manualGuidance?.blockedActions) ? finding.manualGuidance.blockedActions.slice(0, 4) : []
-  }));
+  const agentCandidateIds = new Map();
+  const cleanupQueue = candidates.slice(0, 24).map((candidate, index) => {
+    const agentTargetId = buildAgentCleanupTargetId(candidate, index);
+    agentCandidateIds.set(candidate.id, agentTargetId);
+    return {
+      id: agentTargetId,
+      title: candidate.title,
+      route: candidate.route,
+      routeInput: candidate.routeInput,
+      actionType: candidate.actionType,
+      targetId: agentTargetId,
+      bytes: Number(candidate.bytes || 0),
+      canExecute: Boolean(candidate.canExecute),
+      blockedReason: redactAgentContextText(candidate.blockedReason || ""),
+      targetPath: redactPath(candidate.targetPath || "")
+    };
+  });
+  const manualReviewTargets = manualFindings.slice(0, 24).map((finding, index) => {
+    const agentTargetId = buildAgentManualTargetId(finding, index);
+    return {
+      id: agentTargetId,
+      title: finding.title || "Manual review",
+      route: finding.manualGuidance?.kind || "manual-review",
+      actionType: "manual-only",
+      targetId: agentTargetId,
+      bytes: Number(finding.bytes || 0),
+      status: finding.status || "unknown",
+      confidence: finding.manualGuidance?.confidence || "manual-only",
+      targetPath: redactPath(finding.path || ""),
+      reason: redactAgentContextText(finding.manualGuidance?.primaryAction || finding.note || "Manual review only."),
+      blockedActions: Array.isArray(finding.manualGuidance?.blockedActions)
+        ? finding.manualGuidance.blockedActions.slice(0, 4).map((row) => redactAgentContextText(row))
+        : []
+    };
+  });
   const targetsForRoute = (route) => cleanupQueue.filter((candidate) => candidate.route === route);
   const execution = executionRecord ? {
     planId,
@@ -2230,13 +2240,13 @@ function buildAgentContext({
       ? workflowProofCheck.blockers.map((blocker) => ({
           id: blocker.id || "",
           label: blocker.label || "",
-          detail: blocker.detail || ""
+          detail: redactAgentContextText(blocker.detail || "")
         }))
       : [],
     canRunPostRunRescan: Boolean(executionRecord),
     rescanComparisonStatus: postRunProof.status,
     postRunScanEvidence: Boolean(postRunProof.scanGeneratedAt),
-    largeFileArchiveDestination: String(archiveDestination || "").trim(),
+    largeFileArchiveDestination: redactPath(String(archiveDestination || "").trim()),
     archiveDestinationReady: Boolean(String(archiveDestination || "").trim()),
     permanentRemovalConfirmed: Boolean(permanentRemovalConfirmed)
   } : {
@@ -2251,7 +2261,7 @@ function buildAgentContext({
     canRunPostRunRescan: false,
     rescanComparisonStatus: "not-run",
     postRunScanEvidence: false,
-    largeFileArchiveDestination: String(archiveDestination || "").trim(),
+    largeFileArchiveDestination: redactPath(String(archiveDestination || "").trim()),
     archiveDestinationReady: Boolean(String(archiveDestination || "").trim()),
     permanentRemovalConfirmed: Boolean(permanentRemovalConfirmed)
   };
@@ -2302,7 +2312,7 @@ function buildAgentContext({
     recycleBinTargets: targetsForRoute("shell-recycle-bin"),
     agentTaskQueue,
     selected: selectedCandidate ? {
-      id: selectedCandidate.id,
+      id: agentCandidateIds.get(selectedCandidate.id) || buildAgentCleanupTargetId(selectedCandidate, 0),
       route: selectedCandidate.route,
       routeInput: selectedCandidate.routeInput,
       canExecute: selectedCandidate.canExecute,
@@ -2310,6 +2320,16 @@ function buildAgentContext({
     } : null,
     execution
   };
+}
+
+function buildAgentCleanupTargetId(candidate = {}, index = 0) {
+  const base = candidate.routeInput || candidate.actionType || candidate.route || candidate.recipeId || "cleanup-target";
+  return `${slugifyId(base)}-${index + 1}`;
+}
+
+function buildAgentManualTargetId(finding = {}, index = 0) {
+  const base = finding.manualGuidance?.kind || finding.status || "manual-review";
+  return `manual-${slugifyId(base)}-${index + 1}`;
 }
 
 function getAgentProofStatus(executionRecord, postRunProof, workflowProofAccepted = false) {
@@ -2321,9 +2341,18 @@ function getAgentProofStatus(executionRecord, postRunProof, workflowProofAccepte
 
 function redactPath(value = "") {
   return String(value || "")
-    .replace(/C:\\Users\\[^\\]+/gi, "%USERPROFILE%")
-    .replace(/C:\\Windows/gi, "%WINDIR%")
-    .replace(/C:\\Program Files/gi, "%PROGRAMFILES%");
+    .replace(/[A-Za-z]:\\Users\\[^\\]+\\AppData\\LocalLow/gi, "%USERPROFILE%\\AppData\\LocalLow")
+    .replace(/[A-Za-z]:\\Users\\[^\\]+\\AppData\\Local/gi, "%LOCALAPPDATA%")
+    .replace(/[A-Za-z]:\\Users\\[^\\]+\\AppData\\Roaming/gi, "%APPDATA%")
+    .replace(/[A-Za-z]:\\Users\\[^\\]+/gi, "%USERPROFILE%")
+    .replace(/[A-Za-z]:\\Windows/gi, "%WINDIR%")
+    .replace(/[A-Za-z]:\\Program Files \(x86\)/gi, "%PROGRAMFILES(X86)%")
+    .replace(/[A-Za-z]:\\Program Files/gi, "%PROGRAMFILES%")
+    .replace(/[A-Za-z]:\\ProgramData/gi, "%PROGRAMDATA%");
+}
+
+function redactAgentContextText(value = "") {
+  return redactPath(value);
 }
 
 function toProofMarkdown(title, packet) {
