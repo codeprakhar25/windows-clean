@@ -9,6 +9,7 @@ npm install
 Copy-Item .env.example .env
 notepad .env
 npm run route:arm -- --route npm-cache
+npm run windows:ready -- --route npm-cache
 npm run native:dev
 ```
 
@@ -35,6 +36,7 @@ npm run real-app:shell
 npm test
 npm run build
 npm run route:arm -- --route npm-cache --dry-run
+npm run windows:ready -- --route npm-cache
 npm run setup:doctor
 npm run setup:route -- --route npm-cache
 npm run openai:smoke -- --route npm-cache

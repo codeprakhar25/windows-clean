@@ -16,6 +16,7 @@ npm install
 Copy-Item .env.example .env
 notepad .env
 npm run route:arm -- --route npm-cache
+npm run windows:ready -- --route npm-cache
 ```
 
 Set your key in `.env`:
@@ -39,6 +40,7 @@ The desktop app should show the native bridge as connected. A normal browser tab
 ```powershell
 npm run setup:doctor
 npm run setup:route -- --route npm-cache
+npm run windows:ready -- --route npm-cache
 npm run openai:smoke -- --local-contract --route npm-cache
 npm run openai:smoke -- --route npm-cache
 ```
