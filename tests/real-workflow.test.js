@@ -286,6 +286,43 @@ const assert = require("assert");
   assert.strictEqual(scanNextGuide.actionEnabled, true, "workflow guide should allow the primary scan action when connected");
   assert(scanNextGuide.steps.some((step) => step.id === "scan" && step.status === "current"), "workflow guide should mark the scan step as current");
 
+  const selectNextGuide = workflow.buildWorkflowGuide({
+    nativeConnected: true,
+    scan: { generatedAt: "2026-06-08T14:59:00.000Z" },
+    candidates: [
+      { id: "blocked-target", title: "blocked target", canExecute: false },
+      { id: "ready-target", title: "ready target", canExecute: true }
+    ],
+    selectedCandidate: null,
+    executionGate: missingConsentGate,
+    executionRecord: null,
+    postRunProof: { status: "not-run", scanGeneratedAt: "" },
+    proofReviewed: false,
+    workflowProofAccepted: false,
+    supportBundleWritten: false,
+    canExportProof: false
+  });
+  assert.strictEqual(selectNextGuide.currentStepId, "select", "workflow guide should move to target selection after a scan finds candidates");
+  assert.strictEqual(selectNextGuide.primaryActionKind, "select-target", "workflow guide should expose the select-target action kind");
+  assert.strictEqual(selectNextGuide.primaryTargetId, "ready-target", "workflow guide should recommend the first executable target when available");
+  assert.strictEqual(selectNextGuide.actionEnabled, true, "workflow guide should allow selecting the recommended target");
+
+  const emptySelectGuide = workflow.buildWorkflowGuide({
+    nativeConnected: true,
+    scan: { generatedAt: "2026-06-08T14:59:00.000Z" },
+    candidates: [],
+    selectedCandidate: null,
+    executionGate: missingConsentGate,
+    executionRecord: null,
+    postRunProof: { status: "not-run", scanGeneratedAt: "" },
+    proofReviewed: false,
+    workflowProofAccepted: false,
+    supportBundleWritten: false,
+    canExportProof: false
+  });
+  assert.strictEqual(emptySelectGuide.currentStepId, "select", "workflow guide should still explain selection when a scan has no route candidates");
+  assert.strictEqual(emptySelectGuide.actionEnabled, false, "workflow guide should not enable selection when no candidate exists");
+
   const executeNextGuide = workflow.buildWorkflowGuide({
     nativeConnected: true,
     scan: { generatedAt: "2026-06-08T14:59:00.000Z" },

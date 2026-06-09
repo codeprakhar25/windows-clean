@@ -125,6 +125,8 @@ assert(app.includes("Guided workflow"), "app should render a single workflow gui
 assert(app.includes("workflowGuide.currentStepId"), "workflow guide should expose the current step in the renderer");
 assert(app.includes("runWorkflowGuideAction"), "workflow guide should route enabled actions through existing guarded app handlers");
 assert(app.includes("workflowGuide.primaryActionKind"), "workflow guide renderer should branch on the tested current action kind");
+assert(app.includes("selectWorkflowCandidate"), "workflow guide target selection should reuse the guarded selection reset helper");
+assert(app.includes("workflowGuide.primaryTargetId"), "workflow guide selection should use the tested recommended target id");
 assert(app.includes("disabled={!workflowGuide.actionEnabled}"), "workflow guide action button should stay disabled when the current step is review-only");
 assert(app.includes("Execution prerequisites"), "user gate should render route-specific execution prerequisite blockers");
 assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
@@ -169,7 +171,7 @@ assert(app.includes("setScan(baselinePromotion.activeScan)"), "proof export shou
 assert(app.includes("Post-run scan promoted as the active cleanup baseline."), "proof export should tell the operator when baseline promotion succeeds");
 assert(!app.includes("npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted"), "proof panel should not rely on a manual CLI acceptance checkbox");
 assert(
-  /setSelectedId=\{\(id\) => \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setPostRunScan\(null\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}\}/.test(app),
+  /function selectWorkflowCandidate\(id\) \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setPostRunScan\(null\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}/.test(app),
   "selecting a different cleanup target should clear stale execution, rescan, and proof export state"
 );
 assert(

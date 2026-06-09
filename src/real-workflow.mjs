@@ -808,6 +808,7 @@ export function buildWorkflowGuide({
   const scanReady = Boolean(scan?.generatedAt);
   const candidateRows = Array.isArray(candidates) ? candidates : [];
   const hasSelectableTargets = candidateRows.length > 0;
+  const recommendedTarget = candidateRows.find((candidate) => candidate?.canExecute) || candidateRows[0] || null;
   const targetSelected = Boolean(selectedCandidate);
   const executed = Boolean(executionRecord);
   const proofScanCaptured = Boolean(postRunProof?.scanGeneratedAt);
@@ -830,7 +831,7 @@ export function buildWorkflowGuide({
     currentStepId = "select";
     primaryAction = hasSelectableTargets ? "Select cleanup target" : "Review findings or choose cleanup type";
     primaryActionKind = "select-target";
-    actionEnabled = false;
+    actionEnabled = Boolean(recommendedTarget?.id);
     primaryDetail = hasSelectableTargets
       ? "Pick one measured cleanup row that matches the armed route."
       : "The current scan has no selectable cleanup row for this route; review manual findings or arm another route.";
@@ -900,6 +901,7 @@ export function buildWorkflowGuide({
     currentStepId,
     primaryAction,
     primaryActionKind,
+    primaryTargetId: recommendedTarget?.id || "",
     actionEnabled,
     primaryDetail,
     steps

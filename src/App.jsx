@@ -669,6 +669,10 @@ function App() {
       await runRealScan();
       return;
     }
+    if (workflowGuide.primaryActionKind === "select-target") {
+      selectWorkflowCandidate(workflowGuide.primaryTargetId);
+      return;
+    }
     if (workflowGuide.primaryActionKind === "execute-cleanup") {
       await executeSelectedCleanup();
       return;
@@ -680,6 +684,27 @@ function App() {
     if (workflowGuide.primaryActionKind === "export-proof") {
       await exportProofPacket();
     }
+  }
+
+  function selectWorkflowCandidate(id) {
+    if (!id) return;
+    if (targetSwitchLocked && id !== selectedId) return;
+    setSelectedId(id);
+    setExecutionResult(null);
+    setExecutionRecord(null);
+    setPostRunScan(null);
+    setExecutionStatus("idle");
+    setExecutionError("");
+    setArchiveDestination("");
+    setConsentChecked(false);
+    setConfirmationText("");
+    setPermanentRemovalConfirmed(false);
+    setProofReviewed(false);
+    setWorkflowProofAccepted(false);
+    setWorkflowProofCheck(null);
+    setSupportBundleWrite(null);
+    setProofExportStatus("idle");
+    setProofExportMessage("");
   }
 
   if (!nativeConnected) {
@@ -748,25 +773,7 @@ function App() {
             candidates={candidates}
             selectedId={selectedId}
             targetSwitchLocked={targetSwitchLocked}
-            setSelectedId={(id) => {
-              if (targetSwitchLocked && id !== selectedId) return;
-              setSelectedId(id);
-              setExecutionResult(null);
-              setExecutionRecord(null);
-              setPostRunScan(null);
-              setExecutionStatus("idle");
-              setExecutionError("");
-              setArchiveDestination("");
-              setConsentChecked(false);
-              setConfirmationText("");
-              setPermanentRemovalConfirmed(false);
-              setProofReviewed(false);
-              setWorkflowProofAccepted(false);
-              setWorkflowProofCheck(null);
-              setSupportBundleWrite(null);
-              setProofExportStatus("idle");
-              setProofExportMessage("");
-            }}
+            setSelectedId={selectWorkflowCandidate}
             scan={scan}
           />
           <DecisionPanel
