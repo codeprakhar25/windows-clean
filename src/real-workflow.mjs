@@ -589,14 +589,8 @@ export function buildRouteReadiness({ recipe = {}, finding = {}, runtime = {}, s
     };
   }
 
-  const routeFlagEnabled = Boolean(runtime?.executorFlags?.[recipe.flagKey]);
-  const multipleFlags = runtime?.executorScopeStatus === "multiple-scoped-flags";
-  const enabledFlags = Array.isArray(runtime?.enabledScopedExecutorFlags)
-    ? runtime.enabledScopedExecutorFlags
-    : [];
   const findingStatus = finding.status || "unknown";
-  const selectedRoute = String(selectedRouteInput || "").trim();
-  const selectedRouteMatches = !selectedRoute || !recipe.routeInput || selectedRoute === recipe.routeInput;
+  const executorAvailable = Boolean(runtime?.executorFlags?.[recipe.flagKey]);
 
   const rows = [
     guardrailRow({
@@ -612,38 +606,20 @@ export function buildRouteReadiness({ recipe = {}, finding = {}, runtime = {}, s
       detail: runtime?.executeCleanupPlan ? "Native executor command is available." : "Native executor command is unavailable."
     }),
     guardrailRow({
-      id: "single-route-scope",
-      label: "Single route scope",
-      passed: !multipleFlags,
-      detail: multipleFlags
-        ? `Turn off all but one scoped executor flag. Enabled: ${enabledFlags.join(", ") || "multiple flags"}.`
-        : "No competing scoped executor flags detected."
+      id: "built-in-allowlist",
+      label: "Built-in allowlist",
+      passed: executorAvailable,
+      detail: executorAvailable
+        ? `${recipe.label || recipe.routeInput || "This cleanup"} is available through native allowlists.`
+        : "This cleanup executor is not available in the current runtime."
     }),
     guardrailRow({
-      id: "route-flag",
-      label: "Route flag",
-      passed: routeFlagEnabled,
-      detail: routeFlagEnabled
-        ? `${recipe.envVar}=1 is active for this route.`
-        : `Set ${recipe.envVar}=1 in .env and restart the desktop app.`
-    }),
-    guardrailRow({
-      id: "selected-route-setup",
-      label: "Selected route setup",
-      passed: selectedRouteMatches,
-      detail: selectedRouteMatches
-        ? selectedRoute
-          ? `${selectedRoute} is selected in the route setup wizard.`
-          : "No route setup selection was provided by this caller."
-        : `Select ${recipe.routeInput} in the route setup wizard before execution.`
-    }),
-    guardrailRow({
-      id: "real-run-authority",
-      label: "Real-run authority",
+      id: "production-cleanup",
+      label: "Production cleanup",
       passed: Boolean(runtime?.realRunEnabled && runtime?.destructiveCommands),
       detail: runtime?.realRunEnabled && runtime?.destructiveCommands
-        ? "Runtime allows exactly one scoped mutating executor."
-        : "Runtime does not report real-run authority for the single selected route."
+        ? "Runtime allows guarded cleanup after user confirmation."
+        : "Runtime does not report cleanup authority."
     }),
     guardrailRow({
       id: "native-finding-status",
@@ -747,8 +723,6 @@ export function buildExecutionPrerequisites({
 export function buildExecutionGate({
   candidate = null,
   consentChecked = false,
-  confirmationText = "",
-  expectedConfirmation = "",
   executionPrerequisites = { ready: true, blockers: [] },
   scanFingerprint = "",
   executionStatus = "idle",
@@ -756,20 +730,9 @@ export function buildExecutionGate({
   executionRecord = null,
   activeScanGeneratedAt = ""
 } = {}) {
-  const expected = String(expectedConfirmation || "").trim();
-  const actual = String(confirmationText || "").trim();
   const prerequisiteBlockers = Array.isArray(executionPrerequisites?.blockers)
     ? executionPrerequisites.blockers
     : [];
-  const acceptedPositiveExecution = Boolean(executionRecord?.accepted && Number(executionRecord?.bytes || 0) > 0);
-  const baselineRequired = Boolean(acceptedPositiveExecution && workflowLocks?.proofAllowsNextExecutor !== false);
-  const activeScanTime = parseWorkflowTimestamp(activeScanGeneratedAt);
-  const executionTime = parseWorkflowTimestamp(executionRecord?.executedAt);
-  const baselineCurrent = !baselineRequired || (
-    Number.isFinite(activeScanTime) &&
-    Number.isFinite(executionTime) &&
-    activeScanTime >= executionTime
-  );
   const rows = [
     guardrailRow({
       id: "selected-target",
@@ -790,12 +753,6 @@ export function buildExecutionGate({
       detail: consentChecked ? "The operator checked the current-plan consent box." : "Check the current-plan consent box before execution."
     }),
     guardrailRow({
-      id: "confirmation-phrase",
-      label: "Confirmation phrase",
-      passed: Boolean(expected && actual === expected),
-      detail: expected && actual === expected ? "Confirmation phrase matches the selected route." : `Type exactly ${expected || "the selected route confirmation phrase"}.`
-    }),
-    guardrailRow({
       id: "scan-fingerprint",
       label: "Current scan fingerprint",
       passed: Boolean(String(scanFingerprint || "").trim()),
@@ -808,24 +765,6 @@ export function buildExecutionGate({
       detail: executionPrerequisites?.ready !== false
         ? "Route-specific execution prerequisites are satisfied."
         : `Resolve ${prerequisiteBlockers.length || 1} route-specific prerequisite blocker(s).`
-    }),
-    guardrailRow({
-      id: "proof-handoff",
-      label: "Proof handoff",
-      passed: workflowLocks?.proofAllowsNextExecutor !== false,
-      detail: workflowLocks?.proofAllowsNextExecutor !== false
-        ? "Workflow lock policy allows executor dispatch."
-        : "Export proof and capture the support bundle before another executor dispatch."
-    }),
-    guardrailRow({
-      id: "baseline-scan-current",
-      label: "Active scan baseline",
-      passed: baselineCurrent,
-      detail: baselineCurrent
-        ? baselineRequired
-          ? "Active cleanup queue scan is newer than the accepted execution."
-          : "No post-execution baseline refresh is required for this dispatch."
-        : "Run a fresh real scan so the cleanup queue uses post-execution evidence before another executor dispatch."
     }),
     guardrailRow({
       id: "executor-not-running",
@@ -873,7 +812,7 @@ export function buildWorkflowGuide({
   const proofScanCaptured = Boolean(postRunProof?.scanGeneratedAt);
   const proofMatched = postRunProof?.status === "matched";
   const noOpExecution = Boolean(executionRecord?.accepted && Number(executionRecord?.bytes || 0) <= 0);
-  const handoffComplete = Boolean(noOpExecution || (workflowProofAccepted && supportBundleWritten));
+  const cleanupFlowComplete = Boolean(noOpExecution || (executed && proofScanCaptured));
 
   let currentStepId = "connect";
   let primaryAction = "Connect Windows desktop app";
@@ -893,54 +832,38 @@ export function buildWorkflowGuide({
     primaryActionKind = "select-target";
     actionEnabled = Boolean(recommendedTarget?.id);
     primaryDetail = hasSelectableTargets
-      ? "Pick one measured cleanup row that matches the armed route."
-      : "The current scan has no selectable cleanup row for this route; review manual findings or arm another route.";
+      ? "Pick one measured cleanup row that matches a built-in cleanup."
+      : "The current scan has no selectable cleanup row; review manual findings or scan again.";
   } else if (nativeConnected && scanReady && targetSelected && !executed && !executionGate?.ready) {
     currentStepId = "consent";
     primaryAction = "Resolve user gate";
     primaryActionKind = "resolve-user-gate";
     actionEnabled = false;
-    primaryDetail = executionGate?.primary || "Review route readiness, check consent, and type the confirmation phrase.";
+    primaryDetail = executionGate?.primary || "Review route readiness and check consent before cleanup.";
   } else if (nativeConnected && scanReady && targetSelected && !executed) {
     currentStepId = "execute";
     primaryAction = "Execute selected cleanup";
     primaryActionKind = "execute-cleanup";
     actionEnabled = Boolean(executionGate?.ready);
-    primaryDetail = "Run the scoped native executor only after the selected target and consent gate are ready.";
+    primaryDetail = "Run the allowlisted native executor only after the selected target and consent gate are ready.";
   } else if (nativeConnected && noOpExecution) {
     currentStepId = "next-route";
     primaryAction = "Ready for next route";
     primaryActionKind = "next-route";
     actionEnabled = false;
-    primaryDetail = "The accepted native executor reclaimed 0 bytes, so proof handoff is not required before another route can be considered.";
+    primaryDetail = "The accepted native executor reclaimed 0 bytes, so no post-clean evidence is needed before choosing another target.";
   } else if (nativeConnected && executed && !proofScanCaptured) {
     currentStepId = "rescan";
     primaryAction = "Run post-run rescan";
     primaryActionKind = "run-post-run-rescan";
     actionEnabled = true;
-    primaryDetail = "Capture a newer native scan before exporting proof or enabling another route.";
-  } else if (nativeConnected && executed && (!proofMatched || !proofReviewed)) {
-    currentStepId = "review-proof";
-    primaryAction = proofMatched ? "Review post-run proof" : "Resolve rescan mismatch";
-    primaryActionKind = proofMatched ? "review-proof" : "resolve-proof-mismatch";
-    actionEnabled = false;
-    primaryDetail = proofMatched
-      ? "Review the native ledger and matched post-run scan, then check the proof review box."
-      : postRunProof?.detail || "The post-run scan has not matched the selected execution ledger.";
-  } else if (nativeConnected && executed && !handoffComplete) {
-    currentStepId = "export-proof";
-    primaryAction = canExportProof ? "Export proof packet" : "Resolve proof export blockers";
-    primaryActionKind = "export-proof";
-    actionEnabled = Boolean(canExportProof);
-    primaryDetail = canExportProof
-      ? "Write the selected-route proof, real workflow proof, verifier output, and support bundle."
-      : "Proof export remains locked until the matched rescan and proof review are complete.";
-  } else if (nativeConnected && handoffComplete) {
+    primaryDetail = "Refresh the scan after cleanup so the dashboard and explorer show current space usage.";
+  } else if (nativeConnected && executed) {
     currentStepId = "next-route";
     primaryAction = "Ready for next route";
     primaryActionKind = "next-route";
     actionEnabled = false;
-    primaryDetail = "The workflow proof and support bundle handoff are complete; another route can be considered.";
+    primaryDetail = "Cleanup history is recorded. You can select another allowlisted target or scan again.";
   }
   const actionBusy = Boolean(
     (primaryActionKind === "run-scan" && scanStatus === "scanning") ||
@@ -956,10 +879,8 @@ export function buildWorkflowGuide({
     workflowGuideStep("select", "Select", "Cleanup target", "Choose one measured target."),
     workflowGuideStep("consent", "Consent", "User gate", "Review guardrails and confirm."),
     workflowGuideStep("execute", "Execute", "Native executor", "Run the scoped cleanup."),
-    workflowGuideStep("rescan", "Rescan", "Post-run scan", "Capture fresh evidence."),
-    workflowGuideStep("review-proof", "Review", "Proof review", "Review matched ledger evidence."),
-    workflowGuideStep("export-proof", "Export", "Proof handoff", "Write proof and support artifacts."),
-    workflowGuideStep("next-route", "Next", "Next route", "Unlock route switching.")
+    workflowGuideStep("rescan", "Rescan", "Post-clean scan", "Refresh usage evidence."),
+    workflowGuideStep("next-route", "Next", "Next target", "Continue cleanup.")
   ];
   const currentIndex = Math.max(0, order.findIndex((step) => step.id === currentStepId));
   const steps = order.map((step, index) => ({
@@ -970,7 +891,7 @@ export function buildWorkflowGuide({
 
   return {
     schemaVersion: "spaceguard-workflow-guide/v1",
-    status: handoffComplete ? "complete" : "active",
+    status: cleanupFlowComplete ? "complete" : "active",
     currentStepId,
     primaryAction,
     primaryActionKind,
@@ -1008,10 +929,10 @@ export function buildWorkflowLocks({
   const reclaimedBytes = Number(executionRecord?.bytes || 0);
   const noOpExecution = Boolean(accepted && reclaimedBytes <= 0);
   const positiveExecution = Boolean(accepted && reclaimedBytes > 0);
-  const proofHandoffRequired = Boolean(positiveExecution && !supportBundleWritten);
-  const proofAllowsNextExecutor = !proofHandoffRequired;
-  const targetSwitchLocked = proofHandoffRequired;
-  const routeSetupLocked = proofHandoffRequired;
+  const proofHandoffRequired = false;
+  const proofAllowsNextExecutor = true;
+  const targetSwitchLocked = false;
+  const routeSetupLocked = false;
 
   return {
     schemaVersion: "spaceguard-workflow-locks/v1",
@@ -1025,9 +946,9 @@ export function buildWorkflowLocks({
     targetSwitchLocked,
     routeSetupLocked,
     primary: noOpExecution
-      ? "Native executor accepted but reclaimed 0 bytes; proof handoff is not required and route switching is unlocked."
-      : proofHandoffRequired
-        ? "Positive reclaimed bytes require proof export and support bundle capture before another route."
+      ? "Native executor accepted but reclaimed 0 bytes; route switching remains unlocked."
+      : positiveExecution
+        ? "Cleanup history is recorded and route switching remains unlocked."
         : "Workflow route and target switching are unlocked."
   };
 }

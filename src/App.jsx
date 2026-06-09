@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Bot,
+  BarChart3,
   CheckCircle2,
   ChevronRight,
   ClipboardCheck,
@@ -9,7 +10,10 @@ import {
   FileJson,
   FolderSearch,
   HardDrive,
+  History,
   KeyRound,
+  LayoutDashboard,
+  ListTree,
   Loader2,
   Lock,
   Play,
@@ -50,7 +54,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowAgentTargetId, buildWorkflowGuide, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, renderInAppSupportBundleMarkdown, resolveRuntimeRouteInput, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
+import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildWorkflowAgentTargetId, buildWorkflowGuide, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, renderInAppSupportBundleMarkdown, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
 import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -65,7 +69,6 @@ const PROOF_PACKET_FILE = "spaceguard-selected-route-proof-packet.md";
 const WORKFLOW_PROOF_FILE = "spaceguard-real-workflow-proof.md";
 const WORKFLOW_PROOF_CHECK_FILE = "spaceguard-workflow-proof-check.json";
 const SUPPORT_BUNDLE_FILE = "spaceguard-support-bundle.md";
-const CONFIRM_PREFIX = "RUN";
 
 const EXECUTOR_RECIPES = {
   "windows-temp": {
@@ -255,8 +258,7 @@ const MANUAL_RECIPE_LABELS = {
 };
 
 function App() {
-  const routeSetupOptions = useMemo(() => buildRouteSetupOptions(), []);
-  const [setupRouteInput, setSetupRouteInput] = useState("npm-cache");
+  const [activeView, setActiveView] = useState("overview");
   const [capability, setCapability] = useState(() => getNativeScannerCapability());
   const [runtime, setRuntime] = useState(null);
   const [runtimeStatus, setRuntimeStatus] = useState("loading");
@@ -268,7 +270,6 @@ function App() {
   const [postRunScan, setPostRunScan] = useState(null);
   const [selectedId, setSelectedId] = useState("");
   const [consentChecked, setConsentChecked] = useState(false);
-  const [confirmationText, setConfirmationText] = useState("");
   const [permanentRemovalConfirmed, setPermanentRemovalConfirmed] = useState(false);
   const [archiveDestination, setArchiveDestination] = useState("");
   const [executionStatus, setExecutionStatus] = useState("idle");
@@ -291,20 +292,12 @@ function App() {
   }, []);
 
   const nativeConnected = Boolean(capability.available && runtime?.available);
-  const candidates = useMemo(() => buildCleanupCandidates(scan, runtime, setupRouteInput), [scan, runtime, setupRouteInput]);
+  const candidates = useMemo(() => buildCleanupCandidates(scan, runtime), [scan, runtime]);
   const selectedCandidate = useMemo(
     () => candidates.find((candidate) => candidate.id === selectedId) || null,
     [candidates, selectedId]
   );
   const manualFindings = useMemo(() => buildManualFindings(scan), [scan]);
-  const setupRoute = useMemo(
-    () => routeSetupOptions.find((route) => route.routeInput === setupRouteInput) || routeSetupOptions[0],
-    [routeSetupOptions, setupRouteInput]
-  );
-  const setupChecklist = useMemo(
-    () => buildRouteSetupChecklist({ route: setupRoute, runtime }),
-    [setupRoute, runtime]
-  );
   const scanFingerprint = useMemo(() => buildScanFingerprint(scan), [scan]);
   const activePlanId = useMemo(
     () => buildCurrentPlanId({ candidate: selectedCandidate, scanFingerprint }),
@@ -318,9 +311,6 @@ function App() {
     () => buildPostRunProof({ candidate: proofCandidate, executionRecord, postRunScan }),
     [proofCandidate, executionRecord, postRunScan]
   );
-  const expectedConfirmation = selectedCandidate
-    ? `${CONFIRM_PREFIX} ${selectedCandidate.routeInput}`
-    : `${CONFIRM_PREFIX} route`;
   const executionPrerequisites = useMemo(
     () => buildExecutionPrerequisites({
       candidate: selectedCandidate,
@@ -341,12 +331,11 @@ function App() {
       workflowProofAccepted,
       workflowProofCheck,
       supportBundleWritten,
-      setupRouteInput,
       archiveDestination,
       permanentRemovalConfirmed,
       agentPrompt
     }),
-    [runtime, scanFingerprint, selectedCandidate, executionRecord, postRunProof, workflowProofAccepted, workflowProofCheck, supportBundleWritten, setupRouteInput, archiveDestination, permanentRemovalConfirmed, agentPrompt]
+    [runtime, scanFingerprint, selectedCandidate, executionRecord, postRunProof, workflowProofAccepted, workflowProofCheck, supportBundleWritten, archiveDestination, permanentRemovalConfirmed, agentPrompt]
   );
   const agentContextKeyRef = useRef(agentContextKey);
 
@@ -365,8 +354,6 @@ function App() {
     () => buildExecutionGate({
       candidate: selectedCandidate,
       consentChecked,
-      confirmationText,
-      expectedConfirmation,
       executionPrerequisites,
       scanFingerprint,
       executionStatus,
@@ -374,7 +361,7 @@ function App() {
       executionRecord,
       activeScanGeneratedAt: scan?.generatedAt || ""
     }),
-    [selectedCandidate, consentChecked, confirmationText, expectedConfirmation, executionPrerequisites, scanFingerprint, executionStatus, workflowLocks, executionRecord, scan]
+    [selectedCandidate, consentChecked, executionPrerequisites, scanFingerprint, executionStatus, workflowLocks, executionRecord, scan]
   );
   const workflowGuide = useMemo(
     () => buildWorkflowGuide({
@@ -396,18 +383,6 @@ function App() {
     [nativeConnected, scan, scanStatus, candidates, selectedCandidate, executionGate, executionStatus, executionRecord, postRunProof, proofReviewed, workflowProofAccepted, supportBundleWritten, canExportProof, proofExportStatus]
   );
   const canExecute = executionGate.ready;
-  const targetSwitchLocked = workflowLocks.targetSwitchLocked;
-  const routeSetupLocked = workflowLocks.routeSetupLocked;
-  const runtimeRouteInput = useMemo(
-    () => resolveRuntimeRouteInput({ routes: routeSetupOptions, runtime, fallbackRouteInput: setupRouteInput }),
-    [routeSetupOptions, runtime, setupRouteInput]
-  );
-  useEffect(() => {
-    if (routeSetupLocked) return;
-    if (!runtimeRouteInput || runtimeRouteInput === setupRouteInput) return;
-    setSetupRouteInput(runtimeRouteInput);
-    resetWorkflowForRouteChange();
-  }, [runtimeRouteInput, setupRouteInput, routeSetupLocked]);
   const agentContext = useMemo(
     () => buildAgentContext({
       runtime,
@@ -488,7 +463,6 @@ function App() {
         setExecutionRecord(null);
         setSelectedId("");
         setConsentChecked(false);
-        setConfirmationText("");
         setPermanentRemovalConfirmed(false);
         setProofReviewed(false);
         setWorkflowProofAccepted(false);
@@ -498,6 +472,7 @@ function App() {
         setProofExportMessage("");
       }
       setScanStatus("complete");
+      setActiveView(afterExecution ? "history" : "clean");
       await refreshRuntime();
     } catch (error) {
       setScanStatus("error");
@@ -510,8 +485,6 @@ function App() {
     const currentExecutionGate = buildExecutionGate({
       candidate: selectedCandidate,
       consentChecked,
-      confirmationText,
-      expectedConfirmation,
       executionPrerequisites,
       scanFingerprint,
       executionStatus,
@@ -660,7 +633,6 @@ function App() {
         setScan(baselinePromotion.activeScan);
         setSelectedId("");
         setConsentChecked(false);
-        setConfirmationText("");
         setPermanentRemovalConfirmed(false);
         setArchiveDestination("");
       }
@@ -726,7 +698,6 @@ function App() {
   function resetWorkflowForRouteChange() {
     setSelectedId("");
     setConsentChecked(false);
-    setConfirmationText("");
     setPermanentRemovalConfirmed(false);
     setArchiveDestination("");
     setExecutionStatus("idle");
@@ -744,8 +715,8 @@ function App() {
 
   function selectWorkflowCandidate(id) {
     if (!id) return;
-    if (targetSwitchLocked && id !== selectedId) return;
     setSelectedId(id);
+    setActiveView("clean");
     setExecutionResult(null);
     setExecutionRecord(null);
     setPostRunScan(null);
@@ -753,7 +724,6 @@ function App() {
     setExecutionError("");
     setArchiveDestination("");
     setConsentChecked(false);
-    setConfirmationText("");
     setPermanentRemovalConfirmed(false);
     setProofReviewed(false);
     setWorkflowProofAccepted(false);
@@ -772,17 +742,14 @@ function App() {
         scan={scan}
         selectedCandidate={selectedCandidate}
         executionRecord={executionRecord}
+        activeView={activeView}
+        setActiveView={setActiveView}
       >
         <ConnectionRequired
           runtime={runtime}
           runtimeStatus={runtimeStatus}
           runtimeError={runtimeError}
           onRefresh={refreshRuntime}
-          routes={routeSetupOptions}
-          selectedRouteInput={setupRouteInput}
-          setSelectedRouteInput={setSetupRouteInput}
-          checklist={setupChecklist}
-          routeSetupLocked={routeSetupLocked}
         />
       </AppFrame>
     );
@@ -796,6 +763,8 @@ function App() {
       scan={scan}
       selectedCandidate={selectedCandidate}
       executionRecord={executionRecord}
+      activeView={activeView}
+      setActiveView={setActiveView}
     >
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 py-5 lg:px-7">
         <TopBar
@@ -803,72 +772,56 @@ function App() {
           scan={scan}
           onRefreshRuntime={refreshRuntime}
         />
-        <WorkflowGuidePanel workflowGuide={workflowGuide} onPrimaryAction={runWorkflowGuideAction} />
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
-          <ScanPanel
-            request={scanRequest}
-            setRequest={setScanRequest}
+        {activeView === "overview" ? (
+          <OverviewPanel
+            workflowGuide={workflowGuide}
+            runtime={runtime}
             scan={scan}
             scanStatus={scanStatus}
             scanError={scanError}
+            scanRequest={scanRequest}
+            setScanRequest={setScanRequest}
+            onRunScan={() => runRealScan()}
+            onPrimaryAction={runWorkflowGuideAction}
+            cleanupCount={candidates.length}
+            manualCount={manualFindings.length}
+          />
+        ) : null}
+        {activeView === "clean" ? (
+          <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
+            <CleanupQueue
+              candidates={candidates}
+              selectedId={selectedId}
+              setSelectedId={selectWorkflowCandidate}
+              scan={scan}
+            />
+            <DecisionPanel
+              candidate={selectedCandidate}
+              consentChecked={consentChecked}
+              setConsentChecked={setConsentChecked}
+              permanentRemovalConfirmed={permanentRemovalConfirmed}
+              setPermanentRemovalConfirmed={setPermanentRemovalConfirmed}
+              archiveDestination={archiveDestination}
+              setArchiveDestination={setArchiveDestination}
+              executionPrerequisites={executionPrerequisites}
+              canExecute={canExecute}
+              executionStatus={executionStatus}
+              executionError={executionError}
+              executionResult={executionResult}
+              onExecute={executeSelectedCleanup}
+            />
+          </section>
+        ) : null}
+        {activeView === "explore" ? (
+          <ExplorePanel
+            scan={scan}
+            candidates={candidates}
+            manualFindings={manualFindings}
+            onSelectCandidate={selectWorkflowCandidate}
             onRunScan={() => runRealScan()}
           />
-          <div className="grid gap-5">
-            <RuntimePanel runtime={runtime} />
-            <RouteSetupPanel
-              routes={routeSetupOptions}
-              selectedRouteInput={setupRouteInput}
-              setSelectedRouteInput={setSetupRouteInput}
-              checklist={setupChecklist}
-              routeSetupLocked={routeSetupLocked}
-            />
-          </div>
-        </section>
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
-          <CleanupQueue
-            candidates={candidates}
-            selectedId={selectedId}
-            targetSwitchLocked={targetSwitchLocked}
-            setSelectedId={selectWorkflowCandidate}
-            scan={scan}
-          />
-          <DecisionPanel
-            candidate={selectedCandidate}
-            consentChecked={consentChecked}
-            setConsentChecked={setConsentChecked}
-            confirmationText={confirmationText}
-            setConfirmationText={setConfirmationText}
-            expectedConfirmation={expectedConfirmation}
-            permanentRemovalConfirmed={permanentRemovalConfirmed}
-            setPermanentRemovalConfirmed={setPermanentRemovalConfirmed}
-            archiveDestination={archiveDestination}
-            setArchiveDestination={setArchiveDestination}
-            executionPrerequisites={executionPrerequisites}
-            canExecute={canExecute}
-            executionStatus={executionStatus}
-            executionError={executionError}
-            executionResult={executionResult}
-            onExecute={executeSelectedCleanup}
-          />
-        </section>
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(380px,1.1fr)]">
-          <ProofPanel
-            selectedCandidate={selectedCandidate}
-            executionRecord={executionRecord}
-            postRunScan={postRunScan}
-            postRunProof={postRunProof}
-            scanStatus={scanStatus}
-            proofReviewed={proofReviewed}
-            setProofReviewed={setProofReviewed}
-            workflowProofAccepted={workflowProofAccepted}
-            workflowProofCheck={workflowProofCheck}
-            workflowLocks={workflowLocks}
-            canExportProof={canExportProof}
-            proofExportStatus={proofExportStatus}
-            proofExportMessage={proofExportMessage}
-            onRescan={() => runRealScan({ afterExecution: true })}
-            onExportProof={exportProofPacket}
-          />
+        ) : null}
+        {activeView === "agent" ? (
           <OpenAIPanel
             runtime={runtime}
             scan={scan}
@@ -884,19 +837,39 @@ function App() {
             onAsk={askOpenAI}
             onBrokerAction={runAgentBrokerAction}
           />
-        </section>
-        <ManualReviewPanel findings={manualFindings} />
+        ) : null}
+        {activeView === "history" ? (
+          <HistoryPanel
+            selectedCandidate={selectedCandidate}
+            executionRecord={executionRecord}
+            executionResult={executionResult}
+            postRunScan={postRunScan}
+            postRunProof={postRunProof}
+            scanStatus={scanStatus}
+            proofReviewed={proofReviewed}
+            setProofReviewed={setProofReviewed}
+            workflowProofAccepted={workflowProofAccepted}
+            workflowProofCheck={workflowProofCheck}
+            workflowLocks={workflowLocks}
+            canExportProof={canExportProof}
+            proofExportStatus={proofExportStatus}
+            proofExportMessage={proofExportMessage}
+            onRescan={() => runRealScan({ afterExecution: true })}
+            onExportProof={exportProofPacket}
+          />
+        ) : null}
       </main>
     </AppFrame>
   );
 }
 
-function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, selectedCandidate, executionRecord }) {
+function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, selectedCandidate, executionRecord, activeView = "overview", setActiveView = () => {} }) {
   const navRows = [
-    { id: "connect", label: "Connection", icon: HardDrive, state: nativeConnected ? "ready" : runtimeStatus },
-    { id: "scan", label: "Real scan", icon: ScanLine, state: scan ? "ready" : "waiting" },
-    { id: "queue", label: "Queue", icon: ClipboardCheck, state: selectedCandidate ? "ready" : "waiting" },
-    { id: "proof", label: "Proof", icon: FileJson, state: executionRecord ? "ready" : "waiting" }
+    { id: "overview", label: "Overview", icon: LayoutDashboard, state: nativeConnected ? "ready" : runtimeStatus },
+    { id: "clean", label: "Clean", icon: Trash2, state: selectedCandidate ? "ready" : scan ? "waiting" : "idle" },
+    { id: "explore", label: "Explore C:", icon: ListTree, state: scan ? "ready" : "waiting" },
+    { id: "agent", label: "Agent", icon: Bot, state: scan ? "waiting" : "idle" },
+    { id: "history", label: "History", icon: History, state: executionRecord ? "ready" : "waiting" }
   ];
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -919,13 +892,20 @@ function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, sel
               {navRows.map((row) => {
                 const Icon = row.icon;
                 return (
-                  <div key={row.id} className="flex items-center justify-between rounded-md px-3 py-2 text-sm">
+                  <button
+                    key={row.id}
+                    type="button"
+                    onClick={() => setActiveView(row.id)}
+                    className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition hover:bg-muted ${
+                      activeView === row.id ? "bg-primary text-primary-foreground hover:bg-primary" : ""
+                    }`}
+                  >
                     <span className="flex items-center gap-2">
-                      <Icon className="h-4 w-4 text-muted-foreground" />
+                      <Icon className={`h-4 w-4 ${activeView === row.id ? "text-primary-foreground" : "text-muted-foreground"}`} />
                       {row.label}
                     </span>
                     <StatusDot state={row.state} />
-                  </div>
+                  </button>
                 );
               })}
             </nav>
@@ -943,8 +923,7 @@ function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, sel
   );
 }
 
-function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh, routes, selectedRouteInput, setSelectedRouteInput, checklist, routeSetupLocked = false }) {
-  const routeInput = selectedRouteInput || "npm-cache";
+function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh }) {
   const setupSteps = [
     {
       label: "Install project dependencies",
@@ -952,28 +931,23 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh, r
       detail: "Run this from the SpaceGuard project folder on the Windows PC you want to clean."
     },
     {
-      label: "Arm one cleanup route",
-      command: `npm run route:arm -- --route ${routeInput}`,
-      detail: "This creates or updates .env, enables one cleanup type, and turns every other cleanup flag off."
-    },
-    {
-      label: "Add your OpenAI key",
+      label: "Optional OpenAI key",
       command: "OPENAI_API_KEY=sk-...",
-      detail: "Open .env in Notepad after route arming. The key powers advisory reasoning only and cannot approve cleanup."
+      detail: "Set this only if you want advisory reasoning. Cleanup still requires native allowlists and user confirmation."
     },
     {
       label: "Check Windows readiness",
-      command: `npm run windows:ready -- --route ${routeInput}`,
-      detail: "This blocks early if npm dependencies, the Windows toolchain, route flag, or local route contract is not ready."
+      command: "npm run windows:ready",
+      detail: "This blocks early if npm dependencies or the Windows toolchain are not ready."
     },
     {
       label: "Launch the desktop app",
-      command: `npm run windows:dev -- --route ${routeInput}`,
-      detail: "This arms one route, checks readiness, and opens the Tauri desktop shell."
+      command: "npm run native:dev",
+      detail: "This opens the Tauri desktop shell with built-in cleanup allowlists."
     },
     {
-      label: "Run the real workflow",
-      command: "Scan -> select -> consent -> execute -> rescan -> export proof",
+      label: "Run cleanup",
+      command: "Scan -> explore -> select -> confirm -> clean -> rescan",
       detail: "If this setup screen is still visible, the native bridge is not connected yet."
     }
   ];
@@ -988,8 +962,8 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh, r
     "Measured cleanup queue",
     "Explicit user consent",
     "Scoped native executor",
-    "Post-run rescan",
-    "Proof and support export"
+    "Post-clean rescan",
+    "Cleanup history"
   ];
 
   return (
@@ -1004,7 +978,7 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh, r
             <h1 className="mt-3 text-3xl font-semibold tracking-normal">Connect the Windows desktop app</h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
               No local folders are scanned from this browser session. Start the Tauri shell on Windows to unlock real scan,
-              user consent, native cleanup, post-run rescan, and proof export.
+              user consent, native cleanup, post-clean rescan, and cleanup history.
             </p>
           </div>
           <Button variant="outline" onClick={onRefresh} disabled={runtimeStatus === "loading"}>
@@ -1076,13 +1050,7 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh, r
             </Card>
           </div>
           <div className="grid gap-4">
-            <RouteSetupPanel
-              routes={routes}
-              selectedRouteInput={selectedRouteInput}
-              setSelectedRouteInput={setSelectedRouteInput}
-              checklist={checklist}
-              routeSetupLocked={routeSetupLocked}
-            />
+            <RuntimePanel runtime={runtime} />
           </div>
         </div>
       </div>
@@ -1099,15 +1067,15 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
       <div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={runtime?.realRunEnabled ? "safe" : "review"}>
-            {runtime?.realRunEnabled ? "single route armed" : "cleanup locked"}
+            {runtime?.realRunEnabled ? "cleanup available" : "desktop required"}
           </Badge>
           <Badge variant={runtime?.openAiAdvisorConfigured ? "safe" : "outline"}>
             {runtime?.openAiAdvisorConfigured ? "OpenAI key detected" : "OpenAI key missing"}
           </Badge>
         </div>
-        <h1 className="mt-2 text-2xl font-semibold tracking-normal">Real Windows cleanup workflow</h1>
+        <h1 className="mt-2 text-2xl font-semibold tracking-normal">SpaceGuard Windows cleanup</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Scan C: with the native bridge, select one measured target, consent, run the guarded executor, rescan, and export proof.
+          Scan C:, explore recoverable space, select an allowlisted target, confirm, clean, and rescan.
         </p>
       </div>
       <div className="min-w-[240px] space-y-2">
@@ -1144,7 +1112,7 @@ function WorkflowGuidePanel({ workflowGuide, onPrimaryAction }) {
               <ClipboardCheck className="h-4 w-4" />
               Guided workflow
             </CardTitle>
-            <CardDescription>One current action for the real scan, cleanup, rescan, and proof sequence.</CardDescription>
+            <CardDescription>One current action for scan, cleanup, and post-clean rescan.</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant={workflowGuide.status === "complete" ? "safe" : "review"}>{workflowGuide.status}</Badge>
@@ -1220,6 +1188,54 @@ function WorkflowGuidePanel({ workflowGuide, onPrimaryAction }) {
   );
 }
 
+function OverviewPanel({
+  workflowGuide,
+  runtime,
+  scan,
+  scanStatus,
+  scanError,
+  scanRequest,
+  setScanRequest,
+  onRunScan,
+  onPrimaryAction,
+  cleanupCount = 0,
+  manualCount = 0
+}) {
+  return (
+    <div className="grid gap-5">
+      <WorkflowGuidePanel workflowGuide={workflowGuide} onPrimaryAction={onPrimaryAction} />
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+        <ScanPanel
+          request={scanRequest}
+          setRequest={setScanRequest}
+          scan={scan}
+          scanStatus={scanStatus}
+          scanError={scanError}
+          onRunScan={onRunScan}
+        />
+        <div className="grid gap-5">
+          <RuntimePanel runtime={runtime} />
+          <Card className="rounded-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" />
+                Analysis summary
+              </CardTitle>
+              <CardDescription>Current scan output and cleanup opportunity counts.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              <Metric label="Cleanable targets" value={String(cleanupCount)} />
+              <Metric label="Manual review rows" value={String(manualCount)} />
+              <Metric label="Measured reclaim" value={formatBytes(scan?.totalBytes || 0)} />
+              <Metric label="Drive free" value={formatBytes(scan?.volume?.freeBytes || 0)} />
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function RuntimePanel({ runtime }) {
   const flagRows = Object.entries(runtime?.executorFlags || {})
     .filter(([, enabled]) => enabled)
@@ -1228,7 +1244,7 @@ function RuntimePanel({ runtime }) {
     ["Windows", runtime?.windows],
     ["Native scan command", runtime?.scanKnownRoots],
     ["Executor command", runtime?.executeCleanupPlan],
-    ["Single route scope", runtime?.executorScopeStatus === "single-scoped-flag"],
+    ["Built-in allowlists", runtime?.safeExecutorsEnabled],
     ["OpenAI advisor", runtime?.openAiAgentAdvice && runtime?.openAiAdvisorConfigured]
   ];
   return (
@@ -1238,7 +1254,7 @@ function RuntimePanel({ runtime }) {
           <ShieldCheck className="h-4 w-4" />
           Native runtime
         </CardTitle>
-        <CardDescription>Current desktop bridge and route state.</CardDescription>
+        <CardDescription>Current desktop bridge and built-in cleanup authority.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-2">
@@ -1252,206 +1268,18 @@ function RuntimePanel({ runtime }) {
           ))}
         </div>
         <div className="rounded-md border bg-background p-3">
-          <p className="text-sm font-medium">Enabled route flags</p>
+          <p className="text-sm font-medium">Cleanup authority</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {flagRows.length ? (
               flagRows.map((flag) => <Badge key={flag} variant="safe">{flag}</Badge>)
             ) : (
-              <Badge variant="restricted">no route flag</Badge>
+              <Badge variant="safe">production allowlists</Badge>
             )}
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            Real cleanup requires exactly one route flag, native scan evidence, explicit consent, and post-run proof.
+            Real cleanup uses shipped native executors, strict target validation, scan evidence, and explicit user consent.
           </p>
         </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function RouteSetupPanel({ routes, selectedRouteInput, setSelectedRouteInput, checklist, routeSetupLocked = false }) {
-  const [copyStatus, setCopyStatus] = useState("idle");
-  const [copyRunbookStatus, setCopyRunbookStatus] = useState("idle");
-  const runbook = checklist.runbook || { commands: [], appSteps: [], guardrails: [], content: "" };
-  const selectedRoute = routes.find((route) => route.routeInput === selectedRouteInput) || routes[0] || {};
-  const blockerRows = checklist.blockers?.length ? checklist.blockers : checklist.steps.filter((step) => step.status === "blocked");
-
-  useEffect(() => {
-    setCopyStatus("idle");
-    setCopyRunbookStatus("idle");
-  }, [selectedRouteInput]);
-
-  async function copyEnvBlock() {
-    try {
-      await navigator.clipboard.writeText(checklist.envBlock.content);
-      setCopyStatus("copied");
-    } catch {
-      setCopyStatus("failed");
-    }
-  }
-
-  async function copyRunbook() {
-    try {
-      await navigator.clipboard.writeText(checklist.runbook.content);
-      setCopyRunbookStatus("copied");
-    } catch {
-      setCopyRunbookStatus("failed");
-    }
-  }
-
-  return (
-    <Card className="rounded-md">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Terminal className="h-4 w-4" />
-          Cleanup workflow setup
-        </CardTitle>
-        <CardDescription>Every cleanup type follows the same scan, review, consent, execute, rescan, and proof workflow.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {routeSetupLocked ? (
-          <Notice
-            tone="review"
-            icon={Lock}
-            text="Current route is locked until proof export and support bundle capture finish."
-          />
-        ) : null}
-        <div className="rounded-md border bg-background p-3">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">Selected cleanup type</p>
-              <p className="mt-1 truncate text-lg font-semibold">{selectedRoute.label || selectedRouteInput}</p>
-              <p className="mt-1 truncate text-xs text-muted-foreground">{selectedRoute.routeInput || selectedRouteInput}</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant={checklist.ready ? "safe" : "review"}>{checklist.ready ? "ready" : "needs setup"}</Badge>
-              <Badge variant="outline">one workflow</Badge>
-              <Badge variant="outline">one route flag</Badge>
-            </div>
-          </div>
-        </div>
-        <div>
-          <p className="mb-2 text-sm font-medium">Choose cleanup type</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {routes.map((route) => (
-              <button
-                key={route.routeInput}
-                type="button"
-                disabled={routeSetupLocked && route.routeInput !== selectedRouteInput}
-                onClick={() => {
-                  if (routeSetupLocked && route.routeInput !== selectedRouteInput) return;
-                  setSelectedRouteInput(route.routeInput);
-                }}
-                className={`rounded-md border px-3 py-2 text-left text-sm transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-50 ${
-                  selectedRouteInput === route.routeInput ? "border-primary bg-primary/5" : "bg-background"
-                }`}
-              >
-                <span className="block truncate font-medium">{route.label}</span>
-                <span className="block truncate text-xs text-muted-foreground">{route.routeInput}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="rounded-md border bg-background">
-          <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">Selected .env block</p>
-              <p className="truncate text-xs text-muted-foreground">{checklist.envBlock.selectedEnvVar}=1</p>
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={copyEnvBlock}>
-              <ClipboardCheck className="h-4 w-4" />
-              {copyStatus === "copied" ? "Copied" : "Copy"}
-            </Button>
-          </div>
-          <pre className="max-h-72 overflow-auto p-3 text-xs leading-5">
-            <code>{checklist.envBlock.content}</code>
-          </pre>
-          {copyStatus === "failed" ? (
-            <p className="border-t px-3 py-2 text-xs text-red-600">Copy failed. Select the block manually.</p>
-          ) : null}
-        </div>
-        <div className="rounded-md border bg-background p-3">
-          <p className="text-sm font-medium">App workflow</p>
-          <div className="mt-3 grid gap-2">
-            {runbook.appSteps.map((row, index) => (
-              <div key={row.id} className="flex gap-3 rounded-md border bg-muted/25 p-2">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded border bg-background text-xs font-medium">
-                  {index + 1}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium">{row.label}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{row.detail}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        {blockerRows.length ? (
-          <div className="grid gap-2">
-            {blockerRows.map((step) => (
-              <div key={step.id} className="rounded-md border bg-background p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{step.label}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{step.detail}</p>
-                  </div>
-                  <Badge variant="restricted">{step.status}</Badge>
-                </div>
-                <code className="mt-2 block overflow-hidden text-ellipsis rounded border bg-muted/50 px-2 py-1 text-xs">
-                  {step.command}
-                </code>
-              </div>
-            ))}
-          </div>
-        ) : null}
-        <details className="rounded-md border bg-background">
-          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Windows test runbook</summary>
-          <div className="border-t">
-            <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
-              <div className="min-w-0">
-                <p className="text-sm font-medium">Command checklist</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  Includes npm run openai:smoke -- --local-contract --route before desktop launch.
-                </p>
-              </div>
-              <Button type="button" variant="outline" size="sm" onClick={copyRunbook}>
-                <ClipboardCheck className="h-4 w-4" />
-                {copyRunbookStatus === "copied" ? "Copied" : "Copy"}
-              </Button>
-            </div>
-            <div className="max-h-[24rem] overflow-auto p-3">
-              <div className="grid gap-2">
-                {runbook.commands.map((row, index) => (
-                  <div key={row.id} className="rounded-md border bg-muted/25 p-2">
-                    <div className="flex items-start gap-2">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded border bg-background text-xs font-medium">
-                        {index + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium">{row.label}</p>
-                        <code className="mt-1 block overflow-hidden text-ellipsis rounded border bg-background px-2 py-1 text-xs">
-                          {row.command}
-                        </code>
-                        <p className="mt-1 text-xs text-muted-foreground">{row.expected}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 rounded-md border bg-muted/20 p-3">
-                <p className="text-xs font-medium">Guardrails</p>
-                <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                  {runbook.guardrails.map((row) => (
-                    <li key={row.id}>{row.detail}</li>
-                  ))}
-                </ul>
-              </div>
-              {copyRunbookStatus === "failed" ? (
-                <p className="mt-3 text-xs text-red-600">Copy failed. Select the runbook manually.</p>
-              ) : null}
-            </div>
-          </div>
-        </details>
       </CardContent>
     </Card>
   );
@@ -1528,7 +1356,7 @@ function ScanPanel({ request, setRequest, scan, scanStatus, scanError, onRunScan
   );
 }
 
-function CleanupQueue({ candidates, selectedId, setSelectedId, scan, targetSwitchLocked = false }) {
+function CleanupQueue({ candidates, selectedId, setSelectedId, scan }) {
   return (
     <Card id="cleanup-actions-panel" className="rounded-md">
       <CardHeader>
@@ -1543,16 +1371,12 @@ function CleanupQueue({ candidates, selectedId, setSelectedId, scan, targetSwitc
           <EmptyState icon={ScanLine} title="Run real scan first" detail="The queue is built only from native scan findings." />
         ) : candidates.length ? (
           <div className="grid gap-3">
-            {targetSwitchLocked ? (
-              <Notice tone="review" icon={Lock} text="Export proof, let the in-app verifier accept it, and capture the support bundle before selecting another cleanup target." />
-            ) : null}
             {candidates.map((candidate) => (
               <button
                 key={candidate.id}
                 type="button"
-                disabled={targetSwitchLocked && candidate.id !== selectedId}
                 onClick={() => setSelectedId(candidate.id)}
-                className={`w-full rounded-md border p-4 text-left transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-50 ${
+                className={`w-full rounded-md border p-4 text-left transition hover:border-primary ${
                   selectedId === candidate.id ? "border-primary bg-primary/5" : "bg-background"
                 }`}
               >
@@ -1583,7 +1407,7 @@ function CleanupQueue({ candidates, selectedId, setSelectedId, scan, targetSwitc
             ))}
           </div>
         ) : (
-          <EmptyState icon={Lock} title="No executable findings yet" detail="Measured findings were not found or their route flags are not enabled." />
+          <EmptyState icon={Lock} title="No cleanable findings yet" detail="Measured findings were not found or they do not map to a shipped safe executor." />
         )}
       </CardContent>
     </Card>
@@ -1594,9 +1418,6 @@ function DecisionPanel({
   candidate,
   consentChecked,
   setConsentChecked,
-  confirmationText,
-  setConfirmationText,
-  expectedConfirmation,
   permanentRemovalConfirmed,
   setPermanentRemovalConfirmed,
   archiveDestination,
@@ -1614,9 +1435,9 @@ function DecisionPanel({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ClipboardCheck className="h-4 w-4" />
-          User gate
+          Confirm cleanup
         </CardTitle>
-        <CardDescription>Every real cleanup requires explicit current-plan consent.</CardDescription>
+        <CardDescription>Review the selected target, then confirm once to run the native cleanup.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {!candidate ? (
@@ -1634,15 +1455,7 @@ function DecisionPanel({
             ) : null}
             <label className="flex items-start gap-3 text-sm">
               <Checkbox checked={consentChecked} onClick={() => setConsentChecked(!consentChecked)} />
-              <span>I reviewed the target, expected bytes, route flag, and consequence for this cleanup.</span>
-            </label>
-            <label className="space-y-1 text-sm">
-              <span className="font-medium">Type the confirmation phrase</span>
-              <Input
-                value={confirmationText}
-                onChange={(event) => setConfirmationText(event.target.value)}
-                placeholder={expectedConfirmation}
-              />
+              <span>I reviewed the target, expected bytes, allowlist, and consequence for this cleanup.</span>
             </label>
             {candidate.requiresPermanentConfirmation ? (
               <label className="flex items-start gap-3 text-sm">
@@ -1658,7 +1471,7 @@ function DecisionPanel({
             ) : null}
             <Button className="w-full" disabled={!canExecute} onClick={onExecute}>
               {executionStatus === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              Execute selected cleanup
+              {candidate.requiresPermanentConfirmation ? "Empty selected Recycle Bin" : "Clean selected target"}
             </Button>
             {executionError ? <Notice tone="restricted" icon={AlertTriangle} text={executionError} /> : null}
             {executionResult ? (
@@ -1674,7 +1487,7 @@ function DecisionPanel({
                   <Metric label="Free-space delta" value={formatSignedBytes(executionResult.volumeProof?.freeBytesDelta || 0)} />
                 </div>
                 {executionResult.accepted && !volumeProofMeasured(executionResult.volumeProof) ? (
-                  <Notice tone="restricted" icon={AlertTriangle} text="Native volume proof missing. Export can capture the blocker, but the workflow verifier will not clear the next route until measured volume proof exists." />
+                  <Notice tone="review" icon={AlertTriangle} text="Native volume proof was not measured. Cleanup history is still recorded; run a fresh scan to refresh the space totals." />
                 ) : null}
                 {executionLedger.warnings.length ? (
                   <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900">
@@ -1769,6 +1582,143 @@ function RouteReadinessList({ rows = [], compact = false, title = "Route readine
   );
 }
 
+function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCandidate, onRunScan }) {
+  const rows = buildExploreRows(scan, candidates, manualFindings);
+  return (
+    <Card id="drive-explorer-panel" className="rounded-md">
+      <CardHeader>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ListTree className="h-4 w-4" />
+              Explore C: allocation
+            </CardTitle>
+            <CardDescription>Top-level drive inventory, known cleanup areas, and manual review rows from the native scan.</CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={onRunScan} disabled={false}>
+            <ScanLine className="h-4 w-4" />
+            Rescan
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!scan ? (
+          <EmptyState icon={HardDrive} title="Run a scan to explore C:" detail="The explorer is built from native scan evidence and does not browse arbitrary folders live." />
+        ) : (
+          <>
+            <div className="grid gap-3 md:grid-cols-4">
+              <Metric label="Drive" value={scan.volume?.drive || scan.targetDrive || "C:"} />
+              <Metric label="Used" value={formatBytes(scan.volume?.usedBytes || 0)} />
+              <Metric label="Free" value={formatBytes(scan.volume?.freeBytes || 0)} />
+              <Metric label="Rows" value={String(rows.length)} />
+            </div>
+            <div className="grid gap-3">
+              {rows.map((row) => (
+                <div key={row.id} className="rounded-md border bg-background p-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={row.cleanable ? row.ready ? "safe" : "review" : "outline"}>
+                          {row.cleanable ? row.ready ? "cleanable" : "blocked" : "review"}
+                        </Badge>
+                        <Badge variant="outline">{row.kind}</Badge>
+                        <p className="font-medium">{row.title}</p>
+                      </div>
+                      <p className="mt-2 truncate text-sm text-muted-foreground">{row.path || row.source}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{row.detail}</p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-start gap-2 lg:items-end">
+                      <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
+                      {row.candidateId ? (
+                        <Button size="sm" variant={row.ready ? "default" : "outline"} onClick={() => onSelectCandidate(row.candidateId)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {row.ready ? "Stage cleanup" : "View blocker"}
+                        </Button>
+                      ) : (
+                        <Badge variant="outline">manual only</Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function HistoryPanel({
+  selectedCandidate,
+  executionRecord,
+  executionResult,
+  postRunScan,
+  postRunProof,
+  scanStatus,
+  proofReviewed,
+  setProofReviewed,
+  workflowProofAccepted,
+  workflowProofCheck,
+  workflowLocks,
+  canExportProof,
+  proofExportStatus,
+  proofExportMessage,
+  onRescan,
+  onExportProof
+}) {
+  const ledger = buildExecutionLedgerRows(executionResult);
+  return (
+    <div className="grid gap-5">
+      <Card className="rounded-md">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-4 w-4" />
+            Cleanup history
+          </CardTitle>
+          <CardDescription>Recent native cleanup result and optional support evidence.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!executionRecord ? (
+            <EmptyState icon={History} title="No cleanup has run yet" detail="Run a cleanable target to create a local cleanup history record." />
+          ) : (
+            <>
+              <div className="grid gap-3 md:grid-cols-4">
+                <Metric label="Target" value={executionRecord.title || "Cleanup target"} />
+                <Metric label="Result" value={executionRecord.accepted ? "accepted" : "rejected"} />
+                <Metric label="Recovered" value={formatBytes(executionRecord.bytes || 0)} />
+                <Metric label="Ran" value={formatShortDate(executionRecord.executedAt)} />
+              </div>
+              <p className="text-sm text-muted-foreground">{executionRecord.reason || ledger.primary}</p>
+              <Button variant="outline" onClick={onRescan} disabled={scanStatus === "rescanning"}>
+                {scanStatus === "rescanning" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+                Refresh scan after cleanup
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+      <ProofPanel
+        selectedCandidate={selectedCandidate}
+        executionRecord={executionRecord}
+        postRunScan={postRunScan}
+        postRunProof={postRunProof}
+        scanStatus={scanStatus}
+        proofReviewed={proofReviewed}
+        setProofReviewed={setProofReviewed}
+        workflowProofAccepted={workflowProofAccepted}
+        workflowProofCheck={workflowProofCheck}
+        workflowLocks={workflowLocks}
+        canExportProof={canExportProof}
+        proofExportStatus={proofExportStatus}
+        proofExportMessage={proofExportMessage}
+        onRescan={onRescan}
+        onExportProof={onExportProof}
+      />
+    </div>
+  );
+}
+
 function ProofPanel({
   selectedCandidate,
   executionRecord,
@@ -1793,7 +1743,7 @@ function ProofPanel({
           <FileJson className="h-4 w-4" />
           Post-run proof
         </CardTitle>
-        <CardDescription>Run a newer native scan before another route is trusted.</CardDescription>
+        <CardDescription>Optional audit artifacts for support and before/after review.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {!executionRecord ? (
@@ -1807,14 +1757,14 @@ function ProofPanel({
               <Metric label="Rescan state" value={postRunProof.status} />
             </div>
             {executionRecord.accepted && !volumeProofMeasured(executionRecord.volumeProof) ? (
-              <Notice tone="restricted" icon={AlertTriangle} text="Native volume proof is missing. Run post-run rescan and export proof to capture the blocker; do not enable another route until the verifier accepts the workflow proof." />
+              <Notice tone="review" icon={AlertTriangle} text="Native volume proof is missing. Run a post-clean rescan to refresh totals; optional proof export can capture this for support." />
             ) : null}
             {workflowLocks?.noOpExecution ? (
               <Notice tone="review" icon={AlertTriangle} text={workflowLocks.primary} />
             ) : null}
             <Button variant="outline" className="w-full" onClick={onRescan} disabled={scanStatus === "rescanning"}>
               {scanStatus === "rescanning" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-              Run post-run rescan
+              Run post-clean rescan
             </Button>
             {postRunScan ? (
               <div className="space-y-3 rounded-md border bg-background p-3 text-sm">
@@ -1831,7 +1781,7 @@ function ProofPanel({
             ) : null}
             <label className="flex items-start gap-3 text-sm">
               <Checkbox checked={proofReviewed} onClick={() => setProofReviewed(!proofReviewed)} />
-              <span>I reviewed the post-run scan, native ledger, and proof packet before export.</span>
+              <span>I reviewed the post-clean scan, native ledger, and optional proof packet before export.</span>
             </label>
             <Button className="w-full" disabled={!canExportProof || proofExportStatus === "running"} onClick={onExportProof}>
               {proofExportStatus === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
@@ -1881,7 +1831,7 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
           <Bot className="h-4 w-4" />
           OpenAI cleanup agent
         </CardTitle>
-        <CardDescription>Advisory only. The model cannot approve, execute, or change files.</CardDescription>
+        <CardDescription>The agent can stage safe targets; cleanup still runs only after UI confirmation and native validation.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <Textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
@@ -2128,22 +2078,22 @@ function splitLines(value = "") {
     .filter(Boolean);
 }
 
-function buildCleanupCandidates(scan, runtime, selectedRouteInput = "") {
+function buildCleanupCandidates(scan, runtime) {
   if (!scan?.findings?.length) return [];
   const rows = [];
   for (const finding of scan.findings) {
     const rootRecipe = EXECUTOR_RECIPES[finding.recipeId];
     if (rootRecipe) {
-      rows.push(buildCandidateFromFinding(finding, rootRecipe, runtime, selectedRouteInput));
+      rows.push(buildCandidateFromFinding(finding, rootRecipe, runtime));
       continue;
     }
     const itemRecipe = ITEM_REVIEW_RECIPES[finding.recipeId];
     if (itemRecipe) {
-      rows.push(...buildItemCandidates(finding, itemRecipe, runtime, { selectedRouteInput }));
+      rows.push(...buildItemCandidates(finding, itemRecipe, runtime));
       continue;
     }
     if (finding.recipeId === "large-user-files") {
-      rows.push(...buildItemCandidates(finding, ARCHIVE_RECIPE, runtime, { archive: true, selectedRouteInput }));
+      rows.push(...buildItemCandidates(finding, ARCHIVE_RECIPE, runtime, { archive: true }));
     }
   }
   return rows
@@ -2151,27 +2101,54 @@ function buildCleanupCandidates(scan, runtime, selectedRouteInput = "") {
     .sort((left, right) => Number(right.canExecute) - Number(left.canExecute) || right.bytes - left.bytes);
 }
 
-function buildRouteSetupOptions() {
-  const routeMap = new Map();
-  for (const recipe of [
-    ...Object.values(EXECUTOR_RECIPES),
-    ...Object.values(ITEM_REVIEW_RECIPES),
-    ARCHIVE_RECIPE
-  ]) {
-    if (!recipe.routeInput || routeMap.has(recipe.routeInput)) continue;
-    routeMap.set(recipe.routeInput, {
-      label: recipe.label,
-      route: recipe.route,
-      routeInput: recipe.routeInput,
-      flagKey: recipe.flagKey,
-      envVar: recipe.envVar
-    });
-  }
-  return Array.from(routeMap.values()).sort((left, right) => left.label.localeCompare(right.label));
+function buildExploreRows(scan, candidates = [], manualFindings = []) {
+  if (!scan) return [];
+  const cleanableRows = candidates.map((candidate) => ({
+    id: `cleanable-${candidate.id}`,
+    title: candidate.title,
+    path: candidate.targetPath,
+    bytes: Number(candidate.bytes || 0),
+    kind: candidate.routeInput || "cleanup",
+    source: "cleanup-candidate",
+    detail: candidate.canExecute
+      ? candidate.consequence
+      : candidate.blockedReason || "This target needs review before cleanup.",
+    cleanable: true,
+    ready: Boolean(candidate.canExecute),
+    candidateId: candidate.id
+  }));
+  const manualRows = manualFindings.map((finding) => ({
+    id: `manual-${finding.recipeId}-${finding.path || finding.title}`,
+    title: finding.title || "Manual review",
+    path: finding.path || "",
+    bytes: Number(finding.bytes || 0),
+    kind: finding.manualGuidance?.kind || "manual",
+    source: "manual-review",
+    detail: finding.manualGuidance?.primaryAction || finding.note || "Manual review only; no shipped executor can delete this row.",
+    cleanable: false,
+    ready: false,
+    candidateId: ""
+  }));
+  const inventoryRows = (scan.driveInventory || []).map((row) => ({
+    id: `inventory-${row.id || row.path || row.name}`,
+    title: row.name || row.path || "Drive entry",
+    path: row.path || "",
+    bytes: Number(row.bytes || 0),
+    kind: row.classification || row.kind || "drive inventory",
+    source: "drive-inventory",
+    detail: row.note || "Top-level C: allocation. Use cleanable rows or manual review guidance for action.",
+    cleanable: false,
+    ready: false,
+    candidateId: ""
+  }));
+  return [...cleanableRows, ...manualRows, ...inventoryRows]
+    .filter((row) => row.bytes > 0 || row.cleanable)
+    .sort((left, right) => Number(right.cleanable) - Number(left.cleanable) || right.bytes - left.bytes)
+    .slice(0, 80);
 }
 
-function buildCandidateFromFinding(finding, recipe, runtime, selectedRouteInput = "") {
-  const status = buildRouteReadiness({ recipe, finding, runtime, selectedRouteInput });
+function buildCandidateFromFinding(finding, recipe, runtime) {
+  const status = buildRouteReadiness({ recipe, finding, runtime });
   return {
     id: `${finding.recipeId}:${finding.path || recipe.route}`,
     title: finding.title || recipe.label,
@@ -2203,7 +2180,7 @@ function buildItemCandidates(finding, recipe, runtime, options = {}) {
   return items
     .filter((item) => item.path && Number(item.bytes || 0) > 0)
     .map((item) => {
-      const status = buildRouteReadiness({ recipe, finding, runtime, selectedRouteInput: options.selectedRouteInput || "" });
+      const status = buildRouteReadiness({ recipe, finding, runtime });
       return {
         id: `${finding.recipeId}:${item.id || item.path}`,
         title: item.name || recipe.label,
@@ -2726,7 +2703,6 @@ function buildAgentContextKey({
   workflowProofAccepted = false,
   workflowProofCheck = null,
   supportBundleWritten = false,
-  setupRouteInput = "",
   archiveDestination = "",
   permanentRemovalConfirmed = false,
   agentPrompt = ""
@@ -2745,7 +2721,6 @@ function buildAgentContextKey({
   const archiveHash = archiveDestination ? hashContextValue(redactPath(archiveDestination)) : "archive-missing";
   return [
     scanFingerprint || "scan-missing",
-    setupRouteInput || "route-missing",
     runtime?.available ? "native-ready" : "native-missing",
     runtime?.windows ? "windows" : "not-windows",
     runtime?.realRunEnabled ? "real-run" : "real-run-blocked",
