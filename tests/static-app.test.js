@@ -134,6 +134,8 @@ assert(app.includes("supportBundleWritten: Boolean(supportBundleWritten)"), "Ope
 assert(app.includes("proofAllowsNextExecutor: workflowLocks.proofAllowsNextExecutor"), "OpenAI context should use the tested workflow lock policy for next-executor allowance");
 assert(app.includes("noOpExecution: Boolean(workflowLocks.noOpExecution)"), "OpenAI context should expose accepted zero-byte no-op handoff state");
 assert(app.includes("agentTaskQueue"), "OpenAI context should include the app task queue that the advisor instructions require");
+assert(app.includes("manualReviewTargets"), "OpenAI context should include manual review targets");
+assert(app.includes("visibleTargets"), "OpenAI panel should unlock for executable or manual review findings");
 assert(app.includes("selected-route-proof-reviewed"), "app workflow proof should require reviewed selected-route proof export");
 assert(!app.includes("selected-route-proof-import"), "app workflow proof should not require obsolete selected-route proof import");
 assert(app.includes("Export proof, let the in-app verifier accept it, and capture the support bundle before selecting another cleanup target."), "cleanup queue should explain the workflow proof and support bundle lock");
@@ -159,6 +161,10 @@ assert(
 );
 assert(app.includes("buildManualFindingGuidance"), "app should use tested manual finding guidance");
 assert(app.includes("buildManualFindingReviewRows"), "app should use tested manual review row guidance");
+assert(app.includes("\"windows-old\": \"Previous Windows installation review\""), "manual panel should surface Windows.old findings");
+assert(app.includes("hibernation: \"Hibernation file review\""), "manual panel should surface hibernation file findings");
+assert(app.includes("pagefile: \"Pagefile review\""), "manual panel should surface pagefile findings");
+assert(app.includes("\"wsl-vhdx\": \"WSL virtual disk review\""), "manual panel should surface WSL virtual disk findings");
 assert(app.includes("Recommended safe action"), "manual review panel should render recommended safe action copy");
 assert(app.includes("Review candidates"), "manual review panel should render visible review candidates");
 assert(app.includes("Usage evidence"), "manual review panel should render candidate usage evidence");

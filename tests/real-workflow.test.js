@@ -427,6 +427,30 @@ const assert = require("assert");
   assert.strictEqual(readyAgentQueue.schemaVersion, "spaceguard-app-agent-task-queue/v1", "app agent task queue should expose a stable schema");
   assert(readyAgentQueue.rows.some((row) => row.source === "scoped-executor" && row.status === "ready"), "app agent task queue should expose ready executor rows only after current consent exists");
 
+  const manualOnlyAgentQueue = workflow.buildAppAgentTaskQueue({
+    cleanupQueue: [],
+    manualReviewTargets: [
+      {
+        id: "manual:wsl-vhdx:C:\\Users\\LocalUser\\AppData\\Local\\Packages\\Ubuntu\\LocalState\\ext4.vhdx",
+        title: "WSL virtual disk compaction",
+        route: "tool-owned-data-review",
+        bytes: 20 * 1024 * 1024 * 1024,
+        reason: "Shut down WSL and compact manually after backup/review."
+      }
+    ],
+    execution: {
+      proofStatus: "waiting-for-execution",
+      proofAllowsNextExecutor: true,
+      consentMatchesPlan: false,
+      scanFingerprintPresent: true
+    }
+  });
+  const manualOnlyRow = manualOnlyAgentQueue.rows.find((row) => row.source === "manual-review");
+  assert.strictEqual(manualOnlyRow.status, "manual-only", "manual review targets should become manual-only app agent rows");
+  assert.strictEqual(manualOnlyRow.canExecuteNow, false, "manual review targets must not become executable recommendations");
+  assert(manualOnlyRow.checks.some((check) => check.id === "no-executor" && check.passed), "manual review rows should state that no executor is mapped");
+  assert.strictEqual(manualOnlyAgentQueue.counts.manual, 1, "manual review rows should be counted separately from executor rows");
+
   const preConsentAgentQueue = workflow.buildAppAgentTaskQueue({
     cleanupQueue: [queueCandidate],
     execution: {
@@ -740,6 +764,49 @@ const assert = require("assert");
   assert.strictEqual(customRootGuidance.kind, "manual-filesystem-review", "custom roots should stay manual filesystem review");
   assert.strictEqual(customRootGuidance.command, "explorer.exe /select,\"D:\\Archive\"", "custom root guidance should expose an Explorer review command");
   assert(customRootGuidance.blockedActions.includes("No SpaceGuard executor is mapped to this finding."), "custom root guidance should block unmapped execution");
+
+  const windowsOldGuidance = workflow.buildManualFindingGuidance({
+    recipeId: "windows-old",
+    title: "Previous Windows installation",
+    path: "C:\\Windows.old",
+    bytes: 14 * 1024 * 1024 * 1024,
+    status: "measured"
+  });
+  assert.strictEqual(windowsOldGuidance.kind, "windows-servicing-review", "Windows.old should route to Windows servicing review");
+  assert.strictEqual(windowsOldGuidance.command, "cleanmgr.exe", "Windows.old guidance should point to Windows cleanup tooling");
+  assert(windowsOldGuidance.blockedActions.includes("Do not delete Windows.old directly from File Explorer."), "Windows.old guidance should block direct folder deletion");
+
+  const hibernationGuidance = workflow.buildManualFindingGuidance({
+    recipeId: "hibernation",
+    title: "Disable hibernation file",
+    path: "C:\\hiberfil.sys",
+    bytes: 8 * 1024 * 1024 * 1024,
+    status: "measured"
+  });
+  assert.strictEqual(hibernationGuidance.kind, "advanced-system-setting", "hibernation file should stay an advanced system setting");
+  assert(hibernationGuidance.command.includes("powercfg /hibernate off"), "hibernation guidance should point to the OS setting command");
+  assert(hibernationGuidance.blockedActions.includes("Do not delete hiberfil.sys manually."), "hibernation guidance should block raw system file deletion");
+
+  const pagefileGuidance = workflow.buildManualFindingGuidance({
+    recipeId: "pagefile",
+    title: "Pagefile size changes",
+    path: "C:\\pagefile.sys",
+    bytes: 12 * 1024 * 1024 * 1024,
+    status: "measured"
+  });
+  assert.strictEqual(pagefileGuidance.command, "SystemPropertiesAdvanced.exe", "pagefile guidance should open Windows virtual memory settings");
+  assert(pagefileGuidance.blockedActions.includes("Do not delete pagefile.sys manually."), "pagefile guidance should block direct deletion");
+
+  const wslGuidance = workflow.buildManualFindingGuidance({
+    recipeId: "wsl-vhdx",
+    title: "WSL virtual disk compaction",
+    path: "C:\\Users\\LocalUser\\AppData\\Local\\Packages\\Ubuntu\\LocalState\\ext4.vhdx",
+    bytes: 20 * 1024 * 1024 * 1024,
+    status: "measured"
+  });
+  assert.strictEqual(wslGuidance.kind, "tool-owned-data-review", "WSL VHDX should route to tool-owned data review");
+  assert(wslGuidance.command.includes("wsl --shutdown"), "WSL VHDX guidance should require WSL shutdown before review");
+  assert(wslGuidance.blockedActions.includes("Do not delete ext4.vhdx directly unless removing the distro intentionally."), "WSL VHDX guidance should block direct disk deletion");
 
   const installedAppRows = workflow.buildManualFindingReviewRows({
     recipeId: "installed-app-footprints",

@@ -209,7 +209,7 @@ export function buildWindowsRealTestRunbook({ route = {}, envBlock = buildRouteE
     runbookGuardrail("one-route", "Keep exactly one route flag enabled before launch."),
     runbookGuardrail("desktop-only", "Do not scan or clean from a normal browser session."),
     runbookGuardrail("user-consent", "Do not execute until the app shows current-plan consent and route readiness."),
-    runbookGuardrail("manual-only", "Do not delete installed app folders, custom roots, or broad inventory rows directly."),
+    runbookGuardrail("manual-only", "Do not delete installed app folders, custom roots, system files, WSL disks, or broad inventory rows directly."),
     runbookGuardrail("proof-before-next-route", "Do not enable another route until the in-app workflow proof verifier accepts the export.")
   ];
   const content = buildWindowsRealTestRunbookMarkdown({
@@ -340,6 +340,58 @@ export function buildManualFindingGuidance(finding = {}) {
         "No SpaceGuard executor deletes Docker volumes.",
         "Do not delete Docker data-root folders directly.",
         "Do not run broad docker system prune from this app."
+      ]
+    });
+  }
+  if (recipeId === "windows-old") {
+    return manualGuidance({
+      kind: "windows-servicing-review",
+      primaryAction: "Use Windows cleanup tools to remove a previous Windows installation.",
+      command: "cleanmgr.exe",
+      confidence: "restricted",
+      blockedActions: [
+        "Do not delete Windows.old directly from File Explorer.",
+        "Do not remove the current Windows folder or servicing store.",
+        "Do not run this cleanup until rollback needs are understood."
+      ]
+    });
+  }
+  if (recipeId === "hibernation") {
+    return manualGuidance({
+      kind: "advanced-system-setting",
+      primaryAction: "Review whether disabling hibernation is acceptable before reclaiming hiberfil.sys.",
+      command: "Run elevated PowerShell: powercfg /hibernate off",
+      confidence: "advanced",
+      blockedActions: [
+        "Do not delete hiberfil.sys manually.",
+        "Do not disable hibernation if the user relies on Hibernate or Fast Startup.",
+        "SpaceGuard does not run elevated powercfg commands."
+      ]
+    });
+  }
+  if (recipeId === "pagefile") {
+    return manualGuidance({
+      kind: "advanced-system-setting",
+      primaryAction: "Review virtual memory settings instead of deleting pagefile.sys.",
+      command: "SystemPropertiesAdvanced.exe",
+      confidence: "advanced",
+      blockedActions: [
+        "Do not delete pagefile.sys manually.",
+        "Do not disable paging without checking RAM, crash dump, and workload needs.",
+        "SpaceGuard does not modify virtual memory settings."
+      ]
+    });
+  }
+  if (recipeId === "wsl-vhdx") {
+    return manualGuidance({
+      kind: "tool-owned-data-review",
+      primaryAction: "Shut down WSL and compact the distro virtual disk only after backup/review.",
+      command: path ? `wsl --shutdown; review ${path}` : "wsl --shutdown",
+      confidence: "advanced",
+      blockedActions: [
+        "Do not delete ext4.vhdx directly unless removing the distro intentionally.",
+        "Do not compact while the distro is running.",
+        "SpaceGuard does not run WSL compaction commands."
       ]
     });
   }
@@ -944,6 +996,7 @@ function buildInAppSupportBundleNextStep({ requiredWritten, accepted }) {
 
 export function buildAppAgentTaskQueue({
   cleanupQueue = [],
+  manualReviewTargets = [],
   execution = {}
 } = {}) {
   const rows = [];
@@ -1046,6 +1099,31 @@ export function buildAppAgentTaskQueue({
         ]
       });
     }
+  }
+
+  for (const target of manualReviewTargets.slice(0, 8)) {
+    const targetId = target.targetId || target.id || target.path || target.title || "manual-review";
+    rows.push({
+      id: `task-manual-only-${targetId}`,
+      source: "manual-review",
+      actionType: "manual-only",
+      targetId,
+      route: target.route || "manual-review",
+      title: target.title || "Manual review",
+      bytes: Number(target.bytes || 0),
+      priority: appTaskPriority(target.bytes, "manual-only"),
+      status: "manual-only",
+      canExecuteNow: false,
+      manualOnly: true,
+      executorFlag: "",
+      buttonLabel: "Open manual review",
+      reason: target.reason || "Manual review only; no SpaceGuard executor is mapped to this finding.",
+      blocker: "manual-only",
+      checks: [
+        appTaskCheck("manual-only", "Manual-only boundary", true, "Routes to review guidance only."),
+        appTaskCheck("no-executor", "No executor", true, "SpaceGuard will not delete or modify this target.")
+      ]
+    });
   }
 
   return {

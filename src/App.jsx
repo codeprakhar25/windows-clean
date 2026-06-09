@@ -247,7 +247,11 @@ const MANUAL_RECIPE_LABELS = {
   "installed-app-footprints": "Installed app review",
   "large-user-files": "Large file review",
   "android-studio": "Android Studio footprint review",
-  "docker-volumes": "Docker volume review"
+  "docker-volumes": "Docker volume review",
+  "windows-old": "Previous Windows installation review",
+  hibernation: "Hibernation file review",
+  pagefile: "Pagefile review",
+  "wsl-vhdx": "WSL virtual disk review"
 };
 
 function App() {
@@ -354,6 +358,7 @@ function App() {
       runtime,
       scan,
       candidates,
+      manualFindings,
       selectedCandidate,
       executionRecord,
       postRunProof,
@@ -367,7 +372,7 @@ function App() {
       supportBundleWritten,
       workflowLocks
     }),
-    [runtime, scan, candidates, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted, workflowProofCheck, supportBundleWritten, workflowLocks]
+    [runtime, scan, candidates, manualFindings, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted, workflowProofCheck, supportBundleWritten, workflowLocks]
   );
   const agentBroker = useMemo(
     () => {
@@ -739,6 +744,7 @@ function App() {
             runtime={runtime}
             scan={scan}
             candidates={candidates}
+            manualFindings={manualFindings}
             selectedCandidate={selectedCandidate}
             prompt={agentPrompt}
             setPrompt={setAgentPrompt}
@@ -1563,8 +1569,9 @@ function ProofPanel({
   );
 }
 
-function OpenAIPanel({ runtime, scan, candidates, selectedCandidate, prompt, setPrompt, status, error, advice, agentBroker, onAsk }) {
-  const canAsk = Boolean(runtime?.openAiAgentAdvice && runtime?.openAiAdvisorConfigured && scan && candidates.length);
+function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedCandidate, prompt, setPrompt, status, error, advice, agentBroker, onAsk }) {
+  const visibleTargets = Number(candidates?.length || 0) + Number(manualFindings?.length || 0);
+  const canAsk = Boolean(runtime?.openAiAgentAdvice && runtime?.openAiAdvisorConfigured && scan && visibleTargets);
   const assistant = advice?.advice;
   return (
     <Card className="rounded-md">
@@ -1585,7 +1592,7 @@ function OpenAIPanel({ runtime, scan, candidates, selectedCandidate, prompt, set
           <Notice
             tone="review"
             icon={AlertTriangle}
-            text="Set OPENAI_API_KEY in .env, start the desktop shell, and run a real scan before asking the advisor."
+            text="Set OPENAI_API_KEY in .env, start the desktop shell, and run a real scan with cleanup or manual review findings before asking the advisor."
           />
         ) : null}
         {error ? <Notice tone="restricted" icon={AlertTriangle} text={error} /> : null}
@@ -2135,6 +2142,7 @@ function buildAgentContext({
   runtime,
   scan,
   candidates,
+  manualFindings = [],
   selectedCandidate,
   executionRecord,
   postRunProof,
@@ -2159,6 +2167,19 @@ function buildAgentContext({
     canExecute: Boolean(candidate.canExecute),
     blockedReason: candidate.blockedReason || "",
     targetPath: redactPath(candidate.targetPath || "")
+  }));
+  const manualReviewTargets = manualFindings.slice(0, 24).map((finding) => ({
+    id: `manual:${finding.recipeId || "finding"}:${finding.path || finding.title || ""}`,
+    title: finding.title || "Manual review",
+    route: finding.manualGuidance?.kind || "manual-review",
+    actionType: "manual-only",
+    targetId: `manual:${finding.recipeId || "finding"}:${finding.path || finding.title || ""}`,
+    bytes: Number(finding.bytes || 0),
+    status: finding.status || "unknown",
+    confidence: finding.manualGuidance?.confidence || "manual-only",
+    targetPath: redactPath(finding.path || ""),
+    reason: finding.manualGuidance?.primaryAction || finding.note || "Manual review only.",
+    blockedActions: Array.isArray(finding.manualGuidance?.blockedActions) ? finding.manualGuidance.blockedActions.slice(0, 4) : []
   }));
   const targetsForRoute = (route) => cleanupQueue.filter((candidate) => candidate.route === route);
   const execution = executionRecord ? {
@@ -2206,7 +2227,7 @@ function buildAgentContext({
     archiveDestinationReady: Boolean(String(archiveDestination || "").trim()),
     permanentRemovalConfirmed: Boolean(permanentRemovalConfirmed)
   };
-  const agentTaskQueue = buildAppAgentTaskQueue({ cleanupQueue, execution });
+  const agentTaskQueue = buildAppAgentTaskQueue({ cleanupQueue, manualReviewTargets, execution });
   return {
     schemaVersion: "spaceguard-openai-agent-context/v1",
     productSurface: "real-windows-desktop-app",
@@ -2237,6 +2258,7 @@ function buildAgentContext({
     },
     cleanupQueue,
     executableRows: cleanupQueue,
+    manualReviewTargets,
     reviewedDownloadsTargets: targetsForRoute("item-review-recycle-bin"),
     reviewedProjectTargets: targetsForRoute("item-review-project-cache"),
     largeFileArchiveTargets: targetsForRoute("item-review-large-files"),
