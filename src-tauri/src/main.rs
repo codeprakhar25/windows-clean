@@ -632,7 +632,7 @@ async fn openai_agent_advice(
         response_id,
         key_source,
         transport: "native-tauri",
-        warnings: vec!["OpenAI advice is advisory only; native executors still require explicit user action, consent, feature flags, and target validation.".to_string()],
+        warnings: vec!["OpenAI advice is advisory only; native executors still require explicit user action, consent, built-in allowlists, and target validation.".to_string()],
     })
 }
 
@@ -993,72 +993,7 @@ fn drive_from_path_string(value: &str) -> Option<String> {
 }
 
 fn enabled_scoped_executor_flags_on_windows() -> Vec<&'static str> {
-    let flags = [
-        ("SPACEGUARD_ENABLE_TEMP_EXECUTOR", temp_executor_enabled()),
-        (
-            "SPACEGUARD_ENABLE_PROJECT_DEPS_EXECUTOR",
-            project_dependency_executor_enabled(),
-        ),
-        (
-            "SPACEGUARD_ENABLE_DOWNLOADS_EXECUTOR",
-            downloads_cleanup_executor_enabled(),
-        ),
-        (
-            "SPACEGUARD_ENABLE_LARGE_FILE_ARCHIVE_EXECUTOR",
-            large_file_archive_executor_enabled(),
-        ),
-        (
-            "SPACEGUARD_ENABLE_BROWSER_CACHE_EXECUTOR",
-            browser_cache_executor_enabled(),
-        ),
-        (
-            "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR",
-            gradle_cache_executor_enabled(),
-        ),
-        (
-            "SPACEGUARD_ENABLE_USER_CACHE_EXECUTOR",
-            user_cache_executor_enabled(),
-        ),
-        (
-            "SPACEGUARD_ENABLE_ANDROID_CACHE_EXECUTOR",
-            android_cache_executor_enabled(),
-        ),
-        (
-            "SPACEGUARD_ENABLE_SHADER_CACHE_EXECUTOR",
-            shader_cache_executor_enabled(),
-        ),
-        (
-            "SPACEGUARD_ENABLE_PIP_CACHE_EXECUTOR",
-            pip_cache_executor_enabled(),
-        ),
-        (
-            "SPACEGUARD_ENABLE_TOOL_NATIVE_PRUNE_EXECUTORS",
-            tool_native_prune_executors_enabled(),
-        ),
-        (
-            "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
-            npm_cache_executor_enabled(),
-        ),
-        (
-            "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR",
-            pnpm_store_executor_enabled(),
-        ),
-        (
-            "SPACEGUARD_ENABLE_RECYCLE_BIN_EXECUTOR",
-            recycle_bin_executor_enabled(),
-        ),
-    ];
-
-    flags
-        .iter()
-        .filter_map(|(name, enabled)| {
-            if scoped_executor_enabled_on_windows(*enabled) {
-                Some(*name)
-            } else {
-                None
-            }
-        })
-        .collect()
+    Vec::new()
 }
 
 fn reject_multiple_scoped_executor_flags(
@@ -4314,6 +4249,70 @@ fn normalize_write_target(value: &str) -> String {
         .to_string()
 }
 
+fn split_dry_run_targets(value: &str) -> Vec<String> {
+    value
+        .lines()
+        .flat_map(|line| line.split(';'))
+        .map(strip_wrapping_quotes)
+        .filter(|target| !target.is_empty())
+        .map(ToString::to_string)
+        .collect()
+}
+
+fn resolve_dry_run_target(value: &str) -> PathBuf {
+    let clean = strip_wrapping_quotes(value);
+    if clean.is_empty() {
+        return PathBuf::new();
+    }
+    PathBuf::from(expand_windows_env_vars(clean))
+}
+
+fn strip_wrapping_quotes(value: &str) -> &str {
+    let clean = value.trim();
+    clean
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .or_else(|| {
+            clean
+                .strip_prefix('\'')
+                .and_then(|value| value.strip_suffix('\''))
+        })
+        .unwrap_or(clean)
+        .trim()
+}
+
+fn expand_windows_env_vars(value: &str) -> String {
+    let mut expanded = String::with_capacity(value.len());
+    let mut rest = value;
+
+    while let Some(start) = rest.find('%') {
+        expanded.push_str(&rest[..start]);
+        let after_start = &rest[start + 1..];
+        let Some(end) = after_start.find('%') else {
+            expanded.push('%');
+            expanded.push_str(after_start);
+            return expanded;
+        };
+
+        let name = &after_start[..end];
+        if !name.is_empty() {
+            if let Some(value) = env::var_os(name) {
+                expanded.push_str(&PathBuf::from(value).display().to_string());
+            } else {
+                expanded.push('%');
+                expanded.push_str(name);
+                expanded.push('%');
+            }
+        } else {
+            expanded.push_str("%%");
+        }
+        rest = &after_start[end + 1..];
+    }
+
+    expanded.push_str(rest);
+    expanded
+}
+
 fn write_target_forbidden(route: &str, target: &str) -> bool {
     match route {
         "known-temp-delete" => {
@@ -4823,9 +4822,10 @@ fn recycle_bin_executor_enabled() -> bool {
 }
 
 fn runtime_feature_flag_enabled(name: &str) -> bool {
-    runtime_env_value(&[name])
-        .map(|(value, _)| is_truthy_runtime_flag(&value))
-        .unwrap_or(false)
+    let disabled_name = name.replace("SPACEGUARD_ENABLE_", "SPACEGUARD_DISABLE_");
+    runtime_env_value(&[&disabled_name])
+        .map(|(value, _)| !is_truthy_runtime_flag(&value))
+        .unwrap_or(true)
 }
 
 fn scoped_executor_enabled_on_windows(flag_enabled: bool) -> bool {
@@ -8655,19 +8655,11 @@ fn runtime_capabilities() -> RuntimeCapabilities {
     let openai_advisor_configured = openai_key_source != "missing";
     let enabled_scoped_executor_flags = enabled_scoped_executor_flags_on_windows();
     let enabled_scoped_executor_flag_count = enabled_scoped_executor_flags.len();
-    let executor_scope_status = if enabled_scoped_executor_flag_count > 1 {
-        "multiple-scoped-flags"
-    } else if enabled_scoped_executor_flag_count == 1 {
-        "single-scoped-flag"
-    } else {
-        "no-scoped-flags"
-    };
-    let real_execution_enabled = enabled_scoped_executor_flag_count == 1;
+    let executor_scope_status = "built-in-allowlists";
+    let real_execution_enabled = cfg!(target_os = "windows");
     RuntimeCapabilities {
-        mode: if enabled_scoped_executor_flag_count > 1 {
-            "native-scope-invalid"
-        } else if real_execution_enabled {
-            "native-scoped-write"
+        mode: if real_execution_enabled {
+            "native-production-write"
         } else {
             "native-readonly"
         },
@@ -8702,12 +8694,10 @@ fn runtime_capabilities() -> RuntimeCapabilities {
             recycle_bin_executor: recycle_bin_enabled,
             browser_cache_executor: browser_cache_enabled,
         },
-        reason: if enabled_scoped_executor_flag_count > 1 {
-            "Multiple scoped cleanup executor flags are enabled; turn off all but one before real cleanup."
-        } else if real_execution_enabled {
-            "Exactly one scoped cleanup executor is enabled by environment flag."
+        reason: if real_execution_enabled {
+            "Production cleanup executors are available through built-in native allowlists and per-target validation."
         } else {
-            "Real executors are disabled until a scoped executor flag is enabled on Windows."
+            "Real executors are available only from the Windows desktop runtime."
         }
         .to_string(),
     }
@@ -11124,9 +11114,10 @@ fn package_script_signals(package_value: Option<&Value>) -> Vec<String> {
 
     ["dev", "start", "build", "test", "android", "ios", "web"]
         .iter()
+        .copied()
         .filter(|name| scripts.contains_key(*name))
         .take(5)
-        .map(|name| (*name).to_string())
+        .map(ToString::to_string)
         .collect()
 }
 
