@@ -117,6 +117,9 @@ assert(app.includes("buildCleanupCandidates(scan, runtime, setupRouteInput)"), "
 assert(app.includes("buildExecutionLedgerRows"), "app should normalize native execution ledger rows for rendering");
 assert(app.includes("buildExecutionGate"), "app should use tested execution dispatch gate guardrails");
 assert(app.includes("buildExecutionPrerequisites"), "app should use tested route-specific execution prerequisites");
+assert(app.includes("resolveRuntimeRouteInput"), "app should sync the selected cleanup route from the single enabled runtime flag");
+assert(app.includes("setSetupRouteInput(runtimeRouteInput)"), "app should update the in-app route when the launcher armed a different route");
+assert(app.includes("resetWorkflowForRouteChange"), "app should clear stale selected target and proof state when runtime route sync changes route");
 assert(app.includes("buildWorkflowGuide"), "app should use the tested single workflow guide");
 assert(app.includes("buildWorkflowLocks"), "app should use tested workflow lock policy for proof handoff");
 assert(app.includes("buildBaselinePromotion"), "app should use tested baseline promotion after proof handoff");

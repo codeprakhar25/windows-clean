@@ -61,6 +61,23 @@ export function resolveWorkflowAgentBrokerCandidate(row = {}, candidates = []) {
   }) || null;
 }
 
+export function resolveRuntimeRouteInput({ routes = [], runtime = null, fallbackRouteInput = "npm-cache" } = {}) {
+  const routeRows = Array.isArray(routes) ? routes : [];
+  const fallback = String(fallbackRouteInput || routeRows[0]?.routeInput || "npm-cache");
+  const enabledEnvVars = Array.isArray(runtime?.enabledScopedExecutorFlags)
+    ? runtime.enabledScopedExecutorFlags.map((flag) => String(flag || "").trim()).filter(Boolean)
+    : [];
+  if (enabledEnvVars.length === 1) {
+    const enabledRoute = routeRows.find((route) => route.envVar === enabledEnvVars[0]);
+    if (enabledRoute?.routeInput) return enabledRoute.routeInput;
+  }
+  if (enabledEnvVars.length > 1) return fallback;
+
+  const enabledByFlagKey = routeRows.filter((route) => route.flagKey && runtime?.executorFlags?.[route.flagKey]);
+  if (enabledByFlagKey.length === 1) return enabledByFlagKey[0].routeInput || fallback;
+  return fallback;
+}
+
 function slugifyWorkflowId(value = "") {
   return String(value || "")
     .trim()

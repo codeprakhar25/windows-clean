@@ -50,7 +50,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowAgentTargetId, buildWorkflowGuide, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, renderInAppSupportBundleMarkdown, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
+import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildRouteSetupChecklist, buildWorkflowAgentTargetId, buildWorkflowGuide, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, renderInAppSupportBundleMarkdown, resolveRuntimeRouteInput, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
 import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -398,6 +398,16 @@ function App() {
   const canExecute = executionGate.ready;
   const targetSwitchLocked = workflowLocks.targetSwitchLocked;
   const routeSetupLocked = workflowLocks.routeSetupLocked;
+  const runtimeRouteInput = useMemo(
+    () => resolveRuntimeRouteInput({ routes: routeSetupOptions, runtime, fallbackRouteInput: setupRouteInput }),
+    [routeSetupOptions, runtime, setupRouteInput]
+  );
+  useEffect(() => {
+    if (routeSetupLocked) return;
+    if (!runtimeRouteInput || runtimeRouteInput === setupRouteInput) return;
+    setSetupRouteInput(runtimeRouteInput);
+    resetWorkflowForRouteChange();
+  }, [runtimeRouteInput, setupRouteInput, routeSetupLocked]);
   const agentContext = useMemo(
     () => buildAgentContext({
       runtime,
@@ -711,6 +721,25 @@ function App() {
     }
 
     focusAgentBrokerPanel(row);
+  }
+
+  function resetWorkflowForRouteChange() {
+    setSelectedId("");
+    setConsentChecked(false);
+    setConfirmationText("");
+    setPermanentRemovalConfirmed(false);
+    setArchiveDestination("");
+    setExecutionStatus("idle");
+    setExecutionError("");
+    setExecutionResult(null);
+    setExecutionRecord(null);
+    setPostRunScan(null);
+    setProofReviewed(false);
+    setWorkflowProofAccepted(false);
+    setWorkflowProofCheck(null);
+    setSupportBundleWrite(null);
+    setProofExportStatus("idle");
+    setProofExportMessage("");
   }
 
   function selectWorkflowCandidate(id) {

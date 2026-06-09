@@ -190,6 +190,45 @@ const assert = require("assert");
   assert.strictEqual(executionLedger.rows[0].checks[0].status, "blocked", "execution ledger should preserve preflight check status");
   assert(executionLedger.warnings[0].includes("SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR"), "execution ledger should expose native executor warnings");
 
+  const routeOptions = [
+    { routeInput: "npm-cache", envVar: "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", flagKey: "npmCacheExecutor" },
+    { routeInput: "pnpm-store", envVar: "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR", flagKey: "pnpmStoreExecutor" },
+    { routeInput: "gradle-cache", envVar: "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR", flagKey: "gradleCacheExecutor" }
+  ];
+  assert.strictEqual(
+    workflow.resolveRuntimeRouteInput({
+      routes: routeOptions,
+      runtime: {
+        enabledScopedExecutorFlags: ["SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR"],
+        executorFlags: { pnpmStoreExecutor: true }
+      },
+      fallbackRouteInput: "npm-cache"
+    }),
+    "pnpm-store",
+    "runtime route sync should select the route for the single enabled scoped flag"
+  );
+  assert.strictEqual(
+    workflow.resolveRuntimeRouteInput({
+      routes: routeOptions,
+      runtime: {
+        enabledScopedExecutorFlags: ["SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "SPACEGUARD_ENABLE_GRADLE_CACHE_EXECUTOR"],
+        executorFlags: { npmCacheExecutor: true, gradleCacheExecutor: true }
+      },
+      fallbackRouteInput: "npm-cache"
+    }),
+    "npm-cache",
+    "runtime route sync should preserve the current route when multiple scoped flags are enabled"
+  );
+  assert.strictEqual(
+    workflow.resolveRuntimeRouteInput({
+      routes: routeOptions,
+      runtime: { enabledScopedExecutorFlags: [], executorFlags: {} },
+      fallbackRouteInput: "gradle-cache"
+    }),
+    "gradle-cache",
+    "runtime route sync should preserve the current route when no scoped flag is enabled"
+  );
+
   const setupMismatchRuntime = {
     windows: true,
     executeCleanupPlan: true,
