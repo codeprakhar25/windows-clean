@@ -271,9 +271,13 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   const report = buildWindowsReadinessReport({ routeInput: args.route || "npm-cache" });
   console.log(JSON.stringify(report, null, 2));
-  if (report.status === "local-contract-blocked" || report.status === "multi-route-blocked") {
+  if (shouldFailReadinessCli(report)) {
     process.exitCode = 1;
   }
+}
+
+export function shouldFailReadinessCli(report) {
+  return !report?.readyForNativeDev;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath) {

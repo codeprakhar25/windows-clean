@@ -28,6 +28,7 @@ OPENAI_API_KEY=sk-...
 
 The `windows:dev` command keeps one route armed, checks readiness, and launches the desktop app only when the selected Windows route is ready.
 Run `route:arm` before `windows:ready`; otherwise readiness correctly reports `route-arm-required` because no write route is enabled yet.
+`windows:ready` exits nonzero until the selected route can launch the native Windows desktop app; treat that as a stop signal and follow the JSON `nextSteps`.
 If `windows:ready` reports `toolchain-blocked`, run `npm install`, install or repair Node.js, Rustup/Cargo, and the Tauri Windows prerequisites, restart PowerShell, and run readiness again.
 
 ## Launch
