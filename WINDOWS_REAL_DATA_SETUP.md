@@ -44,9 +44,8 @@ In the app:
 
 1. Click `Scan PC`.
 2. Check one row marked `can clean`.
-3. Confirm `Delete this selected item from this PC.` if it is not already checked.
-4. Click `Delete selected files`.
-5. Click `Refresh space`.
+3. Click `Delete selected files`.
+4. Click `Refresh space`.
 
 Optional support export can write `spaceguard-selected-route-proof-packet.md`, `spaceguard-real-workflow-proof.md`, `spaceguard-workflow-proof-check.json`, and `spaceguard-support-bundle.md` from `Support details`. Use the CLI verifier as an external audit if needed:
 

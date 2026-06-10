@@ -141,14 +141,14 @@ assert(app.includes("useState(\"clean\")"), "app should open directly on the Cle
 assert(!app.includes("id: \"overview\""), "sidebar should not force users through an overview detour");
 assert(app.includes("Advanced scan options"), "scan tuning should stay collapsed behind advanced options");
 assert(/activeView === "clean"[\s\S]*<ScanPanel[\s\S]*<CleanPanel/.test(app), "Clean screen should contain scan and cleanup controls in one flow");
-assert(app.includes("Required before cleanup"), "user gate should keep route-specific execution requirements inside collapsed checks");
 assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
 assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
-assert(app.includes("Advanced checks"), "clean panel should collapse readiness details behind advanced checks");
-assert(app.includes("Diagnostics"), "clean panel should collapse native diagnostics behind diagnostics");
-assert(app.includes("ledger.warnings"), "clean panel should keep native executor warnings inside technical details");
-assert(app.includes("entry.rejectCode"), "clean panel should render native reject codes");
+assert(app.includes("formatExecutionGateError"), "execute handler should convert dispatch blockers into plain user-facing copy");
+assert(app.includes("Technical details"), "clean panel should collapse native diagnostics behind technical details");
+assert(app.includes("ledger.warnings"), "clean panel should keep native executor warnings inside collapsed technical details");
+assert(app.includes("entry.rejectCode"), "clean panel should keep native reject codes inside collapsed technical details");
+assert(!app.includes("Delete this selected item from this PC."), "normal cleanup should use the selected row checkbox as the confirmation");
 assert(app.includes("workflowLocks"), "execution gate should receive workflow lock state from the shared cleanup policy");
 assert(app.includes("activeScanGeneratedAt: scan?.generatedAt || \"\""), "execution gate should receive active scan timestamp for execution context");
 assert(app.includes("executionRecord?.accepted"), "proof export should require an accepted native execution record");
@@ -219,7 +219,7 @@ assert(app.includes("This screen contains no preloaded cleanup data and cannot t
 assert(app.includes("This setup page is intentionally non-executable. Start the desktop shell to test real Windows data."), "browser-only setup state should explain that real execution requires the desktop shell");
 assert(/if \(!nativeConnected\) \{[\s\S]*return \(\s*<AppFrame[\s\S]*<ConnectionRequired/.test(app), "browser-only setup state should keep the pinned sidebar while rendering non-executable setup content");
 assert(app.includes("Windows launch steps"), "browser-only setup state should present the desktop launch checklist");
-assert(app.includes("Scan -> choose -> delete"), "browser-only setup should describe the simplified cleanup flow");
+assert(app.includes("Scan -> check -> delete"), "browser-only setup should describe the simplified cleanup flow");
 assert(!/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup state should not render the route setup wizard");
 assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context should keep a stable schema");
 assert(app.includes("Recommendation diagnostics"), "OpenAI panel should collapse deterministic broker status");

@@ -474,7 +474,7 @@ function App() {
     });
     if (!currentExecutionGate.ready) {
       setExecutionStatus("error");
-      setExecutionError(currentExecutionGate.primary);
+      setExecutionError(formatExecutionGateError(currentExecutionGate));
       return;
     }
     setExecutionStatus("running");
@@ -524,7 +524,7 @@ function App() {
       setExecutionStatus(result.accepted ? "complete" : "rejected");
     } catch (error) {
       setExecutionStatus("error");
-      setExecutionError(error instanceof Error ? error.message : "Cleanup execution failed.");
+      setExecutionError(formatCleanupStartError(error));
     }
   }
 
@@ -757,12 +757,10 @@ function App() {
                 selectedId={selectedId}
                 candidate={selectedCandidate}
                 consentChecked={consentChecked}
-                setConsentChecked={setConsentChecked}
                 permanentRemovalConfirmed={permanentRemovalConfirmed}
                 setPermanentRemovalConfirmed={setPermanentRemovalConfirmed}
                 archiveDestination={archiveDestination}
                 setArchiveDestination={setArchiveDestination}
-                executionPrerequisites={executionPrerequisites}
                 canExecute={canExecute}
                 executionStatus={executionStatus}
                 executionError={executionError}
@@ -873,7 +871,7 @@ function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, sel
               })}
             </nav>
             <div className="mt-auto rounded-md border bg-muted/35 p-3 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground">Selected cleanup</p>
+              <p className="font-medium text-foreground">Selected item</p>
               <p className="mt-1 truncate">{selectedCandidate?.title || "Nothing selected"}</p>
               <p className="mt-3 font-medium text-foreground">Runtime</p>
               <p className="mt-1">{runtime?.windows ? "Windows native shell" : "Waiting for native shell"}</p>
@@ -910,7 +908,7 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh })
     },
     {
       label: "Run cleanup",
-      command: "Scan -> choose -> delete",
+      command: "Scan -> check -> delete",
       detail: "If this setup screen is still visible, the native bridge is not connected yet."
     }
   ];
@@ -922,9 +920,9 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh })
   ];
   const unlocks = [
     "Read-only C: scan",
-    "Measured cleanup queue",
+    "Cleanup choices",
     "Explicit user consent",
-    "Scoped native executor",
+    "Safe delete action",
     "Post-clean rescan",
     "Cleanup history"
   ];
@@ -1031,9 +1029,6 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={runtime?.realRunEnabled ? "safe" : "review"}>
             {runtime?.realRunEnabled ? "cleanup available" : "desktop required"}
-          </Badge>
-          <Badge variant={runtime?.openAiAdvisorConfigured ? "safe" : "outline"}>
-            {runtime?.openAiAdvisorConfigured ? "OpenAI key detected" : "OpenAI key missing"}
           </Badge>
         </div>
         <h1 className="mt-2 text-2xl font-semibold tracking-normal">SpaceGuard Windows cleanup</h1>
@@ -1181,12 +1176,10 @@ function CleanPanel({
   selectedId,
   candidate,
   consentChecked,
-  setConsentChecked,
   permanentRemovalConfirmed,
   setPermanentRemovalConfirmed,
   archiveDestination,
   setArchiveDestination,
-  executionPrerequisites,
   canExecute,
   executionStatus,
   executionError,
@@ -1226,7 +1219,7 @@ function CleanPanel({
               {candidates.map((row) => {
                 const checked = row.id === selectedId && row.canExecute && consentChecked;
                 const selected = row.id === selectedId;
-                const statusLabel = row.canExecute ? "can clean" : row.executable ? "needs setup" : "review only";
+                const statusLabel = row.canExecute ? "can clean" : row.executable ? "not ready" : "review only";
                 return (
                   <div
                     key={row.id}
@@ -1297,18 +1290,14 @@ function CleanPanel({
                 {!candidateReady ? (
                   <Notice tone="restricted" icon={Lock} text={candidate.blockedReason || "This item is not available for cleanup yet."} />
                 ) : null}
-                <label className="mt-4 flex items-start gap-3 text-sm">
-                  <Checkbox checked={candidateReady && consentChecked} disabled={!candidateReady} onClick={() => setConsentChecked(!consentChecked)} />
-                  <span>Delete this selected item from this PC.</span>
-                </label>
                 {candidate.requiresPermanentConfirmation ? (
-                  <label className="mt-3 flex items-start gap-3 text-sm">
+                  <label className="mt-4 flex items-start gap-3 text-sm">
                     <Checkbox checked={candidateReady && permanentRemovalConfirmed} disabled={!candidateReady} onClick={() => setPermanentRemovalConfirmed(!permanentRemovalConfirmed)} />
                     <span>I understand this permanently empties Recycle Bin contents for the selected drive.</span>
                   </label>
                 ) : null}
                 {candidate.requiresArchiveDestination ? (
-                  <label className="mt-3 block space-y-1 text-sm">
+                  <label className="mt-4 block space-y-1 text-sm">
                     <span className="font-medium">Archive destination</span>
                     <Input value={archiveDestination} onChange={(event) => setArchiveDestination(event.target.value)} placeholder="D:\\Archives" disabled={!candidateReady} />
                   </label>
@@ -1323,17 +1312,6 @@ function CleanPanel({
                 scanStatus={scanStatus}
                 onRescan={onRescan}
               />
-            ) : null}
-            {candidate ? (
-              <details className="rounded-md border bg-muted/20">
-                <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Advanced checks</summary>
-                <div className="space-y-3 border-t p-3">
-                  <RouteReadinessList rows={candidate.readinessRows} />
-                  {executionPrerequisites?.rows?.length ? (
-                    <RouteReadinessList rows={executionPrerequisites.rows} title="Required before cleanup" />
-                  ) : null}
-                </div>
-              </details>
             ) : null}
           </>
         ) : (
@@ -1356,18 +1334,16 @@ function CleanupResult({ result, ledger, scanStatus, onRescan }) {
           <p className="mt-1 text-sm">
             {accepted
               ? `${formatBytes(reclaimedBytes)} removed. Refresh space to update the scan.`
-              : "Nothing was deleted. Run a fresh scan and try again."}
+              : "Nothing was deleted. Refresh the scan, close apps that may be using these files, and try again."}
           </p>
         </div>
-        {accepted ? (
-          <Button type="button" size="sm" variant="outline" onClick={onRescan} disabled={runningRescan}>
-            {runningRescan ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-            Refresh space
-          </Button>
-        ) : null}
+        <Button type="button" size="sm" variant="outline" onClick={onRescan} disabled={runningRescan}>
+          {runningRescan ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+          {accepted ? "Refresh space" : "Refresh scan"}
+        </Button>
       </div>
       <details className="mt-3 rounded-md border bg-background/70">
-        <summary className="cursor-pointer px-3 py-2 text-xs font-medium">Diagnostics</summary>
+        <summary className="cursor-pointer px-3 py-2 text-xs font-medium">Technical details</summary>
         <div className="space-y-3 border-t p-3 text-xs text-muted-foreground">
           <p>{result?.reason || ledger?.primary || "No details returned."}</p>
           {ledger?.warnings?.length ? (
@@ -2676,6 +2652,29 @@ function buildCurrentPlanId({ candidate, scanFingerprint }) {
 
 function totalEntryBytes(entries = []) {
   return entries.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+}
+
+function formatExecutionGateError(gate = {}) {
+  const blocker = Array.isArray(gate.blockers) ? gate.blockers[0] : null;
+  if (!blocker) return "Cleanup is not ready yet. Check one cleanable item and try again.";
+  if (blocker.id === "selected-target") return "Check one item marked can clean before deleting.";
+  if (blocker.id === "route-readiness") return "This item is not ready to clean. Choose another can clean item or refresh the scan.";
+  if (blocker.id === "consent-checkbox") return "Check one item marked can clean before deleting.";
+  if (blocker.id === "scan-fingerprint") return "Refresh the scan, then try deleting again.";
+  if (blocker.id === "execution-prerequisites") return "Finish the extra requirement shown for this item, then try again.";
+  if (blocker.id === "executor-not-running") return "Cleanup is already running. Wait for it to finish.";
+  return blocker.detail || "Cleanup is not ready yet. Refresh the scan and try again.";
+}
+
+function formatCleanupStartError(error) {
+  const detail = error instanceof Error ? error.message : "";
+  if (/native scanner|native bridge|desktop/i.test(detail)) {
+    return "The Windows desktop connection is not ready. Restart the desktop app and try again.";
+  }
+  if (/permission|access denied|denied/i.test(detail)) {
+    return "Windows blocked access to this item. Close related apps or run the desktop app with the needed permissions, then try again.";
+  }
+  return detail ? `Cleanup did not start. ${detail}` : "Cleanup did not start. Refresh the scan and try again.";
 }
 
 function formatShortDate(value = "") {
