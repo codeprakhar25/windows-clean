@@ -1103,32 +1103,54 @@ function RuntimePanel({ runtime }) {
 
 function ScanPanel({ request, setRequest, scan, scanStatus, scanError, onRunScan }) {
   const running = scanStatus === "scanning" || scanStatus === "rescanning";
+  const hasScan = Boolean(scan);
   return (
     <Card className="rounded-md">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FolderSearch className="h-4 w-4" />
-          Scan for cleanup
-        </CardTitle>
-        <CardDescription>Read-only scan. Nothing is deleted until you choose an item and confirm cleanup.</CardDescription>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <FolderSearch className="h-4 w-4" />
+              {hasScan ? "Scan complete" : "Scan for cleanup"}
+            </CardTitle>
+            <CardDescription>{hasScan ? "Choose an item below to clean space." : "Read-only scan. Nothing is deleted until you choose an item."}</CardDescription>
+          </div>
+          {hasScan ? (
+            <Button className="w-full md:w-auto" onClick={onRunScan} disabled={running}>
+              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+              Scan again
+            </Button>
+          ) : null}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-[minmax(180px,260px)_minmax(180px,220px)]">
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Target drive</span>
-            <Input value={request.targetDrive} onChange={(event) => setRequest({ ...request, targetDrive: event.target.value })} />
-          </label>
-          <div className="flex items-end">
-            <Button className="w-full" onClick={onRunScan} disabled={running}>
-              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
-              Scan PC
-            </Button>
+        {!hasScan ? (
+          <div className="grid gap-3 md:grid-cols-[minmax(180px,260px)_minmax(180px,220px)]">
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">Target drive</span>
+              <Input value={request.targetDrive} onChange={(event) => setRequest({ ...request, targetDrive: event.target.value })} />
+            </label>
+            <div className="flex items-end">
+              <Button className="w-full" onClick={onRunScan} disabled={running}>
+                {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+                Scan PC
+              </Button>
+            </div>
           </div>
-        </div>
+        ) : null}
         <details className="rounded-md border bg-muted/20">
-          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Advanced scan options</summary>
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">{hasScan ? "Scan settings" : "Advanced scan options"}</summary>
           <div className="space-y-3 border-t p-3">
+            {hasScan ? (
+              <p className="text-xs font-medium text-muted-foreground">Advanced scan options</p>
+            ) : null}
             <div className="grid gap-3 md:grid-cols-2">
+              {hasScan ? (
+                <label className="space-y-1 text-sm md:col-span-2">
+                  <span className="font-medium">Target drive</span>
+                  <Input value={request.targetDrive} onChange={(event) => setRequest({ ...request, targetDrive: event.target.value })} />
+                </label>
+              ) : null}
               <label className="space-y-1 text-sm">
                 <span className="font-medium">Depth</span>
                 <Input type="number" value={request.maxDepth} onChange={(event) => setRequest({ ...request, maxDepth: Number(event.target.value || 8) })} />
