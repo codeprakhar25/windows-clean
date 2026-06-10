@@ -58,8 +58,8 @@ const requiredAppMarkers = [
   "Export support bundle",
   "selected item",
   "Route readiness",
-  "OpenAI cleanup agent",
-  "Manual review findings",
+  "Ask AI",
+  "Review only",
   "spaceguard-selected-route-proof-packet.md",
   "spaceguard-real-workflow-proof.md",
   "spaceguard-workflow-proof-check.json",
@@ -202,10 +202,11 @@ assert(app.includes("\"windows-old\": \"Previous Windows installation review\"")
 assert(app.includes("hibernation: \"Hibernation file review\""), "manual panel should surface hibernation file findings");
 assert(app.includes("pagefile: \"Pagefile review\""), "manual panel should surface pagefile findings");
 assert(app.includes("\"wsl-vhdx\": \"WSL virtual disk review\""), "manual panel should surface WSL virtual disk findings");
-assert(app.includes("Recommended safe action"), "manual review panel should render recommended safe action copy");
-assert(app.includes("Review candidates"), "manual review panel should render visible review candidates");
-assert(app.includes("Usage evidence"), "manual review panel should render candidate usage evidence");
-assert(app.includes("Blocked actions"), "manual review panel should render blocked action guardrails");
+assert(app.includes("Recommended action"), "manual review panel should render simple recommended action copy");
+assert(app.includes("Review details"), "manual review panel should collapse manual details");
+assert(app.includes("Items inside"), "manual review panel should render visible review candidates inside details");
+assert(app.includes("Signals"), "manual review panel should render candidate usage signals inside details");
+assert(app.includes("Why review only"), "manual review panel should render guardrails inside details");
 assert(!app.includes("Selected .env block"), "app shell should not ask users to copy route-specific env blocks");
 assert(!app.includes("copyEnvBlock"), "app shell should not expose route setup copy actions");
 assert(!app.includes("navigator.clipboard.writeText(checklist.envBlock.content)"), "app shell should not copy route setup env content");
@@ -221,13 +222,13 @@ assert(app.includes("Windows launch steps"), "browser-only setup state should pr
 assert(app.includes("Scan -> choose -> delete"), "browser-only setup should describe the simplified cleanup flow");
 assert(!/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup state should not render the route setup wizard");
 assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context should keep a stable schema");
-assert(app.includes("Recommendation broker"), "OpenAI panel should render deterministic broker status");
+assert(app.includes("Recommendation diagnostics"), "OpenAI panel should collapse deterministic broker status");
 assert(app.includes("agentBroker.rows"), "OpenAI panel should render broker rows for recommendations");
 assert(app.includes("row.blockedReason"), "OpenAI panel should expose broker blockers");
 assert(app.includes("runAgentBrokerAction"), "OpenAI broker recommendations should route through guarded app actions");
 assert(app.includes("resolveWorkflowAgentBrokerCandidate"), "OpenAI broker actions should resolve model target ids to real cleanup candidates");
 assert(app.includes("onBrokerAction(row)"), "OpenAI panel should expose a user-clicked broker action button");
-assert(app.includes("row.buttonLabel || \"Use recommendation\""), "OpenAI broker action button should use the broker-provided action label");
+assert(app.includes("formatAgentButtonLabel(row)"), "OpenAI broker action button should use simple user-facing labels");
 assert(app.includes("redactPath"), "OpenAI context should redact local paths before provider calls");
 assert(app.includes("No local folders are scanned from this browser session."), "browser-only state should be setup-only");
 assert(app.includes("Native proof artifact writer is required"), "proof export should block when the native artifact writer does not write proof files");

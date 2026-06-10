@@ -1436,6 +1436,8 @@ function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCand
       <CardContent className="space-y-4">
         {!scan ? (
           <EmptyState icon={HardDrive} title="Run a scan to explore C:" detail="The explorer is built from native scan evidence and does not browse arbitrary folders live." />
+        ) : !rows.length ? (
+          <EmptyState icon={HardDrive} title="No large areas found" detail="Run a fresh scan or add a custom read-only root from Advanced scan options." />
         ) : (
           <>
             <div className="grid gap-3 md:grid-cols-4">
@@ -1451,23 +1453,28 @@ function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCand
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant={row.cleanable ? row.ready ? "safe" : "review" : "outline"}>
-                          {row.cleanable ? row.ready ? "cleanable" : "blocked" : "review"}
+                          {row.cleanable ? row.ready ? "can clean" : "not ready" : "review only"}
                         </Badge>
-                        <Badge variant="outline">{row.kind}</Badge>
                         <p className="font-medium">{row.title}</p>
                       </div>
                       <p className="mt-2 truncate text-sm text-muted-foreground">{row.path || row.source}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{row.detail}</p>
+                      <details className="mt-2 text-xs text-muted-foreground">
+                        <summary className="cursor-pointer font-medium text-foreground">Details</summary>
+                        <div className="mt-2 rounded-md border bg-muted/20 p-2">
+                          <p>{row.detail}</p>
+                          <p className="mt-1">Type: {row.kind}</p>
+                        </div>
+                      </details>
                     </div>
                     <div className="flex shrink-0 flex-col items-start gap-2 lg:items-end">
                       <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
                       {row.candidateId ? (
                         <Button size="sm" variant={row.ready ? "default" : "outline"} onClick={() => onSelectCandidate(row.candidateId)}>
                           <Trash2 className="h-3.5 w-3.5" />
-                          {row.ready ? "Stage cleanup" : "View blocker"}
+                          {row.ready ? "Select" : "View issue"}
                         </Button>
                       ) : (
-                        <Badge variant="outline">manual only</Badge>
+                        <Badge variant="outline">review only</Badge>
                       )}
                     </div>
                   </div>
@@ -1641,26 +1648,28 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
   const visibleTargets = Number(candidates?.length || 0) + Number(manualFindings?.length || 0);
   const canAsk = Boolean(runtime?.openAiAgentAdvice && runtime?.openAiAdvisorConfigured && scan && visibleTargets);
   const assistant = advice?.advice;
+  const brokerRows = agentBroker?.rows || [];
+  const suggestedAction = brokerRows.find((row) => row.canAct) || brokerRows[0] || null;
   return (
     <Card className="rounded-md">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Bot className="h-4 w-4" />
-          OpenAI cleanup agent
+          Ask AI
         </CardTitle>
-        <CardDescription>The agent can stage safe targets; cleanup still runs only after UI confirmation and native validation.</CardDescription>
+        <CardDescription>Ask for a safe next cleanup choice from the current scan.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
+        <Textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="What should I clean next?" />
         <Button className="w-full" disabled={!canAsk || status === "running"} onClick={onAsk}>
           {status === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-          Ask OpenAI for next cleanup step
+          Get recommendation
         </Button>
         {!canAsk ? (
           <Notice
             tone="review"
             icon={AlertTriangle}
-            text="Set OPENAI_API_KEY in .env, start the desktop shell, and run a real scan with cleanup or manual review findings before asking the advisor."
+            text="Run a scan and set OPENAI_API_KEY to ask AI for a cleanup recommendation."
           />
         ) : null}
         {error ? <Notice tone="restricted" icon={AlertTriangle} text={error} /> : null}
@@ -1668,30 +1677,59 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
           <div className="space-y-3 rounded-md border bg-background p-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="safe">{assistant.confidence}</Badge>
-              <span className="font-medium">{assistant.nextAction}</span>
+              <span className="font-medium">{assistant.nextAction || "Recommended cleanup"}</span>
             </div>
             <p className="text-muted-foreground">{assistant.summary}</p>
-            <div className="grid gap-2">
-              {assistant.recommendedActions.slice(0, 3).map((row) => (
-                <div key={row.id} className="rounded-md border bg-muted/25 p-2">
-                  <p className="font-medium">{row.title}</p>
-                  <p className="text-xs text-muted-foreground">{row.reason}</p>
+            {suggestedAction ? (
+              <div className="rounded-md border bg-muted/25 p-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={suggestedAction.canAct ? "safe" : suggestedAction.status === "manual-only" ? "outline" : "review"}>
+                        {suggestedAction.canAct ? "ready" : suggestedAction.status === "manual-only" ? "review only" : "needs review"}
+                      </Badge>
+                      <p className="font-medium">{formatAgentActionTitle(suggestedAction)}</p>
+                    </div>
+                    {suggestedAction.blockedReason ? (
+                      <p className="mt-2 text-xs text-muted-foreground">{suggestedAction.blockedReason}</p>
+                    ) : null}
+                  </div>
+                  {canRunAgentBrokerAction(suggestedAction) ? (
+                    <Button size="sm" onClick={() => onBrokerAction(suggestedAction)}>
+                      <ChevronRight className="h-3.5 w-3.5" />
+                      {formatAgentButtonLabel(suggestedAction)}
+                    </Button>
+                  ) : null}
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : null}
             {selectedCandidate ? (
-              <p className="text-xs text-muted-foreground">Selected UI target remains {selectedCandidate.title}; model advice cannot change consent.</p>
+              <p className="text-xs text-muted-foreground">Current selection: {selectedCandidate.title}</p>
+            ) : null}
+            {assistant.recommendedActions?.length ? (
+              <details className="rounded-md border bg-muted/20 text-xs">
+                <summary className="cursor-pointer px-3 py-2 font-medium text-foreground">Why this recommendation</summary>
+                <div className="grid gap-2 border-t p-3">
+                  {assistant.recommendedActions.slice(0, 3).map((row) => (
+                    <div key={row.id} className="rounded-md border bg-background p-2">
+                      <p className="font-medium text-foreground">{row.title}</p>
+                      <p className="text-muted-foreground">{row.reason}</p>
+                    </div>
+                  ))}
+                </div>
+              </details>
             ) : null}
           </div>
         ) : null}
         {agentBroker ? (
-          <div className="space-y-3 rounded-md border bg-background p-3 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <p className="font-medium">Recommendation broker</p>
-              <Badge variant={agentBroker.status === "broker-ready" ? "safe" : "review"}>{agentBroker.status}</Badge>
-            </div>
-            <p className="text-xs text-muted-foreground">{agentBroker.primary}</p>
-            <div className="grid gap-2">
+          <details className="rounded-md border bg-muted/20 text-sm">
+            <summary className="cursor-pointer px-3 py-2 font-medium">Recommendation diagnostics</summary>
+            <div className="space-y-3 border-t p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-medium">Recommendation status</p>
+                <Badge variant={agentBroker.status === "broker-ready" ? "safe" : "review"}>{agentBroker.status}</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">{agentBroker.primary}</p>
               {agentBroker.rows.slice(0, 4).map((row) => (
                 <div key={row.key} className="rounded-md border bg-muted/25 p-2">
                   <div className="flex flex-wrap items-center gap-2">
@@ -1700,22 +1738,20 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
                     </Badge>
                     <p className="text-xs font-medium">{row.actionType}</p>
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {row.targetPanel} · {row.route || "manual"}
-                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Target: {row.targetPanel || "manual review"}</p>
                   {row.blockedReason ? (
                     <p className="mt-1 text-xs text-red-600">{row.blockedReason}</p>
                   ) : null}
                   {canRunAgentBrokerAction(row) ? (
                     <Button className="mt-2" size="sm" variant="secondary" onClick={() => onBrokerAction(row)}>
                       <ChevronRight className="h-3.5 w-3.5" />
-                      {row.buttonLabel || "Use recommendation"}
+                      {formatAgentButtonLabel(row)}
                     </Button>
                   ) : null}
                 </div>
               ))}
             </div>
-          </div>
+          </details>
         ) : null}
       </CardContent>
     </Card>
@@ -1724,6 +1760,20 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
 
 function canRunAgentBrokerAction(row = {}) {
   return Boolean(row.canAct && row.kind);
+}
+
+function formatAgentActionTitle(row = {}) {
+  if (row.kind === "scoped-executor") return "Select this cleanup";
+  if (row.kind === "scan") return "Refresh the scan";
+  if (row.kind === "review-target") return "Open review";
+  return row.actionType === "manual-only" ? "Review manually" : "Review recommendation";
+}
+
+function formatAgentButtonLabel(row = {}) {
+  if (row.kind === "scoped-executor") return "Select cleanup";
+  if (row.kind === "scan") return "Run scan";
+  if (row.kind === "review-target") return "Open review";
+  return row.buttonLabel || "Use recommendation";
 }
 
 function focusAgentBrokerPanel(row = {}) {
@@ -1738,9 +1788,9 @@ function ManualReviewPanel({ findings }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <HardDrive className="h-4 w-4" />
-          Manual review findings
+          Review only
         </CardTitle>
-        <CardDescription>These scan rows are visible for decisions, but no executor is created from them.</CardDescription>
+        <CardDescription>These areas may be large, but the app will not delete them automatically.</CardDescription>
       </CardHeader>
       <CardContent>
         {findings.length ? (
@@ -1757,59 +1807,64 @@ function ManualReviewPanel({ findings }) {
                 <div className="mt-3 rounded-md border bg-muted/30 p-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline">{finding.manualGuidance.confidence}</Badge>
-                    <p className="text-xs font-medium">Recommended safe action</p>
+                    <p className="text-xs font-medium">Recommended action</p>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">{finding.manualGuidance.primaryAction}</p>
-                  <code className="mt-2 block overflow-hidden text-ellipsis rounded border bg-background px-2 py-1 text-xs">
-                    {finding.manualGuidance.command}
-                  </code>
                 </div>
-                <div className="mt-3">
-                  <p className="text-xs font-medium">Blocked actions</p>
-                  <ul className="mt-1 space-y-1">
-                    {finding.manualGuidance.blockedActions.slice(0, 3).map((action) => (
-                      <li key={action} className="flex gap-2 text-xs text-muted-foreground">
-                        <Lock className="mt-0.5 h-3 w-3 shrink-0" />
-                        <span>{action}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                {finding.reviewRows.rows.length ? (
-                  <div className="mt-3 rounded-md border bg-background">
-                    <div className="border-b px-2 py-2">
-                      <p className="text-xs font-medium">Review candidates</p>
+                <details className="mt-3 rounded-md border bg-background text-xs">
+                  <summary className="cursor-pointer px-2 py-2 font-medium">Review details</summary>
+                  <div className="space-y-3 border-t p-2">
+                    <code className="block overflow-hidden text-ellipsis rounded border bg-muted/30 px-2 py-1">
+                      {finding.manualGuidance.command}
+                    </code>
+                    <div>
+                      <p className="font-medium">Why review only</p>
+                      <ul className="mt-1 space-y-1">
+                        {finding.manualGuidance.blockedActions.slice(0, 3).map((action) => (
+                          <li key={action} className="flex gap-2 text-muted-foreground">
+                            <Lock className="mt-0.5 h-3 w-3 shrink-0" />
+                            <span>{action}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    <div className="divide-y">
-                      {finding.reviewRows.rows.slice(0, 3).map((row) => (
-                        <div key={row.id || row.path} className="p-2">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="truncate text-xs font-medium">{row.name}</p>
-                              <p className="mt-0.5 text-xs text-muted-foreground">{formatBytes(row.bytes)}</p>
-                            </div>
-                            <Badge variant={row.action === "keep-installed" ? "safe" : "review"}>{row.actionLabel}</Badge>
-                          </div>
-                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{row.reason}</p>
-                          <p className="mt-2 text-xs font-medium">Usage evidence</p>
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {row.signals.slice(0, 4).map((signal) => (
-                              <Badge key={`${row.id}-${signal.label}-${signal.value}`} variant={signal.tone === "safe" ? "safe" : signal.tone === "restricted" ? "restricted" : "outline"}>
-                                {signal.label}: {signal.value}
-                              </Badge>
-                            ))}
-                          </div>
-                          <p className="mt-2 text-xs text-muted-foreground">{row.blockedAction}</p>
+                    {finding.reviewRows.rows.length ? (
+                      <div className="rounded-md border bg-background">
+                        <div className="border-b px-2 py-2">
+                          <p className="font-medium">Items inside</p>
                         </div>
-                      ))}
-                    </div>
+                        <div className="divide-y">
+                          {finding.reviewRows.rows.slice(0, 3).map((row) => (
+                            <div key={row.id || row.path} className="p-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium">{row.name}</p>
+                                  <p className="mt-0.5 text-muted-foreground">{formatBytes(row.bytes)}</p>
+                                </div>
+                                <Badge variant={row.action === "keep-installed" ? "safe" : "review"}>{row.actionLabel}</Badge>
+                              </div>
+                              <p className="mt-1 line-clamp-2 text-muted-foreground">{row.reason}</p>
+                              <p className="mt-2 font-medium">Signals</p>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {row.signals.slice(0, 4).map((signal) => (
+                                  <Badge key={`${row.id}-${signal.label}-${signal.value}`} variant={signal.tone === "safe" ? "safe" : signal.tone === "restricted" ? "restricted" : "outline"}>
+                                    {signal.label}: {signal.value}
+                                  </Badge>
+                                ))}
+                              </div>
+                              <p className="mt-2 text-muted-foreground">{row.blockedAction}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
+                </details>
               </div>
             ))}
           </div>
         ) : (
-          <EmptyState icon={HardDrive} title="No manual findings loaded" detail="Run a scan to show installed-app, broad inventory, and custom-root review rows." />
+          <EmptyState icon={HardDrive} title="No review-only findings" detail="Run a scan to show areas that need manual review." />
         )}
       </CardContent>
     </Card>
