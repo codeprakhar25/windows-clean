@@ -147,6 +147,8 @@ assert(app.includes("Delete checked"), "Clean screen should expose a simple Dele
 assert(app.includes("Some checked items cleaned"), "checked cleanup result should explain partial success simply");
 assert(app.includes("Could not clean checked items"), "checked cleanup result should use selected-items failure copy");
 assert(app.includes("formatCheckedCleanupMessage"), "checked cleanup result should use dedicated user-facing copy");
+assert(app.includes("buildRejectedCheckedCleanupEntry"), "checked cleanup should keep going when one selected row cannot start");
+assert(app.includes("app-dispatch-error"), "checked cleanup should record simple per-row failures");
 assert(app.includes("Ready to clean"), "post-scan clean screen should lead with the actionable cleanup queue");
 assert(!app.includes("Scan details"), "Clean screen should not carry post-scan metrics or diagnostic details");
 assert(!app.includes("items need review"), "Clean screen should not show a secondary review queue beside delete actions");

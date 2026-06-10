@@ -461,11 +461,18 @@ function App() {
     try {
       for (const target of targets) {
         setSelectedId(target.id);
-        const { result } = await executeCleanupCandidate(target, { updateUi: false, rescanAfter: false });
-        allEntries.push(...(result.entries || []));
-        allWarnings.push(...(result.warnings || []));
-        if (result.accepted) acceptedCount += 1;
-        else rejectedCount += 1;
+        try {
+          const { result } = await executeCleanupCandidate(target, { updateUi: false, rescanAfter: false });
+          allEntries.push(...(result.entries || []));
+          allWarnings.push(...(result.warnings || []));
+          if (result.accepted) acceptedCount += 1;
+          else rejectedCount += 1;
+        } catch (error) {
+          const rejectedEntry = buildRejectedCheckedCleanupEntry(target, error);
+          allEntries.push(rejectedEntry);
+          allWarnings.push(rejectedEntry.note);
+          rejectedCount += 1;
+        }
       }
       const reclaimedBytes = allEntries.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
       const accepted = acceptedCount > 0;
@@ -2176,6 +2183,28 @@ function formatCleanupStartError(error) {
     return "Windows blocked access to this item. Close related apps or run the desktop app with the needed permissions, then try again.";
   }
   return detail ? `Cleanup did not start. ${detail}` : "Cleanup did not start. Refresh the scan and try again.";
+}
+
+function buildRejectedCheckedCleanupEntry(candidate = {}, error = null) {
+  const note = formatCleanupStartError(error);
+  return {
+    id: candidate.id || "checked-cleanup",
+    title: candidate.title || "Checked cleanup",
+    route: candidate.route || candidate.routeInput || "checked-cleanup",
+    result: "rejected",
+    rejectCode: "app-dispatch-error",
+    bytes: 0,
+    preflightStatus: "rejected",
+    note,
+    preflightChecks: [
+      {
+        id: "app-dispatch",
+        label: "Cleanup request",
+        status: "rejected",
+        detail: note
+      }
+    ]
+  };
 }
 
 function formatShortDate(value = "") {
