@@ -1282,6 +1282,20 @@ function CleanPanel({
                       <div className="shrink-0 md:text-right">
                         <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
                         <p className="text-xs text-muted-foreground">{row.canExecute ? "Ready" : "Not ready"}</p>
+                        {selected && row.canExecute ? (
+                          <Button
+                            className="mt-2 w-full md:w-auto"
+                            size="sm"
+                            disabled={!canExecute || running}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onExecute();
+                            }}
+                          >
+                            {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                            {running ? "Deleting" : !canExecute ? "Finish below" : candidate?.requiresPermanentConfirmation ? "Empty" : "Delete"}
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                     {!row.canExecute ? (
