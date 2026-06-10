@@ -187,9 +187,10 @@ assert(
   "selecting a different cleanup target should clear stale execution, rescan, and proof export state"
 );
 assert(
-  /if \(afterExecution\) \{[\s\S]*setPostRunScan\(result\);[\s\S]*setProofReviewed\(false\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}/.test(app),
-  "post-clean rescan should force fresh proof review and clear stale export status"
+  /if \(afterExecution\) \{[\s\S]*setScan\(result\);[\s\S]*setPostRunScan\(result\);[\s\S]*setSelectedId\(""\);[\s\S]*setProofReviewed\(false\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}/.test(app),
+  "post-clean rescan should update the normal cleanup list and clear stale proof export status"
 );
+assert(/if \(result\.accepted\) \{[\s\S]*await runRealScan\(\{ afterExecution: true \}\);[\s\S]*\}/.test(app), "accepted cleanup should refresh the list automatically");
 assert(app.includes("buildManualFindingGuidance"), "app should use tested manual finding guidance");
 assert(app.includes("buildManualFindingReviewRows"), "app should use tested manual review row guidance");
 assert(app.includes("\"windows-old\": \"Previous Windows installation review\""), "manual panel should surface Windows.old findings");

@@ -429,7 +429,12 @@ function App() {
       }
       const latestRuntime = await refreshRuntime();
       if (afterExecution) {
+        setScan(result);
         setPostRunScan(result);
+        setSelectedId("");
+        setConsentChecked(false);
+        setPermanentRemovalConfirmed(false);
+        setArchiveDestination("");
         setProofReviewed(false);
         setWorkflowProofAccepted(false);
         setWorkflowProofCheck(null);
@@ -453,7 +458,7 @@ function App() {
         setProofExportMessage("");
       }
       setScanStatus("complete");
-      setActiveView(afterExecution ? "history" : "clean");
+      setActiveView("clean");
     } catch (error) {
       setScanStatus("error");
       setScanError(error instanceof Error ? error.message : "Native scan failed.");
@@ -522,6 +527,9 @@ function App() {
       setPostRunScan(null);
       setProofReviewed(false);
       setExecutionStatus(result.accepted ? "complete" : "rejected");
+      if (result.accepted) {
+        await runRealScan({ afterExecution: true });
+      }
     } catch (error) {
       setExecutionStatus("error");
       setExecutionError(formatCleanupStartError(error));
@@ -1203,7 +1211,7 @@ function CleanPanel({
               <ClipboardCheck className="h-4 w-4" />
               Clean space
             </CardTitle>
-            <CardDescription>Check one item, delete it, then refresh space.</CardDescription>
+            <CardDescription>Check one item, then delete it.</CardDescription>
           </div>
           <Button className="w-full md:w-auto" disabled={!canExecute || running} onClick={onExecute}>
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -1322,6 +1330,11 @@ function CleanupResult({ result, ledger, scanStatus, onRescan }) {
   const accepted = Boolean(result?.accepted);
   const reclaimedBytes = totalEntryBytes(result?.entries || []);
   const runningRescan = scanStatus === "rescanning";
+  const acceptedText = runningRescan
+    ? `${formatBytes(reclaimedBytes)} removed. Refreshing the list.`
+    : scanStatus === "error"
+      ? `${formatBytes(reclaimedBytes)} removed. Refresh failed; click Refresh again.`
+      : `${formatBytes(reclaimedBytes)} removed. The list is up to date.`;
   return (
     <div className={`rounded-md border p-4 text-sm ${accepted ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-red-200 bg-red-50 text-red-950"}`}>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -1329,13 +1342,13 @@ function CleanupResult({ result, ledger, scanStatus, onRescan }) {
           <p className="text-base font-semibold">{accepted ? "Cleaned" : "Could not clean this item"}</p>
           <p className="mt-1 text-sm">
             {accepted
-              ? `${formatBytes(reclaimedBytes)} removed. Refresh space to update the scan.`
+              ? acceptedText
               : "Nothing was deleted. Refresh the scan, close apps that may be using these files, and try again."}
           </p>
         </div>
         <Button type="button" size="sm" variant="outline" onClick={onRescan} disabled={runningRescan}>
           {runningRescan ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-          {accepted ? "Refresh space" : "Refresh scan"}
+          {accepted ? runningRescan ? "Refreshing" : "Refresh again" : "Refresh scan"}
         </Button>
       </div>
       <details className="mt-3 rounded-md border bg-background/70">
@@ -1881,8 +1894,8 @@ function formatHistorySummary(executionRecord = {}, ledger = {}) {
   if (executionRecord.accepted) {
     const bytes = formatBytes(executionRecord.bytes || 0);
     return Number(executionRecord.bytes || 0) > 0
-      ? `${bytes} removed. Refresh space to update the list.`
-      : "Cleanup ran, but there was nothing new to remove. Refresh space to update the list.";
+      ? `${bytes} removed. The list is up to date.`
+      : "Cleanup ran, but there was nothing new to remove. The list is up to date.";
   }
   return "Nothing was deleted. Refresh the scan, close apps that may be using these files, and try again.";
 }

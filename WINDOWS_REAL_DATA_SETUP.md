@@ -45,7 +45,6 @@ In the app:
 1. Click `Scan PC`.
 2. Check one row marked `can clean`.
 3. Click `Delete selected files`.
-4. Click `Refresh space`.
 
 Support export is only for troubleshooting. It is not required to clean files.
 

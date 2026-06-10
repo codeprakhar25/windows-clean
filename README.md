@@ -23,7 +23,6 @@ Inside the desktop app:
 1. Click `Scan PC`.
 2. Check one row marked `can clean`.
 3. Click `Delete selected files`.
-4. Click `Refresh space`.
 
 If the app opens in a normal browser, it will only show connection/setup steps. It will not scan local folders or run cleanup.
 
@@ -37,7 +36,7 @@ npm run windows:ready
 npm run native:dev
 ```
 
-For a real cleanup test, use the desktop app as the control point: scan, check one `can clean` target, delete, and refresh space.
+For a real cleanup test, use the desktop app as the control point: scan, check one `can clean` target, and delete.
 Support export tools are for troubleshooting only. They are not required to clean files.
 
 ## Safety Boundary
