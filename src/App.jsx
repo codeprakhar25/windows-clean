@@ -1192,6 +1192,7 @@ function CleanPanel({
 }) {
   const executionLedger = buildExecutionLedgerRows(executionResult);
   const candidateReady = Boolean(candidate?.canExecute);
+  const showSelectedDetails = Boolean(candidate && (!candidateReady || candidate.requiresPermanentConfirmation || candidate.requiresArchiveDestination));
   const running = executionStatus === "running";
   return (
     <Card id="cleanup-actions-panel" className="rounded-md">
@@ -1253,7 +1254,6 @@ function CleanPanel({
                             <span className="font-medium">{row.title}</span>
                           </div>
                           <p className="mt-2 truncate text-sm text-muted-foreground">{row.targetPath || row.targetKind}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">{row.consequence}</p>
                         </div>
                       </div>
                       <div className="shrink-0 md:text-right">
@@ -1274,7 +1274,7 @@ function CleanPanel({
                 );
               })}
             </div>
-            {candidate ? (
+            {showSelectedDetails ? (
               <div className="rounded-md border bg-muted/25 p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
