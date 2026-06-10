@@ -619,8 +619,8 @@ function App() {
       setProofExportStatus("complete");
       setProofExportMessage(
         acceptedCheck.canAccept
-          ? `Support bundle exported to the app working directory.${baselinePromotion.canPromote ? " Latest scan is now active." : ""}`
-          : `Support bundle exported, but verification needs review: ${acceptedCheck.blockers.length} issue(s).`
+          ? `Troubleshooting bundle exported.${baselinePromotion.canPromote ? " Latest scan is now active." : ""}`
+          : `Troubleshooting bundle exported, but ${acceptedCheck.blockers.length} issue(s) need review.`
       );
     } catch (error) {
       setProofExportStatus("error");
@@ -1497,7 +1497,7 @@ function HistoryPanel({
             <History className="h-4 w-4" />
             Cleanup history
           </CardTitle>
-          <CardDescription>Recent native cleanup result and optional support evidence.</CardDescription>
+          <CardDescription>Recent cleanup result.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {!executionRecord ? (
@@ -1505,18 +1505,18 @@ function HistoryPanel({
           ) : (
             <>
               <div className="grid gap-3 md:grid-cols-4">
-                <Metric label="Target" value={executionRecord.title || "Cleanup target"} />
-                <Metric label="Result" value={executionRecord.accepted ? "accepted" : "rejected"} />
-                <Metric label="Recovered" value={formatBytes(executionRecord.bytes || 0)} />
+                <Metric label="Item" value={executionRecord.title || "Cleanup target"} />
+                <Metric label="Status" value={executionRecord.accepted ? "Cleaned" : "Needs retry"} />
+                <Metric label="Freed" value={formatBytes(executionRecord.bytes || 0)} />
                 <Metric label="Ran" value={formatShortDate(executionRecord.executedAt)} />
               </div>
-              <p className="text-sm text-muted-foreground">{executionRecord.reason || ledger.primary}</p>
+              <p className="text-sm text-muted-foreground">{formatHistorySummary(executionRecord, ledger)}</p>
               <Button variant="outline" onClick={onRescan} disabled={scanStatus === "rescanning"}>
                 {scanStatus === "rescanning" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-                Refresh scan after cleanup
+                Refresh space
               </Button>
               <details id="execution-proof-handoff-panel" className="rounded-md border bg-muted/20">
-                <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Support details</summary>
+                <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Troubleshooting</summary>
                 <SupportDetails
                   selectedCandidate={selectedCandidate}
                   executionRecord={executionRecord}
@@ -1559,13 +1559,13 @@ function SupportDetails({
   return (
     <div className="space-y-4 border-t p-3">
       <div className="grid gap-3 md:grid-cols-4">
-        <Metric label="Route" value={selectedCandidate?.routeInput || executionRecord.routeInput} />
-        <Metric label="Recovered" value={formatBytes(executionRecord.bytes)} />
-        <Metric label="Volume check" value={formatVolumeProofStatus(executionRecord.volumeProof)} />
-        <Metric label="Refresh status" value={postRunProof.status} />
+        <Metric label="Cleanup" value={selectedCandidate?.title || executionRecord.title || "Selected item"} />
+        <Metric label="Freed" value={formatBytes(executionRecord.bytes)} />
+        <Metric label="Space check" value={formatVolumeProofStatus(executionRecord.volumeProof)} />
+        <Metric label="Refresh" value={formatPostRunProofStatus(postRunProof.status)} />
       </div>
       {executionRecord.accepted && !volumeProofMeasured(executionRecord.volumeProof) ? (
-        <Notice tone="review" icon={AlertTriangle} text="Volume check was not captured. Refresh the scan after cleanup before exporting a support bundle." />
+        <Notice tone="review" icon={AlertTriangle} text="Refresh space before exporting troubleshooting info." />
       ) : null}
       {workflowLocks?.noOpExecution ? (
         <Notice tone="review" icon={AlertTriangle} text={workflowLocks.primary} />
@@ -1577,13 +1577,13 @@ function SupportDetails({
             <p className="mt-1 text-muted-foreground">{postRunProof.detail}</p>
           </div>
           <div className="grid gap-2 md:grid-cols-3">
-            <Metric label="Support target" value={postRunProof.targetEvidence?.kind === "item" ? "selected item" : "scanned finding"} />
-            <Metric label="Observed size" value={formatBytes(postRunProof.actualBytes)} />
-            <Metric label="Expected remaining" value={formatBytes(postRunProof.expectedRemaining)} />
+            <Metric label="Item" value={postRunProof.targetEvidence?.kind === "item" ? "selected item" : "scanned finding"} />
+            <Metric label="Current size" value={formatBytes(postRunProof.actualBytes)} />
+            <Metric label="Expected size" value={formatBytes(postRunProof.expectedRemaining)} />
           </div>
         </div>
       ) : (
-        <Notice tone="review" icon={RefreshCcw} text="Refresh scan after cleanup to unlock support bundle export." />
+        <Notice tone="review" icon={RefreshCcw} text="Refresh space after cleanup before exporting troubleshooting info." />
       )}
       <label className="flex items-start gap-3 text-sm">
         <Checkbox checked={Boolean(postRunScan && proofReviewed)} disabled={!postRunScan} onClick={() => setProofReviewed(!proofReviewed)} />
@@ -1591,7 +1591,7 @@ function SupportDetails({
       </label>
       <Button className="w-full" disabled={!canExportProof || proofExportStatus === "running"} onClick={onExportProof}>
         {proofExportStatus === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-        Export support bundle
+        Export troubleshooting bundle
       </Button>
       {proofExportMessage ? (
         <Notice
@@ -1602,10 +1602,10 @@ function SupportDetails({
       ) : null}
       {workflowProofCheck ? (
         <details className="rounded-md border bg-background text-sm">
-          <summary className="cursor-pointer px-3 py-2 font-medium">Export diagnostics</summary>
+          <summary className="cursor-pointer px-3 py-2 font-medium">Export details</summary>
           <div className="space-y-2 border-t p-3">
             <div className="flex items-center justify-between gap-3">
-              <span className="font-medium">Support bundle check</span>
+              <span className="font-medium">Troubleshooting check</span>
               <Badge variant={workflowProofAccepted ? "safe" : "restricted"}>{workflowProofCheck.status}</Badge>
             </div>
             <p className="text-muted-foreground">{workflowProofCheck.primary}</p>
@@ -1893,6 +1893,23 @@ function volumeProofMeasured(volumeProof = null) {
 function formatVolumeProofStatus(volumeProof = null) {
   if (volumeProofMeasured(volumeProof)) return `measured ${volumeProof.drive || ""}`.trim();
   return volumeProof?.status || "missing";
+}
+
+function formatPostRunProofStatus(status = "") {
+  if (status === "matched") return "Updated";
+  if (status === "needs-rescan" || status === "not-run") return "Refresh needed";
+  if (status === "mismatch") return "Needs review";
+  return status || "Not refreshed";
+}
+
+function formatHistorySummary(executionRecord = {}, ledger = {}) {
+  if (executionRecord.accepted) {
+    const bytes = formatBytes(executionRecord.bytes || 0);
+    return Number(executionRecord.bytes || 0) > 0
+      ? `${bytes} removed. Refresh space to update the list.`
+      : "Cleanup ran, but there was nothing new to remove. Refresh space to update the list.";
+  }
+  return "Nothing was deleted. Refresh the scan, close apps that may be using these files, and try again.";
 }
 
 function formatSignedBytes(value = 0) {

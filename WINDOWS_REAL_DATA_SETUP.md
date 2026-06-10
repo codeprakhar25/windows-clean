@@ -47,12 +47,7 @@ In the app:
 3. Click `Delete selected files`.
 4. Click `Refresh space`.
 
-Optional support export can write `spaceguard-selected-route-proof-packet.md`, `spaceguard-real-workflow-proof.md`, `spaceguard-workflow-proof-check.json`, and `spaceguard-support-bundle.md` from `Support details`. Use the CLI verifier as an external audit if needed:
-
-```powershell
-npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md
-npm run support:bundle
-```
+Support export is only for troubleshooting. It is not required to clean files.
 
 ## If The App Is Not Connected
 

@@ -25,11 +25,9 @@ Inside the desktop app:
 3. Click `Delete selected files`.
 4. Click `Refresh space`.
 
-Optional support export can still write `spaceguard-selected-route-proof-packet.md`, `spaceguard-real-workflow-proof.md`, `spaceguard-workflow-proof-check.json`, and `spaceguard-support-bundle.md` from the collapsed `Support details` section.
-
 If the app opens in a normal browser, it will only show connection/setup steps. It will not scan local folders or run cleanup.
 
-## Real Workflow Checks
+## Developer Checks
 
 ```powershell
 npm run real-app:shell
@@ -37,11 +35,10 @@ npm test
 npm run build
 npm run windows:ready
 npm run native:dev
-npm run support:bundle
 ```
 
 For a real cleanup test, use the desktop app as the control point: scan, check one `can clean` target, delete, and refresh space.
-Optional developer audit only: run `npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md` after exporting support details from the app.
+Support export tools are for troubleshooting only. They are not required to clean files.
 
 ## Safety Boundary
 
