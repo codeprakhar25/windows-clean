@@ -1094,25 +1094,16 @@ function CleanPanel({
   const candidateReady = Boolean(candidate?.canExecute);
   const showSelectedDetails = Boolean(candidate && (!candidateReady || candidate.requiresArchiveDestination));
   const readyCandidates = candidates.filter(isOneClickCleanupCandidate);
-  const reviewCandidates = candidates.filter((row) => !isOneClickCleanupCandidate(row));
   const hasReadyCandidates = readyCandidates.length > 0;
   const running = executionStatus === "running";
   return (
     <Card id="cleanup-actions-panel" className="rounded-md">
       <CardHeader>
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardCheck className="h-4 w-4" />
-              Clean space
-            </CardTitle>
-            <CardDescription>Select one item, then delete it.</CardDescription>
-          </div>
-          <Button className="w-full md:w-auto" disabled={!canExecute || running} onClick={onExecute}>
-            {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            {candidate?.requiresPermanentConfirmation ? "Empty Recycle Bin" : "Delete selected files"}
-          </Button>
-        </div>
+        <CardTitle className="flex items-center gap-2">
+          <ClipboardCheck className="h-4 w-4" />
+          Clean space
+        </CardTitle>
+        <CardDescription>Select one ready item, then press Delete on that row.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {!scan ? (
@@ -1182,32 +1173,6 @@ function CleanPanel({
             ) : (
               <EmptyState icon={Lock} title="No items ready to delete" detail="Run another scan or open Explore to review what was found." />
             )}
-            {reviewCandidates.length ? (
-              <details className="rounded-md border bg-muted/20">
-                <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
-                  {reviewCandidates.length === 1 ? "1 item needs review" : `${reviewCandidates.length} items need review`}
-                </summary>
-                <div className="grid gap-2 border-t p-3">
-                  {reviewCandidates.map((row) => (
-                    <div key={row.id} className="flex flex-col gap-2 rounded-md border bg-background p-3 md:flex-row md:items-center md:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant={row.executable ? "review" : "outline"}>{formatReviewCandidateStatus(row)}</Badge>
-                          <p className="font-medium">{row.title}</p>
-                        </div>
-                        <p className="mt-1 truncate text-sm text-muted-foreground">{row.targetPath || row.targetKind}</p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2 md:justify-end">
-                        <p className="font-semibold">{formatBytes(row.bytes)}</p>
-                        <Button size="sm" variant="outline" onClick={() => onToggleCandidate(row)}>
-                          View
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            ) : null}
             {showSelectedDetails ? (
               <div className="rounded-md border bg-muted/25 p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">

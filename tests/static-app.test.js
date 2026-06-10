@@ -46,7 +46,7 @@ const requiredAppMarkers = [
   "Cleanup status",
   "Explore C:",
   "Selected item",
-  "Delete selected files",
+  "Select one ready item, then press Delete on that row.",
   "Latest scan",
   "Scan again",
   "Activity",
@@ -142,10 +142,10 @@ assert(/onSelectCandidate=\{\(id\) => \{[\s\S]*selectWorkflowCandidate\(id, \{ c
 assert(app.includes("onExecute();"), "selected cleanup row action should dispatch the guarded cleanup handler");
 assert(app.includes("Ready to clean"), "post-scan clean screen should lead with the actionable cleanup queue");
 assert(app.includes("Scan details"), "post-scan metrics should be collapsed behind scan details");
-assert(app.includes("items need review"), "cleanup queue should move unavailable rows behind a collapsed review section");
+assert(!app.includes("items need review"), "Clean screen should not show a secondary review queue beside delete actions");
 assert(app.includes("isOneClickCleanupCandidate"), "cleanup queue should use a shared one-click eligibility helper");
 assert(app.includes("candidates.filter(isOneClickCleanupCandidate)"), "main cleanup queue should only show one-click cleanup rows");
-assert(app.includes("!isOneClickCleanupCandidate(row)"), "extra-input cleanup rows should be moved out of the main delete queue");
+assert(!app.includes("reviewCandidates"), "extra-input cleanup rows should stay out of the main Clean delete queue");
 assert(app.includes("needs destination"), "large-file archive rows should be labelled as needing setup instead of can-clean");
 assert(app.includes("Archive setup required before this item can run."), "Explore and AI context should not present archive rows as immediate delete actions");
 assert(app.includes("No items ready to delete"), "cleanup queue should avoid preselecting blocked targets when nothing can run");
