@@ -272,7 +272,6 @@ function App() {
   const [executionError, setExecutionError] = useState("");
   const [executionResult, setExecutionResult] = useState(null);
   const [executionRecord, setExecutionRecord] = useState(null);
-  const [proofReviewed, setProofReviewed] = useState(false);
   const [workflowProofAccepted, setWorkflowProofAccepted] = useState(false);
   const [workflowProofCheck, setWorkflowProofCheck] = useState(null);
   const [supportBundleWrite, setSupportBundleWrite] = useState(null);
@@ -315,7 +314,7 @@ function App() {
     }),
     [selectedCandidate, archiveDestination, permanentRemovalConfirmed]
   );
-  const canExportProof = Boolean(postRunProof.status === "matched" && proofReviewed && executionRecord?.accepted);
+  const canExportProof = Boolean(postRunProof.status === "matched" && executionRecord?.accepted);
   const supportBundleWritten = Boolean(workflowProofAccepted && supportBundleWrite?.written);
   const agentContextKey = useMemo(
     () => buildAgentContextKey({
@@ -435,7 +434,6 @@ function App() {
         setConsentChecked(false);
         setPermanentRemovalConfirmed(false);
         setArchiveDestination("");
-        setProofReviewed(false);
         setWorkflowProofAccepted(false);
         setWorkflowProofCheck(null);
         setSupportBundleWrite(null);
@@ -450,7 +448,6 @@ function App() {
         setSelectedId(defaultSelection);
         setConsentChecked(false);
         setPermanentRemovalConfirmed(false);
-        setProofReviewed(false);
         setWorkflowProofAccepted(false);
         setWorkflowProofCheck(null);
         setSupportBundleWrite(null);
@@ -525,7 +522,6 @@ function App() {
       setExecutionResult(result);
       setExecutionRecord(record);
       setPostRunScan(null);
-      setProofReviewed(false);
       setExecutionStatus(result.accepted ? "complete" : "rejected");
       if (result.accepted) {
         await runRealScan({ afterExecution: true });
@@ -627,8 +623,8 @@ function App() {
       setProofExportStatus("complete");
       setProofExportMessage(
         acceptedCheck.canAccept
-          ? `Troubleshooting bundle exported.${baselinePromotion.canPromote ? " Latest scan is now active." : ""}`
-          : `Troubleshooting bundle exported, but ${acceptedCheck.blockers.length} issue(s) need review.`
+          ? `Support file exported.${baselinePromotion.canPromote ? " Latest scan is now active." : ""}`
+          : `Support file exported, but ${acceptedCheck.blockers.length} issue(s) need review.`
       );
     } catch (error) {
       setProofExportStatus("error");
@@ -670,7 +666,6 @@ function App() {
     setExecutionResult(null);
     setExecutionRecord(null);
     setPostRunScan(null);
-    setProofReviewed(false);
     setWorkflowProofAccepted(false);
     setWorkflowProofCheck(null);
     setSupportBundleWrite(null);
@@ -690,7 +685,6 @@ function App() {
     setArchiveDestination("");
     setConsentChecked(false);
     setPermanentRemovalConfirmed(false);
-    setProofReviewed(false);
     setWorkflowProofAccepted(false);
     setWorkflowProofCheck(null);
     setSupportBundleWrite(null);
@@ -816,11 +810,8 @@ function App() {
             postRunScan={postRunScan}
             postRunProof={postRunProof}
             scanStatus={scanStatus}
-            proofReviewed={proofReviewed}
-            setProofReviewed={setProofReviewed}
             workflowProofAccepted={workflowProofAccepted}
             workflowProofCheck={workflowProofCheck}
-            workflowLocks={workflowLocks}
             canExportProof={canExportProof}
             proofExportStatus={proofExportStatus}
             proofExportMessage={proofExportMessage}
@@ -838,7 +829,7 @@ function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, sel
     { id: "clean", label: "Clean", icon: Trash2, state: selectedCandidate ? "ready" : scan ? "waiting" : "idle" },
     { id: "explore", label: "Explore C:", icon: ListTree, state: scan ? "ready" : "waiting" },
     { id: "agent", label: "Ask AI", icon: Bot, state: scan ? "waiting" : "idle" },
-    { id: "history", label: "History", icon: History, state: executionRecord ? "ready" : "waiting" }
+    { id: "history", label: "Activity", icon: History, state: executionRecord ? "ready" : "waiting" }
   ];
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -932,7 +923,7 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh })
     "Explicit user consent",
     "Safe delete action",
     "Post-clean rescan",
-    "Cleanup history"
+    "Cleanup activity"
   ];
 
   return (
@@ -1460,11 +1451,8 @@ function HistoryPanel({
   postRunScan,
   postRunProof,
   scanStatus,
-  proofReviewed,
-  setProofReviewed,
   workflowProofAccepted,
   workflowProofCheck,
-  workflowLocks,
   canExportProof,
   proofExportStatus,
   proofExportMessage,
@@ -1478,13 +1466,13 @@ function HistoryPanel({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <History className="h-4 w-4" />
-            Cleanup history
+            Activity
           </CardTitle>
-          <CardDescription>Recent cleanup result.</CardDescription>
+          <CardDescription>Latest cleanup result.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {!executionRecord ? (
-            <EmptyState icon={History} title="No cleanup has run yet" detail="Run a cleanable target to create a local cleanup history record." />
+            <EmptyState icon={History} title="No cleanup has run yet" detail="Run a cleanable item to see what happened." />
           ) : (
             <>
               <div className="grid gap-3 md:grid-cols-4">
@@ -1496,20 +1484,17 @@ function HistoryPanel({
               <p className="text-sm text-muted-foreground">{formatHistorySummary(executionRecord, ledger)}</p>
               <Button variant="outline" onClick={onRescan} disabled={scanStatus === "rescanning"}>
                 {scanStatus === "rescanning" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-                Refresh space
+                Scan again
               </Button>
               <details id="execution-proof-handoff-panel" className="rounded-md border bg-muted/20">
-                <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Troubleshooting</summary>
+                <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Support file</summary>
                 <SupportDetails
                   selectedCandidate={selectedCandidate}
                   executionRecord={executionRecord}
                   postRunScan={postRunScan}
                   postRunProof={postRunProof}
-                  proofReviewed={proofReviewed}
-                  setProofReviewed={setProofReviewed}
                   workflowProofAccepted={workflowProofAccepted}
                   workflowProofCheck={workflowProofCheck}
-                  workflowLocks={workflowLocks}
                   canExportProof={canExportProof}
                   proofExportStatus={proofExportStatus}
                   proofExportMessage={proofExportMessage}
@@ -1529,11 +1514,8 @@ function SupportDetails({
   executionRecord,
   postRunScan,
   postRunProof,
-  proofReviewed,
-  setProofReviewed,
   workflowProofAccepted,
   workflowProofCheck,
-  workflowLocks,
   canExportProof,
   proofExportStatus,
   proofExportMessage,
@@ -1541,40 +1523,20 @@ function SupportDetails({
 }) {
   return (
     <div className="space-y-4 border-t p-3">
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-3">
         <Metric label="Cleanup" value={selectedCandidate?.title || executionRecord.title || "Selected item"} />
         <Metric label="Freed" value={formatBytes(executionRecord.bytes)} />
-        <Metric label="Space check" value={formatVolumeProofStatus(executionRecord.volumeProof)} />
-        <Metric label="Refresh" value={formatPostRunProofStatus(postRunProof.status)} />
+        <Metric label="Latest scan" value={formatPostRunProofStatus(postRunProof.status)} />
       </div>
       {executionRecord.accepted && !volumeProofMeasured(executionRecord.volumeProof) ? (
-        <Notice tone="review" icon={AlertTriangle} text="Refresh space before exporting troubleshooting info." />
+        <Notice tone="review" icon={AlertTriangle} text="Scan again before exporting a support file." />
       ) : null}
-      {workflowLocks?.noOpExecution ? (
-        <Notice tone="review" icon={AlertTriangle} text={workflowLocks.primary} />
+      {postRunScan && postRunProof.status !== "matched" ? (
+        <Notice tone="review" icon={RefreshCcw} text="Scan again before exporting a support file." />
       ) : null}
-      {postRunScan ? (
-        <div className="space-y-3 rounded-md border bg-background p-3 text-sm">
-          <div>
-            <p className="font-medium">{postRunProof.status === "matched" ? "Refresh matched the cleanup" : "Refresh needs review"}</p>
-            <p className="mt-1 text-muted-foreground">{postRunProof.detail}</p>
-          </div>
-          <div className="grid gap-2 md:grid-cols-3">
-            <Metric label="Item" value={postRunProof.targetEvidence?.kind === "item" ? "selected item" : "scanned finding"} />
-            <Metric label="Current size" value={formatBytes(postRunProof.actualBytes)} />
-            <Metric label="Expected size" value={formatBytes(postRunProof.expectedRemaining)} />
-          </div>
-        </div>
-      ) : (
-        <Notice tone="review" icon={RefreshCcw} text="Refresh space after cleanup before exporting troubleshooting info." />
-      )}
-      <label className="flex items-start gap-3 text-sm">
-        <Checkbox checked={Boolean(postRunScan && proofReviewed)} disabled={!postRunScan} onClick={() => setProofReviewed(!proofReviewed)} />
-        <span>I reviewed the refreshed scan.</span>
-      </label>
       <Button className="w-full" disabled={!canExportProof || proofExportStatus === "running"} onClick={onExportProof}>
         {proofExportStatus === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-        Export troubleshooting bundle
+        Export support file
       </Button>
       {proofExportMessage ? (
         <Notice
@@ -1585,10 +1547,10 @@ function SupportDetails({
       ) : null}
       {workflowProofCheck ? (
         <details className="rounded-md border bg-background text-sm">
-          <summary className="cursor-pointer px-3 py-2 font-medium">Export details</summary>
+          <summary className="cursor-pointer px-3 py-2 font-medium">Support details</summary>
           <div className="space-y-2 border-t p-3">
             <div className="flex items-center justify-between gap-3">
-              <span className="font-medium">Troubleshooting check</span>
+              <span className="font-medium">Support check</span>
               <Badge variant={workflowProofAccepted ? "safe" : "restricted"}>{workflowProofCheck.status}</Badge>
             </div>
             <p className="text-muted-foreground">{workflowProofCheck.primary}</p>

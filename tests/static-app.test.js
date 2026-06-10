@@ -49,12 +49,11 @@ const requiredAppMarkers = [
   "Explore C: allocation",
   "Selected item",
   "Delete selected files",
-  "Space check",
-  "Refresh space",
-  "Cleanup history",
-  "Troubleshooting",
-  "Export troubleshooting bundle",
-  "selected item",
+  "Latest scan",
+  "Scan again",
+  "Activity",
+  "Support file",
+  "Export support file",
   "Ask AI",
   "Review only"
 ];
@@ -152,7 +151,7 @@ assert(!app.includes("routeSetupLocked"), "app shell should not carry route setu
 assert(app.includes("workflowProofAccepted"), "optional proof export should still track in-app verifier state");
 assert(app.includes("buildWorkflowProofCheck"), "proof export should run the shared workflow proof verifier inside the app");
 assert(app.includes("workflowProofCheck"), "support details should render workflow validation output from the app");
-assert(app.includes("Troubleshooting bundle exported"), "support export should report accepted in-app workflow validation with user-facing copy");
+assert(app.includes("Support file exported"), "support export should report accepted in-app workflow validation with user-facing copy");
 assert(app.includes("proofKind: \"workflow-proof-check\""), "proof export should persist the in-app verifier output as a restricted artifact");
 assert(app.includes("proofKind: \"support-bundle\""), "proof export should persist an in-app support bundle as a restricted artifact");
 assert(app.includes("buildInAppSupportBundleReport"), "proof export should build the support bundle inside the desktop app");
@@ -174,7 +173,9 @@ assert(!app.includes("Export proof, let the in-app verifier accept it, and captu
 assert(!app.includes("disabled={targetSwitchLocked && candidate.id !== selectedId}"), "cleanup queue should not disable other targets behind proof export");
 assert(!app.includes("disabled={routeSetupLocked && route.routeInput !== selectedRouteInput}"), "route setup locks should not exist in the app shell");
 assert(!app.includes("Current route is locked until proof export and support bundle capture finish."), "route setup proof lock copy should not render in the app shell");
-assert(app.includes("workflowLocks?.noOpExecution"), "support details should render accepted zero-byte no-op handoff state");
+assert(!app.includes("I reviewed the refreshed scan."), "support export should not require a manual proof-review checkbox");
+assert(!app.includes("Export troubleshooting bundle"), "support export should use product-facing support file copy");
+assert(!app.includes("Refresh space before exporting troubleshooting info."), "support export should not expose troubleshooting proof copy");
 assert(app.includes("buildProofCandidateFromExecutionRecord"), "proof panel should preserve executed target proof context after baseline promotion");
 assert(app.includes("recipeId: selectedCandidate.recipeId"), "execution records should preserve recipe id for post-run proof matching");
 assert(app.includes("envVar: selectedCandidate.envVar"), "execution records should preserve selected route flag for proof/support re-export");
@@ -188,8 +189,8 @@ assert(
   "selecting a different cleanup target should clear stale execution, rescan, and proof export state"
 );
 assert(
-  /if \(afterExecution\) \{[\s\S]*setScan\(result\);[\s\S]*setPostRunScan\(result\);[\s\S]*setSelectedId\(""\);[\s\S]*setProofReviewed\(false\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}/.test(app),
-  "post-clean rescan should update the normal cleanup list and clear stale proof export status"
+  /if \(afterExecution\) \{[\s\S]*setScan\(result\);[\s\S]*setPostRunScan\(result\);[\s\S]*setSelectedId\(""\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}/.test(app),
+  "post-clean rescan should update the normal cleanup list and clear stale support export status"
 );
 assert(/if \(result\.accepted\) \{[\s\S]*await runRealScan\(\{ afterExecution: true \}\);[\s\S]*\}/.test(app), "accepted cleanup should refresh the list automatically");
 assert(app.includes("buildManualFindingGuidance"), "app should use tested manual finding guidance");
