@@ -74,7 +74,7 @@ const EXECUTOR_RECIPES = {
     actionType: "run-temp-executor",
     risk: "safe",
     targetKind: "cache root",
-    consequence: "Old temp files under allowed temp roots are removed."
+    consequence: "Old Windows temp files are removed."
   },
   "browser-cache": {
     label: "Browser cache cleanup",
@@ -86,7 +86,7 @@ const EXECUTOR_RECIPES = {
     actionType: "run-browser-cache-executor",
     risk: "rebuildable",
     targetKind: "cache root",
-    consequence: "Browser cache files are removed; cookies and identity files stay blocked by native validation."
+    consequence: "Browser cache files are removed. Cookies and sign-in data are not touched."
   },
   "gradle-cache": {
     label: "Gradle cache cleanup",
@@ -122,7 +122,7 @@ const EXECUTOR_RECIPES = {
     actionType: "run-android-cache-executor",
     risk: "rebuildable",
     targetKind: "cache root",
-    consequence: "Android Studio cache roots are pruned through native allowlists."
+    consequence: "Old Android Studio cache files are removed."
   },
   "steam-shader-cache": {
     label: "Graphics shader cache cleanup",
@@ -158,7 +158,7 @@ const EXECUTOR_RECIPES = {
     actionType: "run-docker-build-cache-executor",
     risk: "advanced",
     targetKind: "tool inventory",
-    consequence: "Only Docker build cache is pruned; images, containers, and volumes remain outside this route."
+    consequence: "Only Docker build cache is cleared. Images, containers, and volumes are not touched."
   },
   "npm-cache": {
     label: "npm cache cleanup",
@@ -872,7 +872,7 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh })
   const cleanupSteps = [
     ["Scan PC", "Find cleanable cache and temp files."],
     ["Check item", "Choose one safe cleanup row."],
-    ["Delete", "Run the guarded Windows cleanup."]
+    ["Delete", "Clear the selected files."]
   ];
 
   return (
@@ -985,7 +985,7 @@ function ScanPanel({ request, setRequest, candidates = [], scan, scanStatus, sca
               {hasScan ? "Ready to clean" : "Scan for cleanup"}
             </CardTitle>
             <CardDescription>
-              {hasScan ? `${readyLabel}. Check a row below, then delete it.` : "Read-only scan. Nothing is deleted until you choose an item."}
+              {hasScan ? `${readyLabel}. Select a row below, then delete it.` : "Scan first. Nothing is deleted until you choose an item."}
             </CardDescription>
           </div>
           {hasScan ? (
@@ -1051,7 +1051,7 @@ function ScanPanel({ request, setRequest, candidates = [], scan, scanStatus, sca
                 />
               </label>
               <label className="space-y-1 text-sm">
-                <span className="font-medium">Custom read-only roots</span>
+                <span className="font-medium">Extra folders to scan</span>
                 <Textarea
                   value={request.customRoots}
                   onChange={(event) => setRequest({ ...request, customRoots: event.target.value })}
@@ -1303,7 +1303,7 @@ function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCand
         {!scan ? (
           <EmptyState icon={HardDrive} title="Run a scan to explore C:" detail="Large folders and cleanable items appear here after scanning." />
         ) : !rows.length ? (
-          <EmptyState icon={HardDrive} title="No large areas found" detail="Run a fresh scan or add a custom read-only root from Advanced scan options." />
+          <EmptyState icon={HardDrive} title="No large areas found" detail="Run a fresh scan or add an extra folder from Advanced scan options." />
         ) : (
           <>
             <div className="grid gap-3 md:grid-cols-4">
@@ -1319,7 +1319,7 @@ function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCand
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant={row.cleanable ? row.ready ? "safe" : "review" : "outline"}>
-                          {row.cleanable ? row.ready ? "ready" : "not ready" : "review only"}
+                          {row.cleanable ? row.ready ? "ready" : "review" : "manual"}
                         </Badge>
                         <p className="font-medium">{row.title}</p>
                       </div>
@@ -1334,7 +1334,7 @@ function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCand
                           {row.ready ? "Clean" : "View"}
                         </Button>
                       ) : (
-                        <Badge variant="outline">review only</Badge>
+                        <Badge variant="outline">manual</Badge>
                       )}
                     </div>
                   </div>
@@ -1431,7 +1431,7 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant={suggestedAction.canAct ? "safe" : suggestedAction.status === "manual-only" ? "outline" : "review"}>
-                        {suggestedAction.canAct ? "ready" : suggestedAction.status === "manual-only" ? "review only" : "needs review"}
+                        {suggestedAction.canAct ? "ready" : suggestedAction.status === "manual-only" ? "manual" : "needs review"}
                       </Badge>
                       <p className="font-medium">{formatAgentActionTitle(suggestedAction)}</p>
                     </div>
@@ -1486,9 +1486,9 @@ function ManualReviewPanel({ findings }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <HardDrive className="h-4 w-4" />
-          Review only
+          Needs review
         </CardTitle>
-        <CardDescription>These areas may be large, but the app will not delete them automatically.</CardDescription>
+        <CardDescription>These areas may be large. SpaceGuard will not delete them automatically.</CardDescription>
       </CardHeader>
       <CardContent>
         {findings.length ? (
@@ -1497,72 +1497,28 @@ function ManualReviewPanel({ findings }) {
               <div key={`${finding.recipeId}-${finding.path}`} className="rounded-md border bg-background p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="truncate text-sm font-medium">{finding.title}</p>
-                  <Badge variant="outline">{finding.status}</Badge>
+                  <Badge variant="outline">manual</Badge>
                 </div>
                 <p className="mt-2 truncate text-xs text-muted-foreground">{finding.path || finding.recipeId}</p>
                 <p className="mt-2 text-lg font-semibold">{formatBytes(finding.bytes)}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{finding.note || "Manual review only."}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{formatManualFindingNote(finding)}</p>
                 <div className="mt-3 rounded-md border bg-muted/30 p-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline">{finding.manualGuidance.confidence}</Badge>
-                    <p className="text-xs font-medium">Recommended action</p>
+                    <p className="text-xs font-medium">Suggested action</p>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">{finding.manualGuidance.primaryAction}</p>
                 </div>
-                <details className="mt-3 rounded-md border bg-background text-xs">
-                  <summary className="cursor-pointer px-2 py-2 font-medium">Review details</summary>
-                  <div className="space-y-3 border-t p-2">
-                    <code className="block overflow-hidden text-ellipsis rounded border bg-muted/30 px-2 py-1">
-                      {finding.manualGuidance.command}
-                    </code>
-                    <div>
-                      <p className="font-medium">Why review only</p>
-                      <ul className="mt-1 space-y-1">
-                        {finding.manualGuidance.blockedActions.slice(0, 3).map((action) => (
-                          <li key={action} className="flex gap-2 text-muted-foreground">
-                            <Lock className="mt-0.5 h-3 w-3 shrink-0" />
-                            <span>{action}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    {finding.reviewRows.rows.length ? (
-                      <div className="rounded-md border bg-background">
-                        <div className="border-b px-2 py-2">
-                          <p className="font-medium">Items inside</p>
-                        </div>
-                        <div className="divide-y">
-                          {finding.reviewRows.rows.slice(0, 3).map((row) => (
-                            <div key={row.id || row.path} className="p-2">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <p className="truncate font-medium">{row.name}</p>
-                                  <p className="mt-0.5 text-muted-foreground">{formatBytes(row.bytes)}</p>
-                                </div>
-                                <Badge variant={row.action === "keep-installed" ? "safe" : "review"}>{row.actionLabel}</Badge>
-                              </div>
-                              <p className="mt-1 line-clamp-2 text-muted-foreground">{row.reason}</p>
-                              <p className="mt-2 font-medium">Signals</p>
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {row.signals.slice(0, 4).map((signal) => (
-                                  <Badge key={`${row.id}-${signal.label}-${signal.value}`} variant={signal.tone === "safe" ? "safe" : signal.tone === "restricted" ? "restricted" : "outline"}>
-                                    {signal.label}: {signal.value}
-                                  </Badge>
-                                ))}
-                              </div>
-                              <p className="mt-2 text-muted-foreground">{row.blockedAction}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                </details>
+                {finding.reviewRows.rows.length ? (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {finding.reviewRows.rows.length === 1 ? "1 item may need your review." : `${finding.reviewRows.rows.length} items may need your review.`}
+                  </p>
+                ) : null}
               </div>
             ))}
           </div>
         ) : (
-          <EmptyState icon={HardDrive} title="No review-only findings" detail="Run a scan to show areas that need manual review." />
+          <EmptyState icon={HardDrive} title="No manual review items" detail="Run a scan to show areas that need your review." />
         )}
       </CardContent>
     </Card>
@@ -1675,7 +1631,7 @@ function formatCleanupRejectMessage(result = {}) {
 
 function formatNotReadyReason(candidate = {}) {
   if (!candidate?.executable) {
-    return "Review only. SpaceGuard will not delete this automatically.";
+    return "Manual review needed. SpaceGuard will not delete this automatically.";
   }
   const text = String(candidate.blockedReason || "").toLowerCase();
   if (text.includes("windows") || text.includes("runtime") || text.includes("desktop")) {
@@ -1733,7 +1689,15 @@ function isOneClickCleanupCandidate(candidate = {}) {
 
 function formatReviewCandidateStatus(candidate = {}) {
   if (candidate?.requiresArchiveDestination) return "needs destination";
-  return candidate?.executable ? "not ready" : "review only";
+  return candidate?.executable ? "not ready" : "manual";
+}
+
+function formatManualFindingNote(finding = {}) {
+  const text = String(finding.note || "").trim();
+  if (!text || /executor|allowlist|native|command/i.test(text)) {
+    return "Review this area yourself before removing anything.";
+  }
+  return text;
 }
 
 function buildCleanupCandidates(scan, runtime) {
@@ -1788,7 +1752,7 @@ function buildExploreRows(scan, candidates = [], manualFindings = []) {
     bytes: Number(finding.bytes || 0),
     kind: finding.manualGuidance?.kind || "manual",
     source: "manual-review",
-    detail: finding.manualGuidance?.primaryAction || finding.note || "Manual review only; no shipped executor can delete this row.",
+    detail: finding.manualGuidance?.primaryAction || formatManualFindingNote(finding),
     cleanable: false,
     ready: false,
     candidateId: ""
@@ -2188,7 +2152,7 @@ function buildAgentContext({
       status: finding.status || "unknown",
       confidence: finding.manualGuidance?.confidence || "manual-only",
       targetPath: redactPath(finding.path || ""),
-      reason: redactAgentContextText(finding.manualGuidance?.primaryAction || finding.note || "Manual review only."),
+      reason: redactAgentContextText(finding.manualGuidance?.primaryAction || finding.note || "Manual review needed."),
       blockedActions: Array.isArray(finding.manualGuidance?.blockedActions)
         ? finding.manualGuidance.blockedActions.slice(0, 4).map((row) => redactAgentContextText(row))
         : []

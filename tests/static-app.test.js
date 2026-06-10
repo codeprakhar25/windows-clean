@@ -51,7 +51,7 @@ const requiredAppMarkers = [
   "Scan again",
   "Activity",
   "Ask AI",
-  "Review only"
+  "Needs review"
 ];
 
 for (const marker of requiredAppMarkers) {
@@ -223,11 +223,12 @@ assert(app.includes("\"windows-old\": \"Previous Windows installation review\"")
 assert(app.includes("hibernation: \"Hibernation file review\""), "manual panel should surface hibernation file findings");
 assert(app.includes("pagefile: \"Pagefile review\""), "manual panel should surface pagefile findings");
 assert(app.includes("\"wsl-vhdx\": \"WSL virtual disk review\""), "manual panel should surface WSL virtual disk findings");
-assert(app.includes("Recommended action"), "manual review panel should render simple recommended action copy");
-assert(app.includes("Review details"), "manual review panel should collapse manual details");
-assert(app.includes("Items inside"), "manual review panel should render visible review candidates inside details");
-assert(app.includes("Signals"), "manual review panel should render candidate usage signals inside details");
-assert(app.includes("Why review only"), "manual review panel should render guardrails inside details");
+assert(app.includes("Suggested action"), "manual review panel should render simple suggested action copy");
+assert(app.includes("formatManualFindingNote"), "manual review panel should convert internal notes into plain copy");
+assert(!app.includes("manualGuidance.command"), "manual review panel should not render command snippets");
+assert(!app.includes("Review details"), "manual review panel should not expose a nested diagnostic details panel");
+assert(!app.includes("Signals"), "manual review panel should not render candidate usage signals as user-facing UI");
+assert(!app.includes("Why review only"), "manual review panel should not expose internal guardrail details");
 assert(!app.includes("Selected .env block"), "app shell should not ask users to copy route-specific env blocks");
 assert(!app.includes("copyEnvBlock"), "app shell should not expose route setup copy actions");
 assert(!app.includes("navigator.clipboard.writeText(checklist.envBlock.content)"), "app shell should not copy route setup env content");
