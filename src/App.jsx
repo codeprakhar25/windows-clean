@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Bot,
-  BarChart3,
   CheckCircle2,
   ChevronRight,
   ClipboardCheck,
@@ -12,7 +11,6 @@ import {
   HardDrive,
   History,
   KeyRound,
-  LayoutDashboard,
   ListTree,
   Loader2,
   Lock,
@@ -54,7 +52,7 @@ import {
   writeNativeProofArtifact
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildWorkflowAgentTargetId, buildWorkflowGuide, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, renderInAppSupportBundleMarkdown, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
+import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildWorkflowAgentTargetId, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, renderInAppSupportBundleMarkdown, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
 import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -258,7 +256,7 @@ const MANUAL_RECIPE_LABELS = {
 };
 
 function App() {
-  const [activeView, setActiveView] = useState("overview");
+  const [activeView, setActiveView] = useState("clean");
   const [capability, setCapability] = useState(() => getNativeScannerCapability());
   const [runtime, setRuntime] = useState(null);
   const [runtimeStatus, setRuntimeStatus] = useState("loading");
@@ -362,25 +360,6 @@ function App() {
       activeScanGeneratedAt: scan?.generatedAt || ""
     }),
     [selectedCandidate, consentChecked, executionPrerequisites, scanFingerprint, executionStatus, workflowLocks, executionRecord, scan]
-  );
-  const workflowGuide = useMemo(
-    () => buildWorkflowGuide({
-      nativeConnected,
-      scan,
-      scanStatus,
-      candidates,
-      selectedCandidate,
-      executionGate,
-      executionStatus,
-      executionRecord,
-      postRunProof,
-      proofReviewed,
-      workflowProofAccepted,
-      supportBundleWritten,
-      canExportProof,
-      proofExportStatus
-    }),
-    [nativeConnected, scan, scanStatus, candidates, selectedCandidate, executionGate, executionStatus, executionRecord, postRunProof, proofReviewed, workflowProofAccepted, supportBundleWritten, canExportProof, proofExportStatus]
   );
   const canExecute = executionGate.ready;
   const agentContext = useMemo(
@@ -651,29 +630,6 @@ function App() {
     }
   }
 
-  async function runWorkflowGuideAction() {
-    if (!workflowGuide.actionEnabled) return;
-    if (workflowGuide.primaryActionKind === "run-scan") {
-      await runRealScan();
-      return;
-    }
-    if (workflowGuide.primaryActionKind === "select-target") {
-      selectWorkflowCandidate(workflowGuide.primaryTargetId);
-      return;
-    }
-    if (workflowGuide.primaryActionKind === "execute-cleanup") {
-      await executeSelectedCleanup();
-      return;
-    }
-    if (workflowGuide.primaryActionKind === "run-post-run-rescan") {
-      await runRealScan({ afterExecution: true });
-      return;
-    }
-    if (workflowGuide.primaryActionKind === "export-proof") {
-      await exportProofPacket();
-    }
-  }
-
   async function runAgentBrokerAction(row) {
     if (!row?.canAct) return;
     if (row.kind === "scan") {
@@ -775,46 +731,43 @@ function App() {
           scan={scan}
           onRefreshRuntime={refreshRuntime}
         />
-        {activeView === "overview" ? (
-          <OverviewPanel
-            workflowGuide={workflowGuide}
-            runtime={runtime}
-            scan={scan}
-            scanStatus={scanStatus}
-            scanError={scanError}
-            scanRequest={scanRequest}
-            setScanRequest={setScanRequest}
-            onRunScan={() => runRealScan()}
-            onPrimaryAction={runWorkflowGuideAction}
-            cleanupCount={candidates.length}
-            manualCount={manualFindings.length}
-          />
-        ) : null}
         {activeView === "clean" ? (
           <section className="grid gap-4">
-            <DecisionPanel
-              candidate={selectedCandidate}
-              consentChecked={consentChecked}
-              setConsentChecked={setConsentChecked}
-              permanentRemovalConfirmed={permanentRemovalConfirmed}
-              setPermanentRemovalConfirmed={setPermanentRemovalConfirmed}
-              archiveDestination={archiveDestination}
-              setArchiveDestination={setArchiveDestination}
-              executionPrerequisites={executionPrerequisites}
-              canExecute={canExecute}
-              executionStatus={executionStatus}
-              executionError={executionError}
-              executionResult={executionResult}
-              scanStatus={scanStatus}
-              onExecute={executeSelectedCleanup}
-              onRescan={() => runRealScan({ afterExecution: true })}
-            />
-            <CleanupQueue
-              candidates={candidates}
-              selectedId={selectedId}
-              setSelectedId={selectWorkflowCandidate}
+            <ScanPanel
+              request={scanRequest}
+              setRequest={setScanRequest}
               scan={scan}
+              scanStatus={scanStatus}
+              scanError={scanError}
+              onRunScan={() => runRealScan()}
             />
+            {scan ? (
+              <>
+                <DecisionPanel
+                  candidate={selectedCandidate}
+                  consentChecked={consentChecked}
+                  setConsentChecked={setConsentChecked}
+                  permanentRemovalConfirmed={permanentRemovalConfirmed}
+                  setPermanentRemovalConfirmed={setPermanentRemovalConfirmed}
+                  archiveDestination={archiveDestination}
+                  setArchiveDestination={setArchiveDestination}
+                  executionPrerequisites={executionPrerequisites}
+                  canExecute={canExecute}
+                  executionStatus={executionStatus}
+                  executionError={executionError}
+                  executionResult={executionResult}
+                  scanStatus={scanStatus}
+                  onExecute={executeSelectedCleanup}
+                  onRescan={() => runRealScan({ afterExecution: true })}
+                />
+                <CleanupQueue
+                  candidates={candidates}
+                  selectedId={selectedId}
+                  setSelectedId={selectWorkflowCandidate}
+                  scan={scan}
+                />
+              </>
+            ) : null}
           </section>
         ) : null}
         {activeView === "explore" ? (
@@ -868,12 +821,11 @@ function App() {
   );
 }
 
-function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, selectedCandidate, executionRecord, activeView = "overview", setActiveView = () => {} }) {
+function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, selectedCandidate, executionRecord, activeView = "clean", setActiveView = () => {} }) {
   const navRows = [
-    { id: "overview", label: "Overview", icon: LayoutDashboard, state: nativeConnected ? "ready" : runtimeStatus },
     { id: "clean", label: "Clean", icon: Trash2, state: selectedCandidate ? "ready" : scan ? "waiting" : "idle" },
     { id: "explore", label: "Explore C:", icon: ListTree, state: scan ? "ready" : "waiting" },
-    { id: "agent", label: "Agent", icon: Bot, state: scan ? "waiting" : "idle" },
+    { id: "agent", label: "Ask AI", icon: Bot, state: scan ? "waiting" : "idle" },
     { id: "history", label: "History", icon: History, state: executionRecord ? "ready" : "waiting" }
   ];
   return (
@@ -915,8 +867,8 @@ function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, sel
               })}
             </nav>
             <div className="mt-auto rounded-md border bg-muted/35 p-3 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground">Current route</p>
-              <p className="mt-1 truncate">{selectedCandidate?.routeInput || "No route selected"}</p>
+              <p className="font-medium text-foreground">Selected cleanup</p>
+              <p className="mt-1 truncate">{selectedCandidate?.title || "Nothing selected"}</p>
               <p className="mt-3 font-medium text-foreground">Runtime</p>
               <p className="mt-1">{runtime?.windows ? "Windows native shell" : "Waiting for native shell"}</p>
             </div>
@@ -952,7 +904,7 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh })
     },
     {
       label: "Run cleanup",
-      command: "Scan -> explore -> select -> confirm -> clean -> rescan",
+      command: "Scan -> choose -> delete",
       detail: "If this setup screen is still visible, the native bridge is not connected yet."
     }
   ];
@@ -1080,7 +1032,7 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
         </div>
         <h1 className="mt-2 text-2xl font-semibold tracking-normal">SpaceGuard Windows cleanup</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Scan C:, explore recoverable space, select an allowlisted target, confirm, clean, and rescan.
+          Scan your PC, choose what to clean, then delete the selected files.
         </p>
       </div>
       <div className="min-w-[240px] space-y-2">
@@ -1095,149 +1047,6 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
         </Button>
       </div>
     </header>
-  );
-}
-
-function WorkflowGuidePanel({ workflowGuide, onPrimaryAction }) {
-  const current = workflowGuide.steps.find((step) => step.id === workflowGuide.currentStepId) || workflowGuide.steps[0];
-  const ActionIcon =
-    workflowGuide.actionBusy
-      ? Loader2
-      : workflowGuide.primaryActionKind === "run-scan" || workflowGuide.primaryActionKind === "run-post-run-rescan"
-      ? RefreshCcw
-      : workflowGuide.primaryActionKind === "export-proof"
-        ? Download
-        : Play;
-  return (
-    <Card className="rounded-md">
-      <CardHeader className="pb-3">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardCheck className="h-4 w-4" />
-              Guided workflow
-            </CardTitle>
-            <CardDescription>One current action for scan, cleanup, and post-clean rescan.</CardDescription>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant={workflowGuide.status === "complete" ? "safe" : "review"}>{workflowGuide.status}</Badge>
-            <Badge variant="outline">{workflowGuide.currentStepId}</Badge>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="rounded-md border bg-background p-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">{workflowGuide.primaryAction}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{workflowGuide.primaryDetail}</p>
-            </div>
-            <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-              <Badge variant="outline">{current?.label || "Current step"}</Badge>
-              <Button
-                type="button"
-                size="sm"
-                disabled={!workflowGuide.actionEnabled || workflowGuide.actionBusy}
-                onClick={onPrimaryAction}
-              >
-                <ActionIcon className={`h-4 w-4 ${workflowGuide.actionBusy ? "animate-spin" : ""}`} />
-                {workflowGuide.primaryAction}
-              </Button>
-            </div>
-          </div>
-          {workflowGuide.primaryTargetTitle || workflowGuide.primaryTargetBytes ? (
-            <div className="mt-3 grid gap-2 md:grid-cols-3">
-              <Metric label="Guide target" value={workflowGuide.primaryTargetTitle || "selected target"} />
-              <Metric label="Expected reclaim" value={formatBytes(workflowGuide.primaryTargetBytes || 0)} />
-              <Metric label="Route" value={workflowGuide.primaryTargetRouteInput || workflowGuide.currentStepId} />
-              {workflowGuide.primaryTargetPath ? (
-                <div className="rounded-md border bg-muted/25 p-3 md:col-span-3">
-                  <p className="text-xs text-muted-foreground">Target path</p>
-                  <p className="mt-1 truncate text-sm font-medium">{workflowGuide.primaryTargetPath}</p>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-        <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-9">
-          {workflowGuide.steps.map((step, index) => (
-            <div
-              key={step.id}
-              className={`min-h-[104px] rounded-md border p-3 ${
-                step.status === "current"
-                  ? "border-primary bg-primary/5"
-                  : step.status === "done"
-                    ? "bg-emerald-50/70"
-                    : "bg-muted/30"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded border bg-background text-xs font-medium">
-                  {index + 1}
-                </span>
-                {step.status === "done" ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                ) : step.status === "current" ? (
-                  <ChevronRight className="h-4 w-4 text-primary" />
-                ) : (
-                  <Lock className="h-4 w-4 text-muted-foreground" />
-                )}
-              </div>
-              <p className="mt-2 truncate text-xs font-medium">{step.shortLabel}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{step.label}</p>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function OverviewPanel({
-  workflowGuide,
-  runtime,
-  scan,
-  scanStatus,
-  scanError,
-  scanRequest,
-  setScanRequest,
-  onRunScan,
-  onPrimaryAction,
-  cleanupCount = 0,
-  manualCount = 0
-}) {
-  return (
-    <div className="grid gap-5">
-      <WorkflowGuidePanel workflowGuide={workflowGuide} onPrimaryAction={onPrimaryAction} />
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
-        <ScanPanel
-          request={scanRequest}
-          setRequest={setScanRequest}
-          scan={scan}
-          scanStatus={scanStatus}
-          scanError={scanError}
-          onRunScan={onRunScan}
-        />
-        <div className="grid gap-5">
-          <RuntimePanel runtime={runtime} />
-          <Card className="rounded-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" />
-                Analysis summary
-              </CardTitle>
-              <CardDescription>Current scan output and cleanup opportunity counts.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              <Metric label="Cleanable targets" value={String(cleanupCount)} />
-              <Metric label="Manual review rows" value={String(manualCount)} />
-              <Metric label="Measured reclaim" value={formatBytes(scan?.totalBytes || 0)} />
-              <Metric label="Drive free" value={formatBytes(scan?.volume?.freeBytes || 0)} />
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-    </div>
   );
 }
 
@@ -1297,23 +1106,15 @@ function ScanPanel({ request, setRequest, scan, scanStatus, scanError, onRunScan
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FolderSearch className="h-4 w-4" />
-          Real scan
+          Scan for cleanup
         </CardTitle>
-        <CardDescription>Read-only Windows scan settings. No cleanup runs from this panel.</CardDescription>
+        <CardDescription>Read-only scan. Nothing is deleted until you choose an item and confirm cleanup.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-[minmax(180px,260px)_minmax(180px,220px)]">
           <label className="space-y-1 text-sm">
             <span className="font-medium">Target drive</span>
             <Input value={request.targetDrive} onChange={(event) => setRequest({ ...request, targetDrive: event.target.value })} />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Depth</span>
-            <Input type="number" value={request.maxDepth} onChange={(event) => setRequest({ ...request, maxDepth: Number(event.target.value || 8) })} />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Entry cap</span>
-            <Input type="number" value={request.maxEntriesPerRoot} onChange={(event) => setRequest({ ...request, maxEntriesPerRoot: Number(event.target.value || 25000) })} />
           </label>
           <div className="flex items-end">
             <Button className="w-full" onClick={onRunScan} disabled={running}>
@@ -1322,31 +1123,46 @@ function ScanPanel({ request, setRequest, scan, scanStatus, scanError, onRunScan
             </Button>
           </div>
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Protected paths</span>
-            <Textarea
-              value={request.protectedPaths}
-              onChange={(event) => setRequest({ ...request, protectedPaths: event.target.value })}
-              placeholder="One path per line"
-            />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Custom read-only roots</span>
-            <Textarea
-              value={request.customRoots}
-              onChange={(event) => setRequest({ ...request, customRoots: event.target.value })}
-              placeholder="Optional folders to measure manually"
-            />
-          </label>
-        </div>
-        <label className="flex items-center gap-3 text-sm">
-          <Checkbox
-            checked={request.includeProjectArtifacts}
-            onClick={() => setRequest({ ...request, includeProjectArtifacts: !request.includeProjectArtifacts })}
-          />
-          Include project artifact discovery such as node_modules.
-        </label>
+        <details className="rounded-md border bg-muted/20">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Advanced scan options</summary>
+          <div className="space-y-3 border-t p-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">Depth</span>
+                <Input type="number" value={request.maxDepth} onChange={(event) => setRequest({ ...request, maxDepth: Number(event.target.value || 8) })} />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">Entry cap</span>
+                <Input type="number" value={request.maxEntriesPerRoot} onChange={(event) => setRequest({ ...request, maxEntriesPerRoot: Number(event.target.value || 25000) })} />
+              </label>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">Protected paths</span>
+                <Textarea
+                  value={request.protectedPaths}
+                  onChange={(event) => setRequest({ ...request, protectedPaths: event.target.value })}
+                  placeholder="One path per line"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">Custom read-only roots</span>
+                <Textarea
+                  value={request.customRoots}
+                  onChange={(event) => setRequest({ ...request, customRoots: event.target.value })}
+                  placeholder="Optional folders to measure manually"
+                />
+              </label>
+            </div>
+            <label className="flex items-center gap-3 text-sm">
+              <Checkbox
+                checked={request.includeProjectArtifacts}
+                onClick={() => setRequest({ ...request, includeProjectArtifacts: !request.includeProjectArtifacts })}
+              />
+              Include project artifact discovery such as node_modules.
+            </label>
+          </div>
+        </details>
         {scanError ? <Notice tone="restricted" icon={AlertTriangle} text={scanError} /> : null}
         {scan ? (
           <div className="grid gap-3 md:grid-cols-4">
