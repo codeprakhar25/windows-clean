@@ -140,6 +140,9 @@ assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should
 assert(app.includes("formatExecutionGateError"), "execute handler should convert dispatch blockers into plain user-facing copy");
 assert(/if \(candidate\.id === selectedId && consentChecked\) \{[\s\S]*setSelectedId\(""\);[\s\S]*setConsentChecked\(false\);/.test(app), "clicking an already checked cleanup row should deselect it instead of leaving a disabled action");
 assert(!app.includes("Check row"), "selected cleanup rows should not render a disabled check-row action");
+assert(app.includes("function selectWorkflowCandidate(id, options = {})"), "cleanup target selection should support checked handoff state");
+assert(app.includes("setConsentChecked(Boolean(options.checked && target?.canExecute))"), "checked handoff should only check executable cleanup targets");
+assert(/onSelectCandidate=\{\(id\) => \{[\s\S]*selectWorkflowCandidate\(id, \{ checked: Boolean\(candidate\?\.canExecute\) \}\);/.test(app), "Explore cleanup buttons should open Clean with executable rows checked");
 assert(app.includes("onExecute();"), "selected cleanup row action should dispatch the guarded cleanup handler");
 assert(app.includes("Ready to clean"), "post-scan clean screen should lead with the actionable cleanup queue");
 assert(app.includes("Scan details"), "post-scan metrics should be collapsed behind scan details");
@@ -208,7 +211,7 @@ assert(app.includes("setScan(baselinePromotion.activeScan)"), "proof export shou
 assert(app.includes("Latest scan is now active."), "support export should tell the user when baseline promotion succeeds");
 assert(!app.includes("npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted"), "proof panel should not rely on a manual CLI acceptance checkbox");
 assert(
-  /function selectWorkflowCandidate\(id\) \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setPostRunScan\(null\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}/.test(app),
+  /function selectWorkflowCandidate\(id, options = \{\}\) \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setPostRunScan\(null\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}/.test(app),
   "selecting a different cleanup target should clear stale execution, rescan, and proof export state"
 );
 assert(
@@ -249,7 +252,7 @@ assert(app.includes("agentBroker?.rows"), "OpenAI panel should still read broker
 assert(app.includes("Open Clean or Explore to review this item."), "OpenAI panel should show simple review guidance for blocked recommendations");
 assert(!app.includes("suggestedAction.blockedReason"), "OpenAI panel should not expose internal broker blocker text");
 assert(!app.includes("Why this recommendation"), "OpenAI panel should not expose recommendation diagnostic details");
-assert(/resolveWorkflowAgentBrokerCandidate\(row, candidates\)[\s\S]*setConsentChecked\(true\)/.test(app), "OpenAI cleanup recommendations should check the chosen cleanup row before returning to Clean");
+assert(/resolveWorkflowAgentBrokerCandidate\(row, candidates\)[\s\S]*selectWorkflowCandidate\(brokerCandidate\.id, \{[\s\S]*checked: row\.kind === "scoped-executor" && isOneClickCleanupCandidate\(brokerCandidate\)/.test(app), "OpenAI cleanup recommendations should check one-click cleanup rows before returning to Clean");
 assert(app.includes("runAgentBrokerAction"), "OpenAI broker recommendations should route through guarded app actions");
 assert(app.includes("resolveWorkflowAgentBrokerCandidate"), "OpenAI broker actions should resolve model target ids to real cleanup candidates");
 assert(app.includes("onBrokerAction(suggestedAction)"), "OpenAI panel should expose a user-clicked broker action button");

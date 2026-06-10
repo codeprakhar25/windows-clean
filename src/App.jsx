@@ -639,10 +639,9 @@ function App() {
 
     const brokerCandidate = resolveWorkflowAgentBrokerCandidate(row, candidates);
     if (brokerCandidate) {
-      selectWorkflowCandidate(brokerCandidate.id);
-      if (row.kind === "scoped-executor" && isOneClickCleanupCandidate(brokerCandidate)) {
-        setConsentChecked(true);
-      }
+      selectWorkflowCandidate(brokerCandidate.id, {
+        checked: row.kind === "scoped-executor" && isOneClickCleanupCandidate(brokerCandidate)
+      });
       return;
     }
 
@@ -665,8 +664,9 @@ function App() {
     setProofExportMessage("");
   }
 
-  function selectWorkflowCandidate(id) {
+  function selectWorkflowCandidate(id, options = {}) {
     if (!id) return;
+    const target = candidates.find((candidate) => candidate.id === id);
     setSelectedId(id);
     setActiveView("clean");
     setExecutionResult(null);
@@ -675,7 +675,7 @@ function App() {
     setExecutionStatus("idle");
     setExecutionError("");
     setArchiveDestination("");
-    setConsentChecked(false);
+    setConsentChecked(Boolean(options.checked && target?.canExecute));
     setWorkflowProofAccepted(false);
     setWorkflowProofCheck(null);
     setSupportBundleWrite(null);
@@ -692,10 +692,7 @@ function App() {
       setArchiveDestination("");
       return;
     }
-    selectWorkflowCandidate(candidate.id);
-    if (candidate.canExecute) {
-      setConsentChecked(true);
-    }
+    selectWorkflowCandidate(candidate.id, { checked: candidate.canExecute });
   }
 
   if (!nativeConnected) {
@@ -775,7 +772,8 @@ function App() {
             candidates={candidates}
             manualFindings={manualFindings}
             onSelectCandidate={(id) => {
-              selectWorkflowCandidate(id);
+              const candidate = candidates.find((row) => row.id === id);
+              selectWorkflowCandidate(id, { checked: Boolean(candidate?.canExecute) });
               setActiveView("clean");
             }}
             onRunScan={() => runRealScan()}
