@@ -32,7 +32,6 @@ const requiredRealShellMarkers = [
   "Clean space",
   "Cleanup status",
   "Explore C:",
-  "Selected item",
   "Select one ready item, then press Delete on that row.",
   "Scan again",
   "Activity",

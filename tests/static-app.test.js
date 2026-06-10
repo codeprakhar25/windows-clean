@@ -45,7 +45,6 @@ const requiredAppMarkers = [
   "Clean space",
   "Cleanup status",
   "Explore C:",
-  "Selected item",
   "Select one ready item, then press Delete on that row.",
   "Latest scan",
   "Scan again",
@@ -124,7 +123,7 @@ assert(app.includes("buildWorkflowLocks"), "app should use tested workflow lock 
 assert(app.includes("buildBaselinePromotion"), "app should use tested baseline promotion after optional proof export");
 assert(!app.includes("buildRouteSetupChecklist"), "app shell should not render the legacy route setup checklist");
 assert(!app.includes("RouteReadinessList"), "clean screen should not render internal readiness rows");
-assert(app.includes("formatNotReadyReason"), "clean screen should convert internal blockers into simple not-ready copy");
+assert(!app.includes("formatNotReadyReason"), "Clean screen should not carry a separate not-ready detail panel");
 assert(app.includes("selectWorkflowCandidate"), "cleanup target selection should reuse the guarded selection reset helper");
 assert(app.includes("useState(\"clean\")"), "app should open directly on the Clean screen");
 assert(!app.includes("id: \"overview\""), "sidebar should not force users through an overview detour");

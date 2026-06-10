@@ -748,10 +748,7 @@ function App() {
               <CleanPanel
                 candidates={candidates}
                 selectedId={selectedId}
-                candidate={selectedCandidate}
                 consentChecked={consentChecked}
-                archiveDestination={archiveDestination}
-                setArchiveDestination={setArchiveDestination}
                 canExecute={canExecute}
                 executionStatus={executionStatus}
                 executionError={executionError}
@@ -1077,10 +1074,7 @@ function ScanPanel({ request, setRequest, candidates = [], scan, scanStatus, sca
 function CleanPanel({
   candidates,
   selectedId,
-  candidate,
   consentChecked,
-  archiveDestination,
-  setArchiveDestination,
   canExecute,
   executionStatus,
   executionError,
@@ -1091,8 +1085,6 @@ function CleanPanel({
   onExecute,
   onRescan
 }) {
-  const candidateReady = Boolean(candidate?.canExecute);
-  const showSelectedDetails = Boolean(candidate && (!candidateReady || candidate.requiresArchiveDestination));
   const readyCandidates = candidates.filter(isOneClickCleanupCandidate);
   const hasReadyCandidates = readyCandidates.length > 0;
   const running = executionStatus === "running";
@@ -1161,7 +1153,7 @@ function CleanPanel({
                               }}
                             >
                               {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                              {running ? "Deleting" : candidate?.requiresPermanentConfirmation ? "Empty" : "Delete"}
+                              {running ? "Deleting" : row.requiresPermanentConfirmation ? "Empty" : "Delete"}
                             </Button>
                           ) : null}
                         </div>
@@ -1173,30 +1165,6 @@ function CleanPanel({
             ) : (
               <EmptyState icon={Lock} title="No items ready to delete" detail="Run another scan or open Explore to review what was found." />
             )}
-            {showSelectedDetails ? (
-              <div className="rounded-md border bg-muted/25 p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-muted-foreground">Selected item</p>
-                    <p className="mt-1 text-base font-semibold">{candidate.title}</p>
-                    <p className="mt-1 truncate text-sm text-muted-foreground">{candidate.targetPath}</p>
-                  </div>
-                  <div className="shrink-0 md:text-right">
-                    <p className="text-2xl font-semibold">{formatBytes(candidate.bytes)}</p>
-                    <p className="text-xs text-muted-foreground">{candidateReady ? "Ready to delete" : "Not ready yet"}</p>
-                  </div>
-                </div>
-                {!candidateReady ? (
-                  <Notice tone="restricted" icon={Lock} text={formatNotReadyReason(candidate)} />
-                ) : null}
-                {candidate.requiresArchiveDestination ? (
-                  <label className="mt-4 block space-y-1 text-sm">
-                    <span className="font-medium">Archive destination</span>
-                    <Input value={archiveDestination} onChange={(event) => setArchiveDestination(event.target.value)} placeholder="D:\\Archives" disabled={!candidateReady} />
-                  </label>
-                ) : null}
-              </div>
-            ) : null}
             {executionError ? <Notice tone="restricted" icon={AlertTriangle} text={executionError} /> : null}
             {executionResult ? (
               <CleanupResult
@@ -1592,23 +1560,6 @@ function formatCleanupRejectMessage(result = {}) {
     return "Windows blocked some files because they are in use. Close the related apps, scan again, and retry.";
   }
   return "Nothing was deleted. Close apps using these files, scan again, and try once more.";
-}
-
-function formatNotReadyReason(candidate = {}) {
-  if (!candidate?.executable) {
-    return "Manual review needed. SpaceGuard will not delete this automatically.";
-  }
-  const text = String(candidate.blockedReason || "").toLowerCase();
-  if (text.includes("windows") || text.includes("runtime") || text.includes("desktop")) {
-    return "The desktop cleanup connection is not ready. Refresh or restart the app.";
-  }
-  if (text.includes("finding status") || text.includes("scan")) {
-    return "Refresh the scan, then try this item again.";
-  }
-  if (text.includes("allowlist") || text.includes("executor")) {
-    return "This cleanup is not available in this session. Choose another item or refresh the app.";
-  }
-  return "Not ready to delete. Choose another ready item or refresh the scan.";
 }
 
 function formatSignedBytes(value = 0) {
