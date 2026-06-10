@@ -139,6 +139,10 @@ assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute
 assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
 assert(app.includes("formatExecutionGateError"), "execute handler should convert dispatch blockers into plain user-facing copy");
 assert(!app.includes("Technical details"), "clean panel should not expose native diagnostics in the primary cleanup result");
+assert(app.includes("formatAcceptedCleanupMessage"), "clean panel should format accepted cleanup outcomes with simple user copy");
+assert(app.includes("Nothing to remove"), "accepted zero-byte cleanup should not be presented as cleaned space");
+assert(app.includes("No eligible files were removed"), "accepted zero-byte cleanup should explain that nothing was eligible");
+assert(app.includes("formatCleanupStatusLabel"), "activity status should distinguish cleaned space from zero-byte accepted runs");
 assert(app.includes("formatCleanupRejectMessage"), "clean panel should translate native rejection details into plain user-facing copy");
 assert(app.includes("Cleanup could not verify the current scan"), "cleanup rejection copy should tell users to scan again when confirmation evidence is stale");
 assert(app.includes("Windows blocked some files because they are in use"), "cleanup rejection copy should explain locked-file retries without reject codes");

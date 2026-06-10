@@ -1343,19 +1343,17 @@ function CleanPanel({
 function CleanupResult({ result, scanStatus, onRescan }) {
   const accepted = Boolean(result?.accepted);
   const reclaimedBytes = totalEntryBytes(result?.entries || []);
+  const removedFiles = reclaimedBytes > 0;
+  const acceptedTitle = removedFiles ? "Cleaned" : "Nothing to remove";
   const runningRescan = scanStatus === "rescanning";
-  const acceptedText = runningRescan
-    ? `${formatBytes(reclaimedBytes)} removed. Refreshing the list.`
-    : scanStatus === "error"
-      ? `${formatBytes(reclaimedBytes)} removed. Refresh failed; click Refresh again.`
-      : `${formatBytes(reclaimedBytes)} removed. The list is up to date.`;
+  const acceptedText = formatAcceptedCleanupMessage({ reclaimedBytes, removedFiles, runningRescan, scanStatus });
   const rejectedText = formatCleanupRejectMessage(result);
   const showRefreshAction = !accepted || runningRescan || scanStatus === "error";
   return (
     <div className={`rounded-md border p-4 text-sm ${accepted ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-red-200 bg-red-50 text-red-950"}`}>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
-          <p className="text-base font-semibold">{accepted ? "Cleaned" : "Could not clean this item"}</p>
+          <p className="text-base font-semibold">{accepted ? acceptedTitle : "Could not clean this item"}</p>
           <p className="mt-1 text-sm">
             {accepted
               ? acceptedText
@@ -1474,7 +1472,7 @@ function HistoryPanel({
             <>
               <div className="grid gap-3 md:grid-cols-4">
                 <Metric label="Item" value={executionRecord.title || "Cleanup target"} />
-                <Metric label="Status" value={executionRecord.accepted ? "Cleaned" : "Needs retry"} />
+                <Metric label="Status" value={formatCleanupStatusLabel(executionRecord)} />
                 <Metric label="Freed" value={formatBytes(executionRecord.bytes || 0)} />
                 <Metric label="Ran" value={formatShortDate(executionRecord.executedAt)} />
               </div>
@@ -1817,9 +1815,26 @@ function formatHistorySummary(executionRecord = {}, ledger = {}) {
     const bytes = formatBytes(executionRecord.bytes || 0);
     return Number(executionRecord.bytes || 0) > 0
       ? `${bytes} removed. The list is up to date.`
-      : "Cleanup ran, but there was nothing new to remove. The list is up to date.";
+      : "No eligible files were removed. The list is up to date.";
   }
   return "Nothing was deleted. Refresh the scan, close apps that may be using these files, and try again.";
+}
+
+function formatCleanupStatusLabel(executionRecord = {}) {
+  if (!executionRecord.accepted) return "Needs retry";
+  return Number(executionRecord.bytes || 0) > 0 ? "Cleaned" : "Nothing removed";
+}
+
+function formatAcceptedCleanupMessage({ reclaimedBytes = 0, removedFiles = false, runningRescan = false, scanStatus = "" } = {}) {
+  if (!removedFiles) {
+    if (runningRescan) return "No eligible files were removed. Refreshing the list.";
+    if (scanStatus === "error") return "No eligible files were removed. Refresh failed; click Refresh again.";
+    return "No eligible files were removed. The list is up to date.";
+  }
+  const bytes = formatBytes(reclaimedBytes);
+  if (runningRescan) return `${bytes} removed. Refreshing the list.`;
+  if (scanStatus === "error") return `${bytes} removed. Refresh failed; click Refresh again.`;
+  return `${bytes} removed. The list is up to date.`;
 }
 
 function formatCleanupRejectMessage(result = {}) {
