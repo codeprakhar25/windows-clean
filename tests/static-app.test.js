@@ -45,9 +45,9 @@ const requiredAppMarkers = [
   "OPENAI_API_KEY",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Scan PC",
-  "Cleanup queue",
+  "Clean space",
   "Explore C: allocation",
-  "Selected cleanup",
+  "Selected item",
   "Delete selected files",
   "Volume check",
   "Refresh space",
@@ -140,15 +140,15 @@ assert(app.includes("selectWorkflowCandidate"), "cleanup target selection should
 assert(app.includes("useState(\"clean\")"), "app should open directly on the Clean screen");
 assert(!app.includes("id: \"overview\""), "sidebar should not force users through an overview detour");
 assert(app.includes("Advanced scan options"), "scan tuning should stay collapsed behind advanced options");
-assert(/activeView === "clean"[\s\S]*<ScanPanel[\s\S]*<DecisionPanel[\s\S]*<CleanupQueue/.test(app), "Clean screen should contain scan, selected cleanup, and queue in one flow");
+assert(/activeView === "clean"[\s\S]*<ScanPanel[\s\S]*<CleanPanel/.test(app), "Clean screen should contain scan and cleanup controls in one flow");
 assert(app.includes("Required before cleanup"), "user gate should keep route-specific execution requirements inside collapsed checks");
 assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
 assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
-assert(app.includes("Checks"), "decision panel should collapse readiness details behind simple checks");
-assert(app.includes("Diagnostics"), "decision panel should collapse native diagnostics behind diagnostics");
-assert(app.includes("ledger.warnings"), "decision panel should keep native executor warnings inside technical details");
-assert(app.includes("entry.rejectCode"), "decision panel should render native reject codes");
+assert(app.includes("Advanced checks"), "clean panel should collapse readiness details behind advanced checks");
+assert(app.includes("Diagnostics"), "clean panel should collapse native diagnostics behind diagnostics");
+assert(app.includes("ledger.warnings"), "clean panel should keep native executor warnings inside technical details");
+assert(app.includes("entry.rejectCode"), "clean panel should render native reject codes");
 assert(app.includes("workflowLocks"), "execution gate should receive workflow lock state from the shared cleanup policy");
 assert(app.includes("activeScanGeneratedAt: scan?.generatedAt || \"\""), "execution gate should receive active scan timestamp for execution context");
 assert(app.includes("executionRecord?.accepted"), "proof export should require an accepted native execution record");

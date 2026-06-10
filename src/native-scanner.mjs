@@ -1129,7 +1129,7 @@ export function normalizeNativeRuntimeCapabilities(result = {}) {
     result.executorScopeStatus ||
     result.executor_scope_status ||
     (enabledScopedExecutorFlagCount > 1 ? "multiple-scoped-flags" : enabledScopedExecutorFlagCount === 1 ? "single-scoped-flag" : "no-scoped-flags");
-  const multiScopedFlagBlock = enabledScopedExecutorFlagCount > 1 || executorScopeStatus === "multiple-scoped-flags";
+  const multiScopedFlagBlock = executorScopeStatus === "multiple-scoped-flags";
   return {
     available: true,
     mode: result.mode || "native-readonly",

@@ -21,8 +21,8 @@ If Tauri reports `icons/icon.ico` not found, confirm `src-tauri/icons/icon.ico` 
 Inside the desktop app:
 
 1. Click `Scan PC`.
-2. Pick a row marked `can clean`.
-3. Check `Delete this selected item from this PC.`
+2. Check one row marked `can clean`.
+3. Confirm `Delete this selected item from this PC.` if it is not already checked.
 4. Click `Delete selected files`.
 5. Click `Refresh space`.
 
@@ -41,7 +41,7 @@ npm run native:dev
 npm run support:bundle
 ```
 
-For a real cleanup test, use the desktop app as the control point: scan, select one `can clean` target, check the confirmation box, delete, and refresh space.
+For a real cleanup test, use the desktop app as the control point: scan, check one `can clean` target, delete, and refresh space.
 Optional developer audit only: run `npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md` after exporting support details from the app.
 
 ## Safety Boundary

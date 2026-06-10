@@ -43,8 +43,8 @@ The desktop app should show the native bridge as connected. A normal browser tab
 In the app:
 
 1. Click `Scan PC`.
-2. Select a row marked `can clean`.
-3. Check `Delete this selected item from this PC.`
+2. Check one row marked `can clean`.
+3. Confirm `Delete this selected item from this PC.` if it is not already checked.
 4. Click `Delete selected files`.
 5. Click `Refresh space`.
 

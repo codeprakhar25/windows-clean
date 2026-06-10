@@ -13,7 +13,6 @@ import {
   ListTree,
   Loader2,
   Lock,
-  Play,
   RefreshCcw,
   ScanLine,
   ShieldCheck,
@@ -691,6 +690,18 @@ function App() {
     setProofExportMessage("");
   }
 
+  function toggleCleanupCandidate(candidate) {
+    if (!candidate?.id) return;
+    if (candidate.id === selectedId && consentChecked) {
+      setConsentChecked(false);
+      return;
+    }
+    selectWorkflowCandidate(candidate.id);
+    if (candidate.canExecute) {
+      setConsentChecked(true);
+    }
+  }
+
   if (!nativeConnected) {
     return (
       <AppFrame
@@ -741,31 +752,27 @@ function App() {
               onRunScan={() => runRealScan()}
             />
             {scan ? (
-              <>
-                <DecisionPanel
-                  candidate={selectedCandidate}
-                  consentChecked={consentChecked}
-                  setConsentChecked={setConsentChecked}
-                  permanentRemovalConfirmed={permanentRemovalConfirmed}
-                  setPermanentRemovalConfirmed={setPermanentRemovalConfirmed}
-                  archiveDestination={archiveDestination}
-                  setArchiveDestination={setArchiveDestination}
-                  executionPrerequisites={executionPrerequisites}
-                  canExecute={canExecute}
-                  executionStatus={executionStatus}
-                  executionError={executionError}
-                  executionResult={executionResult}
-                  scanStatus={scanStatus}
-                  onExecute={executeSelectedCleanup}
-                  onRescan={() => runRealScan({ afterExecution: true })}
-                />
-                <CleanupQueue
-                  candidates={candidates}
-                  selectedId={selectedId}
-                  setSelectedId={selectWorkflowCandidate}
-                  scan={scan}
-                />
-              </>
+              <CleanPanel
+                candidates={candidates}
+                selectedId={selectedId}
+                candidate={selectedCandidate}
+                consentChecked={consentChecked}
+                setConsentChecked={setConsentChecked}
+                permanentRemovalConfirmed={permanentRemovalConfirmed}
+                setPermanentRemovalConfirmed={setPermanentRemovalConfirmed}
+                archiveDestination={archiveDestination}
+                setArchiveDestination={setArchiveDestination}
+                executionPrerequisites={executionPrerequisites}
+                canExecute={canExecute}
+                executionStatus={executionStatus}
+                executionError={executionError}
+                executionResult={executionResult}
+                scanStatus={scanStatus}
+                scan={scan}
+                onToggleCandidate={toggleCleanupCandidate}
+                onExecute={executeSelectedCleanup}
+                onRescan={() => runRealScan({ afterExecution: true })}
+              />
             ) : null}
           </section>
         ) : null}
@@ -1169,75 +1176,9 @@ function ScanPanel({ request, setRequest, scan, scanStatus, scanError, onRunScan
   );
 }
 
-function CleanupQueue({ candidates, selectedId, setSelectedId, scan }) {
-  return (
-    <Card id="cleanup-actions-panel" className="rounded-md">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Trash2 className="h-4 w-4" />
-          Cleanup queue
-        </CardTitle>
-        <CardDescription>Choose an item to clean.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {!scan ? (
-          <EmptyState icon={ScanLine} title="Scan first" detail="Cleanable items appear here after the scan finishes." />
-        ) : candidates.length ? (
-          <div className="grid gap-3">
-            {candidates.map((candidate) => {
-              const statusLabel = candidate.canExecute ? "can clean" : candidate.executable ? "unavailable" : "review only";
-              return (
-                <div
-                  key={candidate.id}
-                  className={`rounded-md border transition hover:border-primary ${
-                  selectedId === candidate.id ? "border-primary bg-primary/5" : "bg-background"
-                }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(candidate.id)}
-                    className="w-full p-4 text-left"
-                  >
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant={candidate.risk}>{candidate.risk}</Badge>
-                          <Badge variant={candidate.canExecute ? "safe" : candidate.executable ? "review" : "outline"}>
-                            {statusLabel}
-                          </Badge>
-                          <span className="font-medium">{candidate.title}</span>
-                        </div>
-                        <p className="mt-2 truncate text-sm text-muted-foreground">{candidate.targetPath || candidate.targetKind}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{candidate.consequence}</p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-lg font-semibold">{formatBytes(candidate.bytes)}</p>
-                        <p className="text-xs text-muted-foreground">{candidate.canExecute ? "Ready to delete" : "Not ready"}</p>
-                      </div>
-                    </div>
-                  </button>
-                  {!candidate.canExecute ? (
-                    <details className="mx-4 mb-4 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                      <summary className="cursor-pointer font-medium text-foreground">Why unavailable</summary>
-                      <div className="mt-2 space-y-2">
-                        <p>{candidate.blockedReason}</p>
-                        <RouteReadinessList rows={candidate.readinessRows} compact />
-                      </div>
-                    </details>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <EmptyState icon={Lock} title="No cleanable findings yet" detail="Measured findings were not found or they do not map to a shipped safe executor." />
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function DecisionPanel({
+function CleanPanel({
+  candidates,
+  selectedId,
   candidate,
   consentChecked,
   setConsentChecked,
@@ -1251,61 +1192,129 @@ function DecisionPanel({
   executionError,
   executionResult,
   scanStatus,
+  scan,
+  onToggleCandidate,
   onExecute,
   onRescan
 }) {
   const executionLedger = buildExecutionLedgerRows(executionResult);
   const candidateReady = Boolean(candidate?.canExecute);
+  const running = executionStatus === "running";
   return (
-    <Card className="rounded-md">
+    <Card id="cleanup-actions-panel" className="rounded-md">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ClipboardCheck className="h-4 w-4" />
-          Selected cleanup
-        </CardTitle>
-        <CardDescription>Check once, then clean the selected item.</CardDescription>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardCheck className="h-4 w-4" />
+              Clean space
+            </CardTitle>
+            <CardDescription>Check one item, delete it, then refresh space.</CardDescription>
+          </div>
+          <Button className="w-full md:w-auto" disabled={!canExecute || running} onClick={onExecute}>
+            {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            {candidate?.requiresPermanentConfirmation ? "Empty Recycle Bin" : "Delete selected files"}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!candidate ? (
-          <EmptyState icon={ChevronRight} title="Select something to clean" detail="Pick a row below, then confirm here." />
-        ) : (
+        {!scan ? (
+          <EmptyState icon={ScanLine} title="Scan first" detail="Cleanable items appear here after the scan finishes." />
+        ) : candidates.length ? (
           <>
-            <div className="rounded-md border bg-muted/25 p-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div className="min-w-0">
-                  <p className="text-base font-semibold">{candidate.title}</p>
-                  <p className="mt-1 truncate text-sm text-muted-foreground">{candidate.targetPath}</p>
-                  <p className="mt-2 text-sm">{candidate.consequence}</p>
-                </div>
-                <div className="shrink-0 md:text-right">
-                  <p className="text-2xl font-semibold">{formatBytes(candidate.bytes)}</p>
-                  <p className="text-xs text-muted-foreground">{candidateReady ? "Ready to delete" : "Not ready yet"}</p>
-                </div>
-              </div>
+            <div className="grid gap-3">
+              {candidates.map((row) => {
+                const checked = row.id === selectedId && row.canExecute && consentChecked;
+                const selected = row.id === selectedId;
+                const statusLabel = row.canExecute ? "can clean" : row.executable ? "needs setup" : "review only";
+                return (
+                  <div
+                    key={row.id}
+                    className={`rounded-md border bg-background transition hover:border-primary ${
+                      selected ? "border-primary bg-primary/5" : ""
+                    }`}
+                  >
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onToggleCandidate(row)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") onToggleCandidate(row);
+                      }}
+                      className="flex cursor-pointer flex-col gap-3 p-4 md:flex-row md:items-start md:justify-between"
+                    >
+                      <div className="flex min-w-0 gap-3">
+                        <Checkbox
+                          checked={checked}
+                          disabled={!row.canExecute}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onToggleCandidate(row);
+                          }}
+                        />
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant={row.canExecute ? "safe" : row.executable ? "review" : "outline"}>
+                              {statusLabel}
+                            </Badge>
+                            <span className="font-medium">{row.title}</span>
+                          </div>
+                          <p className="mt-2 truncate text-sm text-muted-foreground">{row.targetPath || row.targetKind}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{row.consequence}</p>
+                        </div>
+                      </div>
+                      <div className="shrink-0 md:text-right">
+                        <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
+                        <p className="text-xs text-muted-foreground">{row.canExecute ? "Ready" : "Not ready"}</p>
+                      </div>
+                    </div>
+                    {!row.canExecute ? (
+                      <details className="mx-4 mb-4 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                        <summary className="cursor-pointer font-medium text-foreground">Why not ready</summary>
+                        <div className="mt-2 space-y-2">
+                          <p>{row.blockedReason}</p>
+                          <RouteReadinessList rows={row.readinessRows} compact />
+                        </div>
+                      </details>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
-            {!candidateReady ? (
-              <Notice tone="restricted" icon={Lock} text={candidate.blockedReason || "This item is not available for cleanup yet."} />
+            {candidate ? (
+              <div className="rounded-md border bg-muted/25 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-muted-foreground">Selected item</p>
+                    <p className="mt-1 text-base font-semibold">{candidate.title}</p>
+                    <p className="mt-1 truncate text-sm text-muted-foreground">{candidate.targetPath}</p>
+                  </div>
+                  <div className="shrink-0 md:text-right">
+                    <p className="text-2xl font-semibold">{formatBytes(candidate.bytes)}</p>
+                    <p className="text-xs text-muted-foreground">{candidateReady ? "Ready to delete" : "Not ready yet"}</p>
+                  </div>
+                </div>
+                {!candidateReady ? (
+                  <Notice tone="restricted" icon={Lock} text={candidate.blockedReason || "This item is not available for cleanup yet."} />
+                ) : null}
+                <label className="mt-4 flex items-start gap-3 text-sm">
+                  <Checkbox checked={candidateReady && consentChecked} disabled={!candidateReady} onClick={() => setConsentChecked(!consentChecked)} />
+                  <span>Delete this selected item from this PC.</span>
+                </label>
+                {candidate.requiresPermanentConfirmation ? (
+                  <label className="mt-3 flex items-start gap-3 text-sm">
+                    <Checkbox checked={candidateReady && permanentRemovalConfirmed} disabled={!candidateReady} onClick={() => setPermanentRemovalConfirmed(!permanentRemovalConfirmed)} />
+                    <span>I understand this permanently empties Recycle Bin contents for the selected drive.</span>
+                  </label>
+                ) : null}
+                {candidate.requiresArchiveDestination ? (
+                  <label className="mt-3 block space-y-1 text-sm">
+                    <span className="font-medium">Archive destination</span>
+                    <Input value={archiveDestination} onChange={(event) => setArchiveDestination(event.target.value)} placeholder="D:\\Archives" disabled={!candidateReady} />
+                  </label>
+                ) : null}
+              </div>
             ) : null}
-            <label className="flex items-start gap-3 text-sm">
-              <Checkbox checked={candidateReady && consentChecked} disabled={!candidateReady} onClick={() => setConsentChecked(!consentChecked)} />
-              <span>Delete this selected item from this PC.</span>
-            </label>
-            {candidate.requiresPermanentConfirmation ? (
-              <label className="flex items-start gap-3 text-sm">
-                <Checkbox checked={candidateReady && permanentRemovalConfirmed} disabled={!candidateReady} onClick={() => setPermanentRemovalConfirmed(!permanentRemovalConfirmed)} />
-                <span>I understand this permanently empties Recycle Bin contents for the selected drive.</span>
-              </label>
-            ) : null}
-            {candidate.requiresArchiveDestination ? (
-              <label className="space-y-1 text-sm">
-                <span className="font-medium">Archive destination</span>
-                <Input value={archiveDestination} onChange={(event) => setArchiveDestination(event.target.value)} placeholder="D:\\Archives" disabled={!candidateReady} />
-              </label>
-            ) : null}
-            <Button className="w-full" disabled={!canExecute} onClick={onExecute}>
-              {executionStatus === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              {candidate.requiresPermanentConfirmation ? "Empty Recycle Bin" : "Delete selected files"}
-            </Button>
             {executionError ? <Notice tone="restricted" icon={AlertTriangle} text={executionError} /> : null}
             {executionResult ? (
               <CleanupResult
@@ -1315,16 +1324,20 @@ function DecisionPanel({
                 onRescan={onRescan}
               />
             ) : null}
-            <details className="rounded-md border bg-muted/20">
-              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Checks</summary>
-              <div className="space-y-3 border-t p-3">
-                <RouteReadinessList rows={candidate.readinessRows} />
-                {executionPrerequisites?.rows?.length ? (
-                  <RouteReadinessList rows={executionPrerequisites.rows} title="Required before cleanup" />
-                ) : null}
-              </div>
-            </details>
+            {candidate ? (
+              <details className="rounded-md border bg-muted/20">
+                <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Advanced checks</summary>
+                <div className="space-y-3 border-t p-3">
+                  <RouteReadinessList rows={candidate.readinessRows} />
+                  {executionPrerequisites?.rows?.length ? (
+                    <RouteReadinessList rows={executionPrerequisites.rows} title="Required before cleanup" />
+                  ) : null}
+                </div>
+              </details>
+            ) : null}
           </>
+        ) : (
+          <EmptyState icon={Lock} title="No cleanable findings yet" detail="Measured findings were not found or they do not map to a shipped safe executor." />
         )}
       </CardContent>
     </Card>
