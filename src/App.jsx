@@ -867,7 +867,7 @@ function ScanPanel({ request, setRequest, candidates = [], scan, scanStatus, sca
               {hasScan ? "Ready to clean" : "Scan for cleanup"}
             </CardTitle>
             <CardDescription>
-              {hasScan ? `${readyLabel}. Select a row below, then delete it.` : "Scan first. Nothing is deleted until you choose an item."}
+              {hasScan ? `${readyLabel}. Press Delete on a row to clean it.` : "Scan first. Nothing is deleted until you choose an item."}
             </CardDescription>
           </div>
           {hasScan ? (
@@ -893,63 +893,48 @@ function ScanPanel({ request, setRequest, candidates = [], scan, scanStatus, sca
             </div>
           </div>
         ) : null}
-        <details className="rounded-md border bg-muted/20">
-          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">{hasScan ? "Scan details" : "Advanced scan options"}</summary>
-          <div className="space-y-3 border-t p-3">
-            {hasScan ? (
-              <div className="grid gap-3 md:grid-cols-4">
-                <Metric label="Generated" value={formatShortDate(scan.generatedAt)} />
-                <Metric label="Findings" value={String(scan.findings.length)} />
-                <Metric label="Measured bytes" value={formatBytes(scan.totalBytes)} />
-                <Metric label="Drive free" value={formatBytes(scan.volume?.freeBytes || 0)} />
-              </div>
-            ) : null}
-            {hasScan ? (
-              <p className="text-xs font-medium text-muted-foreground">Advanced scan options</p>
-            ) : null}
-            <div className="grid gap-3 md:grid-cols-2">
-              {hasScan ? (
-                <label className="space-y-1 text-sm md:col-span-2">
-                  <span className="font-medium">Target drive</span>
-                  <Input value={request.targetDrive} onChange={(event) => setRequest({ ...request, targetDrive: event.target.value })} />
+        {!hasScan ? (
+          <details className="rounded-md border bg-muted/20">
+            <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Advanced scan options</summary>
+            <div className="space-y-3 border-t p-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Depth</span>
+                  <Input type="number" value={request.maxDepth} onChange={(event) => setRequest({ ...request, maxDepth: Number(event.target.value || 8) })} />
                 </label>
-              ) : null}
-              <label className="space-y-1 text-sm">
-                <span className="font-medium">Depth</span>
-                <Input type="number" value={request.maxDepth} onChange={(event) => setRequest({ ...request, maxDepth: Number(event.target.value || 8) })} />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="font-medium">Entry cap</span>
-                <Input type="number" value={request.maxEntriesPerRoot} onChange={(event) => setRequest({ ...request, maxEntriesPerRoot: Number(event.target.value || 25000) })} />
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Entry cap</span>
+                  <Input type="number" value={request.maxEntriesPerRoot} onChange={(event) => setRequest({ ...request, maxEntriesPerRoot: Number(event.target.value || 25000) })} />
+                </label>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Protected paths</span>
+                  <Textarea
+                    value={request.protectedPaths}
+                    onChange={(event) => setRequest({ ...request, protectedPaths: event.target.value })}
+                    placeholder="One path per line"
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Extra folders to scan</span>
+                  <Textarea
+                    value={request.customRoots}
+                    onChange={(event) => setRequest({ ...request, customRoots: event.target.value })}
+                    placeholder="Optional folders to measure manually"
+                  />
+                </label>
+              </div>
+              <label className="flex items-center gap-3 text-sm">
+                <Checkbox
+                  checked={request.includeProjectArtifacts}
+                  onClick={() => setRequest({ ...request, includeProjectArtifacts: !request.includeProjectArtifacts })}
+                />
+                Include project artifact discovery such as node_modules.
               </label>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <span className="font-medium">Protected paths</span>
-                <Textarea
-                  value={request.protectedPaths}
-                  onChange={(event) => setRequest({ ...request, protectedPaths: event.target.value })}
-                  placeholder="One path per line"
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="font-medium">Extra folders to scan</span>
-                <Textarea
-                  value={request.customRoots}
-                  onChange={(event) => setRequest({ ...request, customRoots: event.target.value })}
-                  placeholder="Optional folders to measure manually"
-                />
-              </label>
-            </div>
-            <label className="flex items-center gap-3 text-sm">
-              <Checkbox
-                checked={request.includeProjectArtifacts}
-                onClick={() => setRequest({ ...request, includeProjectArtifacts: !request.includeProjectArtifacts })}
-              />
-              Include project artifact discovery such as node_modules.
-            </label>
-          </div>
-        </details>
+          </details>
+        ) : null}
         {scanError ? <Notice tone="restricted" icon={AlertTriangle} text={scanError} /> : null}
       </CardContent>
     </Card>

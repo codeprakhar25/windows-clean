@@ -141,7 +141,7 @@ assert(app.includes("async function executeSelectedCleanup(candidateOverride = n
 assert(app.includes("const candidateForExecution = candidateOverride || selectedCandidate"), "direct cleanup should execute the clicked row without waiting for selection state");
 assert(app.includes("onExecuteCandidate(row);"), "ready cleanup row Delete buttons should dispatch the guarded cleanup handler directly");
 assert(app.includes("Ready to clean"), "post-scan clean screen should lead with the actionable cleanup queue");
-assert(app.includes("Scan details"), "post-scan metrics should be collapsed behind scan details");
+assert(!app.includes("Scan details"), "Clean screen should not carry post-scan metrics or diagnostic details");
 assert(!app.includes("items need review"), "Clean screen should not show a secondary review queue beside delete actions");
 assert(app.includes("isOneClickCleanupCandidate"), "cleanup queue should use a shared one-click eligibility helper");
 assert(app.includes("candidates.filter(isOneClickCleanupCandidate)"), "main cleanup queue should only show one-click cleanup rows");
