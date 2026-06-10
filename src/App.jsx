@@ -15,7 +15,8 @@ import {
   RefreshCcw,
   ScanLine,
   ShieldCheck,
-  Trash2
+  Trash2,
+  X
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -689,6 +690,7 @@ function App() {
   function toggleCleanupCandidate(candidate) {
     if (!candidate?.id) return;
     if (!candidate.canExecute) return;
+    if (executionStatus === "running") return;
     const isChecked = checkedIds.includes(candidate.id);
     const nextCheckedIds = isChecked
       ? checkedIds.filter((id) => id !== candidate.id)
@@ -697,6 +699,26 @@ function App() {
     setSelectedId(isChecked ? nextCheckedIds[0] || "" : candidate.id);
     setConsentChecked(nextCheckedIds.length > 0);
     setExecutionError("");
+    setExecutionResult(null);
+    setExecutionRecord(null);
+    setPostRunScan(null);
+    setExecutionStatus("idle");
+    setArchiveDestination("");
+  }
+
+  function setCheckedCleanupCandidates(rows = []) {
+    if (executionStatus === "running") return;
+    const nextCheckedIds = rows
+      .filter(isOneClickCleanupCandidate)
+      .map((row) => row.id);
+    setCheckedIds(nextCheckedIds);
+    setSelectedId(nextCheckedIds[0] || "");
+    setConsentChecked(nextCheckedIds.length > 0);
+    setExecutionError("");
+    setExecutionResult(null);
+    setExecutionRecord(null);
+    setPostRunScan(null);
+    setExecutionStatus("idle");
     setArchiveDestination("");
   }
 
@@ -761,6 +783,7 @@ function App() {
                 scanStatus={scanStatus}
                 scan={scan}
                 onToggleCandidate={toggleCleanupCandidate}
+                onSetCheckedCandidates={setCheckedCleanupCandidates}
                 onExecuteCandidate={executeSelectedCleanup}
                 onExecuteChecked={executeCheckedCleanups}
                 onRescan={() => runRealScan({ afterExecution: true })}
@@ -864,9 +887,38 @@ function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, sel
             </div>
           </div>
         </aside>
-        <div className="min-w-0">{children}</div>
+        <div className="min-w-0">
+          <MobileTabNav rows={navRows} activeView={activeView} setActiveView={setActiveView} />
+          {children}
+        </div>
       </div>
     </div>
+  );
+}
+
+function MobileTabNav({ rows = [], activeView = "clean", setActiveView = () => {} }) {
+  return (
+    <nav role="tablist" aria-label="SpaceGuard views" className="sticky top-0 z-20 grid grid-cols-4 border-b bg-card/95 px-2 py-2 shadow-sm backdrop-blur lg:hidden">
+      {rows.map((row) => {
+        const Icon = row.icon;
+        const active = activeView === row.id;
+        return (
+          <button
+            key={row.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => setActiveView(row.id)}
+            className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-md px-2 text-[11px] font-medium transition ${
+              active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+            <span className="truncate">{row.label}</span>
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -1071,6 +1123,7 @@ function CleanPanel({
   scanStatus,
   scan,
   onToggleCandidate,
+  onSetCheckedCandidates,
   onExecuteCandidate,
   onExecuteChecked,
   onRescan
@@ -1080,6 +1133,7 @@ function CleanPanel({
   const checkedCandidates = readyCandidates.filter((row) => checkedIds.includes(row.id));
   const checkedCount = checkedCandidates.length;
   const checkedBytes = checkedCandidates.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+  const allReadyChecked = hasReadyCandidates && checkedCount === readyCandidates.length;
   const running = executionStatus === "running";
   return (
     <Card id="cleanup-actions-panel" className="rounded-md">
@@ -1088,7 +1142,7 @@ function CleanPanel({
           <ClipboardCheck className="h-4 w-4" />
           Clean space
         </CardTitle>
-        <CardDescription>Check one or more rows, then delete them.</CardDescription>
+        <CardDescription>Select one or more rows, then delete them.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {!scan ? (
@@ -1100,20 +1154,32 @@ function CleanPanel({
                 <div className="flex flex-col gap-3 rounded-md border bg-muted/20 p-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="text-sm font-medium">
-                      {checkedCount ? `${checkedCount} checked` : "No rows checked"}
+                      {checkedCount ? `${checkedCount} selected` : "Nothing selected"}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {checkedCount ? `${formatBytes(checkedBytes)} selected` : "Select rows to clean several items together."}
                     </p>
                   </div>
-                  <Button
-                    className="w-full md:w-auto"
-                    disabled={!checkedCount || running}
-                    onClick={onExecuteChecked}
-                  >
-                    {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                    {running ? "Deleting" : "Delete checked"}
-                  </Button>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                      disabled={running}
+                      onClick={() => onSetCheckedCandidates(allReadyChecked ? [] : readyCandidates)}
+                    >
+                      {allReadyChecked ? <X className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+                      {allReadyChecked ? "Clear" : "Select all"}
+                    </Button>
+                    <Button
+                      className="w-full sm:w-auto"
+                      disabled={!checkedCount || running}
+                      onClick={onExecuteChecked}
+                    >
+                      {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      {running ? "Deleting" : "Delete selected"}
+                    </Button>
+                  </div>
                 </div>
                 <div className="grid gap-3">
                   {readyCandidates.map((row) => {
@@ -1202,9 +1268,9 @@ function CleanupResult({ result, scanStatus, onRescan }) {
   const acceptedCount = Number(result?.acceptedCount || 0);
   const acceptedTitle = checkedCleanup
     ? rejectedCount > 0
-      ? "Some checked items cleaned"
+      ? "Some selected items cleaned"
       : removedFiles
-        ? "Checked items cleaned"
+        ? "Selected items cleaned"
         : "Nothing to remove"
     : removedFiles ? "Cleaned" : "Nothing to remove";
   const runningRescan = scanStatus === "rescanning";
@@ -1217,7 +1283,7 @@ function CleanupResult({ result, scanStatus, onRescan }) {
     <div className={`rounded-md border p-4 text-sm ${accepted ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-red-200 bg-red-50 text-red-950"}`}>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
-          <p className="text-base font-semibold">{accepted ? acceptedTitle : checkedCleanup ? "Could not clean checked items" : "Could not clean this item"}</p>
+          <p className="text-base font-semibold">{accepted ? acceptedTitle : checkedCleanup ? "Could not clean selected items" : "Could not clean this item"}</p>
           <p className="mt-1 text-sm">
             {accepted
               ? acceptedText
@@ -1554,14 +1620,14 @@ function formatCheckedCleanupMessage({
     ? ` ${rejectedCount} item${rejectedCount === 1 ? "" : "s"} need another try.`
     : "";
   if (!removedFiles) {
-    if (runningRescan) return `No eligible files were removed from checked items. Refreshing the list.${retryText}`;
-    if (scanStatus === "error") return `No eligible files were removed from checked items. Refresh failed; click Refresh again.${retryText}`;
-    return `No eligible files were removed from checked items.${retryText || " The list is up to date."}`;
+    if (runningRescan) return `No eligible files were removed from selected items. Refreshing the list.${retryText}`;
+    if (scanStatus === "error") return `No eligible files were removed from selected items. Refresh failed; click Refresh again.${retryText}`;
+    return `No eligible files were removed from selected items.${retryText || " The list is up to date."}`;
   }
   const bytes = formatBytes(reclaimedBytes);
   const cleanedText = acceptedCount > 1
-    ? `${bytes} removed from ${acceptedCount} checked items.`
-    : `${bytes} removed from checked items.`;
+    ? `${bytes} removed from ${acceptedCount} selected items.`
+    : `${bytes} removed from selected items.`;
   if (runningRescan) return `${cleanedText} Refreshing the list.${retryText}`;
   if (scanStatus === "error") return `${cleanedText} Refresh failed; click Refresh again.${retryText}`;
   return `${cleanedText}${retryText || " The list is up to date."}`;

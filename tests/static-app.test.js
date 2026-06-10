@@ -45,7 +45,7 @@ const requiredAppMarkers = [
   "Clean space",
   "Cleanup status",
   "Explore C:",
-  "Check one or more rows, then delete them.",
+  "Select one or more rows, then delete them.",
   "Ready to clean",
   "Scan again",
   "Activity",
@@ -126,6 +126,8 @@ assert(!app.includes("formatNotReadyReason"), "Clean screen should not carry a s
 assert(app.includes("selectWorkflowCandidate"), "cleanup target selection should reuse the guarded selection reset helper");
 assert(app.includes("useState(\"clean\")"), "app should open directly on the Clean screen");
 assert(!app.includes("id: \"overview\""), "sidebar should not force users through an overview detour");
+assert(app.includes("function MobileTabNav"), "mobile layout should expose tab switching between app views");
+assert(app.includes("role=\"tablist\""), "mobile view switching should use tab semantics");
 assert(app.includes("Advanced scan options"), "scan tuning should stay collapsed behind advanced options");
 assert(/activeView === "clean"[\s\S]*<ScanPanel[\s\S]*<CleanPanel/.test(app), "Clean screen should contain scan and cleanup controls in one flow");
 assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
@@ -142,10 +144,12 @@ assert(app.includes("async function executeSelectedCleanup(candidateOverride = n
 assert(app.includes("const candidateForExecution = candidateOverride || selectedCandidate"), "direct cleanup should execute the clicked row without waiting for selection state");
 assert(app.includes("onExecuteCandidate(row);"), "ready cleanup row Delete buttons should dispatch the guarded cleanup handler directly");
 assert(app.includes("async function executeCheckedCleanups()"), "cleanup queue should execute multiple checked rows from one action");
-assert(app.includes("onExecuteChecked={executeCheckedCleanups}"), "Clean screen should wire the Delete checked action");
-assert(app.includes("Delete checked"), "Clean screen should expose a simple Delete checked action");
-assert(app.includes("Some checked items cleaned"), "checked cleanup result should explain partial success simply");
-assert(app.includes("Could not clean checked items"), "checked cleanup result should use selected-items failure copy");
+assert(app.includes("onExecuteChecked={executeCheckedCleanups}"), "Clean screen should wire the Delete selected action");
+assert(app.includes("Delete selected"), "Clean screen should expose a simple Delete selected action");
+assert(app.includes("Select all"), "Clean screen should expose a simple select-all action");
+assert(app.includes("function setCheckedCleanupCandidates(rows = [])"), "Clean screen should support selecting all ready cleanup rows");
+assert(app.includes("Some selected items cleaned"), "selected cleanup result should explain partial success simply");
+assert(app.includes("Could not clean selected items"), "selected cleanup result should use selected-items failure copy");
 assert(app.includes("formatCheckedCleanupMessage"), "checked cleanup result should use dedicated user-facing copy");
 assert(app.includes("buildRejectedCheckedCleanupEntry"), "checked cleanup should keep going when one selected row cannot start");
 assert(app.includes("app-dispatch-error"), "checked cleanup should record simple per-row failures");
