@@ -55,7 +55,6 @@ const requiredAppMarkers = [
   "Troubleshooting",
   "Export troubleshooting bundle",
   "selected item",
-  "Cleanup checks",
   "Ask AI",
   "Review only"
 ];
@@ -129,7 +128,8 @@ assert(app.includes("resetWorkflowForRouteChange"), "app should keep a shared re
 assert(app.includes("buildWorkflowLocks"), "app should use tested workflow lock policy for cleanup continuation");
 assert(app.includes("buildBaselinePromotion"), "app should use tested baseline promotion after optional proof export");
 assert(!app.includes("buildRouteSetupChecklist"), "app shell should not render the legacy route setup checklist");
-assert(app.includes("RouteReadinessList"), "app should render route readiness guardrails before execution");
+assert(!app.includes("RouteReadinessList"), "clean screen should not render internal readiness rows");
+assert(app.includes("formatNotReadyReason"), "clean screen should convert internal blockers into simple not-ready copy");
 assert(app.includes("selectWorkflowCandidate"), "cleanup target selection should reuse the guarded selection reset helper");
 assert(app.includes("useState(\"clean\")"), "app should open directly on the Clean screen");
 assert(!app.includes("id: \"overview\""), "sidebar should not force users through an overview detour");

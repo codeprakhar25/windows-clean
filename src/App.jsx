@@ -1262,13 +1262,9 @@ function CleanPanel({
                       </div>
                     </div>
                     {!row.canExecute ? (
-                      <details className="mx-4 mb-4 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                        <summary className="cursor-pointer font-medium text-foreground">Why not ready</summary>
-                        <div className="mt-2 space-y-2">
-                          <p>{row.blockedReason}</p>
-                          <RouteReadinessList rows={row.readinessRows} compact />
-                        </div>
-                      </details>
+                      <div className="mx-4 mb-4 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                        {formatNotReadyReason(row)}
+                      </div>
                     ) : null}
                   </div>
                 );
@@ -1288,7 +1284,7 @@ function CleanPanel({
                   </div>
                 </div>
                 {!candidateReady ? (
-                  <Notice tone="restricted" icon={Lock} text={candidate.blockedReason || "This item is not available for cleanup yet."} />
+                  <Notice tone="restricted" icon={Lock} text={formatNotReadyReason(candidate)} />
                 ) : null}
                 {candidate.requiresPermanentConfirmation ? (
                   <label className="mt-4 flex items-start gap-3 text-sm">
@@ -1371,27 +1367,6 @@ function CleanupResult({ result, ledger, scanStatus, onRescan }) {
           ) : null}
         </div>
       </details>
-    </div>
-  );
-}
-
-function RouteReadinessList({ rows = [], compact = false, title = "Cleanup checks" }) {
-  const visibleRows = compact ? rows.filter((row) => !row.passed).slice(0, 3) : rows;
-  if (!visibleRows.length) return null;
-  return (
-    <div className="space-y-2 rounded-md border bg-background p-3">
-      {!compact ? <p className="text-sm font-medium">{title}</p> : null}
-      <div className={compact ? "flex flex-wrap gap-2" : "grid gap-2"}>
-        {visibleRows.map((row) => (
-          <div key={row.id} className={compact ? "flex items-center gap-1 rounded border px-2 py-1" : "flex items-start justify-between gap-3 rounded border px-3 py-2"}>
-            <div className="min-w-0">
-              <p className="truncate text-xs font-medium">{row.label}</p>
-              {!compact ? <p className="mt-0.5 text-xs text-muted-foreground">{row.detail}</p> : null}
-            </div>
-            <Badge variant={row.passed ? "safe" : row.status === "not-required" ? "outline" : "restricted"}>{row.status}</Badge>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -1910,6 +1885,23 @@ function formatHistorySummary(executionRecord = {}, ledger = {}) {
       : "Cleanup ran, but there was nothing new to remove. Refresh space to update the list.";
   }
   return "Nothing was deleted. Refresh the scan, close apps that may be using these files, and try again.";
+}
+
+function formatNotReadyReason(candidate = {}) {
+  if (!candidate?.executable) {
+    return "Review only. SpaceGuard will not delete this automatically.";
+  }
+  const text = String(candidate.blockedReason || "").toLowerCase();
+  if (text.includes("windows") || text.includes("runtime") || text.includes("desktop")) {
+    return "The desktop cleanup connection is not ready. Refresh or restart the app.";
+  }
+  if (text.includes("finding status") || text.includes("scan")) {
+    return "Refresh the scan, then try this item again.";
+  }
+  if (text.includes("allowlist") || text.includes("executor")) {
+    return "This cleanup is not available in this session. Choose another item or refresh the app.";
+  }
+  return "Not ready to delete. Choose another can clean item or refresh the scan.";
 }
 
 function formatSignedBytes(value = 0) {
