@@ -47,10 +47,10 @@ const requiredAppMarkers = [
   "Run real scan",
   "Real cleanup queue",
   "Explore C: allocation",
-  "Confirm cleanup",
-  "Clean selected target",
+  "Selected cleanup",
+  "Delete selected files",
   "Volume proof",
-  "Native volume proof was not measured.",
+  "Refresh space",
   "Run post-clean rescan",
   "Cleanup history",
   "Proof target",
@@ -146,13 +146,13 @@ assert(app.includes("workflowGuide.primaryTargetBytes"), "workflow guide should 
 assert(app.includes("Guide target"), "workflow guide should label the target summary");
 assert(app.includes("workflowGuide.actionBusy"), "workflow guide action button should render busy state from the tested workflow guide");
 assert(app.includes("disabled={!workflowGuide.actionEnabled || workflowGuide.actionBusy}"), "workflow guide action button should stay disabled during running actions");
-assert(app.includes("Execution prerequisites"), "user gate should render route-specific execution prerequisite blockers");
+assert(app.includes("Extra requirements"), "user gate should keep route-specific execution requirements inside collapsed safety details");
 assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
 assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
-assert(app.includes("Native execution ledger"), "decision panel should render the native execution ledger after dispatch");
-assert(app.includes("Preflight checks"), "decision panel should render native preflight checks after dispatch");
-assert(app.includes("executionLedger.warnings"), "decision panel should render native executor warnings");
+assert(app.includes("Safety details"), "decision panel should collapse readiness details behind safety details");
+assert(app.includes("Technical details"), "decision panel should collapse native diagnostics behind technical details");
+assert(app.includes("ledger.warnings"), "decision panel should keep native executor warnings inside technical details");
 assert(app.includes("entry.rejectCode"), "decision panel should render native reject codes");
 assert(app.includes("workflowLocks"), "execution gate should receive workflow lock state from the shared cleanup policy");
 assert(app.includes("activeScanGeneratedAt: scan?.generatedAt || \"\""), "execution gate should receive active scan timestamp for execution context");

@@ -195,6 +195,21 @@ function checkWindowsMsvcBuildTools({ platform = process.platform, env = process
     };
   }
 
+  const usingProcessEnv = env === process.env;
+  const hasDiscoveryEnv = Boolean(
+    String(env["ProgramFiles(x86)"] || env.ProgramFiles || env.Path || env.PATH || "").trim()
+  );
+  if (!usingProcessEnv && !hasDiscoveryEnv) {
+    return {
+      id: "msvc-build-tools",
+      label: "Visual Studio C++ Build Tools",
+      command: "VCINSTALLDIR, VCToolsInstallDir, VSINSTALLDIR, ProgramFiles, or PATH",
+      available: false,
+      version: "",
+      error: "Visual Studio Build Tools were not visible in the provided environment."
+    };
+  }
+
   const vswhere = checkVsWhereForComponent({
     env,
     component: "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"

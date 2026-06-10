@@ -788,13 +788,7 @@ function App() {
           />
         ) : null}
         {activeView === "clean" ? (
-          <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
-            <CleanupQueue
-              candidates={candidates}
-              selectedId={selectedId}
-              setSelectedId={selectWorkflowCandidate}
-              scan={scan}
-            />
+          <section className="grid gap-4">
             <DecisionPanel
               candidate={selectedCandidate}
               consentChecked={consentChecked}
@@ -808,7 +802,15 @@ function App() {
               executionStatus={executionStatus}
               executionError={executionError}
               executionResult={executionResult}
+              scanStatus={scanStatus}
               onExecute={executeSelectedCleanup}
+              onRescan={() => runRealScan({ afterExecution: true })}
+            />
+            <CleanupQueue
+              candidates={candidates}
+              selectedId={selectedId}
+              setSelectedId={selectWorkflowCandidate}
+              scan={scan}
             />
           </section>
         ) : null}
@@ -1427,7 +1429,9 @@ function DecisionPanel({
   executionStatus,
   executionError,
   executionResult,
-  onExecute
+  scanStatus,
+  onExecute,
+  onRescan
 }) {
   const executionLedger = buildExecutionLedgerRows(executionResult);
   return (
@@ -1435,27 +1439,31 @@ function DecisionPanel({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ClipboardCheck className="h-4 w-4" />
-          Confirm cleanup
+          Selected cleanup
         </CardTitle>
-        <CardDescription>Review the selected target, then confirm once to run the native cleanup.</CardDescription>
+        <CardDescription>Check once, then clean the selected item.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {!candidate ? (
-          <EmptyState icon={ChevronRight} title="Select a cleanup target" detail="Pick one measured row from the queue to continue." />
+          <EmptyState icon={ChevronRight} title="Select something to clean" detail="Pick a row below, then confirm here." />
         ) : (
           <>
-            <div className="rounded-md border bg-muted/30 p-3">
-              <p className="text-sm font-medium">{candidate.title}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{candidate.targetPath}</p>
-              <p className="mt-2 text-sm">{candidate.consequence}</p>
+            <div className="rounded-md border bg-muted/25 p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
+                  <p className="text-base font-semibold">{candidate.title}</p>
+                  <p className="mt-1 truncate text-sm text-muted-foreground">{candidate.targetPath}</p>
+                  <p className="mt-2 text-sm">{candidate.consequence}</p>
+                </div>
+                <div className="shrink-0 md:text-right">
+                  <p className="text-2xl font-semibold">{formatBytes(candidate.bytes)}</p>
+                  <p className="text-xs text-muted-foreground">can be cleaned</p>
+                </div>
+              </div>
             </div>
-            <RouteReadinessList rows={candidate.readinessRows} />
-            {executionPrerequisites?.rows?.length ? (
-              <RouteReadinessList rows={executionPrerequisites.rows} title="Execution prerequisites" />
-            ) : null}
             <label className="flex items-start gap-3 text-sm">
               <Checkbox checked={consentChecked} onClick={() => setConsentChecked(!consentChecked)} />
-              <span>I reviewed the target, expected bytes, allowlist, and consequence for this cleanup.</span>
+              <span>I want to clean this selected item from this PC.</span>
             </label>
             {candidate.requiresPermanentConfirmation ? (
               <label className="flex items-start gap-3 text-sm">
@@ -1471,93 +1479,85 @@ function DecisionPanel({
             ) : null}
             <Button className="w-full" disabled={!canExecute} onClick={onExecute}>
               {executionStatus === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              {candidate.requiresPermanentConfirmation ? "Empty selected Recycle Bin" : "Clean selected target"}
+              {candidate.requiresPermanentConfirmation ? "Empty Recycle Bin" : "Delete selected files"}
             </Button>
             {executionError ? <Notice tone="restricted" icon={AlertTriangle} text={executionError} /> : null}
             {executionResult ? (
-              <div className="space-y-3 rounded-md border bg-background p-3 text-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium">{executionResult.accepted ? "Native executor accepted" : "Native executor rejected"}</span>
-                  <Badge variant={executionResult.accepted ? "safe" : "restricted"}>{executionResult.mode}</Badge>
-                </div>
-                <p className="text-muted-foreground">{executionResult.reason}</p>
-                <div className="grid gap-2 md:grid-cols-3">
-                  <Metric label="Recovered" value={formatBytes(totalEntryBytes(executionResult.entries))} />
-                  <Metric label="Volume proof" value={formatVolumeProofStatus(executionResult.volumeProof)} />
-                  <Metric label="Free-space delta" value={formatSignedBytes(executionResult.volumeProof?.freeBytesDelta || 0)} />
-                </div>
-                {executionResult.accepted && !volumeProofMeasured(executionResult.volumeProof) ? (
-                  <Notice tone="review" icon={AlertTriangle} text="Native volume proof was not measured. Cleanup history is still recorded; run a fresh scan to refresh the space totals." />
-                ) : null}
-                {executionLedger.warnings.length ? (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900">
-                    <p className="text-xs font-medium">Native executor warnings</p>
-                    <ul className="mt-2 space-y-1">
-                      {executionLedger.warnings.map((warning) => (
-                        <li key={warning} className="text-xs">{warning}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {executionLedger.rows.length ? (
-                  <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-medium">Native execution ledger</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">{executionLedger.primary}</p>
-                      </div>
-                      <Badge variant={executionLedger.accepted ? "safe" : "restricted"}>{executionLedger.status}</Badge>
-                    </div>
-                    <div className="grid gap-2">
-                      {executionLedger.rows.map((entry) => (
-                        <div key={`${entry.id}-${entry.route}`} className="rounded-md border bg-background p-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="truncate text-xs font-medium">{entry.title}</p>
-                              <p className="mt-0.5 text-xs text-muted-foreground">{entry.route || "route missing"}</p>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant={entry.result === "executed" || entry.result === "no-op" ? "safe" : entry.result === "rejected" ? "restricted" : "outline"}>
-                                {entry.result}
-                              </Badge>
-                              <Badge variant="outline">{formatBytes(entry.bytes)}</Badge>
-                            </div>
-                          </div>
-                          {entry.rejectCode ? (
-                            <p className="mt-2 text-xs text-red-600">Reject code: {entry.rejectCode}</p>
-                          ) : null}
-                          {entry.note ? (
-                            <p className="mt-2 text-xs text-muted-foreground">{entry.note}</p>
-                          ) : null}
-                          {entry.checks.length ? (
-                            <div className="mt-3">
-                              <p className="text-xs font-medium">Preflight checks</p>
-                              <div className="mt-2 grid gap-2">
-                                {entry.checks.map((check) => (
-                                  <div key={`${entry.id}-${check.id}`} className="flex items-start justify-between gap-3 rounded border px-3 py-2">
-                                    <div className="min-w-0">
-                                      <p className="truncate text-xs font-medium">{check.label}</p>
-                                      <p className="mt-0.5 text-xs text-muted-foreground">{check.detail}</p>
-                                    </div>
-                                    <Badge variant={check.status === "passed" || check.status === "executed" ? "safe" : check.status === "blocked" ? "restricted" : "outline"}>
-                                      {check.status}
-                                    </Badge>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              <CleanupResult
+                result={executionResult}
+                ledger={executionLedger}
+                scanStatus={scanStatus}
+                onRescan={onRescan}
+              />
+            ) : null}
+            <details className="rounded-md border bg-muted/20">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Safety details</summary>
+              <div className="space-y-3 border-t p-3">
+                <RouteReadinessList rows={candidate.readinessRows} />
+                {executionPrerequisites?.rows?.length ? (
+                  <RouteReadinessList rows={executionPrerequisites.rows} title="Extra requirements" />
                 ) : null}
               </div>
-            ) : null}
+            </details>
           </>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function CleanupResult({ result, ledger, scanStatus, onRescan }) {
+  const accepted = Boolean(result?.accepted);
+  const reclaimedBytes = totalEntryBytes(result?.entries || []);
+  const runningRescan = scanStatus === "rescanning";
+  return (
+    <div className={`rounded-md border p-4 text-sm ${accepted ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-red-200 bg-red-50 text-red-950"}`}>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <p className="text-base font-semibold">{accepted ? "Cleaned" : "Could not clean this item"}</p>
+          <p className="mt-1 text-sm">
+            {accepted
+              ? `${formatBytes(reclaimedBytes)} removed. Refresh space to update the scan.`
+              : "Nothing was deleted. Run a fresh scan and try again."}
+          </p>
+        </div>
+        {accepted ? (
+          <Button type="button" size="sm" variant="outline" onClick={onRescan} disabled={runningRescan}>
+            {runningRescan ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+            Refresh space
+          </Button>
+        ) : null}
+      </div>
+      <details className="mt-3 rounded-md border bg-background/70">
+        <summary className="cursor-pointer px-3 py-2 text-xs font-medium">Technical details</summary>
+        <div className="space-y-3 border-t p-3 text-xs text-muted-foreground">
+          <p>{result?.reason || ledger?.primary || "No details returned."}</p>
+          {ledger?.warnings?.length ? (
+            <ul className="space-y-1">
+              {ledger.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          ) : null}
+          {ledger?.rows?.length ? (
+            <div className="grid gap-2">
+              {ledger.rows.map((entry) => (
+                <div key={`${entry.id}-${entry.route}`} className="rounded border bg-background px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium text-foreground">{entry.title}</span>
+                    <Badge variant={entry.result === "executed" || entry.result === "no-op" ? "safe" : "restricted"}>
+                      {entry.result || ledger.status}
+                    </Badge>
+                  </div>
+                  {entry.rejectCode ? <p className="mt-1 text-red-600">Reject code: {entry.rejectCode}</p> : null}
+                  {entry.note ? <p className="mt-1">{entry.note}</p> : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </details>
+    </div>
   );
 }
 
