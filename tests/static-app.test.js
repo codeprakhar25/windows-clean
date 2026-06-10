@@ -139,9 +139,10 @@ assert(app.includes("const canExecute = executionGate.ready"), "execute button s
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
 assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
 assert(app.includes("formatExecutionGateError"), "execute handler should convert dispatch blockers into plain user-facing copy");
-assert(app.includes("Technical details"), "clean panel should collapse native diagnostics behind technical details");
-assert(app.includes("ledger.warnings"), "clean panel should keep native executor warnings inside collapsed technical details");
-assert(app.includes("entry.rejectCode"), "clean panel should keep native reject codes inside collapsed technical details");
+assert(!app.includes("Technical details"), "clean panel should not expose native diagnostics in the primary cleanup result");
+assert(app.includes("formatCleanupRejectMessage"), "clean panel should translate native rejection details into plain user-facing copy");
+assert(app.includes("Cleanup could not verify the current scan"), "cleanup rejection copy should tell users to scan again when confirmation evidence is stale");
+assert(app.includes("Windows blocked some files because they are in use"), "cleanup rejection copy should explain locked-file retries without reject codes");
 assert(!app.includes("Delete this selected item from this PC."), "normal cleanup should use the selected row checkbox as the confirmation");
 assert(app.includes("workflowLocks"), "execution gate should receive workflow lock state from the shared cleanup policy");
 assert(app.includes("activeScanGeneratedAt: scan?.generatedAt || \"\""), "execution gate should receive active scan timestamp for execution context");

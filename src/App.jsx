@@ -1198,7 +1198,6 @@ function CleanPanel({
   onExecute,
   onRescan
 }) {
-  const executionLedger = buildExecutionLedgerRows(executionResult);
   const candidateReady = Boolean(candidate?.canExecute);
   const showSelectedDetails = Boolean(candidate && (!candidateReady || candidate.requiresPermanentConfirmation || candidate.requiresArchiveDestination));
   const running = executionStatus === "running";
@@ -1312,7 +1311,6 @@ function CleanPanel({
             {executionResult ? (
               <CleanupResult
                 result={executionResult}
-                ledger={executionLedger}
                 scanStatus={scanStatus}
                 onRescan={onRescan}
               />
@@ -1326,7 +1324,7 @@ function CleanPanel({
   );
 }
 
-function CleanupResult({ result, ledger, scanStatus, onRescan }) {
+function CleanupResult({ result, scanStatus, onRescan }) {
   const accepted = Boolean(result?.accepted);
   const reclaimedBytes = totalEntryBytes(result?.entries || []);
   const runningRescan = scanStatus === "rescanning";
@@ -1335,6 +1333,8 @@ function CleanupResult({ result, ledger, scanStatus, onRescan }) {
     : scanStatus === "error"
       ? `${formatBytes(reclaimedBytes)} removed. Refresh failed; click Refresh again.`
       : `${formatBytes(reclaimedBytes)} removed. The list is up to date.`;
+  const rejectedText = formatCleanupRejectMessage(result);
+  const showRefreshAction = !accepted || runningRescan || scanStatus === "error";
   return (
     <div className={`rounded-md border p-4 text-sm ${accepted ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-red-200 bg-red-50 text-red-950"}`}>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -1343,43 +1343,16 @@ function CleanupResult({ result, ledger, scanStatus, onRescan }) {
           <p className="mt-1 text-sm">
             {accepted
               ? acceptedText
-              : "Nothing was deleted. Refresh the scan, close apps that may be using these files, and try again."}
+              : rejectedText}
           </p>
         </div>
-        <Button type="button" size="sm" variant="outline" onClick={onRescan} disabled={runningRescan}>
-          {runningRescan ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-          {accepted ? runningRescan ? "Refreshing" : "Refresh again" : "Refresh scan"}
-        </Button>
+        {showRefreshAction ? (
+          <Button type="button" size="sm" variant="outline" onClick={onRescan} disabled={runningRescan}>
+            {runningRescan ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+            {accepted ? runningRescan ? "Refreshing" : "Refresh again" : "Scan again"}
+          </Button>
+        ) : null}
       </div>
-      <details className="mt-3 rounded-md border bg-background/70">
-        <summary className="cursor-pointer px-3 py-2 text-xs font-medium">Technical details</summary>
-        <div className="space-y-3 border-t p-3 text-xs text-muted-foreground">
-          <p>{result?.reason || ledger?.primary || "No details returned."}</p>
-          {ledger?.warnings?.length ? (
-            <ul className="space-y-1">
-              {ledger.warnings.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
-          ) : null}
-          {ledger?.rows?.length ? (
-            <div className="grid gap-2">
-              {ledger.rows.map((entry) => (
-                <div key={`${entry.id}-${entry.route}`} className="rounded border bg-background px-3 py-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium text-foreground">{entry.title}</span>
-                    <Badge variant={entry.result === "executed" || entry.result === "no-op" ? "safe" : "restricted"}>
-                      {entry.result || ledger.status}
-                    </Badge>
-                  </div>
-                  {entry.rejectCode ? <p className="mt-1 text-red-600">Reject code: {entry.rejectCode}</p> : null}
-                  {entry.note ? <p className="mt-1">{entry.note}</p> : null}
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </details>
     </div>
   );
 }
@@ -1898,6 +1871,34 @@ function formatHistorySummary(executionRecord = {}, ledger = {}) {
       : "Cleanup ran, but there was nothing new to remove. The list is up to date.";
   }
   return "Nothing was deleted. Refresh the scan, close apps that may be using these files, and try again.";
+}
+
+function formatCleanupRejectMessage(result = {}) {
+  const ledger = buildExecutionLedgerRows(result);
+  const text = [
+    result?.reason || "",
+    ...ledger.warnings,
+    ...ledger.rows.flatMap((row) => [row.rejectCode, row.note, ...row.checks.map((check) => check.detail)])
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  if (/missing-(scan-fingerprint|consent-plan|plan-id)|no-actions|request-mode-invalid|route-not/i.test(text)) {
+    return "Cleanup could not verify the current scan. Scan again, check the item, and delete it.";
+  }
+  if (/permanent-confirmation/.test(text)) {
+    return "Confirm the Recycle Bin cleanup, then try again.";
+  }
+  if (/target-(not-allowlisted|forbidden|blocked|missing)|outside|allowlist/.test(text)) {
+    return "This item is outside the safe cleanup list. Choose another can clean item or scan again.";
+  }
+  if (/executor-disabled|feature-flag|cleanup authority|not available|runtime/.test(text)) {
+    return "Cleanup is not available for this item in this app session. Restart SpaceGuard, scan again, and try another can clean item.";
+  }
+  if (/access denied|permission|locked|in use|using these files/.test(text)) {
+    return "Windows blocked some files because they are in use. Close the related apps, scan again, and retry.";
+  }
+  return "Nothing was deleted. Close apps using these files, scan again, and try once more.";
 }
 
 function formatNotReadyReason(candidate = {}) {
