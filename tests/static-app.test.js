@@ -127,7 +127,10 @@ assert(app.includes("useState(\"clean\")"), "app should open directly on the Cle
 assert(!app.includes("id: \"overview\""), "sidebar should not force users through an overview detour");
 assert(app.includes("function MobileTabNav"), "mobile layout should expose tab switching between app views");
 assert(app.includes("role=\"tablist\""), "mobile view switching should use tab semantics");
-assert(app.includes("Advanced scan options"), "scan tuning should stay collapsed behind advanced options");
+assert(!app.includes("Advanced scan options"), "Clean screen should not expose advanced scan tuning");
+assert(!app.includes("Entry cap"), "Clean screen should not expose native scan cap controls");
+assert(!app.includes("Protected paths"), "Clean screen should not expose protected-path editing");
+assert(!app.includes("Extra folders to scan"), "Clean screen should not expose custom root setup");
 assert(/activeView === "clean"[\s\S]*<ScanPanel[\s\S]*<CleanPanel/.test(app), "Clean screen should contain scan and cleanup controls in one flow");
 assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");

@@ -1053,48 +1053,6 @@ function ScanPanel({ request, setRequest, candidates = [], scan, scanStatus, sca
             </div>
           </div>
         ) : null}
-        {!hasScan ? (
-          <details className="rounded-md border bg-muted/20">
-            <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Advanced scan options</summary>
-            <div className="space-y-3 border-t p-3">
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-1 text-sm">
-                  <span className="font-medium">Depth</span>
-                  <Input type="number" value={request.maxDepth} onChange={(event) => setRequest({ ...request, maxDepth: Number(event.target.value || 8) })} />
-                </label>
-                <label className="space-y-1 text-sm">
-                  <span className="font-medium">Entry cap</span>
-                  <Input type="number" value={request.maxEntriesPerRoot} onChange={(event) => setRequest({ ...request, maxEntriesPerRoot: Number(event.target.value || 25000) })} />
-                </label>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-1 text-sm">
-                  <span className="font-medium">Protected paths</span>
-                  <Textarea
-                    value={request.protectedPaths}
-                    onChange={(event) => setRequest({ ...request, protectedPaths: event.target.value })}
-                    placeholder="One path per line"
-                  />
-                </label>
-                <label className="space-y-1 text-sm">
-                  <span className="font-medium">Extra folders to scan</span>
-                  <Textarea
-                    value={request.customRoots}
-                    onChange={(event) => setRequest({ ...request, customRoots: event.target.value })}
-                    placeholder="Optional folders to measure manually"
-                  />
-                </label>
-              </div>
-              <label className="flex items-center gap-3 text-sm">
-                <Checkbox
-                  checked={request.includeProjectArtifacts}
-                  onClick={() => setRequest({ ...request, includeProjectArtifacts: !request.includeProjectArtifacts })}
-                />
-                Include project artifact discovery such as node_modules.
-              </label>
-            </div>
-          </details>
-        ) : null}
         {scanError ? <Notice tone="restricted" icon={AlertTriangle} text={scanError} /> : null}
       </CardContent>
     </Card>
@@ -1312,7 +1270,7 @@ function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCand
         {!scan ? (
           <EmptyState icon={HardDrive} title="Run a scan to explore C:" detail="Large folders and cleanable items appear here after scanning." />
         ) : !rows.length ? (
-          <EmptyState icon={HardDrive} title="No large areas found" detail="Run a fresh scan or add an extra folder from Advanced scan options." />
+          <EmptyState icon={HardDrive} title="No large areas found" detail="Run a fresh scan to refresh the allocation list." />
         ) : (
           <>
             <div className="grid gap-3 md:grid-cols-4">
