@@ -37,7 +37,6 @@ const requiredRealShellMarkers = [
   "Activity",
   "getNativeRuntimeCapabilities",
   "runNativeReadonlyScan",
-  "writeNativeProofArtifact",
   "requestOpenAIAgentAdvice"
 ];
 

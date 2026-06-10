@@ -46,7 +46,7 @@ const requiredAppMarkers = [
   "Cleanup status",
   "Explore C:",
   "Select one ready item, then press Delete on that row.",
-  "Latest scan",
+  "Ready to clean",
   "Scan again",
   "Activity",
   "Ask AI",
@@ -96,8 +96,7 @@ for (const marker of [
   "runNativeProjectDependencyExecutor",
   "runNativeDownloadsCleanupExecutor",
   "runNativeBrowserCacheExecutor",
-  "runNativeRecycleBinExecutor",
-  "writeNativeProofArtifact"
+  "runNativeRecycleBinExecutor"
 ]) {
   assert(app.includes(marker), `App.jsx should wire native API ${marker}`);
 }
@@ -120,7 +119,7 @@ assert(!app.includes("resolveRuntimeRouteInput"), "app shell should not sync cle
 assert(!app.includes("setSetupRouteInput"), "app shell should not require route arming before native cleanup");
 assert(app.includes("resetWorkflowForRouteChange"), "app should keep a shared reset helper for workflow state resets");
 assert(app.includes("buildWorkflowLocks"), "app should use tested workflow lock policy for cleanup continuation");
-assert(app.includes("buildBaselinePromotion"), "app should use tested baseline promotion after optional proof export");
+assert(!app.includes("buildBaselinePromotion"), "app shell should not run hidden proof/support baseline promotion after cleanup");
 assert(!app.includes("buildRouteSetupChecklist"), "app shell should not render the legacy route setup checklist");
 assert(!app.includes("RouteReadinessList"), "clean screen should not render internal readiness rows");
 assert(!app.includes("formatNotReadyReason"), "Clean screen should not carry a separate not-ready detail panel");
@@ -164,21 +163,20 @@ assert(!app.includes("I understand this permanently empties Recycle Bin contents
 assert(!app.includes("setPermanentRemovalConfirmed"), "Recycle Bin cleanup should not keep a second UI confirmation state");
 assert(app.includes("workflowLocks"), "execution gate should receive workflow lock state from the shared cleanup policy");
 assert(app.includes("activeScanGeneratedAt: scan?.generatedAt || \"\""), "execution gate should receive active scan timestamp for execution context");
-assert(app.includes("executionRecord?.accepted"), "proof export should require an accepted native execution record");
+assert(app.includes("executionRecord?.accepted"), "agent context key should track accepted native execution records");
 assert(!app.includes("targetSwitchLocked"), "cleanup queue should not lock target switching behind proof export");
 assert(!app.includes("routeSetupLocked"), "app shell should not carry route setup locks in the production flow");
-assert(app.includes("workflowProofAccepted"), "optional proof export should still track in-app verifier state");
-assert(app.includes("buildWorkflowProofCheck"), "proof export should run the shared workflow proof verifier inside the app");
-assert(app.includes("workflowProofCheck"), "support export should still use workflow validation state");
-assert(!app.includes("Support check"), "support export should not render internal workflow validation details");
-assert(app.includes("Support file exported"), "support export should report accepted in-app workflow validation with user-facing copy");
-assert(app.includes("proofKind: \"workflow-proof-check\""), "proof export should persist the in-app verifier output as a restricted artifact");
-assert(app.includes("proofKind: \"support-bundle\""), "proof export should persist an in-app support bundle as a restricted artifact");
-assert(app.includes("buildInAppSupportBundleReport"), "proof export should build the support bundle inside the desktop app");
-assert(app.includes("renderInAppSupportBundleMarkdown"), "proof export should render support bundle markdown inside the desktop app");
+assert(!app.includes("workflowProofAccepted"), "app shell should not track hidden proof verifier state");
+assert(!app.includes("buildWorkflowProofCheck"), "app shell should not run proof verifier handoff inside the cleanup UI");
+assert(!app.includes("workflowProofCheck"), "app shell should not carry workflow validation handoff state");
+assert(!app.includes("Support check"), "app shell should not render internal workflow validation details");
+assert(!app.includes("Support file exported"), "app shell should not report support export as part of cleanup");
+assert(!app.includes("proofKind: \"workflow-proof-check\""), "app shell should not persist proof-check artifacts from the cleanup UI");
+assert(!app.includes("proofKind: \"support-bundle\""), "app shell should not persist support-bundle artifacts from the cleanup UI");
+assert(!app.includes("buildInAppSupportBundleReport"), "app shell should not build support bundles inside the cleanup UI");
+assert(!app.includes("renderInAppSupportBundleMarkdown"), "app shell should not render support-bundle markdown inside the cleanup UI");
 assert(realWorkflow.includes("no post-clean evidence is needed"), "accepted no-op executions should explain that post-clean rescan is skipped");
-assert(app.includes("supportBundleWritten"), "optional proof export should keep support bundle completion state");
-assert(app.includes("supportBundleWritten: Boolean(supportBundleWritten)"), "OpenAI context should receive support bundle completion state");
+assert(!app.includes("supportBundleWritten"), "OpenAI app context should not require support-bundle handoff for cleanup continuation");
 assert(app.includes("proofAllowsNextExecutor: workflowLocks.proofAllowsNextExecutor"), "OpenAI context should use the tested workflow lock policy for next-executor allowance");
 assert(app.includes("noOpExecution: Boolean(workflowLocks.noOpExecution)"), "OpenAI context should expose accepted zero-byte no-op handoff state");
 assert(app.includes("agentTaskQueue"), "OpenAI context should include the app task queue that the advisor instructions require");
@@ -187,7 +185,7 @@ assert(app.includes("visibleTargets"), "OpenAI panel should unlock for executabl
 assert(app.includes("scan.driveInventory"), "manual findings should include native drive inventory evidence");
 assert(app.includes("Drive inventory:"), "drive inventory rows should be visible as manual review cards");
 assert(app.includes("slugifyId"), "drive inventory manual finding ids should be stable and normalized");
-assert(app.includes("selected-route-proof-reviewed"), "app workflow proof should require reviewed selected-route proof export");
+assert(!app.includes("selected-route-proof-reviewed"), "app shell should not require selected-route proof review before more cleanup");
 assert(!app.includes("selected-route-proof-import"), "app workflow proof should not require obsolete selected-route proof import");
 assert(!app.includes("Export proof, let the in-app verifier accept it, and capture the support bundle before selecting another cleanup target."), "cleanup queue should not describe proof export as a target-switch lock");
 assert(!app.includes("disabled={targetSwitchLocked && candidate.id !== selectedId}"), "cleanup queue should not disable other targets behind proof export");
@@ -199,21 +197,21 @@ assert(!app.includes("Export support file"), "normal Activity UI should not expo
 assert(!app.includes("SupportDetails"), "normal Activity UI should not render a support diagnostics component");
 assert(!app.includes("Refresh space before exporting troubleshooting info."), "support export should not expose troubleshooting proof copy");
 assert(!app.includes("Support details"), "support export should not expose a nested diagnostic details panel");
-assert(app.includes("buildProofCandidateFromExecutionRecord"), "proof panel should preserve executed target proof context after baseline promotion");
+assert(app.includes("buildProofCandidateFromExecutionRecord"), "post-clean comparison should preserve executed target context after the selected row clears");
 assert(app.includes("recipeId: selectedCandidate.recipeId"), "execution records should preserve recipe id for post-run proof matching");
-assert(app.includes("envVar: selectedCandidate.envVar"), "execution records should preserve selected route flag for proof/support re-export");
-assert(app.includes("const exportCandidate = selectedCandidate || proofCandidate"), "proof export should use preserved execution context after baseline promotion clears queue selection");
-assert(!app.includes("if (!selectedCandidate || !executionRecord) return;"), "proof export should not silently stop after baseline promotion clears selected candidate");
-assert(app.includes("setScan(baselinePromotion.activeScan)"), "proof export should promote accepted post-run scan to active cleanup baseline");
-assert(app.includes("Latest scan is now active."), "support export should tell the user when baseline promotion succeeds");
+assert(app.includes("envVar: selectedCandidate.envVar"), "execution records should preserve selected route flag for native ledger context");
+assert(!app.includes("const exportCandidate = selectedCandidate || proofCandidate"), "app shell should not carry a hidden proof export candidate");
+assert(!app.includes("if (!selectedCandidate || !executionRecord) return;"), "app shell should not carry the old proof export guard");
+assert(!app.includes("setScan(baselinePromotion.activeScan)"), "app shell should not wait for proof export before promoting the refreshed scan");
+assert(!app.includes("Latest scan is now active."), "app shell should not show support-export baseline promotion copy");
 assert(!app.includes("npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted"), "proof panel should not rely on a manual CLI acceptance checkbox");
 assert(
-  /function selectWorkflowCandidate\(id, options = \{\}\) \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setPostRunScan\(null\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}/.test(app),
-  "selecting a different cleanup target should clear stale execution, rescan, and proof export state"
+  /function selectWorkflowCandidate\(id, options = \{\}\) \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setPostRunScan\(null\);[\s\S]*setExecutionStatus\("idle"\);[\s\S]*setExecutionError\(""\);[\s\S]*\}/.test(app),
+  "selecting a different cleanup target should clear stale execution and rescan state"
 );
 assert(
-  /if \(afterExecution\) \{[\s\S]*setScan\(result\);[\s\S]*setPostRunScan\(result\);[\s\S]*setSelectedId\(""\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}/.test(app),
-  "post-clean rescan should update the normal cleanup list and clear stale support export status"
+  /if \(afterExecution\) \{[\s\S]*setScan\(result\);[\s\S]*setPostRunScan\(result\);[\s\S]*setSelectedId\(""\);[\s\S]*setConsentChecked\(false\);[\s\S]*setArchiveDestination\(""\);[\s\S]*\}/.test(app),
+  "post-clean rescan should update the normal cleanup list and clear stale selection state"
 );
 assert(/if \(result\.accepted\) \{[\s\S]*await runRealScan\(\{ afterExecution: true \}\);[\s\S]*\}/.test(app), "accepted cleanup should refresh the list automatically");
 assert(app.includes("buildManualFindingGuidance"), "app should use tested manual finding guidance");
@@ -259,7 +257,7 @@ assert(app.includes("onBrokerAction(suggestedAction)"), "OpenAI panel should exp
 assert(app.includes("formatAgentButtonLabel(suggestedAction)"), "OpenAI broker action button should use simple user-facing labels");
 assert(app.includes("redactPath"), "OpenAI context should redact local paths before provider calls");
 assert(app.includes("This browser page cannot scan or delete files."), "browser-only state should be setup-only");
-assert(app.includes("Native proof artifact writer is required"), "proof export should block when the native artifact writer does not write proof files");
+assert(!app.includes("Native proof artifact writer is required"), "cleanup UI should not expose proof artifact writer failures");
 assert(!app.includes("downloadTextFile(fileName, content)"), "proof export must not silently fall back to browser downloads");
 
 assert(nativeAdapter.includes("writeNativeProofArtifact"), "native adapter should expose a restricted proof artifact writer");

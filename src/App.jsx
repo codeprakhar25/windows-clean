@@ -43,12 +43,10 @@ import {
   runNativeRecycleBinExecutor,
   runNativeShaderCacheExecutor,
   runNativeTempCleanupExecutor,
-  runNativeUserCacheExecutor,
-  writeNativeProofArtifact
+  runNativeUserCacheExecutor
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildAppAgentTaskQueue, buildBaselinePromotion, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildInAppSupportBundleReport, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildWorkflowAgentTargetId, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, renderInAppSupportBundleMarkdown, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
-import { buildWorkflowProofCheck } from "./workflow-proof-check.mjs";
+import { buildAppAgentTaskQueue, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildWorkflowAgentTargetId, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
   targetDrive: "C:",
@@ -58,11 +56,6 @@ const DEFAULT_SCAN_REQUEST = {
   maxDepth: 8,
   maxEntriesPerRoot: 25000
 };
-const PROOF_PACKET_FILE = "spaceguard-selected-route-proof-packet.md";
-const WORKFLOW_PROOF_FILE = "spaceguard-real-workflow-proof.md";
-const WORKFLOW_PROOF_CHECK_FILE = "spaceguard-workflow-proof-check.json";
-const SUPPORT_BUNDLE_FILE = "spaceguard-support-bundle.md";
-
 const EXECUTOR_RECIPES = {
   "windows-temp": {
     label: "Windows temp cleanup",
@@ -268,11 +261,6 @@ function App() {
   const [executionError, setExecutionError] = useState("");
   const [executionResult, setExecutionResult] = useState(null);
   const [executionRecord, setExecutionRecord] = useState(null);
-  const [workflowProofAccepted, setWorkflowProofAccepted] = useState(false);
-  const [workflowProofCheck, setWorkflowProofCheck] = useState(null);
-  const [supportBundleWrite, setSupportBundleWrite] = useState(null);
-  const [proofExportStatus, setProofExportStatus] = useState("idle");
-  const [proofExportMessage, setProofExportMessage] = useState("");
   const [agentPrompt, setAgentPrompt] = useState("Find the safest next cleanup step from the current real scan.");
   const [agentStatus, setAgentStatus] = useState("idle");
   const [agentError, setAgentError] = useState("");
@@ -311,8 +299,6 @@ function App() {
     }),
     [selectedCandidate, archiveDestination, effectivePermanentRemovalConfirmed]
   );
-  const canExportProof = Boolean(postRunProof.status === "matched" && executionRecord?.accepted);
-  const supportBundleWritten = Boolean(workflowProofAccepted && supportBundleWrite?.written);
   const agentContextKey = useMemo(
     () => buildAgentContextKey({
       runtime,
@@ -320,14 +306,11 @@ function App() {
       selectedCandidate,
       executionRecord,
       postRunProof,
-      workflowProofAccepted,
-      workflowProofCheck,
-      supportBundleWritten,
       archiveDestination,
       permanentRemovalConfirmed: effectivePermanentRemovalConfirmed,
       agentPrompt
     }),
-    [runtime, scanFingerprint, selectedCandidate, executionRecord, postRunProof, workflowProofAccepted, workflowProofCheck, supportBundleWritten, archiveDestination, effectivePermanentRemovalConfirmed, agentPrompt]
+    [runtime, scanFingerprint, selectedCandidate, executionRecord, postRunProof, archiveDestination, effectivePermanentRemovalConfirmed, agentPrompt]
   );
   const agentContextKeyRef = useRef(agentContextKey);
 
@@ -339,8 +322,8 @@ function App() {
   }, [agentContextKey]);
 
   const workflowLocks = useMemo(
-    () => buildWorkflowLocks({ executionRecord, workflowProofAccepted, supportBundleWritten }),
-    [executionRecord, workflowProofAccepted, supportBundleWritten]
+    () => buildWorkflowLocks({ executionRecord }),
+    [executionRecord]
   );
   const executionGate = useMemo(
     () => buildExecutionGate({
@@ -370,12 +353,9 @@ function App() {
       consentPlanId: canExecute ? activePlanId : "",
       archiveDestination,
       permanentRemovalConfirmed: effectivePermanentRemovalConfirmed,
-      workflowProofAccepted,
-      workflowProofCheck,
-      supportBundleWritten,
       workflowLocks
     }),
-    [runtime, scan, candidates, manualFindings, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, effectivePermanentRemovalConfirmed, workflowProofAccepted, workflowProofCheck, supportBundleWritten, workflowLocks]
+    [runtime, scan, candidates, manualFindings, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, effectivePermanentRemovalConfirmed, workflowLocks]
   );
   const currentAgentAdvice = agentAdvice?.contextKey === agentContextKey ? agentAdvice : null;
   const agentBroker = useMemo(
@@ -388,13 +368,13 @@ function App() {
           planId: activePlanId,
           scanFingerprint,
           consentPlanId: canExecute ? activePlanId : "",
-          proofStatus: getAgentProofStatus(executionRecord, postRunProof, workflowProofAccepted),
+          proofStatus: getAgentProofStatus(executionRecord, postRunProof),
           largeFileArchiveDestination: archiveDestination,
           permanentRemovalConfirmed: effectivePermanentRemovalConfirmed
         }
       });
     },
-    [currentAgentAdvice, agentContext, activePlanId, scanFingerprint, canExecute, executionRecord, postRunProof, archiveDestination, effectivePermanentRemovalConfirmed, workflowProofAccepted]
+    [currentAgentAdvice, agentContext, activePlanId, scanFingerprint, canExecute, executionRecord, postRunProof, archiveDestination, effectivePermanentRemovalConfirmed]
   );
 
   async function refreshRuntime() {
@@ -430,11 +410,6 @@ function App() {
         setSelectedId("");
         setConsentChecked(false);
         setArchiveDestination("");
-        setWorkflowProofAccepted(false);
-        setWorkflowProofCheck(null);
-        setSupportBundleWrite(null);
-        setProofExportStatus("idle");
-        setProofExportMessage("");
       } else {
         const defaultSelection = selectDefaultCleanupCandidateId(buildCleanupCandidates(result, latestRuntime || runtime));
         setScan(result);
@@ -443,11 +418,6 @@ function App() {
         setExecutionRecord(null);
         setSelectedId(defaultSelection);
         setConsentChecked(false);
-        setWorkflowProofAccepted(false);
-        setWorkflowProofCheck(null);
-        setSupportBundleWrite(null);
-        setProofExportStatus("idle");
-        setProofExportMessage("");
       }
       setScanStatus("complete");
       setActiveView("clean");
@@ -477,11 +447,6 @@ function App() {
     setExecutionStatus("running");
     setExecutionError("");
     setExecutionResult(null);
-    setWorkflowProofAccepted(false);
-    setWorkflowProofCheck(null);
-    setSupportBundleWrite(null);
-    setProofExportStatus("idle");
-    setProofExportMessage("");
     const planId = activePlanId || `plan-${Date.now()}-${selectedCandidate.id}`;
     const executedAt = new Date().toISOString();
     try {
@@ -547,85 +512,6 @@ function App() {
     }
   }
 
-  async function exportProofPacket() {
-    const exportCandidate = selectedCandidate || proofCandidate;
-    if (!exportCandidate || !executionRecord) return;
-    setProofExportStatus("running");
-    setProofExportMessage("");
-    setWorkflowProofAccepted(false);
-    setWorkflowProofCheck(null);
-    setSupportBundleWrite(null);
-    try {
-      const generatedAt = new Date().toISOString();
-      const selectedRouteProof = buildSelectedRouteProofPacket({
-        candidate: exportCandidate,
-        executionRecord,
-        postRunProof,
-        generatedAt
-      });
-      const workflowProof = buildRealWorkflowProofPacket({
-        selectedRouteProof,
-        generatedAt
-      });
-      const selectedRouteMarkdown = toProofMarkdown("SpaceGuard Selected Route Proof Packet", selectedRouteProof);
-      const workflowMarkdown = toProofMarkdown("SpaceGuard Real Workflow Proof", workflowProof);
-      const selectedWrite = await writeProofFile(PROOF_PACKET_FILE, selectedRouteMarkdown, {
-        route: exportCandidate.route,
-        proofKind: "selected-route-proof-packet"
-      });
-      const workflowWrite = await writeProofFile(WORKFLOW_PROOF_FILE, workflowMarkdown, {
-        route: exportCandidate.route,
-        proofKind: "real-workflow-proof"
-      });
-      const acceptedCheck = buildWorkflowProofCheck({
-        evidenceObject: workflowProof,
-        checkedAt: new Date().toISOString()
-      });
-      const proofCheckWrite = await writeProofFile(WORKFLOW_PROOF_CHECK_FILE, JSON.stringify(acceptedCheck, null, 2), {
-        route: exportCandidate.route,
-        proofKind: "workflow-proof-check"
-      });
-      const supportBundleReport = buildInAppSupportBundleReport({
-        generatedAt,
-        routeInput: exportCandidate.routeInput,
-        selectedFlag: exportCandidate.envVar,
-        proofArtifacts: [selectedWrite, workflowWrite, proofCheckWrite],
-        workflowProofCheck: acceptedCheck
-      });
-      const supportBundleMarkdown = renderInAppSupportBundleMarkdown(supportBundleReport);
-      const supportWrite = await writeProofFile(SUPPORT_BUNDLE_FILE, supportBundleMarkdown, {
-        route: exportCandidate.route,
-        proofKind: "support-bundle"
-      });
-      const supportBundleWrittenNow = Boolean(acceptedCheck.canAccept && supportWrite?.written);
-      const baselinePromotion = buildBaselinePromotion({
-        currentScan: scan,
-        postRunScan,
-        executionRecord,
-        workflowProofAccepted: Boolean(acceptedCheck.canAccept),
-        supportBundleWritten: supportBundleWrittenNow
-      });
-      setWorkflowProofCheck(acceptedCheck);
-      setWorkflowProofAccepted(Boolean(acceptedCheck.canAccept));
-      setSupportBundleWrite(supportWrite);
-      if (baselinePromotion.canPromote) {
-        setScan(baselinePromotion.activeScan);
-        setSelectedId("");
-        setConsentChecked(false);
-        setArchiveDestination("");
-      }
-      setProofExportStatus("complete");
-      setProofExportMessage(
-        acceptedCheck.canAccept
-          ? `Support file exported.${baselinePromotion.canPromote ? " Latest scan is now active." : ""}`
-          : `Support file exported, but ${acceptedCheck.blockers.length} issue(s) need review.`
-      );
-    } catch (error) {
-      setProofExportStatus("error");
-      setProofExportMessage(error instanceof Error ? error.message : "Proof export failed.");
-    }
-  }
-
   async function runAgentBrokerAction(row) {
     if (!row?.canAct) return;
     if (row.kind === "scan") {
@@ -656,11 +542,6 @@ function App() {
     setExecutionResult(null);
     setExecutionRecord(null);
     setPostRunScan(null);
-    setWorkflowProofAccepted(false);
-    setWorkflowProofCheck(null);
-    setSupportBundleWrite(null);
-    setProofExportStatus("idle");
-    setProofExportMessage("");
   }
 
   function selectWorkflowCandidate(id, options = {}) {
@@ -675,11 +556,6 @@ function App() {
     setExecutionError("");
     setArchiveDestination("");
     setConsentChecked(Boolean(options.checked && target?.canExecute));
-    setWorkflowProofAccepted(false);
-    setWorkflowProofCheck(null);
-    setSupportBundleWrite(null);
-    setProofExportStatus("idle");
-    setProofExportMessage("");
   }
 
   function toggleCleanupCandidate(candidate) {
@@ -1853,168 +1729,6 @@ async function dispatchExecutor(candidate, { planId, scanFingerprint, archiveDes
   }
 }
 
-function buildSelectedRouteProofPacket({ candidate, executionRecord, postRunProof, generatedAt }) {
-  return {
-    schemaVersion: "spaceguard-selected-route-proof-packet/v1",
-    generatedAt,
-    status: postRunProof.matched ? "proof-complete" : "proof-mismatch",
-    tone: postRunProof.matched ? "safe" : "restricted",
-    route: candidate.route,
-    routeInput: candidate.routeInput,
-    title: candidate.title,
-    planId: executionRecord.planId,
-    launchStatus: "ready",
-    launchReady: true,
-    proofStatus: "proof-complete",
-    verificationStatus: "ready-for-comparison",
-    rescanStatus: postRunProof.matched ? "matched" : "mismatch",
-    runKind: "scoped-native-execution",
-    runLabel: "Scoped native execution",
-    scopedNativeExecution: true,
-    latestExecutionAt: executionRecord.executedAt,
-    scanGeneratedAt: postRunProof.scanGeneratedAt,
-    postRunScanEvidence: postRunProof.matched,
-    readyForNextRoute: postRunProof.matched,
-    counts: {
-      ledgerEntries: 1,
-      matchedRows: postRunProof.matched ? 1 : 0,
-      reclaimedBytes: Number(executionRecord.bytes || 0)
-    },
-    volumeProof: normalizeProofVolumeProof(executionRecord.volumeProof),
-    selectedRouteProofReview: {
-      status: postRunProof.matched ? "review-complete" : "needs-review",
-      complete: postRunProof.matched,
-      evidencePath: `.\\${PROOF_PACKET_FILE}`,
-      reviewer: "local-operator",
-      detail: "The operator reviewed and exported the proof packet from the desktop app."
-    },
-    ledgerEntries: [
-      {
-        id: executionRecord.id,
-        title: executionRecord.title,
-        planId: executionRecord.planId,
-        source: executionRecord.source,
-        runKind: "scoped-native-execution",
-        runLabel: "Scoped native execution",
-        route: candidate.route,
-        path: candidate.targetPath,
-        bytes: Number(executionRecord.bytes || 0),
-        result: executionRecord.accepted ? "accepted" : "rejected",
-        executedAt: executionRecord.executedAt,
-        nativeVolumeProof: normalizeProofVolumeProof(executionRecord.volumeProof)
-      }
-    ],
-    checkpoints: [
-      {
-        id: candidate.id,
-        title: candidate.title,
-        route: candidate.route,
-        path: candidate.targetPath,
-        expectedBytes: Number(executionRecord.bytes || 0),
-        status: postRunProof.matched ? "ready-for-comparison" : "needs-review"
-      }
-    ],
-    rescanRows: [
-      {
-        id: candidate.id,
-        title: candidate.title,
-        route: candidate.route,
-        state: postRunProof.matched ? "matched" : "mismatch",
-        expectedBytes: Number(executionRecord.bytes || 0),
-        expectedRemainingBytes: Number(postRunProof.expectedRemaining || 0),
-        actualBytes: Number(postRunProof.actualBytes || 0),
-        evidence: postRunProof.detail
-      }
-    ],
-    primary: postRunProof.matched
-      ? `${candidate.routeInput} proof is complete.`
-      : `${candidate.routeInput} proof needs review before another route.`,
-    steps: postRunProof.matched
-      ? ["Validate the workflow proof.", "Keep another route disabled until validation accepts this packet."]
-      : ["Run another post-run scan.", "Review native ledger and target bytes."]
-  };
-}
-
-function buildRealWorkflowProofPacket({ selectedRouteProof, generatedAt }) {
-  const volumeCaptured = selectedRouteProof.volumeProof?.status === "measured" || selectedRouteProof.volumeProof?.measured === true;
-  const ready = Boolean(
-    selectedRouteProof.status === "proof-complete" &&
-      selectedRouteProof.selectedRouteProofReview?.complete &&
-      Number(selectedRouteProof.counts?.reclaimedBytes || 0) > 0 &&
-      volumeCaptured
-  );
-  const rows = [
-    { id: "native-scan-current", label: "Native scan current", passed: true, detail: "The workflow used native scan evidence." },
-    { id: "post-run-proof-complete", label: "Post-run proof complete", passed: selectedRouteProof.status === "proof-complete", detail: selectedRouteProof.primary },
-    { id: "selected-route-proof-reviewed", label: "Selected-route proof reviewed", passed: selectedRouteProof.selectedRouteProofReview?.complete === true, detail: selectedRouteProof.selectedRouteProofReview?.detail || "" },
-    { id: "selected-route-proof-export", label: "Selected-route proof export", passed: true, detail: `${PROOF_PACKET_FILE} exported.` },
-    { id: "reclaimed-bytes", label: "Positive recovered bytes", passed: Number(selectedRouteProof.counts?.reclaimedBytes || 0) > 0, detail: `${formatBytes(selectedRouteProof.counts?.reclaimedBytes || 0)} recovered.` },
-    { id: "native-volume-proof", label: "Native volume proof", passed: volumeCaptured, detail: selectedRouteProof.volumeProof?.note || "Measured native volume proof captured." },
-    { id: "next-route-clearance", label: "Next route clearance", passed: ready, detail: ready ? "The selected route can be validated for handoff." : "Workflow proof is blocked." }
-  ];
-  return {
-    schemaVersion: "spaceguard-real-workflow-proof/v1",
-    generatedAt,
-    status: ready ? "workflow-proven" : "proof-export-required",
-    tone: ready ? "safe" : "review",
-    route: selectedRouteProof.route,
-    routeInput: selectedRouteProof.routeInput,
-    title: selectedRouteProof.title,
-    workflowStatus: ready ? "next-route-ready" : "proof-review-required",
-    proofStatus: selectedRouteProof.status,
-    selectedRouteProofReviewStatus: selectedRouteProof.selectedRouteProofReview?.status || "not-reviewed",
-    appCloseContract: buildAppCloseContract(selectedRouteProof.route),
-    readyForNextRoute: ready,
-    nativeScanCurrent: true,
-    unsafeRuntime: false,
-    rows,
-    blockedRows: rows.filter((row) => !row.passed),
-    volumeProof: selectedRouteProof.volumeProof,
-    counts: {
-      total: rows.length,
-      passed: rows.filter((row) => row.passed).length,
-      blocked: rows.filter((row) => !row.passed).length,
-      ledgerEntries: Number(selectedRouteProof.counts?.ledgerEntries || 0),
-      matchedRows: Number(selectedRouteProof.counts?.matchedRows || 0),
-      reclaimedBytes: Number(selectedRouteProof.counts?.reclaimedBytes || 0)
-    },
-    primary: ready ? `${selectedRouteProof.routeInput} workflow proof is ready.` : "Workflow proof still has blocked rows."
-  };
-}
-
-function buildAppCloseContract(route = "") {
-  const common = [
-    "post-run-rescan-matched",
-    "selected-route-proof-packet-exported",
-    "selected-route-proof-reviewed",
-    "spaceguard-real-workflow-proof-exported"
-  ];
-  return {
-    schemaVersion: "spaceguard-selected-route-app-close-contract/v1",
-    workflowProofPath: `.\\${WORKFLOW_PROOF_FILE}`,
-    selectedRouteProofPacketPath: `.\\${PROOF_PACKET_FILE}`,
-    expectedWorkflowProofSchema: "spaceguard-real-workflow-proof/v1",
-    minimumReclaimedBytes: 1,
-    nextRouteBlockedUntil: "validate:workflow-proof accepted",
-    requiredBeforeClosingApp: ["native-volume-proof-captured", ...common]
-  };
-}
-
-function normalizeProofVolumeProof(volumeProof) {
-  const measured = volumeProof?.status === "measured";
-  return {
-    status: measured ? "measured" : "not-collected",
-    measured,
-    drive: volumeProof?.drive || "",
-    driveLabel: volumeProof?.drive || "",
-    freeBytesDelta: Number(volumeProof?.freeBytesDelta || 0),
-    beforeFreeBytes: Number(volumeProof?.before?.freeBytes || 0),
-    afterFreeBytes: Number(volumeProof?.after?.freeBytes || 0),
-    source: volumeProof?.source || "native-write-volume-proof",
-    note: volumeProof?.note || (measured ? "Native volume proof captured around executor dispatch." : "Native volume proof was not captured.")
-  };
-}
-
 function buildAgentContext({
   runtime,
   scan,
@@ -2028,10 +1742,7 @@ function buildAgentContext({
   consentPlanId = "",
   archiveDestination = "",
   permanentRemovalConfirmed = false,
-  workflowProofAccepted = false,
-  workflowProofCheck = null,
-  supportBundleWritten = false,
-  workflowLocks = buildWorkflowLocks({ executionRecord, workflowProofAccepted, supportBundleWritten })
+  workflowLocks = buildWorkflowLocks({ executionRecord })
 }) {
   const agentCandidateIds = new Map();
   const cleanupQueue = candidates.slice(0, 24).map((candidate, index) => {
@@ -2079,20 +1790,10 @@ function buildAgentContext({
     route: executionRecord.route,
     accepted: executionRecord.accepted,
     reclaimedBytes: executionRecord.bytes,
-    proofStatus: getAgentProofStatus(executionRecord, postRunProof, workflowProofAccepted),
+    proofStatus: getAgentProofStatus(executionRecord, postRunProof),
     proofAllowsNextExecutor: workflowLocks.proofAllowsNextExecutor,
     proofHandoffRequired: Boolean(workflowLocks.proofHandoffRequired),
     noOpExecution: Boolean(workflowLocks.noOpExecution),
-    workflowProofCheckStatus: workflowProofCheck?.status || "not-run",
-    workflowProofCheckCanAccept: Boolean(workflowProofCheck?.canAccept),
-    supportBundleWritten: Boolean(supportBundleWritten),
-    workflowProofCheckBlockers: Array.isArray(workflowProofCheck?.blockers)
-      ? workflowProofCheck.blockers.map((blocker) => ({
-          id: blocker.id || "",
-          label: blocker.label || "",
-          detail: redactAgentContextText(blocker.detail || "")
-        }))
-      : [],
     canRunPostRunRescan: Boolean(executionRecord),
     rescanComparisonStatus: postRunProof.status,
     postRunScanEvidence: Boolean(postRunProof.scanGeneratedAt),
@@ -2107,7 +1808,6 @@ function buildAgentContext({
     consentMatchesPlan: Boolean(planId && consentPlanId && consentPlanId === planId),
     proofStatus: "waiting-for-execution",
     proofAllowsNextExecutor: true,
-    supportBundleWritten: Boolean(supportBundleWritten),
     canRunPostRunRescan: false,
     rescanComparisonStatus: "not-run",
     postRunScanEvidence: false,
@@ -2181,10 +1881,9 @@ function buildAgentManualTargetId(finding = {}, index = 0) {
   return `manual-${slugifyId(base)}-${index + 1}`;
 }
 
-function getAgentProofStatus(executionRecord, postRunProof, workflowProofAccepted = false) {
+function getAgentProofStatus(executionRecord, postRunProof) {
   if (!executionRecord) return "waiting-for-execution";
-  if (workflowProofAccepted) return "proof-complete";
-  if (postRunProof?.matched) return "workflow-proof-validation-required";
+  if (postRunProof?.matched || (executionRecord.accepted && Number(executionRecord.bytes || 0) <= 0)) return "proof-complete";
   return postRunProof?.status || "proof-pending";
 }
 
@@ -2204,25 +1903,6 @@ function redactAgentContextText(value = "") {
   return redactPath(value);
 }
 
-function toProofMarkdown(title, packet) {
-  return [
-    `# ${title}`,
-    "",
-    "```json",
-    JSON.stringify(packet, null, 2),
-    "```"
-  ].join("\n");
-}
-
-async function writeProofFile(fileName, content, metadata) {
-  const result = await writeNativeProofArtifact(fileName, content, metadata);
-  if (!result?.written) {
-    const reason = result?.reason || "Native proof artifact writer is required for real workflow handoff.";
-    throw new Error(`Native proof artifact writer is required before proof export can complete: ${reason}`);
-  }
-  return result;
-}
-
 function buildScanFingerprint(scan) {
   if (!scan) return "";
   return [
@@ -2240,9 +1920,6 @@ function buildAgentContextKey({
   selectedCandidate,
   executionRecord,
   postRunProof,
-  workflowProofAccepted = false,
-  workflowProofCheck = null,
-  supportBundleWritten = false,
   archiveDestination = "",
   permanentRemovalConfirmed = false,
   agentPrompt = ""
@@ -2277,9 +1954,6 @@ function buildAgentContextKey({
     executionHash,
     postRunProof?.status || "proof-not-run",
     postRunProof?.scanGeneratedAt || "proof-scan-missing",
-    workflowProofAccepted ? "workflow-proof-accepted" : "workflow-proof-open",
-    workflowProofCheck?.status || "workflow-proof-check-open",
-    supportBundleWritten ? "support-bundle-written" : "support-bundle-open",
     permanentRemovalConfirmed ? "permanent-confirmed" : "permanent-unconfirmed",
     archiveHash,
     hashContextValue(agentPrompt)
