@@ -14,7 +14,9 @@ npm run native:dev
 Set `OPENAI_API_KEY` in `.env` before using the OpenAI cleanup advisor. Cleanup does not require route arming: the desktop runtime exposes shipped native allowlists and validates each selected target before deletion.
 `windows:ready` exits nonzero until the Windows desktop app can launch; treat that as a stop signal and follow the JSON `nextSteps`.
 If readiness reports `toolchain-blocked`, run `npm install`, install or repair Node.js, Rustup/Cargo, and the Tauri Windows prerequisites, then restart the terminal and rerun the command.
+
 If Tauri reports `icons/icon.ico` not found, confirm `src-tauri/icons/icon.ico` exists, then rerun `npm run native:dev`.
+
 
 Inside the desktop app:
 

@@ -7,17 +7,25 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::Once;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const DEFAULT_OPENAI_MODEL: &str = "gpt-5.2";
 const DEFAULT_OPENAI_ENDPOINT: &str = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_REASONING_EFFORT: &str = "low";
+static RUSTLS_PROVIDER_INIT: Once = Once::new();
 
 #[cfg(target_os = "windows")]
 use std::ffi::OsStr;
 #[cfg(target_os = "windows")]
 use std::os::windows::ffi::OsStrExt;
+
+fn ensure_rustls_crypto_provider() {
+    RUSTLS_PROVIDER_INIT.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -574,6 +582,8 @@ async fn openai_agent_advice(
             );
         }
     }
+
+    ensure_rustls_crypto_provider();
 
     let response = reqwest::Client::new()
         .post(&endpoint)
