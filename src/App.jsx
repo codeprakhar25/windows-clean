@@ -640,7 +640,7 @@ function App() {
     const brokerCandidate = resolveWorkflowAgentBrokerCandidate(row, candidates);
     if (brokerCandidate) {
       selectWorkflowCandidate(brokerCandidate.id);
-      if (row.kind === "scoped-executor" && brokerCandidate.canExecute) {
+      if (row.kind === "scoped-executor" && isOneClickCleanupCandidate(brokerCandidate)) {
         setConsentChecked(true);
       }
       return;
@@ -995,7 +995,7 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
 function ScanPanel({ request, setRequest, candidates = [], scan, scanStatus, scanError, onRunScan }) {
   const running = scanStatus === "scanning" || scanStatus === "rescanning";
   const hasScan = Boolean(scan);
-  const readyCount = candidates.filter((candidate) => candidate.canExecute).length;
+  const readyCount = candidates.filter(isOneClickCleanupCandidate).length;
   const readyLabel = readyCount === 1 ? "1 item ready to delete" : `${readyCount} items ready to delete`;
   return (
     <Card className="rounded-md">
@@ -1115,8 +1115,8 @@ function CleanPanel({
 }) {
   const candidateReady = Boolean(candidate?.canExecute);
   const showSelectedDetails = Boolean(candidate && (!candidateReady || candidate.requiresArchiveDestination));
-  const readyCandidates = candidates.filter((row) => row.canExecute);
-  const reviewCandidates = candidates.filter((row) => !row.canExecute);
+  const readyCandidates = candidates.filter(isOneClickCleanupCandidate);
+  const reviewCandidates = candidates.filter((row) => !isOneClickCleanupCandidate(row));
   const hasReadyCandidates = readyCandidates.length > 0;
   const running = executionStatus === "running";
   return (
@@ -1214,7 +1214,7 @@ function CleanPanel({
                     <div key={row.id} className="flex flex-col gap-2 rounded-md border bg-background p-3 md:flex-row md:items-center md:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant={row.executable ? "review" : "outline"}>{row.executable ? "not ready" : "review only"}</Badge>
+                          <Badge variant={row.executable ? "review" : "outline"}>{formatReviewCandidateStatus(row)}</Badge>
                           <p className="font-medium">{row.title}</p>
                         </div>
                         <p className="mt-1 truncate text-sm text-muted-foreground">{row.targetPath || row.targetKind}</p>
@@ -1810,6 +1810,15 @@ function splitLines(value = "") {
     .filter(Boolean);
 }
 
+function isOneClickCleanupCandidate(candidate = {}) {
+  return Boolean(candidate?.canExecute && !candidate?.requiresArchiveDestination);
+}
+
+function formatReviewCandidateStatus(candidate = {}) {
+  if (candidate?.requiresArchiveDestination) return "needs destination";
+  return candidate?.executable ? "not ready" : "review only";
+}
+
 function buildCleanupCandidates(scan, runtime) {
   if (!scan?.findings?.length) return [];
   const rows = [];
@@ -1846,11 +1855,13 @@ function buildExploreRows(scan, candidates = [], manualFindings = []) {
     bytes: Number(candidate.bytes || 0),
     kind: candidate.routeInput || "cleanup",
     source: "cleanup-candidate",
-    detail: candidate.canExecute
+    detail: candidate.requiresArchiveDestination
+      ? "Archive setup required before this item can run."
+      : candidate.canExecute
       ? candidate.consequence
       : candidate.blockedReason || "This target needs review before cleanup.",
     cleanable: true,
-    ready: Boolean(candidate.canExecute),
+    ready: isOneClickCleanupCandidate(candidate),
     candidateId: candidate.id
   }));
   const manualRows = manualFindings.map((finding) => ({
@@ -2233,6 +2244,7 @@ function buildAgentContext({
   const agentCandidateIds = new Map();
   const cleanupQueue = candidates.slice(0, 24).map((candidate, index) => {
     const agentTargetId = buildAgentCleanupTargetId(candidate, index);
+    const canRunFromQueue = isOneClickCleanupCandidate(candidate);
     agentCandidateIds.set(candidate.id, agentTargetId);
     return {
       id: agentTargetId,
@@ -2242,8 +2254,8 @@ function buildAgentContext({
       actionType: candidate.actionType,
       targetId: agentTargetId,
       bytes: Number(candidate.bytes || 0),
-      canExecute: Boolean(candidate.canExecute),
-      blockedReason: redactAgentContextText(candidate.blockedReason || ""),
+      canExecute: canRunFromQueue,
+      blockedReason: redactAgentContextText(candidate.requiresArchiveDestination ? "Archive destination required before this item can run." : candidate.blockedReason || ""),
       targetPath: redactPath(candidate.targetPath || "")
     };
   });
@@ -2361,7 +2373,7 @@ function buildAgentContext({
       id: agentCandidateIds.get(selectedCandidate.id) || buildAgentCleanupTargetId(selectedCandidate, 0),
       route: selectedCandidate.route,
       routeInput: selectedCandidate.routeInput,
-      canExecute: selectedCandidate.canExecute,
+      canExecute: isOneClickCleanupCandidate(selectedCandidate),
       bytes: selectedCandidate.bytes
     } : null,
     execution

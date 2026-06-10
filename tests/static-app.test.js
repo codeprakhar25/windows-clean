@@ -143,6 +143,11 @@ assert(app.includes("onExecute();"), "selected cleanup row action should dispatc
 assert(app.includes("Ready to clean"), "post-scan clean screen should lead with the actionable cleanup queue");
 assert(app.includes("Scan details"), "post-scan metrics should be collapsed behind scan details");
 assert(app.includes("items need review"), "cleanup queue should move unavailable rows behind a collapsed review section");
+assert(app.includes("isOneClickCleanupCandidate"), "cleanup queue should use a shared one-click eligibility helper");
+assert(app.includes("candidates.filter(isOneClickCleanupCandidate)"), "main cleanup queue should only show one-click cleanup rows");
+assert(app.includes("!isOneClickCleanupCandidate(row)"), "extra-input cleanup rows should be moved out of the main delete queue");
+assert(app.includes("needs destination"), "large-file archive rows should be labelled as needing setup instead of can-clean");
+assert(app.includes("Archive setup required before this item can run."), "Explore and AI context should not present archive rows as immediate delete actions");
 assert(app.includes("No items ready to delete"), "cleanup queue should avoid preselecting blocked targets when nothing can run");
 assert(/function selectDefaultCleanupCandidateId\(candidates = \[\]\) \{[\s\S]*return ""/.test(app), "cleanup scan should not auto-select a row before the user checks it");
 assert(!app.includes("candidates.find((candidate) => candidate.executable)?.id"), "default cleanup selection should not choose blocked executable rows");
