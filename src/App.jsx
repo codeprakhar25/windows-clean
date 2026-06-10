@@ -1042,7 +1042,7 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
         <Progress value={usedPercent} />
         <Button variant="outline" size="sm" onClick={onRefreshRuntime}>
           <RefreshCcw className="h-4 w-4" />
-          Refresh runtime
+          Refresh
         </Button>
       </div>
     </header>
@@ -1050,24 +1050,21 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
 }
 
 function RuntimePanel({ runtime }) {
-  const flagRows = Object.entries(runtime?.executorFlags || {})
-    .filter(([, enabled]) => enabled)
-    .map(([flag]) => flag);
   const checks = [
     ["Windows", runtime?.windows],
-    ["Native scan command", runtime?.scanKnownRoots],
-    ["Executor command", runtime?.executeCleanupPlan],
-    ["Built-in allowlists", runtime?.safeExecutorsEnabled],
-    ["OpenAI advisor", runtime?.openAiAgentAdvice && runtime?.openAiAdvisorConfigured]
+    ["Scan", runtime?.scanKnownRoots],
+    ["Cleanup", runtime?.executeCleanupPlan],
+    ["Safe list", runtime?.safeExecutorsEnabled],
+    ["AI", runtime?.openAiAgentAdvice && runtime?.openAiAdvisorConfigured]
   ];
   return (
     <Card className="rounded-md">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4" />
-          Native runtime
+          Desktop connection
         </CardTitle>
-        <CardDescription>Current desktop bridge and built-in cleanup authority.</CardDescription>
+        <CardDescription>Current app permissions.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-2">
@@ -1081,17 +1078,13 @@ function RuntimePanel({ runtime }) {
           ))}
         </div>
         <div className="rounded-md border bg-background p-3">
-          <p className="text-sm font-medium">Cleanup authority</p>
+          <p className="text-sm font-medium">Safety rules</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            {flagRows.length ? (
-              flagRows.map((flag) => <Badge key={flag} variant="safe">{flag}</Badge>)
-            ) : (
-              <Badge variant="safe">production allowlists</Badge>
-            )}
+            <Badge variant={runtime?.safeExecutorsEnabled ? "safe" : "review"}>
+              {runtime?.safeExecutorsEnabled ? "safe cleanup enabled" : "safe cleanup unavailable"}
+            </Badge>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Real cleanup uses shipped native executors, strict target validation, scan evidence, and explicit user consent.
-          </p>
+          <p className="mt-2 text-xs text-muted-foreground">Cleanup only runs after scan evidence and your confirmation.</p>
         </div>
       </CardContent>
     </Card>
@@ -1118,7 +1111,7 @@ function ScanPanel({ request, setRequest, scan, scanStatus, scanError, onRunScan
           <div className="flex items-end">
             <Button className="w-full" onClick={onRunScan} disabled={running}>
               {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
-              Run real scan
+              Scan PC
             </Button>
           </div>
         </div>
@@ -1184,11 +1177,11 @@ function CleanupQueue({ candidates, selectedId, setSelectedId, scan }) {
           <Trash2 className="h-4 w-4" />
           Cleanup queue
         </CardTitle>
-        <CardDescription>Choose an item, then delete it from the selected cleanup panel.</CardDescription>
+        <CardDescription>Choose an item to clean.</CardDescription>
       </CardHeader>
       <CardContent>
         {!scan ? (
-          <EmptyState icon={ScanLine} title="Run real scan first" detail="The queue is built only from native scan findings." />
+          <EmptyState icon={ScanLine} title="Scan first" detail="Cleanable items appear here after the scan finishes." />
         ) : candidates.length ? (
           <div className="grid gap-3">
             {candidates.map((candidate) => {
@@ -1286,7 +1279,7 @@ function DecisionPanel({
                 </div>
                 <div className="shrink-0 md:text-right">
                   <p className="text-2xl font-semibold">{formatBytes(candidate.bytes)}</p>
-                  <p className="text-xs text-muted-foreground">{candidateReady ? "can be cleaned" : "not ready yet"}</p>
+                  <p className="text-xs text-muted-foreground">{candidateReady ? "Ready to delete" : "Not ready yet"}</p>
                 </div>
               </div>
             </div>
@@ -1295,7 +1288,7 @@ function DecisionPanel({
             ) : null}
             <label className="flex items-start gap-3 text-sm">
               <Checkbox checked={candidateReady && consentChecked} disabled={!candidateReady} onClick={() => setConsentChecked(!consentChecked)} />
-              <span>I want to clean this selected item from this PC.</span>
+              <span>Delete this selected item from this PC.</span>
             </label>
             {candidate.requiresPermanentConfirmation ? (
               <label className="flex items-start gap-3 text-sm">
@@ -1323,11 +1316,11 @@ function DecisionPanel({
               />
             ) : null}
             <details className="rounded-md border bg-muted/20">
-              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Safety details</summary>
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Checks</summary>
               <div className="space-y-3 border-t p-3">
                 <RouteReadinessList rows={candidate.readinessRows} />
                 {executionPrerequisites?.rows?.length ? (
-                  <RouteReadinessList rows={executionPrerequisites.rows} title="Extra requirements" />
+                  <RouteReadinessList rows={executionPrerequisites.rows} title="Required before cleanup" />
                 ) : null}
               </div>
             </details>
@@ -1361,7 +1354,7 @@ function CleanupResult({ result, ledger, scanStatus, onRescan }) {
         ) : null}
       </div>
       <details className="mt-3 rounded-md border bg-background/70">
-        <summary className="cursor-pointer px-3 py-2 text-xs font-medium">Technical details</summary>
+        <summary className="cursor-pointer px-3 py-2 text-xs font-medium">Diagnostics</summary>
         <div className="space-y-3 border-t p-3 text-xs text-muted-foreground">
           <p>{result?.reason || ledger?.primary || "No details returned."}</p>
           {ledger?.warnings?.length ? (
@@ -1393,7 +1386,7 @@ function CleanupResult({ result, ledger, scanStatus, onRescan }) {
   );
 }
 
-function RouteReadinessList({ rows = [], compact = false, title = "Route readiness" }) {
+function RouteReadinessList({ rows = [], compact = false, title = "Cleanup checks" }) {
   const visibleRows = compact ? rows.filter((row) => !row.passed).slice(0, 3) : rows;
   if (!visibleRows.length) return null;
   return (

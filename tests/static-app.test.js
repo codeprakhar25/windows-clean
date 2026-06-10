@@ -44,7 +44,7 @@ const requiredAppMarkers = [
   "npm run windows:ready",
   "OPENAI_API_KEY",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
-  "Run real scan",
+  "Scan PC",
   "Cleanup queue",
   "Explore C: allocation",
   "Selected cleanup",
@@ -57,7 +57,7 @@ const requiredAppMarkers = [
   "Support target",
   "Export support bundle",
   "selected item",
-  "Route readiness",
+  "Cleanup checks",
   "Ask AI",
   "Review only",
   "spaceguard-selected-route-proof-packet.md",
@@ -141,12 +141,12 @@ assert(app.includes("useState(\"clean\")"), "app should open directly on the Cle
 assert(!app.includes("id: \"overview\""), "sidebar should not force users through an overview detour");
 assert(app.includes("Advanced scan options"), "scan tuning should stay collapsed behind advanced options");
 assert(/activeView === "clean"[\s\S]*<ScanPanel[\s\S]*<DecisionPanel[\s\S]*<CleanupQueue/.test(app), "Clean screen should contain scan, selected cleanup, and queue in one flow");
-assert(app.includes("Extra requirements"), "user gate should keep route-specific execution requirements inside collapsed safety details");
+assert(app.includes("Required before cleanup"), "user gate should keep route-specific execution requirements inside collapsed checks");
 assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
 assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
-assert(app.includes("Safety details"), "decision panel should collapse readiness details behind safety details");
-assert(app.includes("Technical details"), "decision panel should collapse native diagnostics behind technical details");
+assert(app.includes("Checks"), "decision panel should collapse readiness details behind simple checks");
+assert(app.includes("Diagnostics"), "decision panel should collapse native diagnostics behind diagnostics");
 assert(app.includes("ledger.warnings"), "decision panel should keep native executor warnings inside technical details");
 assert(app.includes("entry.rejectCode"), "decision panel should render native reject codes");
 assert(app.includes("workflowLocks"), "execution gate should receive workflow lock state from the shared cleanup policy");

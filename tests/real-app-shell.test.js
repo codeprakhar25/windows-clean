@@ -31,7 +31,7 @@ const requiredRealShellMarkers = [
   "npm run native:dev",
   "OPENAI_API_KEY",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
-  "Run real scan",
+  "Scan PC",
   "Cleanup queue",
   "Explore C: allocation",
   "Selected cleanup",
