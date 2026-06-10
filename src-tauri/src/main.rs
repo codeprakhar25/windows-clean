@@ -6895,14 +6895,6 @@ fn delete_browser_cache_target_at(root: &Path, now: SystemTime) -> BrowserCacheD
     result
 }
 
-fn delete_single_browser_cache_file(
-    path: &Path,
-    metadata: &fs::Metadata,
-    result: &mut BrowserCacheDeleteResult,
-) {
-    delete_single_browser_cache_file_at(path, metadata, SystemTime::now(), result);
-}
-
 fn delete_single_browser_cache_file_at(
     path: &Path,
     metadata: &fs::Metadata,
@@ -6921,10 +6913,6 @@ fn delete_single_browser_cache_file_at(
         }
         Err(_) => result.skipped_count += 1,
     }
-}
-
-fn file_old_enough_for_browser_cache_delete(metadata: &fs::Metadata) -> bool {
-    file_old_enough_for_browser_cache_delete_at(metadata, SystemTime::now())
 }
 
 fn file_old_enough_for_browser_cache_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
@@ -6997,14 +6985,6 @@ fn delete_gradle_cache_target_at(root: &Path, now: SystemTime) -> GradleCacheDel
     result
 }
 
-fn delete_single_gradle_cache_file(
-    path: &Path,
-    metadata: &fs::Metadata,
-    result: &mut GradleCacheDeleteResult,
-) {
-    delete_single_gradle_cache_file_at(path, metadata, SystemTime::now(), result);
-}
-
 fn delete_single_gradle_cache_file_at(
     path: &Path,
     metadata: &fs::Metadata,
@@ -7025,10 +7005,6 @@ fn delete_single_gradle_cache_file_at(
         }
         Err(_) => result.skipped_count += 1,
     }
-}
-
-fn file_old_enough_for_gradle_cache_delete(metadata: &fs::Metadata) -> bool {
-    file_old_enough_for_gradle_cache_delete_at(metadata, SystemTime::now())
 }
 
 fn file_old_enough_for_gradle_cache_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
@@ -7115,14 +7091,6 @@ fn delete_user_cache_target_at(root: &Path, now: SystemTime) -> UserCacheDeleteR
     result
 }
 
-fn delete_single_user_cache_file(
-    path: &Path,
-    metadata: &fs::Metadata,
-    result: &mut UserCacheDeleteResult,
-) {
-    delete_single_user_cache_file_at(path, metadata, SystemTime::now(), result);
-}
-
 fn delete_single_user_cache_file_at(
     path: &Path,
     metadata: &fs::Metadata,
@@ -7141,10 +7109,6 @@ fn delete_single_user_cache_file_at(
         }
         Err(_) => result.skipped_count += 1,
     }
-}
-
-fn file_old_enough_for_user_cache_delete(metadata: &fs::Metadata) -> bool {
-    file_old_enough_for_user_cache_delete_at(metadata, SystemTime::now())
 }
 
 fn file_old_enough_for_user_cache_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
@@ -7266,14 +7230,6 @@ fn delete_android_cache_target_at(root: &Path, now: SystemTime) -> AndroidCacheD
     result
 }
 
-fn delete_single_android_cache_file(
-    path: &Path,
-    metadata: &fs::Metadata,
-    result: &mut AndroidCacheDeleteResult,
-) {
-    delete_single_android_cache_file_at(path, metadata, SystemTime::now(), result);
-}
-
 fn delete_single_android_cache_file_at(
     path: &Path,
     metadata: &fs::Metadata,
@@ -7294,10 +7250,6 @@ fn delete_single_android_cache_file_at(
         }
         Err(_) => result.skipped_count += 1,
     }
-}
-
-fn file_old_enough_for_android_cache_delete(metadata: &fs::Metadata) -> bool {
-    file_old_enough_for_android_cache_delete_at(metadata, SystemTime::now())
 }
 
 fn file_old_enough_for_android_cache_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
@@ -7428,14 +7380,6 @@ fn delete_shader_cache_target_at(root: &Path, now: SystemTime) -> ShaderCacheDel
     result
 }
 
-fn delete_single_shader_cache_file(
-    path: &Path,
-    metadata: &fs::Metadata,
-    result: &mut ShaderCacheDeleteResult,
-) {
-    delete_single_shader_cache_file_at(path, metadata, SystemTime::now(), result);
-}
-
 fn delete_single_shader_cache_file_at(
     path: &Path,
     metadata: &fs::Metadata,
@@ -7456,10 +7400,6 @@ fn delete_single_shader_cache_file_at(
         }
         Err(_) => result.skipped_count += 1,
     }
-}
-
-fn file_old_enough_for_shader_cache_delete(metadata: &fs::Metadata) -> bool {
-    file_old_enough_for_shader_cache_delete_at(metadata, SystemTime::now())
 }
 
 fn file_old_enough_for_shader_cache_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
@@ -7601,14 +7541,6 @@ fn delete_pip_cache_target_at(root: &Path, now: SystemTime) -> PipCacheDeleteRes
     result
 }
 
-fn delete_single_pip_cache_file(
-    path: &Path,
-    metadata: &fs::Metadata,
-    result: &mut PipCacheDeleteResult,
-) {
-    delete_single_pip_cache_file_at(path, metadata, SystemTime::now(), result);
-}
-
 fn delete_single_pip_cache_file_at(
     path: &Path,
     metadata: &fs::Metadata,
@@ -7627,10 +7559,6 @@ fn delete_single_pip_cache_file_at(
         }
         Err(_) => result.skipped_count += 1,
     }
-}
-
-fn file_old_enough_for_pip_cache_delete(metadata: &fs::Metadata) -> bool {
-    file_old_enough_for_pip_cache_delete_at(metadata, SystemTime::now())
 }
 
 fn file_old_enough_for_pip_cache_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
@@ -7895,14 +7823,6 @@ fn delete_npm_cache_target_at(root: &Path, now: SystemTime) -> NpmCacheDeleteRes
     result
 }
 
-fn delete_single_npm_cache_file(
-    path: &Path,
-    metadata: &fs::Metadata,
-    result: &mut NpmCacheDeleteResult,
-) {
-    delete_single_npm_cache_file_at(path, metadata, SystemTime::now(), result);
-}
-
 fn delete_single_npm_cache_file_at(
     path: &Path,
     metadata: &fs::Metadata,
@@ -7921,10 +7841,6 @@ fn delete_single_npm_cache_file_at(
         }
         Err(_) => result.skipped_count += 1,
     }
-}
-
-fn file_old_enough_for_npm_cache_delete(metadata: &fs::Metadata) -> bool {
-    file_old_enough_for_npm_cache_delete_at(metadata, SystemTime::now())
 }
 
 fn file_old_enough_for_npm_cache_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
@@ -8009,14 +7925,6 @@ fn delete_pnpm_store_target_at(root: &Path, now: SystemTime) -> PnpmStoreDeleteR
     result
 }
 
-fn delete_single_pnpm_store_file(
-    path: &Path,
-    metadata: &fs::Metadata,
-    result: &mut PnpmStoreDeleteResult,
-) {
-    delete_single_pnpm_store_file_at(path, metadata, SystemTime::now(), result);
-}
-
 fn delete_single_pnpm_store_file_at(
     path: &Path,
     metadata: &fs::Metadata,
@@ -8035,10 +7943,6 @@ fn delete_single_pnpm_store_file_at(
         }
         Err(_) => result.skipped_count += 1,
     }
-}
-
-fn file_old_enough_for_pnpm_store_delete(metadata: &fs::Metadata) -> bool {
-    file_old_enough_for_pnpm_store_delete_at(metadata, SystemTime::now())
 }
 
 fn file_old_enough_for_pnpm_store_delete_at(metadata: &fs::Metadata, now: SystemTime) -> bool {
@@ -8620,23 +8524,6 @@ fn unquote_env_value(value: &str) -> String {
     } else {
         value.to_string()
     }
-}
-
-fn json_string_field(value: &Value, camel_case: &str, snake_case: &str) -> String {
-    value
-        .get(camel_case)
-        .or_else(|| value.get(snake_case))
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string()
-}
-
-fn json_bool_field(value: &Value, camel_case: &str, snake_case: &str) -> bool {
-    value
-        .get(camel_case)
-        .or_else(|| value.get(snake_case))
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
 }
 
 #[tauri::command]
