@@ -781,7 +781,10 @@ function App() {
             scan={scan}
             candidates={candidates}
             manualFindings={manualFindings}
-            onSelectCandidate={selectWorkflowCandidate}
+            onSelectCandidate={(id) => {
+              selectWorkflowCandidate(id);
+              setActiveView("clean");
+            }}
             onRunScan={() => runRealScan()}
           />
         ) : null}
@@ -1379,19 +1382,19 @@ function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCand
           <div>
             <CardTitle className="flex items-center gap-2">
               <ListTree className="h-4 w-4" />
-              Explore C: allocation
+              Explore C:
             </CardTitle>
-            <CardDescription>Top-level drive inventory, known cleanup areas, and manual review rows from the native scan.</CardDescription>
+            <CardDescription>See what is using space and jump to a cleanable item.</CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={onRunScan} disabled={false}>
             <ScanLine className="h-4 w-4" />
-            Rescan
+            Scan again
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {!scan ? (
-          <EmptyState icon={HardDrive} title="Run a scan to explore C:" detail="The explorer is built from native scan evidence and does not browse arbitrary folders live." />
+          <EmptyState icon={HardDrive} title="Run a scan to explore C:" detail="Large folders and cleanable items appear here after scanning." />
         ) : !rows.length ? (
           <EmptyState icon={HardDrive} title="No large areas found" detail="Run a fresh scan or add a custom read-only root from Advanced scan options." />
         ) : (
@@ -1400,7 +1403,7 @@ function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCand
               <Metric label="Drive" value={scan.volume?.drive || scan.targetDrive || "C:"} />
               <Metric label="Used" value={formatBytes(scan.volume?.usedBytes || 0)} />
               <Metric label="Free" value={formatBytes(scan.volume?.freeBytes || 0)} />
-              <Metric label="Rows" value={String(rows.length)} />
+              <Metric label="Items" value={String(rows.length)} />
             </div>
             <div className="grid gap-3">
               {rows.map((row) => (
@@ -1414,20 +1417,14 @@ function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCand
                         <p className="font-medium">{row.title}</p>
                       </div>
                       <p className="mt-2 truncate text-sm text-muted-foreground">{row.path || row.source}</p>
-                      <details className="mt-2 text-xs text-muted-foreground">
-                        <summary className="cursor-pointer font-medium text-foreground">Details</summary>
-                        <div className="mt-2 rounded-md border bg-muted/20 p-2">
-                          <p>{row.detail}</p>
-                          <p className="mt-1">Type: {row.kind}</p>
-                        </div>
-                      </details>
+                      <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{row.detail}</p>
                     </div>
                     <div className="flex shrink-0 flex-col items-start gap-2 lg:items-end">
                       <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
                       {row.candidateId ? (
                         <Button size="sm" variant={row.ready ? "default" : "outline"} onClick={() => onSelectCandidate(row.candidateId)}>
                           <Trash2 className="h-3.5 w-3.5" />
-                          {row.ready ? "Select" : "View issue"}
+                          {row.ready ? "Clean" : "View"}
                         </Button>
                       ) : (
                         <Badge variant="outline">review only</Badge>
@@ -1596,7 +1593,7 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
           <Notice
             tone="review"
             icon={AlertTriangle}
-            text="Run a scan and set OPENAI_API_KEY to ask AI for a cleanup recommendation."
+            text="Run a scan and connect Ask AI in setup to get a cleanup recommendation."
           />
         ) : null}
         {error ? <Notice tone="restricted" icon={AlertTriangle} text={error} /> : null}
@@ -1647,38 +1644,6 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
               </details>
             ) : null}
           </div>
-        ) : null}
-        {agentBroker ? (
-          <details className="rounded-md border bg-muted/20 text-sm">
-            <summary className="cursor-pointer px-3 py-2 font-medium">Recommendation diagnostics</summary>
-            <div className="space-y-3 border-t p-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-medium">Recommendation status</p>
-                <Badge variant={agentBroker.status === "broker-ready" ? "safe" : "review"}>{agentBroker.status}</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground">{agentBroker.primary}</p>
-              {agentBroker.rows.slice(0, 4).map((row) => (
-                <div key={row.key} className="rounded-md border bg-muted/25 p-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={row.canAct ? "safe" : row.status === "manual-only" ? "outline" : "restricted"}>
-                      {row.status}
-                    </Badge>
-                    <p className="text-xs font-medium">{row.actionType}</p>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">Target: {row.targetPanel || "manual review"}</p>
-                  {row.blockedReason ? (
-                    <p className="mt-1 text-xs text-red-600">{row.blockedReason}</p>
-                  ) : null}
-                  {canRunAgentBrokerAction(row) ? (
-                    <Button className="mt-2" size="sm" variant="secondary" onClick={() => onBrokerAction(row)}>
-                      <ChevronRight className="h-3.5 w-3.5" />
-                      {formatAgentButtonLabel(row)}
-                    </Button>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </details>
         ) : null}
       </CardContent>
     </Card>

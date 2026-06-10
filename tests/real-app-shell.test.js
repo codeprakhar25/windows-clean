@@ -33,7 +33,7 @@ const requiredRealShellMarkers = [
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Scan PC",
   "Clean space",
-  "Explore C: allocation",
+  "Explore C:",
   "Selected item",
   "Delete selected files",
   "Scan again",
