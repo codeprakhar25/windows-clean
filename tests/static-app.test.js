@@ -400,6 +400,10 @@ assert(readme.includes("npm run native:dev"), "README should document the Tauri 
 assert(!readme.includes("npm run setup:route -- --route npm-cache"), "README should not put route setup in the normal cleanup path");
 assert(readme.indexOf("npm run windows:ready") < readme.indexOf("npm run native:dev"), "README quick start should check Windows readiness before launch");
 assert(readme.includes("Cleanup does not require route arming"), "README should explain that production cleanup uses built-in allowlists");
+assert(readme.includes("Select one or more rows marked `ready`"), "README should match the current cleanup row label");
+assert(readme.includes("Click `Delete selected`"), "README should match the current cleanup button label");
+assert(!readme.includes("can clean"), "README should not mention obsolete cleanup row labels");
+assert(!readme.includes("Delete selected files"), "README should not mention obsolete cleanup button labels");
 assert(!readme.includes("npm run validate:workflow-proof -- --file"), "README should not put proof verification in the normal cleanup path");
 assert(!readme.includes("spaceguard-workflow-proof-check.json"), "README should not list proof artifact files in the normal cleanup path");
 assert(!readme.includes("npm run support:bundle"), "README should not require support bundle capture for normal cleanup");
@@ -407,6 +411,10 @@ assert(readme.includes("Support export tools are for troubleshooting only"), "RE
 assert(realDataGuide.includes("npm run native:dev"), "Windows setup guide should document the Tauri Windows desktop launcher");
 assert(realDataGuide.indexOf("npm run windows:ready") < realDataGuide.indexOf("npm run native:dev"), "Windows setup guide should check readiness before launch");
 assert(realDataGuide.includes("Cleanup does not require route arming"), "Windows setup guide should explain built-in allowlists");
+assert(realDataGuide.includes("Select one or more rows marked `ready`"), "Windows setup guide should match the current cleanup row label");
+assert(realDataGuide.includes("Click `Delete selected`"), "Windows setup guide should match the current cleanup button label");
+assert(!realDataGuide.includes("can clean"), "Windows setup guide should not mention obsolete cleanup row labels");
+assert(!realDataGuide.includes("Delete selected files"), "Windows setup guide should not mention obsolete cleanup button labels");
 assert(realDataGuide.includes("OPENAI_API_KEY"), "Windows setup guide should document OpenAI key setup");
 assert(!realDataGuide.includes("npm run validate:workflow-proof -- --file"), "Windows setup guide should not put proof verification in the normal cleanup path");
 assert(!realDataGuide.includes("spaceguard-workflow-proof-check.json"), "Windows setup guide should not list proof artifact files in the normal cleanup path");
