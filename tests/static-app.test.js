@@ -138,7 +138,8 @@ assert(app.includes("const canExecute = executionGate.ready"), "execute button s
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
 assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
 assert(app.includes("formatExecutionGateError"), "execute handler should convert dispatch blockers into plain user-facing copy");
-assert(app.includes("Check row"), "selected cleanup rows should explain that the row checkbox is the confirmation");
+assert(/if \(candidate\.id === selectedId && consentChecked\) \{[\s\S]*setSelectedId\(""\);[\s\S]*setConsentChecked\(false\);/.test(app), "clicking an already checked cleanup row should deselect it instead of leaving a disabled action");
+assert(!app.includes("Check row"), "selected cleanup rows should not render a disabled check-row action");
 assert(app.includes("onExecute();"), "selected cleanup row action should dispatch the guarded cleanup handler");
 assert(app.includes("Ready to clean"), "post-scan clean screen should lead with the actionable cleanup queue");
 assert(app.includes("Scan details"), "post-scan metrics should be collapsed behind scan details");

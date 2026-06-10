@@ -686,7 +686,10 @@ function App() {
   function toggleCleanupCandidate(candidate) {
     if (!candidate?.id) return;
     if (candidate.id === selectedId && consentChecked) {
+      setSelectedId("");
       setConsentChecked(false);
+      setExecutionError("");
+      setArchiveDestination("");
       return;
     }
     selectWorkflowCandidate(candidate.id);
@@ -1192,7 +1195,7 @@ function CleanPanel({
                               }}
                             >
                               {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                              {running ? "Deleting" : !canExecute ? "Check row" : candidate?.requiresPermanentConfirmation ? "Empty" : "Delete"}
+                              {running ? "Deleting" : candidate?.requiresPermanentConfirmation ? "Empty" : "Delete"}
                             </Button>
                           ) : null}
                         </div>
