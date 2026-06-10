@@ -138,7 +138,7 @@ assert(app.includes("const canExecute = executionGate.ready"), "execute button s
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
 assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
 assert(app.includes("formatExecutionGateError"), "execute handler should convert dispatch blockers into plain user-facing copy");
-assert(app.includes("Confirm first"), "selected cleanup rows should expose a direct row-level delete action while preserving extra prerequisites");
+assert(app.includes("Check row"), "selected cleanup rows should explain that the row checkbox is the confirmation");
 assert(app.includes("onExecute();"), "selected cleanup row action should dispatch the guarded cleanup handler");
 assert(app.includes("Ready to clean"), "post-scan clean screen should lead with the actionable cleanup queue");
 assert(app.includes("Scan details"), "post-scan metrics should be collapsed behind scan details");
@@ -155,6 +155,9 @@ assert(app.includes("formatCleanupRejectMessage"), "clean panel should translate
 assert(app.includes("Cleanup could not verify the current scan"), "cleanup rejection copy should tell users to scan again when confirmation evidence is stale");
 assert(app.includes("Windows blocked some files because they are in use"), "cleanup rejection copy should explain locked-file retries without reject codes");
 assert(!app.includes("Delete this selected item from this PC."), "normal cleanup should use the selected row checkbox as the confirmation");
+assert(app.includes("effectivePermanentRemovalConfirmed"), "Recycle Bin cleanup should use the selected row checkbox as the permanent-removal confirmation");
+assert(!app.includes("I understand this permanently empties Recycle Bin contents"), "Recycle Bin cleanup should not require a second confirmation checkbox");
+assert(!app.includes("setPermanentRemovalConfirmed"), "Recycle Bin cleanup should not keep a second UI confirmation state");
 assert(app.includes("workflowLocks"), "execution gate should receive workflow lock state from the shared cleanup policy");
 assert(app.includes("activeScanGeneratedAt: scan?.generatedAt || \"\""), "execution gate should receive active scan timestamp for execution context");
 assert(app.includes("executionRecord?.accepted"), "proof export should require an accepted native execution record");

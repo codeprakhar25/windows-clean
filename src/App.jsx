@@ -264,7 +264,6 @@ function App() {
   const [postRunScan, setPostRunScan] = useState(null);
   const [selectedId, setSelectedId] = useState("");
   const [consentChecked, setConsentChecked] = useState(false);
-  const [permanentRemovalConfirmed, setPermanentRemovalConfirmed] = useState(false);
   const [archiveDestination, setArchiveDestination] = useState("");
   const [executionStatus, setExecutionStatus] = useState("idle");
   const [executionError, setExecutionError] = useState("");
@@ -304,13 +303,14 @@ function App() {
     () => buildPostRunProof({ candidate: proofCandidate, executionRecord, postRunScan }),
     [proofCandidate, executionRecord, postRunScan]
   );
+  const effectivePermanentRemovalConfirmed = Boolean(selectedCandidate?.requiresPermanentConfirmation && consentChecked);
   const executionPrerequisites = useMemo(
     () => buildExecutionPrerequisites({
       candidate: selectedCandidate,
       archiveDestination,
-      permanentRemovalConfirmed
+      permanentRemovalConfirmed: effectivePermanentRemovalConfirmed
     }),
-    [selectedCandidate, archiveDestination, permanentRemovalConfirmed]
+    [selectedCandidate, archiveDestination, effectivePermanentRemovalConfirmed]
   );
   const canExportProof = Boolean(postRunProof.status === "matched" && executionRecord?.accepted);
   const supportBundleWritten = Boolean(workflowProofAccepted && supportBundleWrite?.written);
@@ -325,10 +325,10 @@ function App() {
       workflowProofCheck,
       supportBundleWritten,
       archiveDestination,
-      permanentRemovalConfirmed,
+      permanentRemovalConfirmed: effectivePermanentRemovalConfirmed,
       agentPrompt
     }),
-    [runtime, scanFingerprint, selectedCandidate, executionRecord, postRunProof, workflowProofAccepted, workflowProofCheck, supportBundleWritten, archiveDestination, permanentRemovalConfirmed, agentPrompt]
+    [runtime, scanFingerprint, selectedCandidate, executionRecord, postRunProof, workflowProofAccepted, workflowProofCheck, supportBundleWritten, archiveDestination, effectivePermanentRemovalConfirmed, agentPrompt]
   );
   const agentContextKeyRef = useRef(agentContextKey);
 
@@ -370,13 +370,13 @@ function App() {
       scanFingerprint,
       consentPlanId: canExecute ? activePlanId : "",
       archiveDestination,
-      permanentRemovalConfirmed,
+      permanentRemovalConfirmed: effectivePermanentRemovalConfirmed,
       workflowProofAccepted,
       workflowProofCheck,
       supportBundleWritten,
       workflowLocks
     }),
-    [runtime, scan, candidates, manualFindings, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted, workflowProofCheck, supportBundleWritten, workflowLocks]
+    [runtime, scan, candidates, manualFindings, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, effectivePermanentRemovalConfirmed, workflowProofAccepted, workflowProofCheck, supportBundleWritten, workflowLocks]
   );
   const currentAgentAdvice = agentAdvice?.contextKey === agentContextKey ? agentAdvice : null;
   const agentBroker = useMemo(
@@ -391,11 +391,11 @@ function App() {
           consentPlanId: canExecute ? activePlanId : "",
           proofStatus: getAgentProofStatus(executionRecord, postRunProof, workflowProofAccepted),
           largeFileArchiveDestination: archiveDestination,
-          permanentRemovalConfirmed
+          permanentRemovalConfirmed: effectivePermanentRemovalConfirmed
         }
       });
     },
-    [currentAgentAdvice, agentContext, activePlanId, scanFingerprint, canExecute, executionRecord, postRunProof, archiveDestination, permanentRemovalConfirmed, workflowProofAccepted]
+    [currentAgentAdvice, agentContext, activePlanId, scanFingerprint, canExecute, executionRecord, postRunProof, archiveDestination, effectivePermanentRemovalConfirmed, workflowProofAccepted]
   );
 
   async function refreshRuntime() {
@@ -430,7 +430,6 @@ function App() {
         setPostRunScan(result);
         setSelectedId("");
         setConsentChecked(false);
-        setPermanentRemovalConfirmed(false);
         setArchiveDestination("");
         setWorkflowProofAccepted(false);
         setWorkflowProofCheck(null);
@@ -445,7 +444,6 @@ function App() {
         setExecutionRecord(null);
         setSelectedId(defaultSelection);
         setConsentChecked(false);
-        setPermanentRemovalConfirmed(false);
         setWorkflowProofAccepted(false);
         setWorkflowProofCheck(null);
         setSupportBundleWrite(null);
@@ -492,7 +490,7 @@ function App() {
         planId,
         scanFingerprint,
         archiveDestination,
-        permanentRemovalConfirmed
+        permanentRemovalConfirmed: effectivePermanentRemovalConfirmed
       });
       const reclaimedBytes = result.entries.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
       const record = {
@@ -615,7 +613,6 @@ function App() {
         setScan(baselinePromotion.activeScan);
         setSelectedId("");
         setConsentChecked(false);
-        setPermanentRemovalConfirmed(false);
         setArchiveDestination("");
       }
       setProofExportStatus("complete");
@@ -655,7 +652,6 @@ function App() {
   function resetWorkflowForRouteChange() {
     setSelectedId("");
     setConsentChecked(false);
-    setPermanentRemovalConfirmed(false);
     setArchiveDestination("");
     setExecutionStatus("idle");
     setExecutionError("");
@@ -680,7 +676,6 @@ function App() {
     setExecutionError("");
     setArchiveDestination("");
     setConsentChecked(false);
-    setPermanentRemovalConfirmed(false);
     setWorkflowProofAccepted(false);
     setWorkflowProofCheck(null);
     setSupportBundleWrite(null);
@@ -756,8 +751,6 @@ function App() {
                 selectedId={selectedId}
                 candidate={selectedCandidate}
                 consentChecked={consentChecked}
-                permanentRemovalConfirmed={permanentRemovalConfirmed}
-                setPermanentRemovalConfirmed={setPermanentRemovalConfirmed}
                 archiveDestination={archiveDestination}
                 setArchiveDestination={setArchiveDestination}
                 canExecute={canExecute}
@@ -1108,8 +1101,6 @@ function CleanPanel({
   selectedId,
   candidate,
   consentChecked,
-  permanentRemovalConfirmed,
-  setPermanentRemovalConfirmed,
   archiveDestination,
   setArchiveDestination,
   canExecute,
@@ -1123,7 +1114,7 @@ function CleanPanel({
   onRescan
 }) {
   const candidateReady = Boolean(candidate?.canExecute);
-  const showSelectedDetails = Boolean(candidate && (!candidateReady || candidate.requiresPermanentConfirmation || candidate.requiresArchiveDestination));
+  const showSelectedDetails = Boolean(candidate && (!candidateReady || candidate.requiresArchiveDestination));
   const readyCandidates = candidates.filter((row) => row.canExecute);
   const reviewCandidates = candidates.filter((row) => !row.canExecute);
   const hasReadyCandidates = readyCandidates.length > 0;
@@ -1201,7 +1192,7 @@ function CleanPanel({
                               }}
                             >
                               {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                              {running ? "Deleting" : !canExecute ? "Confirm first" : candidate?.requiresPermanentConfirmation ? "Empty" : "Delete"}
+                              {running ? "Deleting" : !canExecute ? "Check row" : candidate?.requiresPermanentConfirmation ? "Empty" : "Delete"}
                             </Button>
                           ) : null}
                         </div>
@@ -1254,12 +1245,6 @@ function CleanPanel({
                 </div>
                 {!candidateReady ? (
                   <Notice tone="restricted" icon={Lock} text={formatNotReadyReason(candidate)} />
-                ) : null}
-                {candidate.requiresPermanentConfirmation ? (
-                  <label className="mt-4 flex items-start gap-3 text-sm">
-                    <Checkbox checked={candidateReady && permanentRemovalConfirmed} disabled={!candidateReady} onClick={() => setPermanentRemovalConfirmed(!permanentRemovalConfirmed)} />
-                    <span>I understand this permanently empties Recycle Bin contents for the selected drive.</span>
-                  </label>
                 ) : null}
                 {candidate.requiresArchiveDestination ? (
                   <label className="mt-4 block space-y-1 text-sm">
@@ -1757,7 +1742,7 @@ function formatCleanupRejectMessage(result = {}) {
     return "Cleanup could not verify the current scan. Scan again, check the item, and delete it.";
   }
   if (/permanent-confirmation/.test(text)) {
-    return "Confirm the Recycle Bin cleanup, then try again.";
+    return "Check the Recycle Bin row, then try again.";
   }
   if (/target-(not-allowlisted|forbidden|blocked|missing)|outside|allowlist/.test(text)) {
     return "This item is outside the safe cleanup list. Choose another can clean item or scan again.";
