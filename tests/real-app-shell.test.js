@@ -37,7 +37,6 @@ const requiredRealShellMarkers = [
   "Selected item",
   "Delete selected files",
   "Scan again",
-  "Support file",
   "Activity",
   "getNativeRuntimeCapabilities",
   "runNativeReadonlyScan",

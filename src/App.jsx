@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   ChevronRight,
   ClipboardCheck,
-  Download,
   FolderSearch,
   HardDrive,
   History,
@@ -798,18 +797,10 @@ function App() {
         ) : null}
         {activeView === "history" ? (
           <HistoryPanel
-            selectedCandidate={selectedCandidate}
             executionRecord={executionRecord}
             executionResult={executionResult}
-            postRunScan={postRunScan}
-            postRunProof={postRunProof}
             scanStatus={scanStatus}
-            workflowProofCheck={workflowProofCheck}
-            canExportProof={canExportProof}
-            proofExportStatus={proofExportStatus}
-            proofExportMessage={proofExportMessage}
             onRescan={() => runRealScan({ afterExecution: true })}
-            onExportProof={exportProofPacket}
           />
         ) : null}
       </main>
@@ -1372,18 +1363,10 @@ function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCand
 }
 
 function HistoryPanel({
-  selectedCandidate,
   executionRecord,
   executionResult,
-  postRunScan,
-  postRunProof,
   scanStatus,
-  workflowProofCheck,
-  canExportProof,
-  proofExportStatus,
-  proofExportMessage,
-  onRescan,
-  onExportProof
+  onRescan
 }) {
   const ledger = buildExecutionLedgerRows(executionResult);
   return (
@@ -1412,63 +1395,10 @@ function HistoryPanel({
                 {scanStatus === "rescanning" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
                 Scan again
               </Button>
-              <details id="execution-proof-handoff-panel" className="rounded-md border bg-muted/20">
-                <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Support file</summary>
-                <SupportDetails
-                  selectedCandidate={selectedCandidate}
-                  executionRecord={executionRecord}
-                  postRunScan={postRunScan}
-                  postRunProof={postRunProof}
-                  workflowProofCheck={workflowProofCheck}
-                  canExportProof={canExportProof}
-                  proofExportStatus={proofExportStatus}
-                  proofExportMessage={proofExportMessage}
-                  onExportProof={onExportProof}
-                />
-              </details>
             </>
           )}
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-function SupportDetails({
-  selectedCandidate,
-  executionRecord,
-  postRunScan,
-  postRunProof,
-  workflowProofCheck,
-  canExportProof,
-  proofExportStatus,
-  proofExportMessage,
-  onExportProof
-}) {
-  return (
-    <div className="space-y-4 border-t p-3">
-      <div className="grid gap-3 md:grid-cols-3">
-        <Metric label="Cleanup" value={selectedCandidate?.title || executionRecord.title || "Selected item"} />
-        <Metric label="Freed" value={formatBytes(executionRecord.bytes)} />
-        <Metric label="Latest scan" value={formatPostRunProofStatus(postRunProof.status)} />
-      </div>
-      {executionRecord.accepted && !volumeProofMeasured(executionRecord.volumeProof) ? (
-        <Notice tone="review" icon={AlertTriangle} text="Scan again before exporting a support file." />
-      ) : null}
-      {postRunScan && postRunProof.status !== "matched" ? (
-        <Notice tone="review" icon={RefreshCcw} text="Scan again before exporting a support file." />
-      ) : null}
-      <Button className="w-full" disabled={!canExportProof || proofExportStatus === "running"} onClick={onExportProof}>
-        {proofExportStatus === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-        Export support file
-      </Button>
-      {proofExportMessage ? (
-        <Notice
-          tone={proofExportStatus === "error" || (workflowProofCheck && !workflowProofCheck.canAccept) ? "restricted" : "safe"}
-          icon={proofExportStatus === "error" || (workflowProofCheck && !workflowProofCheck.canAccept) ? AlertTriangle : CheckCircle2}
-          text={proofExportMessage}
-        />
-      ) : null}
     </div>
   );
 }

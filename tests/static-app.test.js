@@ -52,8 +52,6 @@ const requiredAppMarkers = [
   "Latest scan",
   "Scan again",
   "Activity",
-  "Support file",
-  "Export support file",
   "Ask AI",
   "Review only"
 ];
@@ -200,6 +198,8 @@ assert(!app.includes("disabled={routeSetupLocked && route.routeInput !== selecte
 assert(!app.includes("Current route is locked until proof export and support bundle capture finish."), "route setup proof lock copy should not render in the app shell");
 assert(!app.includes("I reviewed the refreshed scan."), "support export should not require a manual proof-review checkbox");
 assert(!app.includes("Export troubleshooting bundle"), "support export should use product-facing support file copy");
+assert(!app.includes("Export support file"), "normal Activity UI should not expose support export controls");
+assert(!app.includes("SupportDetails"), "normal Activity UI should not render a support diagnostics component");
 assert(!app.includes("Refresh space before exporting troubleshooting info."), "support export should not expose troubleshooting proof copy");
 assert(!app.includes("Support details"), "support export should not expose a nested diagnostic details panel");
 assert(app.includes("buildProofCandidateFromExecutionRecord"), "proof panel should preserve executed target proof context after baseline promotion");
