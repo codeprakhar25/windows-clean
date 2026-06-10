@@ -49,11 +49,13 @@ const requiredAppMarkers = [
   "Explore C: allocation",
   "Selected cleanup",
   "Delete selected files",
-  "Volume proof",
+  "Volume check",
   "Refresh space",
-  "Run post-clean rescan",
+  "Refresh scan after cleanup",
   "Cleanup history",
-  "Proof target",
+  "Support details",
+  "Support target",
+  "Export support bundle",
   "selected item",
   "Route readiness",
   "OpenAI cleanup agent",
@@ -154,8 +156,8 @@ assert(!app.includes("targetSwitchLocked"), "cleanup queue should not lock targe
 assert(!app.includes("routeSetupLocked"), "app shell should not carry route setup locks in the production flow");
 assert(app.includes("workflowProofAccepted"), "optional proof export should still track in-app verifier state");
 assert(app.includes("buildWorkflowProofCheck"), "proof export should run the shared workflow proof verifier inside the app");
-assert(app.includes("workflowProofCheck"), "proof panel should render workflow proof validation output from the app");
-assert(app.includes("Workflow proof accepted by in-app verifier."), "proof export should report accepted in-app workflow proof validation");
+assert(app.includes("workflowProofCheck"), "support details should render workflow validation output from the app");
+assert(app.includes("Support bundle exported"), "support export should report accepted in-app workflow validation with user-facing copy");
 assert(app.includes("proofKind: \"workflow-proof-check\""), "proof export should persist the in-app verifier output as a restricted artifact");
 assert(app.includes("proofKind: \"support-bundle\""), "proof export should persist an in-app support bundle as a restricted artifact");
 assert(app.includes("buildInAppSupportBundleReport"), "proof export should build the support bundle inside the desktop app");
@@ -177,14 +179,14 @@ assert(!app.includes("Export proof, let the in-app verifier accept it, and captu
 assert(!app.includes("disabled={targetSwitchLocked && candidate.id !== selectedId}"), "cleanup queue should not disable other targets behind proof export");
 assert(!app.includes("disabled={routeSetupLocked && route.routeInput !== selectedRouteInput}"), "route setup locks should not exist in the app shell");
 assert(!app.includes("Current route is locked until proof export and support bundle capture finish."), "route setup proof lock copy should not render in the app shell");
-assert(app.includes("workflowLocks?.noOpExecution"), "proof panel should render accepted zero-byte no-op handoff state");
+assert(app.includes("workflowLocks?.noOpExecution"), "support details should render accepted zero-byte no-op handoff state");
 assert(app.includes("buildProofCandidateFromExecutionRecord"), "proof panel should preserve executed target proof context after baseline promotion");
 assert(app.includes("recipeId: selectedCandidate.recipeId"), "execution records should preserve recipe id for post-run proof matching");
 assert(app.includes("envVar: selectedCandidate.envVar"), "execution records should preserve selected route flag for proof/support re-export");
 assert(app.includes("const exportCandidate = selectedCandidate || proofCandidate"), "proof export should use preserved execution context after baseline promotion clears queue selection");
 assert(!app.includes("if (!selectedCandidate || !executionRecord) return;"), "proof export should not silently stop after baseline promotion clears selected candidate");
 assert(app.includes("setScan(baselinePromotion.activeScan)"), "proof export should promote accepted post-run scan to active cleanup baseline");
-assert(app.includes("Post-run scan promoted as the active cleanup baseline."), "proof export should tell the operator when baseline promotion succeeds");
+assert(app.includes("Latest scan is now active."), "support export should tell the user when baseline promotion succeeds");
 assert(!app.includes("npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted"), "proof panel should not rely on a manual CLI acceptance checkbox");
 assert(
   /function selectWorkflowCandidate\(id\) \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setPostRunScan\(null\);[\s\S]*setProofExportStatus\("idle"\);[\s\S]*setProofExportMessage\(""\);[\s\S]*\}/.test(app),

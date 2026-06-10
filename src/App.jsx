@@ -6,7 +6,6 @@ import {
   ChevronRight,
   ClipboardCheck,
   Download,
-  FileJson,
   FolderSearch,
   HardDrive,
   History,
@@ -621,8 +620,8 @@ function App() {
       setProofExportStatus("complete");
       setProofExportMessage(
         acceptedCheck.canAccept
-          ? `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE}, ${workflowWrite.fileName || WORKFLOW_PROOF_FILE}, ${proofCheckWrite.fileName || WORKFLOW_PROOF_CHECK_FILE}, and ${supportWrite.fileName || SUPPORT_BUNDLE_FILE} into the runner working directory. Workflow proof accepted by in-app verifier. Support bundle captured.${baselinePromotion.canPromote ? " Post-run scan promoted as the active cleanup baseline." : ""}`
-          : `Wrote ${selectedWrite.fileName || PROOF_PACKET_FILE}, ${workflowWrite.fileName || WORKFLOW_PROOF_FILE}, ${proofCheckWrite.fileName || WORKFLOW_PROOF_CHECK_FILE}, and ${supportWrite.fileName || SUPPORT_BUNDLE_FILE} into the runner working directory. Workflow proof blocked by in-app verifier: ${acceptedCheck.blockers.length} blocker(s).`
+          ? `Support bundle exported to the app working directory.${baselinePromotion.canPromote ? " Latest scan is now active." : ""}`
+          : `Support bundle exported, but verification needs review: ${acceptedCheck.blockers.length} issue(s).`
       );
     } catch (error) {
       setProofExportStatus("error");
@@ -1527,37 +1526,37 @@ function HistoryPanel({
                 {scanStatus === "rescanning" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
                 Refresh scan after cleanup
               </Button>
+              <details id="execution-proof-handoff-panel" className="rounded-md border bg-muted/20">
+                <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Support details</summary>
+                <SupportDetails
+                  selectedCandidate={selectedCandidate}
+                  executionRecord={executionRecord}
+                  postRunScan={postRunScan}
+                  postRunProof={postRunProof}
+                  proofReviewed={proofReviewed}
+                  setProofReviewed={setProofReviewed}
+                  workflowProofAccepted={workflowProofAccepted}
+                  workflowProofCheck={workflowProofCheck}
+                  workflowLocks={workflowLocks}
+                  canExportProof={canExportProof}
+                  proofExportStatus={proofExportStatus}
+                  proofExportMessage={proofExportMessage}
+                  onExportProof={onExportProof}
+                />
+              </details>
             </>
           )}
         </CardContent>
       </Card>
-      <ProofPanel
-        selectedCandidate={selectedCandidate}
-        executionRecord={executionRecord}
-        postRunScan={postRunScan}
-        postRunProof={postRunProof}
-        scanStatus={scanStatus}
-        proofReviewed={proofReviewed}
-        setProofReviewed={setProofReviewed}
-        workflowProofAccepted={workflowProofAccepted}
-        workflowProofCheck={workflowProofCheck}
-        workflowLocks={workflowLocks}
-        canExportProof={canExportProof}
-        proofExportStatus={proofExportStatus}
-        proofExportMessage={proofExportMessage}
-        onRescan={onRescan}
-        onExportProof={onExportProof}
-      />
     </div>
   );
 }
 
-function ProofPanel({
+function SupportDetails({
   selectedCandidate,
   executionRecord,
   postRunScan,
   postRunProof,
-  scanStatus,
   proofReviewed,
   setProofReviewed,
   workflowProofAccepted,
@@ -1566,90 +1565,75 @@ function ProofPanel({
   canExportProof,
   proofExportStatus,
   proofExportMessage,
-  onRescan,
   onExportProof
 }) {
   return (
-    <Card id="execution-proof-handoff-panel" className="rounded-md">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileJson className="h-4 w-4" />
-          Post-run proof
-        </CardTitle>
-        <CardDescription>Optional audit artifacts for support and before/after review.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {!executionRecord ? (
-          <EmptyState icon={Lock} title="Execution required" detail="Proof export stays locked until a native executor returns a ledger." />
-        ) : (
-          <>
-            <div className="grid gap-3 md:grid-cols-4">
-              <Metric label="Route" value={selectedCandidate?.routeInput || executionRecord.routeInput} />
-              <Metric label="Recovered" value={formatBytes(executionRecord.bytes)} />
-              <Metric label="Volume proof" value={formatVolumeProofStatus(executionRecord.volumeProof)} />
-              <Metric label="Rescan state" value={postRunProof.status} />
+    <div className="space-y-4 border-t p-3">
+      <div className="grid gap-3 md:grid-cols-4">
+        <Metric label="Route" value={selectedCandidate?.routeInput || executionRecord.routeInput} />
+        <Metric label="Recovered" value={formatBytes(executionRecord.bytes)} />
+        <Metric label="Volume check" value={formatVolumeProofStatus(executionRecord.volumeProof)} />
+        <Metric label="Refresh status" value={postRunProof.status} />
+      </div>
+      {executionRecord.accepted && !volumeProofMeasured(executionRecord.volumeProof) ? (
+        <Notice tone="review" icon={AlertTriangle} text="Volume check was not captured. Refresh the scan after cleanup before exporting a support bundle." />
+      ) : null}
+      {workflowLocks?.noOpExecution ? (
+        <Notice tone="review" icon={AlertTriangle} text={workflowLocks.primary} />
+      ) : null}
+      {postRunScan ? (
+        <div className="space-y-3 rounded-md border bg-background p-3 text-sm">
+          <div>
+            <p className="font-medium">{postRunProof.status === "matched" ? "Refresh matched the cleanup" : "Refresh needs review"}</p>
+            <p className="mt-1 text-muted-foreground">{postRunProof.detail}</p>
+          </div>
+          <div className="grid gap-2 md:grid-cols-3">
+            <Metric label="Support target" value={postRunProof.targetEvidence?.kind === "item" ? "selected item" : "scanned finding"} />
+            <Metric label="Observed size" value={formatBytes(postRunProof.actualBytes)} />
+            <Metric label="Expected remaining" value={formatBytes(postRunProof.expectedRemaining)} />
+          </div>
+        </div>
+      ) : (
+        <Notice tone="review" icon={RefreshCcw} text="Refresh scan after cleanup to unlock support bundle export." />
+      )}
+      <label className="flex items-start gap-3 text-sm">
+        <Checkbox checked={Boolean(postRunScan && proofReviewed)} disabled={!postRunScan} onClick={() => setProofReviewed(!proofReviewed)} />
+        <span>I reviewed the refreshed scan.</span>
+      </label>
+      <Button className="w-full" disabled={!canExportProof || proofExportStatus === "running"} onClick={onExportProof}>
+        {proofExportStatus === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+        Export support bundle
+      </Button>
+      {proofExportMessage ? (
+        <Notice
+          tone={proofExportStatus === "error" || (workflowProofCheck && !workflowProofCheck.canAccept) ? "restricted" : "safe"}
+          icon={proofExportStatus === "error" || (workflowProofCheck && !workflowProofCheck.canAccept) ? AlertTriangle : CheckCircle2}
+          text={proofExportMessage}
+        />
+      ) : null}
+      {workflowProofCheck ? (
+        <details className="rounded-md border bg-background text-sm">
+          <summary className="cursor-pointer px-3 py-2 font-medium">Export diagnostics</summary>
+          <div className="space-y-2 border-t p-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-medium">Support bundle check</span>
+              <Badge variant={workflowProofAccepted ? "safe" : "restricted"}>{workflowProofCheck.status}</Badge>
             </div>
-            {executionRecord.accepted && !volumeProofMeasured(executionRecord.volumeProof) ? (
-              <Notice tone="review" icon={AlertTriangle} text="Native volume proof is missing. Run a post-clean rescan to refresh totals; optional proof export can capture this for support." />
-            ) : null}
-            {workflowLocks?.noOpExecution ? (
-              <Notice tone="review" icon={AlertTriangle} text={workflowLocks.primary} />
-            ) : null}
-            <Button variant="outline" className="w-full" onClick={onRescan} disabled={scanStatus === "rescanning"}>
-              {scanStatus === "rescanning" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-              Run post-clean rescan
-            </Button>
-            {postRunScan ? (
-              <div className="space-y-3 rounded-md border bg-background p-3 text-sm">
-                <div>
-                  <p className="font-medium">{postRunProof.status === "matched" ? "Rescan matched the ledger" : "Rescan still needs review"}</p>
-                  <p className="mt-1 text-muted-foreground">{postRunProof.detail}</p>
-                </div>
-                <div className="grid gap-2 md:grid-cols-3">
-                  <Metric label="Proof target" value={postRunProof.targetEvidence?.kind === "item" ? "selected item" : "scanned finding"} />
-                  <Metric label="Observed bytes" value={formatBytes(postRunProof.actualBytes)} />
-                  <Metric label="Expected remaining" value={formatBytes(postRunProof.expectedRemaining)} />
-                </div>
-              </div>
-            ) : null}
-            <label className="flex items-start gap-3 text-sm">
-              <Checkbox checked={proofReviewed} onClick={() => setProofReviewed(!proofReviewed)} />
-              <span>I reviewed the post-clean scan, native ledger, and optional proof packet before export.</span>
-            </label>
-            <Button className="w-full" disabled={!canExportProof || proofExportStatus === "running"} onClick={onExportProof}>
-              {proofExportStatus === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              Export proof packet
-            </Button>
-            {proofExportMessage ? (
-              <Notice
-                tone={proofExportStatus === "error" || (workflowProofCheck && !workflowProofCheck.canAccept) ? "restricted" : "safe"}
-                icon={proofExportStatus === "error" || (workflowProofCheck && !workflowProofCheck.canAccept) ? AlertTriangle : CheckCircle2}
-                text={proofExportMessage}
-              />
-            ) : null}
-            {workflowProofCheck ? (
-              <div className="space-y-2 rounded-md border bg-background p-3 text-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium">Workflow proof verifier</span>
-                  <Badge variant={workflowProofAccepted ? "safe" : "restricted"}>{workflowProofCheck.status}</Badge>
-                </div>
-                <p className="text-muted-foreground">{workflowProofCheck.primary}</p>
-                {workflowProofCheck.blockers?.length ? (
-                  <div className="grid gap-2">
-                    {workflowProofCheck.blockers.slice(0, 4).map((blocker) => (
-                      <div key={`${blocker.id}-${blocker.label}`} className="rounded border px-3 py-2">
-                        <p className="text-xs font-medium">{blocker.label}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">{blocker.detail}</p>
-                      </div>
-                    ))}
+            <p className="text-muted-foreground">{workflowProofCheck.primary}</p>
+            {workflowProofCheck.blockers?.length ? (
+              <div className="grid gap-2">
+                {workflowProofCheck.blockers.slice(0, 4).map((blocker) => (
+                  <div key={`${blocker.id}-${blocker.label}`} className="rounded border px-3 py-2">
+                    <p className="text-xs font-medium">{blocker.label}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{blocker.detail}</p>
                   </div>
-                ) : null}
+                ))}
               </div>
             ) : null}
-          </>
-        )}
-      </CardContent>
-    </Card>
+          </div>
+        </details>
+      ) : null}
+    </div>
   );
 }
 
