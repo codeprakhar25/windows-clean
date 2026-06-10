@@ -671,7 +671,6 @@ function App() {
         {activeView === "history" ? (
           <HistoryPanel
             executionRecord={executionRecord}
-            executionResult={executionResult}
             scanStatus={scanStatus}
             onRescan={() => runRealScan({ afterExecution: true })}
           />
@@ -1159,11 +1158,11 @@ function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCand
 
 function HistoryPanel({
   executionRecord,
-  executionResult,
   scanStatus,
   onRescan
 }) {
-  const ledger = buildExecutionLedgerRows(executionResult);
+  const accepted = Boolean(executionRecord?.accepted);
+  const bytes = Number(executionRecord?.bytes || 0);
   return (
     <div className="grid gap-5">
       <Card className="rounded-md">
@@ -1172,20 +1171,27 @@ function HistoryPanel({
             <History className="h-4 w-4" />
             Activity
           </CardTitle>
-          <CardDescription>Latest cleanup result.</CardDescription>
+          <CardDescription>Last cleanup result.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {!executionRecord ? (
             <EmptyState icon={History} title="No cleanup has run yet" detail="Run a cleanable item to see what happened." />
           ) : (
             <>
-              <div className="grid gap-3 md:grid-cols-4">
-                <Metric label="Item" value={executionRecord.title || "Cleanup target"} />
-                <Metric label="Status" value={formatCleanupStatusLabel(executionRecord)} />
-                <Metric label="Freed" value={formatBytes(executionRecord.bytes || 0)} />
-                <Metric label="Ran" value={formatShortDate(executionRecord.executedAt)} />
+              <div className={`rounded-md border p-4 ${accepted ? "bg-emerald-50 text-emerald-950" : "bg-red-50 text-red-950"}`}>
+                <div className="flex items-start gap-3">
+                  {accepted ? <CheckCircle2 className="mt-0.5 h-5 w-5" /> : <AlertTriangle className="mt-0.5 h-5 w-5" />}
+                  <div className="min-w-0">
+                    <p className="font-semibold">
+                      {accepted ? bytes > 0 ? `${formatBytes(bytes)} cleaned` : "Nothing needed cleaning" : "Nothing was deleted"}
+                    </p>
+                    <p className="mt-1 text-sm">{formatHistorySummary(executionRecord)}</p>
+                    <p className="mt-3 truncate text-xs opacity-80">
+                      {(executionRecord.title || "Cleanup target")} - {formatShortDate(executionRecord.executedAt)}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <p className="text-sm text-muted-foreground">{formatHistorySummary(executionRecord, ledger)}</p>
               <Button variant="outline" onClick={onRescan} disabled={scanStatus === "rescanning"}>
                 {scanStatus === "rescanning" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
                 Scan again
@@ -1367,23 +1373,7 @@ function Metric({ label, value }) {
   );
 }
 
-function volumeProofMeasured(volumeProof = null) {
-  return volumeProof?.status === "measured";
-}
-
-function formatVolumeProofStatus(volumeProof = null) {
-  if (volumeProofMeasured(volumeProof)) return `measured ${volumeProof.drive || ""}`.trim();
-  return volumeProof?.status || "missing";
-}
-
-function formatPostRunProofStatus(status = "") {
-  if (status === "matched") return "Updated";
-  if (status === "needs-rescan" || status === "not-run") return "Refresh needed";
-  if (status === "mismatch") return "Needs review";
-  return status || "Not refreshed";
-}
-
-function formatHistorySummary(executionRecord = {}, ledger = {}) {
+function formatHistorySummary(executionRecord = {}) {
   if (executionRecord.accepted) {
     const bytes = formatBytes(executionRecord.bytes || 0);
     return Number(executionRecord.bytes || 0) > 0
@@ -1391,11 +1381,6 @@ function formatHistorySummary(executionRecord = {}, ledger = {}) {
       : "No eligible files were removed. The list is up to date.";
   }
   return "Nothing was deleted. Refresh the scan, close apps that may be using these files, and try again.";
-}
-
-function formatCleanupStatusLabel(executionRecord = {}) {
-  if (!executionRecord.accepted) return "Needs retry";
-  return Number(executionRecord.bytes || 0) > 0 ? "Cleaned" : "Nothing removed";
 }
 
 function formatAcceptedCleanupMessage({ reclaimedBytes = 0, removedFiles = false, runningRescan = false, scanStatus = "" } = {}) {

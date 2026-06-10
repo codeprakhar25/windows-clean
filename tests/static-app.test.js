@@ -112,7 +112,7 @@ assert(app.includes("./real-workflow.mjs"), "app should import tested real workf
 assert(app.includes("buildAppAgentTaskQueue"), "app should build a deterministic task queue for OpenAI advisor context");
 assert(app.includes("buildRouteReadiness"), "app should use tested route readiness guardrails");
 assert(app.includes("buildCleanupCandidates(scan, runtime)"), "app cleanup candidates should come from measured native findings and built-in allowlists");
-assert(app.includes("buildExecutionLedgerRows"), "app should normalize native execution ledger rows for rendering");
+assert(app.includes("buildExecutionLedgerRows"), "app should normalize native rejection details before converting them to simple user copy");
 assert(app.includes("buildExecutionGate"), "app should use tested execution dispatch gate guardrails");
 assert(app.includes("buildExecutionPrerequisites"), "app should use tested route-specific execution prerequisites");
 assert(!app.includes("resolveRuntimeRouteInput"), "app shell should not sync cleanup selection from legacy route flags");
@@ -153,7 +153,8 @@ assert(!app.includes("Technical details"), "clean panel should not expose native
 assert(app.includes("formatAcceptedCleanupMessage"), "clean panel should format accepted cleanup outcomes with simple user copy");
 assert(app.includes("Nothing to remove"), "accepted zero-byte cleanup should not be presented as cleaned space");
 assert(app.includes("No eligible files were removed"), "accepted zero-byte cleanup should explain that nothing was eligible");
-assert(app.includes("formatCleanupStatusLabel"), "activity status should distinguish cleaned space from zero-byte accepted runs");
+assert(app.includes("Nothing needed cleaning"), "activity summary should use simple zero-byte cleanup copy");
+assert(app.includes("Last cleanup result"), "activity screen should present one compact latest-result summary");
 assert(app.includes("formatCleanupRejectMessage"), "clean panel should translate native rejection details into plain user-facing copy");
 assert(app.includes("Cleanup could not verify the current scan"), "cleanup rejection copy should tell users to scan again when confirmation evidence is stale");
 assert(app.includes("Windows blocked some files because they are in use"), "cleanup rejection copy should explain locked-file retries without reject codes");
