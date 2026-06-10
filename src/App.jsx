@@ -472,6 +472,9 @@ function App() {
       const aggregateResult = {
         mode: "checked-cleanups",
         accepted,
+        totalCount: targets.length,
+        acceptedCount,
+        rejectedCount,
         reason: rejectedCount ? `${rejectedCount} selected cleanup item(s) could not be cleaned.` : "",
         entries: allEntries,
         warnings: allWarnings
@@ -1187,16 +1190,27 @@ function CleanupResult({ result, scanStatus, onRescan }) {
   const accepted = Boolean(result?.accepted);
   const reclaimedBytes = totalEntryBytes(result?.entries || []);
   const removedFiles = reclaimedBytes > 0;
-  const acceptedTitle = removedFiles ? "Cleaned" : "Nothing to remove";
+  const checkedCleanup = result?.mode === "checked-cleanups";
+  const rejectedCount = Number(result?.rejectedCount || 0);
+  const acceptedCount = Number(result?.acceptedCount || 0);
+  const acceptedTitle = checkedCleanup
+    ? rejectedCount > 0
+      ? "Some checked items cleaned"
+      : removedFiles
+        ? "Checked items cleaned"
+        : "Nothing to remove"
+    : removedFiles ? "Cleaned" : "Nothing to remove";
   const runningRescan = scanStatus === "rescanning";
-  const acceptedText = formatAcceptedCleanupMessage({ reclaimedBytes, removedFiles, runningRescan, scanStatus });
+  const acceptedText = checkedCleanup
+    ? formatCheckedCleanupMessage({ reclaimedBytes, removedFiles, runningRescan, scanStatus, acceptedCount, rejectedCount })
+    : formatAcceptedCleanupMessage({ reclaimedBytes, removedFiles, runningRescan, scanStatus });
   const rejectedText = formatCleanupRejectMessage(result);
   const showRefreshAction = !accepted || runningRescan || scanStatus === "error";
   return (
     <div className={`rounded-md border p-4 text-sm ${accepted ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-red-200 bg-red-50 text-red-950"}`}>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
-          <p className="text-base font-semibold">{accepted ? acceptedTitle : "Could not clean this item"}</p>
+          <p className="text-base font-semibold">{accepted ? acceptedTitle : checkedCleanup ? "Could not clean checked items" : "Could not clean this item"}</p>
           <p className="mt-1 text-sm">
             {accepted
               ? acceptedText
@@ -1519,6 +1533,31 @@ function formatAcceptedCleanupMessage({ reclaimedBytes = 0, removedFiles = false
   if (runningRescan) return `${bytes} removed. Refreshing the list.`;
   if (scanStatus === "error") return `${bytes} removed. Refresh failed; click Refresh again.`;
   return `${bytes} removed. The list is up to date.`;
+}
+
+function formatCheckedCleanupMessage({
+  reclaimedBytes = 0,
+  removedFiles = false,
+  runningRescan = false,
+  scanStatus = "",
+  acceptedCount = 0,
+  rejectedCount = 0
+} = {}) {
+  const retryText = rejectedCount > 0
+    ? ` ${rejectedCount} item${rejectedCount === 1 ? "" : "s"} need another try.`
+    : "";
+  if (!removedFiles) {
+    if (runningRescan) return `No eligible files were removed from checked items. Refreshing the list.${retryText}`;
+    if (scanStatus === "error") return `No eligible files were removed from checked items. Refresh failed; click Refresh again.${retryText}`;
+    return `No eligible files were removed from checked items.${retryText || " The list is up to date."}`;
+  }
+  const bytes = formatBytes(reclaimedBytes);
+  const cleanedText = acceptedCount > 1
+    ? `${bytes} removed from ${acceptedCount} checked items.`
+    : `${bytes} removed from checked items.`;
+  if (runningRescan) return `${cleanedText} Refreshing the list.${retryText}`;
+  if (scanStatus === "error") return `${cleanedText} Refresh failed; click Refresh again.${retryText}`;
+  return `${cleanedText}${retryText || " The list is up to date."}`;
 }
 
 function formatCleanupRejectMessage(result = {}) {
