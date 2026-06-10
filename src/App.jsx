@@ -47,7 +47,7 @@ import {
   runNativeUserCacheExecutor
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildAppAgentTaskQueue, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildManualFindingGuidance, buildManualFindingReviewRows, buildPostRunProof, buildRouteReadiness, buildWorkflowAgentTargetId, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
+import { buildAppAgentTaskQueue, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildManualFindingGuidance, buildPostRunProof, buildRouteReadiness, buildWorkflowAgentTargetId, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
   targetDrive: "C:",
@@ -1508,51 +1508,6 @@ function focusAgentBrokerPanel(row = {}) {
   document.getElementById(panelId)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function ManualReviewPanel({ findings }) {
-  return (
-    <Card id="item-review-panel" className="rounded-md">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <HardDrive className="h-4 w-4" />
-          Needs review
-        </CardTitle>
-        <CardDescription>These areas may be large. SpaceGuard will not delete them automatically.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {findings.length ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {findings.map((finding) => (
-              <div key={`${finding.recipeId}-${finding.path}`} className="rounded-md border bg-background p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="truncate text-sm font-medium">{finding.title}</p>
-                  <Badge variant="outline">manual</Badge>
-                </div>
-                <p className="mt-2 truncate text-xs text-muted-foreground">{finding.path || finding.recipeId}</p>
-                <p className="mt-2 text-lg font-semibold">{formatBytes(finding.bytes)}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{formatManualFindingNote(finding)}</p>
-                <div className="mt-3 rounded-md border bg-muted/30 p-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">{finding.manualGuidance.confidence}</Badge>
-                    <p className="text-xs font-medium">Suggested action</p>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">{finding.manualGuidance.primaryAction}</p>
-                </div>
-                {finding.reviewRows.rows.length ? (
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    {finding.reviewRows.rows.length === 1 ? "1 item may need your review." : `${finding.reviewRows.rows.length} items may need your review.`}
-                  </p>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState icon={HardDrive} title="No manual review items" detail="Run a scan to show areas that need your review." />
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 function Notice({ tone = "review", icon: Icon = AlertTriangle, text }) {
   const toneClass = tone === "safe"
     ? "border-emerald-200 bg-emerald-50 text-emerald-800"
@@ -1884,8 +1839,7 @@ function decorateManualFinding(finding) {
   return {
     ...finding,
     title: MANUAL_RECIPE_LABELS[finding.recipeId] || finding.title || "Manual review",
-    manualGuidance: buildManualFindingGuidance(finding),
-    reviewRows: buildManualFindingReviewRows(finding)
+    manualGuidance: buildManualFindingGuidance(finding)
   };
 }
 

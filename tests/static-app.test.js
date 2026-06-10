@@ -49,8 +49,7 @@ const requiredAppMarkers = [
   "Ready to clean",
   "Scan again",
   "Activity",
-  "Ask AI",
-  "Needs review"
+  "Ask AI"
 ];
 
 for (const marker of requiredAppMarkers) {
@@ -231,17 +230,19 @@ assert(
 );
 assert(/if \(rescanAfter && result\.accepted\) \{[\s\S]*await runRealScan\(\{ afterExecution: true \}\);[\s\S]*\}/.test(app), "accepted cleanup should refresh the list automatically");
 assert(app.includes("buildManualFindingGuidance"), "app should use tested manual finding guidance");
-assert(app.includes("buildManualFindingReviewRows"), "app should use tested manual review row guidance");
-assert(app.includes("\"windows-old\": \"Previous Windows installation review\""), "manual panel should surface Windows.old findings");
-assert(app.includes("hibernation: \"Hibernation file review\""), "manual panel should surface hibernation file findings");
-assert(app.includes("pagefile: \"Pagefile review\""), "manual panel should surface pagefile findings");
-assert(app.includes("\"wsl-vhdx\": \"WSL virtual disk review\""), "manual panel should surface WSL virtual disk findings");
-assert(app.includes("Suggested action"), "manual review panel should render simple suggested action copy");
-assert(app.includes("formatManualFindingNote"), "manual review panel should convert internal notes into plain copy");
-assert(!app.includes("manualGuidance.command"), "manual review panel should not render command snippets");
-assert(!app.includes("Review details"), "manual review panel should not expose a nested diagnostic details panel");
-assert(!app.includes("Signals"), "manual review panel should not render candidate usage signals as user-facing UI");
-assert(!app.includes("Why review only"), "manual review panel should not expose internal guardrail details");
+assert(!app.includes("buildManualFindingReviewRows"), "app shell should not carry nested manual review rows");
+assert(!app.includes("function ManualReviewPanel"), "app shell should not carry an unused manual review panel");
+assert(app.includes("\"windows-old\": \"Previous Windows installation review\""), "Explore should surface Windows.old findings");
+assert(app.includes("hibernation: \"Hibernation file review\""), "Explore should surface hibernation file findings");
+assert(app.includes("pagefile: \"Pagefile review\""), "Explore should surface pagefile findings");
+assert(app.includes("\"wsl-vhdx\": \"WSL virtual disk review\""), "Explore should surface WSL virtual disk findings");
+assert(app.includes("manualFindings.map"), "Explore should render manual findings in the same allocation list");
+assert(app.includes("finding.manualGuidance?.primaryAction"), "Explore should show simple manual guidance without an extra panel");
+assert(app.includes("formatManualFindingNote"), "manual findings should convert internal notes into plain copy");
+assert(!app.includes("manualGuidance.command"), "manual findings should not render command snippets");
+assert(!app.includes("Review details"), "manual findings should not expose a nested diagnostic details panel");
+assert(!app.includes("Signals"), "manual findings should not render candidate usage signals as user-facing UI");
+assert(!app.includes("Why review only"), "manual findings should not expose internal guardrail details");
 assert(!app.includes("Selected .env block"), "app shell should not ask users to copy route-specific env blocks");
 assert(!app.includes("copyEnvBlock"), "app shell should not expose route setup copy actions");
 assert(!app.includes("navigator.clipboard.writeText(checklist.envBlock.content)"), "app shell should not copy route setup env content");
