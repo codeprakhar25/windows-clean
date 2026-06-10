@@ -659,18 +659,6 @@ function App() {
     focusAgentBrokerPanel(row);
   }
 
-  function resetWorkflowForRouteChange() {
-    setSelectedId("");
-    setCheckedIds([]);
-    setConsentChecked(false);
-    setArchiveDestination("");
-    setExecutionStatus("idle");
-    setExecutionError("");
-    setExecutionResult(null);
-    setExecutionRecord(null);
-    setPostRunScan(null);
-  }
-
   function selectWorkflowCandidate(id, options = {}) {
     if (!id) return;
     const target = candidates.find((candidate) => candidate.id === id);
@@ -1614,13 +1602,6 @@ function formatCleanupRejectMessage(result = {}) {
     return "Windows blocked some files because they are in use. Close the related apps, scan again, and retry.";
   }
   return "Nothing was deleted. Close apps using these files, scan again, and try once more.";
-}
-
-function formatSignedBytes(value = 0) {
-  const bytes = Number(value || 0);
-  if (!bytes) return formatBytes(0);
-  const sign = bytes > 0 ? "+" : "-";
-  return `${sign}${formatBytes(Math.abs(bytes))}`;
 }
 
 function StatusDot({ state }) {

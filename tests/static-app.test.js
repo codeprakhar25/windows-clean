@@ -116,7 +116,7 @@ assert(app.includes("buildExecutionGate"), "app should use tested execution disp
 assert(app.includes("buildExecutionPrerequisites"), "app should use tested route-specific execution prerequisites");
 assert(!app.includes("resolveRuntimeRouteInput"), "app shell should not sync cleanup selection from legacy route flags");
 assert(!app.includes("setSetupRouteInput"), "app shell should not require route arming before native cleanup");
-assert(app.includes("resetWorkflowForRouteChange"), "app should keep a shared reset helper for workflow state resets");
+assert(!app.includes("resetWorkflowForRouteChange"), "app shell should not carry unused workflow reset helpers");
 assert(app.includes("buildWorkflowLocks"), "app should use tested workflow lock policy for cleanup continuation");
 assert(!app.includes("buildBaselinePromotion"), "app shell should not run hidden proof/support baseline promotion after cleanup");
 assert(!app.includes("buildRouteSetupChecklist"), "app shell should not render the legacy route setup checklist");
@@ -165,6 +165,7 @@ assert(/function selectDefaultCleanupCandidateId\(candidates = \[\]\) \{[\s\S]*r
 assert(!app.includes("candidates.find((candidate) => candidate.executable)?.id"), "default cleanup selection should not choose blocked executable rows");
 assert(!app.includes("Technical details"), "clean panel should not expose native diagnostics in the primary cleanup result");
 assert(app.includes("formatAcceptedCleanupMessage"), "clean panel should format accepted cleanup outcomes with simple user copy");
+assert(!app.includes("formatSignedBytes"), "app shell should not carry unused signed-byte formatting helpers");
 assert(app.includes("Nothing to remove"), "accepted zero-byte cleanup should not be presented as cleaned space");
 assert(app.includes("No eligible files were removed"), "accepted zero-byte cleanup should explain that nothing was eligible");
 assert(app.includes("Nothing needed cleaning"), "activity summary should use simple zero-byte cleanup copy");
