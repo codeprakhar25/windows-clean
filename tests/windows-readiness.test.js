@@ -21,6 +21,7 @@ const script = path.join(root, "scripts", "run-windows-readiness.mjs");
     }
   });
   assert(missingDependencyCheck.missing.includes("tauri-cli"), "toolchain check should require the local Tauri CLI dependency");
+  assert(missingDependencyCheck.missing.includes("msvc-build-tools"), "Windows readiness should require Visual Studio C++ Build Tools");
   assert(missingDependencyCheck.nextStep.includes("npm install"), "missing local dependencies should tell the user to run npm install");
 
   const fakeProject = fs.mkdtempSync(path.join(os.tmpdir(), "spaceguard-ready-deps-"));
@@ -32,10 +33,23 @@ const script = path.join(root, "scripts", "run-windows-readiness.mjs");
     projectRoot: fakeProject,
     env: {
       npm_execpath: process.env.npm_execpath || __filename,
-      npm_config_user_agent: "npm/10.8.2 node/v18.20.8"
+      npm_config_user_agent: "npm/10.8.2 node/v18.20.8",
+      VCINSTALLDIR: "C:\\BuildTools\\VC"
     }
   });
   assert(!installedDependencyCheck.missing.includes("tauri-cli"), "installed Tauri CLI dependency should satisfy readiness");
+  assert(!installedDependencyCheck.missing.includes("msvc-build-tools"), "active VC developer environment should satisfy readiness");
+
+  const missingMsvcCheck = readiness.buildWindowsToolchainCheck({
+    platform: "win32",
+    projectRoot: fakeProject,
+    env: {
+      npm_execpath: process.env.npm_execpath || __filename,
+      npm_config_user_agent: "npm/10.8.2 node/v18.20.8"
+    }
+  });
+  assert(missingMsvcCheck.missing.includes("msvc-build-tools"), "missing MSVC should block Windows native launch");
+  assert(missingMsvcCheck.nextStep.includes("Desktop development with C++"), "missing MSVC next step should name the required Visual Studio workload");
 
   const missingToolchain = readiness.buildWindowsReadinessReport({
     routeInput: "npm-cache",

@@ -7,6 +7,7 @@ Use these steps on the Windows machine you want to test.
 - Windows 10 or 11.
 - Node.js and npm.
 - Rust and the Tauri prerequisites for Windows.
+- Visual Studio Build Tools with the **Desktop development with C++** workload. The native build needs `cl.exe`, `link.exe`, and `lib.exe`.
 - OpenAI API key for the advisory agent.
 
 ## Configure
@@ -29,6 +30,7 @@ OPENAI_API_KEY=sk-...
 Run `route:arm` before `windows:ready`; otherwise readiness correctly reports `route-arm-required` because no write route is enabled yet.
 `windows:ready` exits nonzero until the selected route can launch the native Windows desktop app; treat that as a stop signal and follow the JSON `nextSteps`.
 If `windows:ready` reports `toolchain-blocked`, run `npm install`, install or repair Node.js, Rustup/Cargo, and the Tauri Windows prerequisites, restart PowerShell, and run readiness again.
+If the missing tool is `Visual Studio C++ Build Tools`, modify Visual Studio Build Tools, select **Desktop development with C++**, then restart PowerShell or use Developer PowerShell for VS before rerunning readiness.
 
 ## Launch
 

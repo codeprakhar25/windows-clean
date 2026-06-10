@@ -16,6 +16,7 @@ npm run windows:dev -- --route npm-cache
 Run `route:arm` before `windows:ready`; otherwise readiness correctly reports `route-arm-required` because no write route is enabled yet.
 `windows:ready` exits nonzero until the selected route can launch the native Windows desktop app; treat that as a stop signal and follow the JSON `nextSteps`.
 If readiness reports `toolchain-blocked`, run `npm install`, install or repair Node.js, Rustup/Cargo, and the Tauri Windows prerequisites, then restart the terminal and rerun the command.
+If readiness names `Visual Studio C++ Build Tools`, install the **Desktop development with C++** workload, then restart PowerShell or use Developer PowerShell for VS.
 If Tauri reports `icons/icon.ico` not found, confirm `src-tauri/icons/icon.ico` exists, then rerun `npm run native:dev` or the guarded `windows:dev` command.
 
 Inside the desktop app:

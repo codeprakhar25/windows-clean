@@ -86,6 +86,20 @@ function checkTool({ id, label, command, args = [] }) {
   };
 }
 
+function checkWindowsCommandOnPath(command) {
+  const result = spawnSync("where.exe", [command], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  const output = String(result.stdout || result.stderr || "").trim().split(/\r?\n/)[0] || "";
+  return {
+    command,
+    available: result.status === 0 && !result.error,
+    path: result.status === 0 && !result.error ? output : "",
+    error: result.error?.message || output || "not found on PATH"
+  };
+}
+
 function checkNpmTool({ platform = process.platform, env = process.env } = {}) {
   const execPath = String(env.npm_execpath || "").trim();
   const userAgent = String(env.npm_config_user_agent || "").trim();
@@ -120,6 +134,96 @@ function checkLocalTauriCli({ platform = process.platform, projectRoot = root } 
   };
 }
 
+function findVsWherePath(env = process.env) {
+  const roots = [
+    env["ProgramFiles(x86)"],
+    env.ProgramFiles,
+    "C:\\Program Files (x86)",
+    "C:\\Program Files"
+  ].map((value) => String(value || "").trim()).filter(Boolean);
+  for (const rootPath of roots) {
+    const candidate = path.join(rootPath, "Microsoft Visual Studio", "Installer", "vswhere.exe");
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return "";
+}
+
+function checkVsWhereForComponent({ env = process.env, component = "" } = {}) {
+  const vswherePath = findVsWherePath(env);
+  if (!vswherePath || !component) {
+    return {
+      available: false,
+      command: vswherePath || "vswhere.exe",
+      installPath: "",
+      error: vswherePath ? "component not specified" : "vswhere.exe was not found"
+    };
+  }
+  const result = spawnSync(vswherePath, [
+    "-latest",
+    "-products",
+    "*",
+    "-requires",
+    component,
+    "-property",
+    "installationPath"
+  ], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  const installPath = String(result.stdout || "").trim().split(/\r?\n/)[0] || "";
+  const error = String(result.stderr || "").trim();
+  return {
+    available: result.status === 0 && !result.error && Boolean(installPath),
+    command: `${vswherePath} -requires ${component}`,
+    installPath,
+    error: result.error?.message || error || "Visual Studio component was not found"
+  };
+}
+
+function checkWindowsMsvcBuildTools({ platform = process.platform, env = process.env } = {}) {
+  if (platform !== "win32") return null;
+  const developerEnvKey = ["VCINSTALLDIR", "VCToolsInstallDir", "VSINSTALLDIR"]
+    .find((key) => String(env[key] || "").trim());
+  if (developerEnvKey) {
+    return {
+      id: "msvc-build-tools",
+      label: "Visual Studio C++ Build Tools",
+      command: developerEnvKey,
+      available: true,
+      version: `${developerEnvKey}=${env[developerEnvKey]}`,
+      error: ""
+    };
+  }
+
+  const vswhere = checkVsWhereForComponent({
+    env,
+    component: "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
+  });
+  if (vswhere.available) {
+    return {
+      id: "msvc-build-tools",
+      label: "Visual Studio C++ Build Tools",
+      command: vswhere.command,
+      available: true,
+      version: vswhere.installPath,
+      error: ""
+    };
+  }
+
+  const tools = ["cl.exe", "link.exe", "lib.exe"].map((tool) => checkWindowsCommandOnPath(tool));
+  const missing = tools.filter((tool) => !tool.available).map((tool) => tool.command);
+  return {
+    id: "msvc-build-tools",
+    label: "Visual Studio C++ Build Tools",
+    command: "where.exe cl.exe && where.exe link.exe && where.exe lib.exe",
+    available: missing.length === 0,
+    version: missing.length === 0 ? tools.map((tool) => `${tool.command}=${tool.path}`).join("; ") : "",
+    error: missing.length === 0
+      ? ""
+      : `Missing ${missing.join(", ")}. Install Visual Studio Build Tools with Desktop development with C++, then restart PowerShell or use Developer PowerShell.`
+  };
+}
+
 export function buildWindowsToolchainCheck({ platform = process.platform, env = process.env, projectRoot = root } = {}) {
   const checks = [
     checkTool({ id: "node", label: "Node.js", command: process.execPath, args: ["--version"] }),
@@ -128,7 +232,10 @@ export function buildWindowsToolchainCheck({ platform = process.platform, env = 
     checkTool({ id: "rustc", label: "Rust compiler", command: "rustc", args: ["--version"] }),
     checkTool({ id: "cargo", label: "Cargo", command: "cargo", args: ["--version"] })
   ];
+  const msvcCheck = checkWindowsMsvcBuildTools({ platform, env });
+  if (msvcCheck) checks.push(msvcCheck);
   const missing = checks.filter((row) => !row.available);
+  const missingMsvc = missing.some((row) => row.id === "msvc-build-tools");
   return {
     schemaVersion: "spaceguard-windows-toolchain-check/v1",
     status: missing.length ? "missing-tools" : "ready",
@@ -137,7 +244,9 @@ export function buildWindowsToolchainCheck({ platform = process.platform, env = 
     missing: missing.map((row) => row.id),
     missingLabels: missing.map((row) => row.label),
     nextStep: missing.length
-      ? "Run npm install, then install or repair Node.js, Rustup/Cargo, and the Tauri Windows prerequisites before launching the desktop shell."
+      ? missingMsvc
+        ? "Run npm install if node_modules is missing, install Visual Studio Build Tools with the Desktop development with C++ workload, restart PowerShell or use Developer PowerShell, then rerun npm run windows:ready."
+        : "Run npm install, then install or repair Node.js, Rustup/Cargo, and the Tauri Windows prerequisites before launching the desktop shell."
       : "Required local toolchain commands are available."
   };
 }
@@ -241,6 +350,10 @@ function buildReadinessNextSteps({ status, routeInput, routePacket, doctor, wind
   }
   if (windowsHost && !toolchain?.ready) {
     steps.push(`Install or repair missing desktop toolchain command(s): ${(toolchain?.missingLabels || toolchain?.missing || []).join(", ")}.`);
+    if ((toolchain?.missing || []).includes("msvc-build-tools")) {
+      steps.push("Install Visual Studio Build Tools with the Desktop development with C++ workload so cl.exe, link.exe, and lib.exe are available to native crates.");
+      steps.push("Restart PowerShell after installing Build Tools, or run the app from Developer PowerShell for VS.");
+    }
     steps.push("Run npm install after pulling this repo, then restart the terminal after installing Rustup/Cargo or Tauri Windows prerequisites.");
     steps.push("Rerun npm run windows:ready before launching the desktop app.");
   }
