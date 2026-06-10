@@ -138,8 +138,14 @@ assert(app.includes("const canExecute = executionGate.ready"), "execute button s
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
 assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
 assert(app.includes("formatExecutionGateError"), "execute handler should convert dispatch blockers into plain user-facing copy");
-assert(app.includes("Finish below"), "selected cleanup rows should expose a direct row-level delete action while preserving extra prerequisites");
+assert(app.includes("Confirm first"), "selected cleanup rows should expose a direct row-level delete action while preserving extra prerequisites");
 assert(app.includes("onExecute();"), "selected cleanup row action should dispatch the guarded cleanup handler");
+assert(app.includes("Ready to clean"), "post-scan clean screen should lead with the actionable cleanup queue");
+assert(app.includes("Scan details"), "post-scan metrics should be collapsed behind scan details");
+assert(app.includes("items need review"), "cleanup queue should move unavailable rows behind a collapsed review section");
+assert(app.includes("No items ready to delete"), "cleanup queue should avoid preselecting blocked targets when nothing can run");
+assert(/function selectDefaultCleanupCandidateId\(candidates = \[\]\) \{[\s\S]*return ""/.test(app), "cleanup scan should not auto-select a row before the user checks it");
+assert(!app.includes("candidates.find((candidate) => candidate.executable)?.id"), "default cleanup selection should not choose blocked executable rows");
 assert(!app.includes("Technical details"), "clean panel should not expose native diagnostics in the primary cleanup result");
 assert(app.includes("formatAcceptedCleanupMessage"), "clean panel should format accepted cleanup outcomes with simple user copy");
 assert(app.includes("Nothing to remove"), "accepted zero-byte cleanup should not be presented as cleaned space");

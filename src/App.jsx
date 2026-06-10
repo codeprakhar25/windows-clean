@@ -746,6 +746,7 @@ function App() {
             <ScanPanel
               request={scanRequest}
               setRequest={setScanRequest}
+              candidates={candidates}
               scan={scan}
               scanStatus={scanStatus}
               scanError={scanError}
@@ -1001,9 +1002,11 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
   );
 }
 
-function ScanPanel({ request, setRequest, scan, scanStatus, scanError, onRunScan }) {
+function ScanPanel({ request, setRequest, candidates = [], scan, scanStatus, scanError, onRunScan }) {
   const running = scanStatus === "scanning" || scanStatus === "rescanning";
   const hasScan = Boolean(scan);
+  const readyCount = candidates.filter((candidate) => candidate.canExecute).length;
+  const readyLabel = readyCount === 1 ? "1 item ready to delete" : `${readyCount} items ready to delete`;
   return (
     <Card className="rounded-md">
       <CardHeader>
@@ -1011,9 +1014,11 @@ function ScanPanel({ request, setRequest, scan, scanStatus, scanError, onRunScan
           <div>
             <CardTitle className="flex items-center gap-2">
               <FolderSearch className="h-4 w-4" />
-              {hasScan ? "Scan complete" : "Scan for cleanup"}
+              {hasScan ? "Ready to clean" : "Scan for cleanup"}
             </CardTitle>
-            <CardDescription>{hasScan ? "Choose an item below to clean space." : "Read-only scan. Nothing is deleted until you choose an item."}</CardDescription>
+            <CardDescription>
+              {hasScan ? `${readyLabel}. Check a row below, then delete it.` : "Read-only scan. Nothing is deleted until you choose an item."}
+            </CardDescription>
           </div>
           {hasScan ? (
             <Button className="w-full md:w-auto" onClick={onRunScan} disabled={running}>
@@ -1039,8 +1044,16 @@ function ScanPanel({ request, setRequest, scan, scanStatus, scanError, onRunScan
           </div>
         ) : null}
         <details className="rounded-md border bg-muted/20">
-          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">{hasScan ? "Scan settings" : "Advanced scan options"}</summary>
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">{hasScan ? "Scan details" : "Advanced scan options"}</summary>
           <div className="space-y-3 border-t p-3">
+            {hasScan ? (
+              <div className="grid gap-3 md:grid-cols-4">
+                <Metric label="Generated" value={formatShortDate(scan.generatedAt)} />
+                <Metric label="Findings" value={String(scan.findings.length)} />
+                <Metric label="Measured bytes" value={formatBytes(scan.totalBytes)} />
+                <Metric label="Drive free" value={formatBytes(scan.volume?.freeBytes || 0)} />
+              </div>
+            ) : null}
             {hasScan ? (
               <p className="text-xs font-medium text-muted-foreground">Advanced scan options</p>
             ) : null}
@@ -1088,14 +1101,6 @@ function ScanPanel({ request, setRequest, scan, scanStatus, scanError, onRunScan
           </div>
         </details>
         {scanError ? <Notice tone="restricted" icon={AlertTriangle} text={scanError} /> : null}
-        {scan ? (
-          <div className="grid gap-3 md:grid-cols-4">
-            <Metric label="Generated" value={formatShortDate(scan.generatedAt)} />
-            <Metric label="Findings" value={String(scan.findings.length)} />
-            <Metric label="Measured bytes" value={formatBytes(scan.totalBytes)} />
-            <Metric label="Drive free" value={formatBytes(scan.volume?.freeBytes || 0)} />
-          </div>
-        ) : null}
       </CardContent>
     </Card>
   );
@@ -1122,6 +1127,9 @@ function CleanPanel({
 }) {
   const candidateReady = Boolean(candidate?.canExecute);
   const showSelectedDetails = Boolean(candidate && (!candidateReady || candidate.requiresPermanentConfirmation || candidate.requiresArchiveDestination));
+  const readyCandidates = candidates.filter((row) => row.canExecute);
+  const reviewCandidates = candidates.filter((row) => !row.canExecute);
+  const hasReadyCandidates = readyCandidates.length > 0;
   const running = executionStatus === "running";
   return (
     <Card id="cleanup-actions-panel" className="rounded-md">
@@ -1145,74 +1153,95 @@ function CleanPanel({
           <EmptyState icon={ScanLine} title="Scan first" detail="Cleanable items appear here after the scan finishes." />
         ) : candidates.length ? (
           <>
-            <div className="grid gap-3">
-              {candidates.map((row) => {
-                const checked = row.id === selectedId && row.canExecute && consentChecked;
-                const selected = row.id === selectedId;
-                const statusLabel = row.canExecute ? "can clean" : row.executable ? "not ready" : "review only";
-                return (
-                  <div
-                    key={row.id}
-                    className={`rounded-md border bg-background transition hover:border-primary ${
-                      selected ? "border-primary bg-primary/5" : ""
-                    }`}
-                  >
+            {hasReadyCandidates ? (
+              <div className="grid gap-3">
+                {readyCandidates.map((row) => {
+                  const checked = row.id === selectedId && consentChecked;
+                  const selected = row.id === selectedId;
+                  return (
                     <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => onToggleCandidate(row)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") onToggleCandidate(row);
-                      }}
-                      className="flex cursor-pointer flex-col gap-3 p-4 md:flex-row md:items-start md:justify-between"
+                      key={row.id}
+                      className={`rounded-md border bg-background transition hover:border-primary ${
+                        selected ? "border-primary bg-primary/5" : ""
+                      }`}
                     >
-                      <div className="flex min-w-0 gap-3">
-                        <Checkbox
-                          checked={checked}
-                          disabled={!row.canExecute}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onToggleCandidate(row);
-                          }}
-                        />
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant={row.canExecute ? "safe" : row.executable ? "review" : "outline"}>
-                              {statusLabel}
-                            </Badge>
-                            <span className="font-medium">{row.title}</span>
-                          </div>
-                          <p className="mt-2 truncate text-sm text-muted-foreground">{row.targetPath || row.targetKind}</p>
-                        </div>
-                      </div>
-                      <div className="shrink-0 md:text-right">
-                        <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
-                        <p className="text-xs text-muted-foreground">{row.canExecute ? "Ready" : "Not ready"}</p>
-                        {selected && row.canExecute ? (
-                          <Button
-                            className="mt-2 w-full md:w-auto"
-                            size="sm"
-                            disabled={!canExecute || running}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onToggleCandidate(row)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") onToggleCandidate(row);
+                        }}
+                        className="flex cursor-pointer flex-col gap-3 p-4 md:flex-row md:items-start md:justify-between"
+                      >
+                        <div className="flex min-w-0 gap-3">
+                          <Checkbox
+                            checked={checked}
                             onClick={(event) => {
                               event.stopPropagation();
-                              onExecute();
+                              onToggleCandidate(row);
                             }}
-                          >
-                            {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                            {running ? "Deleting" : !canExecute ? "Finish below" : candidate?.requiresPermanentConfirmation ? "Empty" : "Delete"}
-                          </Button>
-                        ) : null}
+                          />
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="safe">can clean</Badge>
+                              <span className="font-medium">{row.title}</span>
+                            </div>
+                            <p className="mt-2 truncate text-sm text-muted-foreground">{row.targetPath || row.targetKind}</p>
+                          </div>
+                        </div>
+                        <div className="shrink-0 md:text-right">
+                          <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
+                          <p className="text-xs text-muted-foreground">Ready</p>
+                          {selected ? (
+                            <Button
+                              className="mt-2 w-full md:w-auto"
+                              size="sm"
+                              disabled={!canExecute || running}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onExecute();
+                              }}
+                            >
+                              {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                              {running ? "Deleting" : !canExecute ? "Confirm first" : candidate?.requiresPermanentConfirmation ? "Empty" : "Delete"}
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
-                    {!row.canExecute ? (
-                      <div className="mx-4 mb-4 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                        {formatNotReadyReason(row)}
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState icon={Lock} title="No items ready to delete" detail="SpaceGuard did not find a safe cleanup action that can run right now." />
+            )}
+            {reviewCandidates.length ? (
+              <details className="rounded-md border bg-muted/20">
+                <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
+                  {reviewCandidates.length === 1 ? "1 item needs review" : `${reviewCandidates.length} items need review`}
+                </summary>
+                <div className="grid gap-2 border-t p-3">
+                  {reviewCandidates.map((row) => (
+                    <div key={row.id} className="flex flex-col gap-2 rounded-md border bg-background p-3 md:flex-row md:items-center md:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={row.executable ? "review" : "outline"}>{row.executable ? "not ready" : "review only"}</Badge>
+                          <p className="font-medium">{row.title}</p>
+                        </div>
+                        <p className="mt-1 truncate text-sm text-muted-foreground">{row.targetPath || row.targetKind}</p>
                       </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
+                      <div className="flex shrink-0 items-center gap-2 md:justify-end">
+                        <p className="font-semibold">{formatBytes(row.bytes)}</p>
+                        <Button size="sm" variant="outline" onClick={() => onToggleCandidate(row)}>
+                          View
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ) : null}
             {showSelectedDetails ? (
               <div className="rounded-md border bg-muted/25 p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -1863,12 +1892,7 @@ function buildCleanupCandidates(scan, runtime) {
 }
 
 function selectDefaultCleanupCandidateId(candidates = []) {
-  return (
-    candidates.find((candidate) => candidate.canExecute)?.id ||
-    candidates.find((candidate) => candidate.executable)?.id ||
-    candidates[0]?.id ||
-    ""
-  );
+  return "";
 }
 
 function buildExploreRows(scan, candidates = [], manualFindings = []) {
