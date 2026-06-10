@@ -8,7 +8,7 @@ Use these steps on the Windows machine you want to test.
 - Node.js and npm.
 - Rust and the Tauri prerequisites for Windows.
 - Visual Studio Build Tools with the **Desktop development with C++** workload. The native build needs `cl.exe`, `link.exe`, and `lib.exe`.
-- OpenAI API key for the advisory agent.
+- OpenAI API key only if you want the Ask AI page.
 
 ## Configure
 
@@ -50,14 +50,13 @@ npm run openai:smoke -- --route npm-cache
 
 Then in the app:
 
-1. Run real scan.
-2. Open Explore C: or the cleanup queue and select a ready target.
-3. Review the target and check the consent box.
-4. Clean the selected target.
-5. Run post-clean rescan.
-6. Continue with another allowlisted target if needed.
+1. Click `Scan PC`.
+2. Select a row marked `can clean`.
+3. Check `Delete this selected item from this PC.`
+4. Click `Delete selected files`.
+5. Click `Refresh space`.
 
-Optional audit export can write `spaceguard-selected-route-proof-packet.md`, `spaceguard-real-workflow-proof.md`, `spaceguard-workflow-proof-check.json`, and `spaceguard-support-bundle.md`. Use the CLI verifier as an external audit if needed:
+Optional support export can write `spaceguard-selected-route-proof-packet.md`, `spaceguard-real-workflow-proof.md`, `spaceguard-workflow-proof-check.json`, and `spaceguard-support-bundle.md` from `Support details`. Use the CLI verifier as an external audit if needed:
 
 ```powershell
 npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md
