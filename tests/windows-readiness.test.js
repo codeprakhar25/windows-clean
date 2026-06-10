@@ -9,9 +9,6 @@ const script = path.join(root, "scripts", "run-windows-readiness.mjs");
 
 (async () => {
   const readiness = await import(pathToFileURL(script).href);
-  const routeEnv = {
-    SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR: "1"
-  };
   const missingDependencyCheck = readiness.buildWindowsToolchainCheck({
     platform: "win32",
     projectRoot: path.join(os.tmpdir(), "spaceguard-missing-node-modules"),
@@ -53,7 +50,7 @@ const script = path.join(root, "scripts", "run-windows-readiness.mjs");
 
   const missingToolchain = readiness.buildWindowsReadinessReport({
     routeInput: "npm-cache",
-    env: routeEnv,
+    env: {},
     dotenv: {},
     envFilePresent: false,
     generatedAt: "2026-06-09T00:00:00.000Z",
@@ -76,7 +73,7 @@ const script = path.join(root, "scripts", "run-windows-readiness.mjs");
 
   const ready = readiness.buildWindowsReadinessReport({
     routeInput: "npm-cache",
-    env: routeEnv,
+    env: {},
     dotenv: {},
     envFilePresent: false,
     generatedAt: "2026-06-09T00:00:00.000Z",
@@ -91,9 +88,33 @@ const script = path.join(root, "scripts", "run-windows-readiness.mjs");
       nextStep: "Required local toolchain commands are available."
     }
   });
-  assert.strictEqual(ready.status, "ready-for-native-dev", "one armed route with toolchain ready should launch native dev on Windows");
+  assert.strictEqual(ready.status, "ready-for-native-dev", "Windows toolchain readiness should launch native dev without route arming");
   assert.strictEqual(ready.readyForNativeDev, true, "ready Windows preflight should allow native dev launch");
   assert.strictEqual(readiness.shouldFailReadinessCli(ready), false, "readiness CLI should exit green only for ready Windows native dev launch");
+  assert.strictEqual(ready.route.status, "flag-disabled", "route diagnostics may remain disabled without blocking native launch");
+  assert.strictEqual(ready.routeAudit.ready, false, "optional route audit should not be treated as native launch readiness");
+  assert(ready.nextSteps.some((step) => step.includes("npm run native:dev")), "ready preflight should point users to the direct native launcher");
+  assert(!ready.nextSteps.some((step) => /setup:route|route:arm|openai:smoke|windows:dev/.test(step)), "ready preflight should not require advanced route commands");
+
+  const unknownRoute = readiness.buildWindowsReadinessReport({
+    routeInput: "not-a-real-route",
+    env: {},
+    dotenv: {},
+    envFilePresent: false,
+    generatedAt: "2026-06-09T00:00:00.000Z",
+    platform: "win32",
+    toolchain: {
+      schemaVersion: "spaceguard-windows-toolchain-check/v1",
+      status: "ready",
+      ready: true,
+      checks: [],
+      missing: [],
+      missingLabels: [],
+      nextStep: "Required local toolchain commands are available."
+    }
+  });
+  assert.strictEqual(unknownRoute.readyForNativeDev, true, "unknown optional route audit input should not block the native app launcher");
+  assert.strictEqual(unknownRoute.localContract.brokerStatus, "unsupported-route", "unknown optional route audit should be reported as diagnostic data");
 
   console.log("windows readiness ok");
 })().catch((error) => {

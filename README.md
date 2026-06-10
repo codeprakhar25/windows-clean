@@ -38,14 +38,11 @@ npm test
 npm run build
 npm run windows:ready
 npm run native:dev
-npm run setup:doctor
-npm run setup:route -- --route npm-cache
-npm run openai:smoke -- --route npm-cache
-npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md
 npm run support:bundle
 ```
 
 For a real cleanup test, use the desktop app as the control point: scan, select one `can clean` target, check the confirmation box, delete, and refresh space.
+Optional developer audit only: run `npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md` after exporting support details from the app.
 
 ## Safety Boundary
 

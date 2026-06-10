@@ -47,7 +47,20 @@ function readDotEnv(filePath) {
 }
 
 function buildLocalContractCheck(routeInput) {
-  const route = resolveSmokeRoute(routeInput);
+  let route;
+  try {
+    route = resolveSmokeRoute(routeInput);
+  } catch (error) {
+    return {
+      passed: false,
+      route: "",
+      routeInput,
+      expectedActionType: "",
+      expectedTargetId: "",
+      brokerStatus: "unsupported-route",
+      blockers: [error?.message || "Unsupported optional route audit input."]
+    };
+  }
   const requiredRecommendation = route.requiredRecommendation;
   const context = buildRouteContractContext({ routeInput });
   const result = buildRouteContractAdviceResult({ requiredRecommendation });
@@ -293,23 +306,16 @@ export function buildWindowsReadinessReport({
   });
   const contract = buildLocalContractCheck(routeInput);
   const windowsHost = platform === "win32";
+  const toolchainReady = Boolean(toolchain.ready);
   const routeArmed = routePacket.status === "ready";
   const singleRouteReady = doctor.scopedExecutors.validationStatus === "one-route-ready";
-  const toolchainReady = Boolean(toolchain.ready);
-  const readyForNativeDev = Boolean(windowsHost && toolchainReady && routeArmed && singleRouteReady && contract.passed);
+  const routeAuditReady = Boolean(routeArmed && singleRouteReady && contract.passed);
+  const readyForNativeDev = Boolean(windowsHost && toolchainReady);
   const status = readyForNativeDev
     ? "ready-for-native-dev"
     : !windowsHost
       ? "host-not-windows"
-      : !toolchainReady
-        ? "toolchain-blocked"
-        : routePacket.status === "multiple-flags" || doctor.scopedExecutors.validationStatus === "multi-flag-blocked"
-          ? "multi-route-blocked"
-          : !routeArmed
-            ? "route-arm-required"
-            : contract.passed
-              ? "setup-review-required"
-              : "local-contract-blocked";
+      : "toolchain-blocked";
 
   return {
     schemaVersion: "spaceguard-windows-readiness/v1",
@@ -345,25 +351,29 @@ export function buildWindowsReadinessReport({
       safeToLaunchWriteMode: doctor.scopedExecutors.safeToLaunchWriteMode
     },
     localContract: contract,
+    routeAudit: {
+      status: routeAuditReady ? "ready" : "optional",
+      ready: routeAuditReady,
+      routeArmed,
+      singleRouteReady,
+      localContractPassed: contract.passed
+    },
     nextSteps: buildReadinessNextSteps({
       status,
-      routeInput,
-      routePacket,
       doctor,
       windowsHost,
-      contract,
       toolchain
     })
   };
 }
 
-function buildReadinessNextSteps({ status, routeInput, routePacket, doctor, windowsHost, contract, toolchain }) {
-  const armCommand = routePacket.commands?.armRoute || `npm run route:arm -- --route ${routeInput}`;
+function buildReadinessNextSteps({ status, doctor, windowsHost, toolchain }) {
   const steps = [];
   if (!windowsHost) {
     steps.push("Run this readiness command again on the Windows PC before launching the desktop app.");
+    return steps;
   }
-  if (windowsHost && !toolchain?.ready) {
+  if (!toolchain?.ready) {
     steps.push(`Install or repair missing desktop toolchain command(s): ${(toolchain?.missingLabels || toolchain?.missing || []).join(", ")}.`);
     if ((toolchain?.missing || []).includes("msvc-build-tools")) {
       steps.push("Install Visual Studio Build Tools with the Desktop development with C++ workload so cl.exe, link.exe, and lib.exe are available to native crates.");
@@ -372,25 +382,12 @@ function buildReadinessNextSteps({ status, routeInput, routePacket, doctor, wind
     steps.push("Run npm install after pulling this repo, then restart the terminal after installing Rustup/Cargo or Tauri Windows prerequisites.");
     steps.push("Rerun npm run windows:ready before launching the desktop app.");
   }
-  if (!routePacket.selected) {
-    steps.push("Choose a supported route with npm run setup:route -- --list.");
-    return steps;
-  }
-  if (routePacket.status !== "ready") {
-    steps.push(`Run ${armCommand}.`);
-    steps.push(`Run npm run setup:route -- --route ${routeInput}.`);
+  if (status === "ready-for-native-dev") {
+    steps.push("Run npm run native:dev.");
+    steps.push("In the app: Scan PC, pick a row marked can clean, check the delete confirmation, delete selected files, then refresh space.");
   }
   if (!doctor.openAi.configured) {
-    steps.push("Set OPENAI_API_KEY in .env if you want the OpenAI advisor during the app run.");
-  }
-  if (!contract.passed) {
-    steps.push(`Run npm run openai:smoke -- --local-contract --route ${routeInput} and fix the reported local contract blocker.`);
-  }
-  if (status === "ready-for-native-dev") {
-    steps.push(`Run npm run windows:dev -- --route ${routeInput}.`);
-    steps.push("In the app: scan, select one ready row, consent, execute, post-run rescan, export proof.");
-  } else if (windowsHost && routePacket.status === "ready" && contract.passed) {
-    steps.push(`Run npm run windows:dev -- --route ${routeInput} after resolving any setup warnings above.`);
+    steps.push("Set OPENAI_API_KEY in .env only if you want the Ask AI page.");
   }
   return steps;
 }

@@ -354,7 +354,7 @@ for (const removedPath of [
 }
 
 assert(readme.includes("npm run native:dev"), "README should document the Tauri Windows desktop launcher");
-assert(readme.includes("npm run setup:route -- --route npm-cache"), "README should document route setup packet usage");
+assert(!readme.includes("npm run setup:route -- --route npm-cache"), "README should not put route setup in the normal cleanup path");
 assert(readme.indexOf("npm run windows:ready") < readme.indexOf("npm run native:dev"), "README quick start should check Windows readiness before launch");
 assert(readme.includes("Cleanup does not require route arming"), "README should explain that production cleanup uses built-in allowlists");
 assert(readme.includes("npm run validate:workflow-proof -- --file"), "README should document workflow proof verifier usage");

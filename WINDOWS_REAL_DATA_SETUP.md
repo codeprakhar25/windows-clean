@@ -38,17 +38,9 @@ npm run native:dev
 
 The desktop app should show the native bridge as connected. A normal browser tab is setup-only and cannot scan local folders.
 
-## Test A Route
+## Clean Files
 
-```powershell
-npm run setup:doctor
-npm run setup:route -- --route npm-cache
-npm run windows:ready
-npm run openai:smoke -- --local-contract --route npm-cache
-npm run openai:smoke -- --route npm-cache
-```
-
-Then in the app:
+In the app:
 
 1. Click `Scan PC`.
 2. Select a row marked `can clean`.
