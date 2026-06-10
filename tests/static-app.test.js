@@ -162,7 +162,8 @@ assert(!app.includes("targetSwitchLocked"), "cleanup queue should not lock targe
 assert(!app.includes("routeSetupLocked"), "app shell should not carry route setup locks in the production flow");
 assert(app.includes("workflowProofAccepted"), "optional proof export should still track in-app verifier state");
 assert(app.includes("buildWorkflowProofCheck"), "proof export should run the shared workflow proof verifier inside the app");
-assert(app.includes("workflowProofCheck"), "support details should render workflow validation output from the app");
+assert(app.includes("workflowProofCheck"), "support export should still use workflow validation state");
+assert(!app.includes("Support check"), "support export should not render internal workflow validation details");
 assert(app.includes("Support file exported"), "support export should report accepted in-app workflow validation with user-facing copy");
 assert(app.includes("proofKind: \"workflow-proof-check\""), "proof export should persist the in-app verifier output as a restricted artifact");
 assert(app.includes("proofKind: \"support-bundle\""), "proof export should persist an in-app support bundle as a restricted artifact");
@@ -188,6 +189,7 @@ assert(!app.includes("Current route is locked until proof export and support bun
 assert(!app.includes("I reviewed the refreshed scan."), "support export should not require a manual proof-review checkbox");
 assert(!app.includes("Export troubleshooting bundle"), "support export should use product-facing support file copy");
 assert(!app.includes("Refresh space before exporting troubleshooting info."), "support export should not expose troubleshooting proof copy");
+assert(!app.includes("Support details"), "support export should not expose a nested diagnostic details panel");
 assert(app.includes("buildProofCandidateFromExecutionRecord"), "proof panel should preserve executed target proof context after baseline promotion");
 assert(app.includes("recipeId: selectedCandidate.recipeId"), "execution records should preserve recipe id for post-run proof matching");
 assert(app.includes("envVar: selectedCandidate.envVar"), "execution records should preserve selected route flag for proof/support re-export");
@@ -235,7 +237,10 @@ assert(!/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup st
 assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context should keep a stable schema");
 assert(!app.includes("Recommendation diagnostics"), "OpenAI panel should not expose deterministic broker diagnostics");
 assert(app.includes("agentBroker?.rows"), "OpenAI panel should still read broker rows to choose the best recommendation");
-assert(app.includes("suggestedAction.blockedReason"), "OpenAI panel should still show the recommended action blocker when needed");
+assert(app.includes("Open Clean or Explore to review this item."), "OpenAI panel should show simple review guidance for blocked recommendations");
+assert(!app.includes("suggestedAction.blockedReason"), "OpenAI panel should not expose internal broker blocker text");
+assert(!app.includes("Why this recommendation"), "OpenAI panel should not expose recommendation diagnostic details");
+assert(/resolveWorkflowAgentBrokerCandidate\(row, candidates\)[\s\S]*setConsentChecked\(true\)/.test(app), "OpenAI cleanup recommendations should check the chosen cleanup row before returning to Clean");
 assert(app.includes("runAgentBrokerAction"), "OpenAI broker recommendations should route through guarded app actions");
 assert(app.includes("resolveWorkflowAgentBrokerCandidate"), "OpenAI broker actions should resolve model target ids to real cleanup candidates");
 assert(app.includes("onBrokerAction(suggestedAction)"), "OpenAI panel should expose a user-clicked broker action button");

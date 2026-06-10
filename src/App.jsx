@@ -641,13 +641,11 @@ function App() {
     }
 
     const brokerCandidate = resolveWorkflowAgentBrokerCandidate(row, candidates);
-    if (brokerCandidate && brokerCandidate.id !== selectedId) {
+    if (brokerCandidate) {
       selectWorkflowCandidate(brokerCandidate.id);
-      return;
-    }
-
-    if (row.kind === "scoped-executor") {
-      await executeSelectedCleanup();
+      if (row.kind === "scoped-executor" && brokerCandidate.canExecute) {
+        setConsentChecked(true);
+      }
       return;
     }
 
@@ -812,7 +810,6 @@ function App() {
             postRunScan={postRunScan}
             postRunProof={postRunProof}
             scanStatus={scanStatus}
-            workflowProofAccepted={workflowProofAccepted}
             workflowProofCheck={workflowProofCheck}
             canExportProof={canExportProof}
             proofExportStatus={proofExportStatus}
@@ -1395,7 +1392,6 @@ function HistoryPanel({
   postRunScan,
   postRunProof,
   scanStatus,
-  workflowProofAccepted,
   workflowProofCheck,
   canExportProof,
   proofExportStatus,
@@ -1437,7 +1433,6 @@ function HistoryPanel({
                   executionRecord={executionRecord}
                   postRunScan={postRunScan}
                   postRunProof={postRunProof}
-                  workflowProofAccepted={workflowProofAccepted}
                   workflowProofCheck={workflowProofCheck}
                   canExportProof={canExportProof}
                   proofExportStatus={proofExportStatus}
@@ -1458,7 +1453,6 @@ function SupportDetails({
   executionRecord,
   postRunScan,
   postRunProof,
-  workflowProofAccepted,
   workflowProofCheck,
   canExportProof,
   proofExportStatus,
@@ -1489,28 +1483,6 @@ function SupportDetails({
           text={proofExportMessage}
         />
       ) : null}
-      {workflowProofCheck ? (
-        <details className="rounded-md border bg-background text-sm">
-          <summary className="cursor-pointer px-3 py-2 font-medium">Support details</summary>
-          <div className="space-y-2 border-t p-3">
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-medium">Support check</span>
-              <Badge variant={workflowProofAccepted ? "safe" : "restricted"}>{workflowProofCheck.status}</Badge>
-            </div>
-            <p className="text-muted-foreground">{workflowProofCheck.primary}</p>
-            {workflowProofCheck.blockers?.length ? (
-              <div className="grid gap-2">
-                {workflowProofCheck.blockers.slice(0, 4).map((blocker) => (
-                  <div key={`${blocker.id}-${blocker.label}`} className="rounded border px-3 py-2">
-                    <p className="text-xs font-medium">{blocker.label}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{blocker.detail}</p>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </details>
-      ) : null}
     </div>
   );
 }
@@ -1540,7 +1512,7 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
           <Notice
             tone="review"
             icon={AlertTriangle}
-            text="Run a scan and connect Ask AI in setup to get a cleanup recommendation."
+            text="Run a scan to ask for a cleanup recommendation."
           />
         ) : null}
         {error ? <Notice tone="restricted" icon={AlertTriangle} text={error} /> : null}
@@ -1561,9 +1533,7 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
                       </Badge>
                       <p className="font-medium">{formatAgentActionTitle(suggestedAction)}</p>
                     </div>
-                    {suggestedAction.blockedReason ? (
-                      <p className="mt-2 text-xs text-muted-foreground">{suggestedAction.blockedReason}</p>
-                    ) : null}
+                    {!suggestedAction.canAct ? <p className="mt-2 text-xs text-muted-foreground">Open Clean or Explore to review this item.</p> : null}
                   </div>
                   {canRunAgentBrokerAction(suggestedAction) ? (
                     <Button size="sm" onClick={() => onBrokerAction(suggestedAction)}>
@@ -1576,19 +1546,6 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
             ) : null}
             {selectedCandidate ? (
               <p className="text-xs text-muted-foreground">Current selection: {selectedCandidate.title}</p>
-            ) : null}
-            {assistant.recommendedActions?.length ? (
-              <details className="rounded-md border bg-muted/20 text-xs">
-                <summary className="cursor-pointer px-3 py-2 font-medium text-foreground">Why this recommendation</summary>
-                <div className="grid gap-2 border-t p-3">
-                  {assistant.recommendedActions.slice(0, 3).map((row) => (
-                    <div key={row.id} className="rounded-md border bg-background p-2">
-                      <p className="font-medium text-foreground">{row.title}</p>
-                      <p className="text-muted-foreground">{row.reason}</p>
-                    </div>
-                  ))}
-                </div>
-              </details>
             ) : null}
           </div>
         ) : null}
