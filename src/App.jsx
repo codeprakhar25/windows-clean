@@ -427,12 +427,20 @@ function App() {
     }
   }
 
-  async function executeSelectedCleanup() {
-    if (!selectedCandidate) return;
+  async function executeSelectedCleanup(candidateOverride = null) {
+    const candidateForExecution = candidateOverride || selectedCandidate;
+    const consentForExecution = candidateOverride ? true : consentChecked;
+    const permanentRemovalForExecution = Boolean(candidateForExecution?.requiresPermanentConfirmation && consentForExecution);
+    const prerequisitesForExecution = buildExecutionPrerequisites({
+      candidate: candidateForExecution,
+      archiveDestination,
+      permanentRemovalConfirmed: permanentRemovalForExecution
+    });
+    if (!candidateForExecution) return;
     const currentExecutionGate = buildExecutionGate({
-      candidate: selectedCandidate,
-      consentChecked,
-      executionPrerequisites,
+      candidate: candidateForExecution,
+      consentChecked: consentForExecution,
+      executionPrerequisites: prerequisitesForExecution,
       scanFingerprint,
       executionStatus,
       workflowLocks,
@@ -444,39 +452,41 @@ function App() {
       setExecutionError(formatExecutionGateError(currentExecutionGate));
       return;
     }
+    setSelectedId(candidateForExecution.id);
+    setConsentChecked(true);
     setExecutionStatus("running");
     setExecutionError("");
     setExecutionResult(null);
-    const planId = activePlanId || `plan-${Date.now()}-${selectedCandidate.id}`;
+    const planId = buildCurrentPlanId({ candidate: candidateForExecution, scanFingerprint }) || `plan-${Date.now()}-${candidateForExecution.id}`;
     const executedAt = new Date().toISOString();
     try {
-      const result = await dispatchExecutor(selectedCandidate, {
+      const result = await dispatchExecutor(candidateForExecution, {
         planId,
         scanFingerprint,
         archiveDestination,
-        permanentRemovalConfirmed: effectivePermanentRemovalConfirmed
+        permanentRemovalConfirmed: permanentRemovalForExecution
       });
       const reclaimedBytes = result.entries.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
       const record = {
         schemaVersion: "spaceguard-real-execution-record/v1",
         planId,
         executedAt,
-        source: `native-${selectedCandidate.executor}-executor`,
-        id: selectedCandidate.id,
-        title: selectedCandidate.title,
-        recipeId: selectedCandidate.recipeId,
-        route: selectedCandidate.route,
-        routeInput: selectedCandidate.routeInput,
-        envVar: selectedCandidate.envVar,
-        targetPath: selectedCandidate.targetPath,
-        expectedBytes: selectedCandidate.bytes,
+        source: `native-${candidateForExecution.executor}-executor`,
+        id: candidateForExecution.id,
+        title: candidateForExecution.title,
+        recipeId: candidateForExecution.recipeId,
+        route: candidateForExecution.route,
+        routeInput: candidateForExecution.routeInput,
+        envVar: candidateForExecution.envVar,
+        targetPath: candidateForExecution.targetPath,
+        expectedBytes: candidateForExecution.bytes,
         bytes: reclaimedBytes,
         accepted: Boolean(result.accepted),
         resultMode: result.mode || "",
         reason: result.reason || "",
         volumeProof: result.volumeProof || null,
-        sourceFinding: selectedCandidate.sourceFinding || null,
-        reviewTarget: selectedCandidate.reviewTarget || null,
+        sourceFinding: candidateForExecution.sourceFinding || null,
+        reviewTarget: candidateForExecution.reviewTarget || null,
         entries: result.entries
       };
       setExecutionResult(result);
@@ -632,7 +642,7 @@ function App() {
                 scanStatus={scanStatus}
                 scan={scan}
                 onToggleCandidate={toggleCleanupCandidate}
-                onExecute={executeSelectedCleanup}
+                onExecuteCandidate={executeSelectedCleanup}
                 onRescan={() => runRealScan({ afterExecution: true })}
               />
             ) : null}
@@ -957,7 +967,7 @@ function CleanPanel({
   scanStatus,
   scan,
   onToggleCandidate,
-  onExecute,
+  onExecuteCandidate,
   onRescan
 }) {
   const readyCandidates = candidates.filter(isOneClickCleanupCandidate);
@@ -970,7 +980,7 @@ function CleanPanel({
           <ClipboardCheck className="h-4 w-4" />
           Clean space
         </CardTitle>
-        <CardDescription>Select one ready item, then press Delete on that row.</CardDescription>
+        <CardDescription>Check a row or press Delete to clean it.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {!scan ? (
@@ -1016,21 +1026,19 @@ function CleanPanel({
                         </div>
                         <div className="shrink-0 md:text-right">
                           <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
-                          <p className="text-xs text-muted-foreground">Ready</p>
-                          {selected ? (
-                            <Button
-                              className="mt-2 w-full md:w-auto"
-                              size="sm"
-                              disabled={!canExecute || running}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                onExecute();
-                              }}
-                            >
-                              {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                              {running ? "Deleting" : row.requiresPermanentConfirmation ? "Empty" : "Delete"}
-                            </Button>
-                          ) : null}
+                          <Button
+                            className="mt-2 w-full md:w-auto"
+                            size="sm"
+                            variant={selected ? "default" : "outline"}
+                            disabled={running || (selected && !canExecute)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onExecuteCandidate(row);
+                            }}
+                          >
+                            {running && selected ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                            {running && selected ? "Deleting" : row.requiresPermanentConfirmation ? "Empty" : "Delete"}
+                          </Button>
                         </div>
                       </div>
                     </div>

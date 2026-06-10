@@ -45,7 +45,7 @@ const requiredAppMarkers = [
   "Clean space",
   "Cleanup status",
   "Explore C:",
-  "Select one ready item, then press Delete on that row.",
+  "Check a row or press Delete to clean it.",
   "Ready to clean",
   "Scan again",
   "Activity",
@@ -137,7 +137,9 @@ assert(!app.includes("Check row"), "selected cleanup rows should not render a di
 assert(app.includes("function selectWorkflowCandidate(id, options = {})"), "cleanup target selection should support checked handoff state");
 assert(app.includes("setConsentChecked(Boolean(options.checked && target?.canExecute))"), "checked handoff should only check executable cleanup targets");
 assert(/onSelectCandidate=\{\(id\) => \{[\s\S]*selectWorkflowCandidate\(id, \{ checked: isOneClickCleanupCandidate\(candidate\) \}\);/.test(app), "Explore cleanup buttons should open Clean with one-click rows checked");
-assert(app.includes("onExecute();"), "selected cleanup row action should dispatch the guarded cleanup handler");
+assert(app.includes("async function executeSelectedCleanup(candidateOverride = null)"), "cleanup handler should support direct execution from a ready row");
+assert(app.includes("const candidateForExecution = candidateOverride || selectedCandidate"), "direct cleanup should execute the clicked row without waiting for selection state");
+assert(app.includes("onExecuteCandidate(row);"), "ready cleanup row Delete buttons should dispatch the guarded cleanup handler directly");
 assert(app.includes("Ready to clean"), "post-scan clean screen should lead with the actionable cleanup queue");
 assert(app.includes("Scan details"), "post-scan metrics should be collapsed behind scan details");
 assert(!app.includes("items need review"), "Clean screen should not show a secondary review queue beside delete actions");
@@ -199,8 +201,8 @@ assert(!app.includes("SupportDetails"), "normal Activity UI should not render a 
 assert(!app.includes("Refresh space before exporting troubleshooting info."), "support export should not expose troubleshooting proof copy");
 assert(!app.includes("Support details"), "support export should not expose a nested diagnostic details panel");
 assert(app.includes("buildProofCandidateFromExecutionRecord"), "post-clean comparison should preserve executed target context after the selected row clears");
-assert(app.includes("recipeId: selectedCandidate.recipeId"), "execution records should preserve recipe id for post-run proof matching");
-assert(app.includes("envVar: selectedCandidate.envVar"), "execution records should preserve selected route flag for native ledger context");
+assert(app.includes("recipeId: candidateForExecution.recipeId"), "execution records should preserve recipe id for post-run proof matching");
+assert(app.includes("envVar: candidateForExecution.envVar"), "execution records should preserve selected route flag for native ledger context");
 assert(!app.includes("const exportCandidate = selectedCandidate || proofCandidate"), "app shell should not carry a hidden proof export candidate");
 assert(!app.includes("if (!selectedCandidate || !executionRecord) return;"), "app shell should not carry the old proof export guard");
 assert(!app.includes("setScan(baselinePromotion.activeScan)"), "app shell should not wait for proof export before promoting the refreshed scan");
