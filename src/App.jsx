@@ -255,6 +255,7 @@ function App() {
   const [scan, setScan] = useState(null);
   const [postRunScan, setPostRunScan] = useState(null);
   const [selectedId, setSelectedId] = useState("");
+  const [checkedIds, setCheckedIds] = useState([]);
   const [consentChecked, setConsentChecked] = useState(false);
   const [archiveDestination, setArchiveDestination] = useState("");
   const [executionStatus, setExecutionStatus] = useState("idle");
@@ -272,9 +273,15 @@ function App() {
 
   const nativeConnected = Boolean(capability.available && runtime?.available);
   const candidates = useMemo(() => buildCleanupCandidates(scan, runtime), [scan, runtime]);
+  const checkedCandidates = useMemo(
+    () => checkedIds
+      .map((id) => candidates.find((candidate) => candidate.id === id))
+      .filter(isOneClickCleanupCandidate),
+    [checkedIds, candidates]
+  );
   const selectedCandidate = useMemo(
-    () => candidates.find((candidate) => candidate.id === selectedId) || null,
-    [candidates, selectedId]
+    () => candidates.find((candidate) => candidate.id === selectedId) || checkedCandidates[0] || null,
+    [candidates, selectedId, checkedCandidates]
   );
   const manualFindings = useMemo(() => buildManualFindings(scan), [scan]);
   const scanFingerprint = useMemo(() => buildScanFingerprint(scan), [scan]);
@@ -408,6 +415,7 @@ function App() {
         setScan(result);
         setPostRunScan(result);
         setSelectedId("");
+        setCheckedIds([]);
         setConsentChecked(false);
         setArchiveDestination("");
       } else {
@@ -417,6 +425,7 @@ function App() {
         setExecutionResult(null);
         setExecutionRecord(null);
         setSelectedId(defaultSelection);
+        setCheckedIds([]);
         setConsentChecked(false);
       }
       setScanStatus("complete");
@@ -429,7 +438,81 @@ function App() {
 
   async function executeSelectedCleanup(candidateOverride = null) {
     const candidateForExecution = candidateOverride || selectedCandidate;
-    const consentForExecution = candidateOverride ? true : consentChecked;
+    if (!candidateForExecution) return;
+    await executeCleanupCandidate(candidateForExecution);
+  }
+
+  async function executeCheckedCleanups() {
+    const targets = checkedCandidates.length ? checkedCandidates : selectedCandidate ? [selectedCandidate] : [];
+    if (!targets.length) return;
+    if (targets.length === 1) {
+      await executeCleanupCandidate(targets[0]);
+      return;
+    }
+    setExecutionStatus("running");
+    setExecutionError("");
+    setExecutionResult(null);
+    const executedAt = new Date().toISOString();
+    const batchPlanId = `batch-${Date.now()}-${targets.length}`;
+    const allEntries = [];
+    const allWarnings = [];
+    let acceptedCount = 0;
+    let rejectedCount = 0;
+    try {
+      for (const target of targets) {
+        setSelectedId(target.id);
+        const { result } = await executeCleanupCandidate(target, { updateUi: false, rescanAfter: false });
+        allEntries.push(...(result.entries || []));
+        allWarnings.push(...(result.warnings || []));
+        if (result.accepted) acceptedCount += 1;
+        else rejectedCount += 1;
+      }
+      const reclaimedBytes = allEntries.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+      const accepted = acceptedCount > 0;
+      const aggregateResult = {
+        mode: "checked-cleanups",
+        accepted,
+        reason: rejectedCount ? `${rejectedCount} selected cleanup item(s) could not be cleaned.` : "",
+        entries: allEntries,
+        warnings: allWarnings
+      };
+      const aggregateRecord = {
+        schemaVersion: "spaceguard-real-execution-record/v1",
+        planId: batchPlanId,
+        executedAt,
+        source: "native-checked-cleanups",
+        id: "checked-cleanups",
+        title: `${targets.length} checked cleanups`,
+        recipeId: "checked-cleanups",
+        route: "checked-cleanups",
+        routeInput: "checked-cleanups",
+        envVar: "",
+        targetPath: "",
+        expectedBytes: targets.reduce((sum, target) => sum + Number(target.bytes || 0), 0),
+        bytes: reclaimedBytes,
+        accepted,
+        resultMode: "checked-cleanups",
+        reason: aggregateResult.reason,
+        volumeProof: null,
+        sourceFinding: null,
+        reviewTarget: null,
+        entries: allEntries
+      };
+      setExecutionResult(aggregateResult);
+      setExecutionRecord(aggregateRecord);
+      setPostRunScan(null);
+      setExecutionStatus(accepted ? "complete" : "rejected");
+      if (accepted) {
+        await runRealScan({ afterExecution: true });
+      }
+    } catch (error) {
+      setExecutionStatus("error");
+      setExecutionError(formatCleanupStartError(error));
+    }
+  }
+
+  async function executeCleanupCandidate(candidateForExecution, { updateUi = true, rescanAfter = true } = {}) {
+    const consentForExecution = true;
     const permanentRemovalForExecution = Boolean(candidateForExecution?.requiresPermanentConfirmation && consentForExecution);
     const prerequisitesForExecution = buildExecutionPrerequisites({
       candidate: candidateForExecution,
@@ -448,15 +531,22 @@ function App() {
       activeScanGeneratedAt: scan?.generatedAt || ""
     });
     if (!currentExecutionGate.ready) {
-      setExecutionStatus("error");
-      setExecutionError(formatExecutionGateError(currentExecutionGate));
-      return;
+      const message = formatExecutionGateError(currentExecutionGate);
+      if (updateUi) {
+        setExecutionStatus("error");
+        setExecutionError(message);
+        return { result: { accepted: false, reason: message, entries: [], warnings: [message] }, record: null };
+      }
+      throw new Error(message);
     }
-    setSelectedId(candidateForExecution.id);
-    setConsentChecked(true);
-    setExecutionStatus("running");
-    setExecutionError("");
-    setExecutionResult(null);
+    if (updateUi) {
+      setSelectedId(candidateForExecution.id);
+      setCheckedIds([candidateForExecution.id]);
+      setConsentChecked(true);
+      setExecutionStatus("running");
+      setExecutionError("");
+      setExecutionResult(null);
+    }
     const planId = buildCurrentPlanId({ candidate: candidateForExecution, scanFingerprint }) || `plan-${Date.now()}-${candidateForExecution.id}`;
     const executedAt = new Date().toISOString();
     try {
@@ -489,16 +579,31 @@ function App() {
         reviewTarget: candidateForExecution.reviewTarget || null,
         entries: result.entries
       };
-      setExecutionResult(result);
-      setExecutionRecord(record);
-      setPostRunScan(null);
-      setExecutionStatus(result.accepted ? "complete" : "rejected");
-      if (result.accepted) {
+      if (updateUi) {
+        setExecutionResult(result);
+        setExecutionRecord(record);
+        setPostRunScan(null);
+        setExecutionStatus(result.accepted ? "complete" : "rejected");
+      }
+      if (rescanAfter && result.accepted) {
         await runRealScan({ afterExecution: true });
       }
+      return { result, record };
     } catch (error) {
-      setExecutionStatus("error");
-      setExecutionError(formatCleanupStartError(error));
+      if (updateUi) {
+        setExecutionStatus("error");
+        setExecutionError(formatCleanupStartError(error));
+        return {
+          result: {
+            accepted: false,
+            reason: error instanceof Error ? error.message : "Cleanup failed.",
+            entries: [],
+            warnings: [formatCleanupStartError(error)]
+          },
+          record: null
+        };
+      }
+      throw error;
     }
   }
 
@@ -545,6 +650,7 @@ function App() {
 
   function resetWorkflowForRouteChange() {
     setSelectedId("");
+    setCheckedIds([]);
     setConsentChecked(false);
     setArchiveDestination("");
     setExecutionStatus("idle");
@@ -565,19 +671,23 @@ function App() {
     setExecutionStatus("idle");
     setExecutionError("");
     setArchiveDestination("");
-    setConsentChecked(Boolean(options.checked && target?.canExecute));
+    const checked = Boolean(options.checked && target?.canExecute);
+    setCheckedIds(checked ? [id] : []);
+    setConsentChecked(checked);
   }
 
   function toggleCleanupCandidate(candidate) {
     if (!candidate?.id) return;
-    if (candidate.id === selectedId && consentChecked) {
-      setSelectedId("");
-      setConsentChecked(false);
-      setExecutionError("");
-      setArchiveDestination("");
-      return;
-    }
-    selectWorkflowCandidate(candidate.id, { checked: candidate.canExecute });
+    if (!candidate.canExecute) return;
+    const isChecked = checkedIds.includes(candidate.id);
+    const nextCheckedIds = isChecked
+      ? checkedIds.filter((id) => id !== candidate.id)
+      : [...checkedIds, candidate.id];
+    setCheckedIds(nextCheckedIds);
+    setSelectedId(isChecked ? nextCheckedIds[0] || "" : candidate.id);
+    setConsentChecked(nextCheckedIds.length > 0);
+    setExecutionError("");
+    setArchiveDestination("");
   }
 
   if (!nativeConnected) {
@@ -634,8 +744,7 @@ function App() {
               <CleanPanel
                 candidates={candidates}
                 selectedId={selectedId}
-                consentChecked={consentChecked}
-                canExecute={canExecute}
+                checkedIds={checkedIds}
                 executionStatus={executionStatus}
                 executionError={executionError}
                 executionResult={executionResult}
@@ -643,6 +752,7 @@ function App() {
                 scan={scan}
                 onToggleCandidate={toggleCleanupCandidate}
                 onExecuteCandidate={executeSelectedCleanup}
+                onExecuteChecked={executeCheckedCleanups}
                 onRescan={() => runRealScan({ afterExecution: true })}
               />
             ) : null}
@@ -944,8 +1054,7 @@ function ScanPanel({ request, setRequest, candidates = [], scan, scanStatus, sca
 function CleanPanel({
   candidates,
   selectedId,
-  consentChecked,
-  canExecute,
+  checkedIds = [],
   executionStatus,
   executionError,
   executionResult,
@@ -953,10 +1062,14 @@ function CleanPanel({
   scan,
   onToggleCandidate,
   onExecuteCandidate,
+  onExecuteChecked,
   onRescan
 }) {
   const readyCandidates = candidates.filter(isOneClickCleanupCandidate);
   const hasReadyCandidates = readyCandidates.length > 0;
+  const checkedCandidates = readyCandidates.filter((row) => checkedIds.includes(row.id));
+  const checkedCount = checkedCandidates.length;
+  const checkedBytes = checkedCandidates.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
   const running = executionStatus === "running";
   return (
     <Card id="cleanup-actions-panel" className="rounded-md">
@@ -965,7 +1078,7 @@ function CleanPanel({
           <ClipboardCheck className="h-4 w-4" />
           Clean space
         </CardTitle>
-        <CardDescription>Check a row or press Delete to clean it.</CardDescription>
+        <CardDescription>Check one or more rows, then delete them.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {!scan ? (
@@ -973,63 +1086,83 @@ function CleanPanel({
         ) : candidates.length ? (
           <>
             {hasReadyCandidates ? (
-              <div className="grid gap-3">
-                {readyCandidates.map((row) => {
-                  const checked = row.id === selectedId && consentChecked;
-                  const selected = row.id === selectedId;
-                  return (
-                    <div
-                      key={row.id}
-                      className={`rounded-md border bg-background transition hover:border-primary ${
-                        selected ? "border-primary bg-primary/5" : ""
-                      }`}
-                    >
+              <>
+                <div className="flex flex-col gap-3 rounded-md border bg-muted/20 p-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-medium">
+                      {checkedCount ? `${checkedCount} checked` : "No rows checked"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {checkedCount ? `${formatBytes(checkedBytes)} selected` : "Select rows to clean several items together."}
+                    </p>
+                  </div>
+                  <Button
+                    className="w-full md:w-auto"
+                    disabled={!checkedCount || running}
+                    onClick={onExecuteChecked}
+                  >
+                    {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    {running ? "Deleting" : "Delete checked"}
+                  </Button>
+                </div>
+                <div className="grid gap-3">
+                  {readyCandidates.map((row) => {
+                    const checked = checkedIds.includes(row.id);
+                    const selected = row.id === selectedId;
+                    return (
                       <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => onToggleCandidate(row)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") onToggleCandidate(row);
-                        }}
-                        className="flex cursor-pointer flex-col gap-3 p-4 md:flex-row md:items-start md:justify-between"
+                        key={row.id}
+                        className={`rounded-md border bg-background transition hover:border-primary ${
+                          selected ? "border-primary bg-primary/5" : ""
+                        }`}
                       >
-                        <div className="flex min-w-0 gap-3">
-                          <Checkbox
-                            checked={checked}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onToggleCandidate(row);
-                            }}
-                          />
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="safe">ready</Badge>
-                              <span className="font-medium">{row.title}</span>
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => onToggleCandidate(row)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") onToggleCandidate(row);
+                          }}
+                          className="flex cursor-pointer flex-col gap-3 p-4 md:flex-row md:items-start md:justify-between"
+                        >
+                          <div className="flex min-w-0 gap-3">
+                            <Checkbox
+                              checked={checked}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onToggleCandidate(row);
+                              }}
+                            />
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="safe">ready</Badge>
+                                <span className="font-medium">{row.title}</span>
+                              </div>
+                              <p className="mt-2 truncate text-sm text-muted-foreground">{row.targetPath || row.targetKind}</p>
                             </div>
-                            <p className="mt-2 truncate text-sm text-muted-foreground">{row.targetPath || row.targetKind}</p>
+                          </div>
+                          <div className="shrink-0 md:text-right">
+                            <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
+                            <Button
+                              className="mt-2 w-full md:w-auto"
+                              size="sm"
+                              variant={selected ? "default" : "outline"}
+                              disabled={running}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onExecuteCandidate(row);
+                              }}
+                            >
+                              {running && selected ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                              {running && selected ? "Deleting" : row.requiresPermanentConfirmation ? "Empty" : "Delete"}
+                            </Button>
                           </div>
                         </div>
-                        <div className="shrink-0 md:text-right">
-                          <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
-                          <Button
-                            className="mt-2 w-full md:w-auto"
-                            size="sm"
-                            variant={selected ? "default" : "outline"}
-                            disabled={running || (selected && !canExecute)}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onExecuteCandidate(row);
-                            }}
-                          >
-                            {running && selected ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                            {running && selected ? "Deleting" : row.requiresPermanentConfirmation ? "Empty" : "Delete"}
-                          </Button>
-                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              </>
             ) : (
               <EmptyState icon={Lock} title="No items ready to delete" detail="Run another scan or open Explore to review what was found." />
             )}

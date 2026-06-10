@@ -45,7 +45,7 @@ const requiredAppMarkers = [
   "Clean space",
   "Cleanup status",
   "Explore C:",
-  "Check a row or press Delete to clean it.",
+  "Check one or more rows, then delete them.",
   "Ready to clean",
   "Scan again",
   "Activity",
@@ -132,14 +132,18 @@ assert(app.includes("const canExecute = executionGate.ready"), "execute button s
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
 assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
 assert(app.includes("formatExecutionGateError"), "execute handler should convert dispatch blockers into plain user-facing copy");
-assert(/if \(candidate\.id === selectedId && consentChecked\) \{[\s\S]*setSelectedId\(""\);[\s\S]*setConsentChecked\(false\);/.test(app), "clicking an already checked cleanup row should deselect it instead of leaving a disabled action");
+assert(app.includes("const [checkedIds, setCheckedIds] = useState([])"), "cleanup queue should support multiple checked rows");
+assert(app.includes("const nextCheckedIds = isChecked"), "clicking an already checked cleanup row should remove it from the checked set");
 assert(!app.includes("Check row"), "selected cleanup rows should not render a disabled check-row action");
 assert(app.includes("function selectWorkflowCandidate(id, options = {})"), "cleanup target selection should support checked handoff state");
-assert(app.includes("setConsentChecked(Boolean(options.checked && target?.canExecute))"), "checked handoff should only check executable cleanup targets");
+assert(app.includes("setCheckedIds(checked ? [id] : [])"), "checked handoff should only check executable cleanup targets");
 assert(/onSelectCandidate=\{\(id\) => \{[\s\S]*selectWorkflowCandidate\(id, \{ checked: isOneClickCleanupCandidate\(candidate\) \}\);/.test(app), "Explore cleanup buttons should open Clean with one-click rows checked");
 assert(app.includes("async function executeSelectedCleanup(candidateOverride = null)"), "cleanup handler should support direct execution from a ready row");
 assert(app.includes("const candidateForExecution = candidateOverride || selectedCandidate"), "direct cleanup should execute the clicked row without waiting for selection state");
 assert(app.includes("onExecuteCandidate(row);"), "ready cleanup row Delete buttons should dispatch the guarded cleanup handler directly");
+assert(app.includes("async function executeCheckedCleanups()"), "cleanup queue should execute multiple checked rows from one action");
+assert(app.includes("onExecuteChecked={executeCheckedCleanups}"), "Clean screen should wire the Delete checked action");
+assert(app.includes("Delete checked"), "Clean screen should expose a simple Delete checked action");
 assert(app.includes("Ready to clean"), "post-scan clean screen should lead with the actionable cleanup queue");
 assert(!app.includes("Scan details"), "Clean screen should not carry post-scan metrics or diagnostic details");
 assert(!app.includes("items need review"), "Clean screen should not show a secondary review queue beside delete actions");
@@ -216,7 +220,7 @@ assert(
   /if \(afterExecution\) \{[\s\S]*setScan\(result\);[\s\S]*setPostRunScan\(result\);[\s\S]*setSelectedId\(""\);[\s\S]*setConsentChecked\(false\);[\s\S]*setArchiveDestination\(""\);[\s\S]*\}/.test(app),
   "post-clean rescan should update the normal cleanup list and clear stale selection state"
 );
-assert(/if \(result\.accepted\) \{[\s\S]*await runRealScan\(\{ afterExecution: true \}\);[\s\S]*\}/.test(app), "accepted cleanup should refresh the list automatically");
+assert(/if \(rescanAfter && result\.accepted\) \{[\s\S]*await runRealScan\(\{ afterExecution: true \}\);[\s\S]*\}/.test(app), "accepted cleanup should refresh the list automatically");
 assert(app.includes("buildManualFindingGuidance"), "app should use tested manual finding guidance");
 assert(app.includes("buildManualFindingReviewRows"), "app should use tested manual review row guidance");
 assert(app.includes("\"windows-old\": \"Previous Windows installation review\""), "manual panel should surface Windows.old findings");
