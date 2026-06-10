@@ -854,10 +854,11 @@ function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, sel
               })}
             </nav>
             <div className="mt-auto rounded-md border bg-muted/35 p-3 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground">Selected item</p>
-              <p className="mt-1 truncate">{selectedCandidate?.title || "Nothing selected"}</p>
-              <p className="mt-3 font-medium text-foreground">Runtime</p>
-              <p className="mt-1">{runtime?.windows ? "Windows native shell" : "Waiting for native shell"}</p>
+              <p className="font-medium text-foreground">Cleanup status</p>
+              <p className="mt-1 truncate">
+                {scan ? selectedCandidate?.title || "Choose an item to delete" : "Scan your PC to begin"}
+              </p>
+              <p className="mt-3 font-medium text-foreground">{runtime?.realRunEnabled ? "Ready to clean" : "Desktop app needed"}</p>
             </div>
           </div>
         </aside>
@@ -868,10 +869,6 @@ function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, sel
 }
 
 function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh }) {
-  const developerSteps = [
-    ["Check setup", "npm run windows:ready"],
-    ["Launch desktop app", "npm run native:dev"]
-  ];
   const cleanupSteps = [
     ["Scan PC", "Find cleanable cache and temp files."],
     ["Check item", "Choose one safe cleanup row."],
@@ -917,17 +914,6 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh })
                 </div>
               ))}
             </div>
-            <details className="rounded-md border bg-muted/20">
-              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Developer launch</summary>
-              <div className="grid gap-3 border-t p-3 md:grid-cols-2">
-                {developerSteps.map(([label, command]) => (
-                  <div key={label} className="rounded-md border bg-background p-3">
-                    <p className="text-sm font-medium">{label}</p>
-                    <code className="mt-2 block overflow-hidden text-ellipsis rounded border bg-muted/50 px-2 py-1 text-xs">{command}</code>
-                  </div>
-                ))}
-              </div>
-            </details>
           </CardContent>
         </Card>
         <Card className="rounded-md">
@@ -1120,7 +1106,7 @@ function CleanPanel({
               <ClipboardCheck className="h-4 w-4" />
               Clean space
             </CardTitle>
-            <CardDescription>Check one item, then delete it.</CardDescription>
+            <CardDescription>Select one item, then delete it.</CardDescription>
           </div>
           <Button className="w-full md:w-auto" disabled={!canExecute || running} onClick={onExecute}>
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -1164,7 +1150,7 @@ function CleanPanel({
                           />
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="safe">can clean</Badge>
+                              <Badge variant="safe">ready</Badge>
                               <span className="font-medium">{row.title}</span>
                             </div>
                             <p className="mt-2 truncate text-sm text-muted-foreground">{row.targetPath || row.targetKind}</p>
@@ -1194,7 +1180,7 @@ function CleanPanel({
                 })}
               </div>
             ) : (
-              <EmptyState icon={Lock} title="No items ready to delete" detail="SpaceGuard did not find a safe cleanup action that can run right now." />
+              <EmptyState icon={Lock} title="No items ready to delete" detail="Run another scan or open Explore to review what was found." />
             )}
             {reviewCandidates.length ? (
               <details className="rounded-md border bg-muted/20">
@@ -1256,7 +1242,7 @@ function CleanPanel({
             ) : null}
           </>
         ) : (
-          <EmptyState icon={Lock} title="No cleanable findings yet" detail="Measured findings were not found or they do not map to a shipped safe executor." />
+          <EmptyState icon={Lock} title="No cleanable findings yet" detail="Run a scan to find items SpaceGuard can delete safely." />
         )}
       </CardContent>
     </Card>
@@ -1333,7 +1319,7 @@ function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCand
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant={row.cleanable ? row.ready ? "safe" : "review" : "outline"}>
-                          {row.cleanable ? row.ready ? "can clean" : "not ready" : "review only"}
+                          {row.cleanable ? row.ready ? "ready" : "not ready" : "review only"}
                         </Badge>
                         <p className="font-medium">{row.title}</p>
                       </div>
@@ -1676,10 +1662,10 @@ function formatCleanupRejectMessage(result = {}) {
     return "Check the Recycle Bin row, then try again.";
   }
   if (/target-(not-allowlisted|forbidden|blocked|missing)|outside|allowlist/.test(text)) {
-    return "This item is outside the safe cleanup list. Choose another can clean item or scan again.";
+    return "This item is outside the safe cleanup list. Choose another ready item or scan again.";
   }
   if (/executor-disabled|feature-flag|cleanup authority|not available|runtime/.test(text)) {
-    return "Cleanup is not available for this item in this app session. Restart SpaceGuard, scan again, and try another can clean item.";
+    return "Cleanup is not available for this item in this app session. Restart SpaceGuard, scan again, and try another ready item.";
   }
   if (/access denied|permission|locked|in use|using these files/.test(text)) {
     return "Windows blocked some files because they are in use. Close the related apps, scan again, and retry.";
@@ -1701,7 +1687,7 @@ function formatNotReadyReason(candidate = {}) {
   if (text.includes("allowlist") || text.includes("executor")) {
     return "This cleanup is not available in this session. Choose another item or refresh the app.";
   }
-  return "Not ready to delete. Choose another can clean item or refresh the scan.";
+  return "Not ready to delete. Choose another ready item or refresh the scan.";
 }
 
 function formatSignedBytes(value = 0) {
@@ -2473,9 +2459,9 @@ function totalEntryBytes(entries = []) {
 function formatExecutionGateError(gate = {}) {
   const blocker = Array.isArray(gate.blockers) ? gate.blockers[0] : null;
   if (!blocker) return "Cleanup is not ready yet. Check one cleanable item and try again.";
-  if (blocker.id === "selected-target") return "Check one item marked can clean before deleting.";
-  if (blocker.id === "route-readiness") return "This item is not ready to clean. Choose another can clean item or refresh the scan.";
-  if (blocker.id === "consent-checkbox") return "Check one item marked can clean before deleting.";
+  if (blocker.id === "selected-target") return "Select one ready item before deleting.";
+  if (blocker.id === "route-readiness") return "This item is not ready to delete. Choose another ready item or scan again.";
+  if (blocker.id === "consent-checkbox") return "Select one ready item before deleting.";
   if (blocker.id === "scan-fingerprint") return "Refresh the scan, then try deleting again.";
   if (blocker.id === "execution-prerequisites") return "Finish the extra requirement shown for this item, then try again.";
   if (blocker.id === "executor-not-running") return "Cleanup is already running. Wait for it to finish.";

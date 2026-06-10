@@ -27,12 +27,10 @@ for (const marker of forbiddenRuntimeMarkers) {
 const requiredRealShellMarkers = [
   "Open SpaceGuard for Windows",
   "This browser page cannot scan or delete files.",
-  "Developer launch",
-  "npm run windows:ready",
-  "npm run native:dev",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Scan PC",
   "Clean space",
+  "Cleanup status",
   "Explore C:",
   "Selected item",
   "Delete selected files",

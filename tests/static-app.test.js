@@ -40,12 +40,10 @@ const requiredAppMarkers = [
   "Real Windows cleanup",
   "Open SpaceGuard for Windows",
   "This browser page cannot scan or delete files.",
-  "Developer launch",
-  "npm run native:dev",
-  "npm run windows:ready",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Scan PC",
   "Clean space",
+  "Cleanup status",
   "Explore C:",
   "Selected item",
   "Delete selected files",
@@ -241,7 +239,9 @@ assert(app.includes("function ConnectionRequired({ runtime, runtimeStatus, runti
 assert(app.includes("This browser page cannot scan or delete files."), "browser-only setup state should explicitly avoid bundled cleanup data");
 assert(app.includes("The cleanup tools are available only inside the Windows desktop app."), "browser-only setup state should explain that real execution requires the desktop app");
 assert(/if \(!nativeConnected\) \{[\s\S]*return \(\s*<AppFrame[\s\S]*<ConnectionRequired/.test(app), "browser-only setup state should keep the pinned sidebar while rendering non-executable setup content");
-assert(app.includes("Developer launch"), "browser-only setup state should collapse developer launch commands");
+assert(!app.includes("Developer launch"), "browser-only setup state should not expose developer command boxes in the production UI");
+assert(!app.includes("npm run native:dev"), "browser-only setup state should not show terminal launch commands");
+assert(!app.includes("npm run windows:ready"), "browser-only setup state should not show setup command boxes");
 assert(app.includes("What happens in the app"), "browser-only setup should describe the simplified cleanup flow");
 assert(!app.includes("Desktop connection"), "browser-only setup should not expose runtime diagnostics as a product panel");
 assert(!app.includes("Native bridge"), "browser-only setup should not expose internal bridge metrics");
