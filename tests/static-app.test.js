@@ -38,11 +38,11 @@ for (const iconPath of tauriIcons) {
 const requiredAppMarkers = [
   "SpaceGuard",
   "Real Windows cleanup",
-  "Connect the Windows desktop app",
-  "No local folders are scanned from this browser session.",
+  "Open SpaceGuard for Windows",
+  "This browser page cannot scan or delete files.",
+  "Developer launch",
   "npm run native:dev",
   "npm run windows:ready",
-  "OPENAI_API_KEY",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Scan PC",
   "Clean space",
@@ -218,11 +218,13 @@ assert(!app.includes("copyRunbook"), "app shell should not expose route runbook 
 assert(!app.includes("navigator.clipboard.writeText(checklist.runbook.content)"), "app shell should not copy route setup runbooks");
 assert(!app.includes("npm run openai:smoke -- --local-contract --route"), "app shell should not show route-contract smoke setup steps");
 assert(app.includes("function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh })"), "browser-only setup state should accept only runtime status and refresh props");
-assert(app.includes("This screen contains no preloaded cleanup data and cannot touch local files."), "browser-only setup state should explicitly avoid bundled cleanup data");
-assert(app.includes("This setup page is intentionally non-executable. Start the desktop shell to test real Windows data."), "browser-only setup state should explain that real execution requires the desktop shell");
+assert(app.includes("This browser page cannot scan or delete files."), "browser-only setup state should explicitly avoid bundled cleanup data");
+assert(app.includes("The cleanup tools are available only inside the Windows desktop app."), "browser-only setup state should explain that real execution requires the desktop app");
 assert(/if \(!nativeConnected\) \{[\s\S]*return \(\s*<AppFrame[\s\S]*<ConnectionRequired/.test(app), "browser-only setup state should keep the pinned sidebar while rendering non-executable setup content");
-assert(app.includes("Windows launch steps"), "browser-only setup state should present the desktop launch checklist");
-assert(app.includes("Scan -> check -> delete"), "browser-only setup should describe the simplified cleanup flow");
+assert(app.includes("Developer launch"), "browser-only setup state should collapse developer launch commands");
+assert(app.includes("What happens in the app"), "browser-only setup should describe the simplified cleanup flow");
+assert(!app.includes("Desktop connection"), "browser-only setup should not expose runtime diagnostics as a product panel");
+assert(!app.includes("Native bridge"), "browser-only setup should not expose internal bridge metrics");
 assert(!/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup state should not render the route setup wizard");
 assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context should keep a stable schema");
 assert(!app.includes("Recommendation diagnostics"), "OpenAI panel should not expose deterministic broker diagnostics");
@@ -233,7 +235,7 @@ assert(app.includes("resolveWorkflowAgentBrokerCandidate"), "OpenAI broker actio
 assert(app.includes("onBrokerAction(suggestedAction)"), "OpenAI panel should expose a user-clicked broker action button");
 assert(app.includes("formatAgentButtonLabel(suggestedAction)"), "OpenAI broker action button should use simple user-facing labels");
 assert(app.includes("redactPath"), "OpenAI context should redact local paths before provider calls");
-assert(app.includes("No local folders are scanned from this browser session."), "browser-only state should be setup-only");
+assert(app.includes("This browser page cannot scan or delete files."), "browser-only state should be setup-only");
 assert(app.includes("Native proof artifact writer is required"), "proof export should block when the native artifact writer does not write proof files");
 assert(!app.includes("downloadTextFile(fileName, content)"), "proof export must not silently fall back to browser downloads");
 

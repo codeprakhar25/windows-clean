@@ -16,9 +16,7 @@ import {
   RefreshCcw,
   ScanLine,
   ShieldCheck,
-  Terminal,
-  Trash2,
-  XCircle
+  Trash2
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -887,135 +885,85 @@ function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, sel
 }
 
 function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh }) {
-  const setupSteps = [
-    {
-      label: "Install project dependencies",
-      command: "npm install",
-      detail: "Run this from the SpaceGuard project folder on the Windows PC you want to clean."
-    },
-    {
-      label: "Optional OpenAI key",
-      command: "OPENAI_API_KEY=sk-...",
-      detail: "Set this only if you want advisory reasoning. Cleanup still requires native allowlists and user confirmation."
-    },
-    {
-      label: "Check Windows readiness",
-      command: "npm run windows:ready",
-      detail: "This blocks early if npm dependencies or the Windows toolchain are not ready."
-    },
-    {
-      label: "Launch the desktop app",
-      command: "npm run native:dev",
-      detail: "This opens the Tauri desktop shell with built-in cleanup allowlists."
-    },
-    {
-      label: "Run cleanup",
-      command: "Scan -> check -> delete",
-      detail: "If this setup screen is still visible, the native bridge is not connected yet."
-    }
+  const developerSteps = [
+    ["Check setup", "npm run windows:ready"],
+    ["Launch desktop app", "npm run native:dev"]
   ];
-  const setupMetrics = [
-    ["Native bridge", runtime?.available ? "connected" : "not connected"],
-    ["Mode", runtime?.mode || "browser-setup"],
-    ["Platform", runtime?.platform || "browser"],
-    ["Status", runtimeStatus || "loading"]
-  ];
-  const unlocks = [
-    "Read-only C: scan",
-    "Cleanup choices",
-    "Explicit user consent",
-    "Safe delete action",
-    "Post-clean rescan",
-    "Cleanup activity"
+  const cleanupSteps = [
+    ["Scan PC", "Find cleanable cache and temp files."],
+    ["Check item", "Choose one safe cleanup row."],
+    ["Delete", "Run the guarded Windows cleanup."]
   ];
 
   return (
     <main className="min-h-screen bg-background px-5 py-6 text-foreground lg:px-8">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
-        <div className="flex flex-col justify-between gap-4 rounded-md border bg-card p-5 shadow-sm lg:flex-row lg:items-center">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="restricted">desktop required</Badge>
-              <Badge variant="outline">setup only</Badge>
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-5">
+        <Card className="rounded-md">
+          <CardHeader>
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start md:justify-between">
+              <div>
+                <Badge variant="restricted">desktop app needed</Badge>
+                <CardTitle className="mt-3 flex items-center gap-2 text-2xl">
+                  <ShieldCheck className="h-5 w-5" />
+                  Open SpaceGuard for Windows
+                </CardTitle>
+                <CardDescription className="mt-2 max-w-2xl">
+                  This browser page cannot scan or delete files. Open the installed Windows app to clean space.
+                </CardDescription>
+              </div>
+              <Button variant="outline" onClick={onRefresh} disabled={runtimeStatus === "loading"}>
+                <RefreshCcw className="h-4 w-4" />
+                {runtimeStatus === "loading" ? "Checking" : "Check again"}
+              </Button>
             </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-normal">Connect the Windows desktop app</h1>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              No local folders are scanned from this browser session. Start the Tauri shell on Windows to unlock real scan,
-              user consent, native cleanup, post-clean rescan, and cleanup history.
-            </p>
-          </div>
-          <Button variant="outline" onClick={onRefresh} disabled={runtimeStatus === "loading"}>
-            <RefreshCcw className="h-4 w-4" />
-            {runtimeStatus === "loading" ? "Checking" : "Recheck"}
-          </Button>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(380px,1.1fr)]">
-          <div className="space-y-4">
-            <Card className="rounded-md">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Terminal className="h-4 w-4" />
-                  Windows launch steps
-                </CardTitle>
-                <CardDescription>This screen contains no preloaded cleanup data and cannot touch local files.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {setupMetrics.map(([label, value]) => (
-                    <Metric key={label} label={label} value={value} />
-                  ))}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {runtimeError ? (
+              <Notice tone="restricted" icon={AlertTriangle} text={runtimeError} />
+            ) : (
+              <Notice tone="review" icon={Lock} text="The cleanup tools are available only inside the Windows desktop app." />
+            )}
+            <div className="grid gap-3 md:grid-cols-3">
+              {cleanupSteps.map(([label, detail], index) => (
+                <div key={label} className="rounded-md border bg-background p-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-md border bg-muted text-xs font-semibold">{index + 1}</div>
+                    <p className="font-medium">{label}</p>
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">{detail}</p>
                 </div>
-                <div className="space-y-3">
-                  {setupSteps.map((step, index) => (
-                    <div key={step.label} className="rounded-md border bg-background p-3">
-                      <div className="flex gap-3">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-muted text-sm font-semibold">
-                          {index + 1}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium">{step.label}</p>
-                          <code className="mt-2 block overflow-hidden text-ellipsis rounded border bg-muted/50 px-2 py-1 text-xs">
-                            {step.command}
-                          </code>
-                          <p className="mt-2 text-sm text-muted-foreground">{step.detail}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {runtimeError ? (
-                  <Notice tone="restricted" icon={AlertTriangle} text={runtimeError} />
-                ) : (
-                  <Notice
-                    tone="review"
-                    icon={Lock}
-                    text="This setup page is intentionally non-executable. Start the desktop shell to test real Windows data."
-                  />
-                )}
-              </CardContent>
-            </Card>
-            <Card className="rounded-md">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4" />
-                  What unlocks after connection
-                </CardTitle>
-                <CardDescription>The real app appears only when the Tauri bridge is detected.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
-                {unlocks.map((item) => (
-                  <div key={item} className="flex items-center gap-2 rounded-md border bg-background px-3 py-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    <span>{item}</span>
+              ))}
+            </div>
+            <details className="rounded-md border bg-muted/20">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Developer launch</summary>
+              <div className="grid gap-3 border-t p-3 md:grid-cols-2">
+                {developerSteps.map(([label, command]) => (
+                  <div key={label} className="rounded-md border bg-background p-3">
+                    <p className="text-sm font-medium">{label}</p>
+                    <code className="mt-2 block overflow-hidden text-ellipsis rounded border bg-muted/50 px-2 py-1 text-xs">{command}</code>
                   </div>
                 ))}
-              </CardContent>
-            </Card>
-          </div>
-          <div className="grid gap-4">
-            <RuntimePanel runtime={runtime} />
-          </div>
-        </div>
+              </div>
+            </details>
+          </CardContent>
+        </Card>
+        <Card className="rounded-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trash2 className="h-4 w-4" />
+              What happens in the app
+            </CardTitle>
+            <CardDescription>SpaceGuard only deletes from built-in safe cleanup areas after you check a row.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
+            {["Windows temp files", "Browser caches", "Developer caches", "Recycle Bin", "Old downloads", "Activity summary"].map((item) => (
+              <div key={item} className="flex items-center gap-2 rounded-md border bg-background px-3 py-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <span>{item}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </div>
     </main>
   );
@@ -1050,48 +998,6 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
         </Button>
       </div>
     </header>
-  );
-}
-
-function RuntimePanel({ runtime }) {
-  const checks = [
-    ["Windows", runtime?.windows],
-    ["Scan", runtime?.scanKnownRoots],
-    ["Cleanup", runtime?.executeCleanupPlan],
-    ["Safe list", runtime?.safeExecutorsEnabled],
-    ["AI", runtime?.openAiAgentAdvice && runtime?.openAiAdvisorConfigured]
-  ];
-  return (
-    <Card className="rounded-md">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4" />
-          Desktop connection
-        </CardTitle>
-        <CardDescription>Current app permissions.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-2">
-          {checks.map(([label, passed]) => (
-            <div key={label} className="rounded-md border bg-muted/25 p-3">
-              <div className="flex items-center gap-2">
-                {passed ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-red-600" />}
-                <span className="text-sm font-medium">{label}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="rounded-md border bg-background p-3">
-          <p className="text-sm font-medium">Safety rules</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Badge variant={runtime?.safeExecutorsEnabled ? "safe" : "review"}>
-              {runtime?.safeExecutorsEnabled ? "safe cleanup enabled" : "safe cleanup unavailable"}
-            </Badge>
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">Cleanup only runs after scan evidence and your confirmation.</p>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 

@@ -25,11 +25,11 @@ for (const marker of forbiddenRuntimeMarkers) {
 }
 
 const requiredRealShellMarkers = [
-  "Connect the Windows desktop app",
-  "No local folders are scanned from this browser session.",
+  "Open SpaceGuard for Windows",
+  "This browser page cannot scan or delete files.",
+  "Developer launch",
   "npm run windows:ready",
   "npm run native:dev",
-  "OPENAI_API_KEY",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Scan PC",
   "Clean space",
