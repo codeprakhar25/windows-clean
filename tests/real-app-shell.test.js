@@ -32,7 +32,7 @@ const requiredRealShellMarkers = [
   "OPENAI_API_KEY",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Run real scan",
-  "Real cleanup queue",
+  "Cleanup queue",
   "Explore C: allocation",
   "Selected cleanup",
   "Delete selected files",

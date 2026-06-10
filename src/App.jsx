@@ -433,10 +433,12 @@ function App() {
       const nextRuntime = await getNativeRuntimeCapabilities();
       setRuntime(nextRuntime);
       setRuntimeStatus("ready");
+      return nextRuntime;
     } catch (error) {
       setRuntime(null);
       setRuntimeStatus("error");
       setRuntimeError(error instanceof Error ? error.message : "Runtime capability check failed.");
+      return null;
     }
   }
 
@@ -448,6 +450,7 @@ function App() {
       if (!result.available || !result.windows) {
         throw new Error("The native scanner is not available on this Windows desktop session.");
       }
+      const latestRuntime = await refreshRuntime();
       if (afterExecution) {
         setPostRunScan(result);
         setProofReviewed(false);
@@ -457,11 +460,12 @@ function App() {
         setProofExportStatus("idle");
         setProofExportMessage("");
       } else {
+        const defaultSelection = selectDefaultCleanupCandidateId(buildCleanupCandidates(result, latestRuntime || runtime));
         setScan(result);
         setPostRunScan(null);
         setExecutionResult(null);
         setExecutionRecord(null);
-        setSelectedId("");
+        setSelectedId(defaultSelection);
         setConsentChecked(false);
         setPermanentRemovalConfirmed(false);
         setProofReviewed(false);
@@ -473,7 +477,6 @@ function App() {
       }
       setScanStatus("complete");
       setActiveView(afterExecution ? "history" : "clean");
-      await refreshRuntime();
     } catch (error) {
       setScanStatus("error");
       setScanError(error instanceof Error ? error.message : "Native scan failed.");
@@ -1364,49 +1367,59 @@ function CleanupQueue({ candidates, selectedId, setSelectedId, scan }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Trash2 className="h-4 w-4" />
-          Real cleanup queue
+          Cleanup queue
         </CardTitle>
-        <CardDescription>Only measured native findings can become cleanup targets.</CardDescription>
+        <CardDescription>Choose an item, then delete it from the selected cleanup panel.</CardDescription>
       </CardHeader>
       <CardContent>
         {!scan ? (
           <EmptyState icon={ScanLine} title="Run real scan first" detail="The queue is built only from native scan findings." />
         ) : candidates.length ? (
           <div className="grid gap-3">
-            {candidates.map((candidate) => (
-              <button
-                key={candidate.id}
-                type="button"
-                onClick={() => setSelectedId(candidate.id)}
-                className={`w-full rounded-md border p-4 text-left transition hover:border-primary ${
+            {candidates.map((candidate) => {
+              const statusLabel = candidate.canExecute ? "can clean" : candidate.executable ? "unavailable" : "review only";
+              return (
+                <div
+                  key={candidate.id}
+                  className={`rounded-md border transition hover:border-primary ${
                   selectedId === candidate.id ? "border-primary bg-primary/5" : "bg-background"
                 }`}
-              >
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={candidate.risk}>{candidate.risk}</Badge>
-                      <Badge variant={candidate.canExecute ? "safe" : candidate.executable ? "review" : "outline"}>
-                        {candidate.canExecute ? "ready" : candidate.executable ? "blocked" : "manual"}
-                      </Badge>
-                      <span className="font-medium">{candidate.title}</span>
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(candidate.id)}
+                    className="w-full p-4 text-left"
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={candidate.risk}>{candidate.risk}</Badge>
+                          <Badge variant={candidate.canExecute ? "safe" : candidate.executable ? "review" : "outline"}>
+                            {statusLabel}
+                          </Badge>
+                          <span className="font-medium">{candidate.title}</span>
+                        </div>
+                        <p className="mt-2 truncate text-sm text-muted-foreground">{candidate.targetPath || candidate.targetKind}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{candidate.consequence}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-lg font-semibold">{formatBytes(candidate.bytes)}</p>
+                        <p className="text-xs text-muted-foreground">{candidate.canExecute ? "Ready to delete" : "Not ready"}</p>
+                      </div>
                     </div>
-                    <p className="mt-2 truncate text-sm text-muted-foreground">{candidate.targetPath || candidate.targetKind}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{candidate.consequence}</p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-lg font-semibold">{formatBytes(candidate.bytes)}</p>
-                    <p className="text-xs text-muted-foreground">{candidate.routeInput}</p>
-                  </div>
+                  </button>
+                  {!candidate.canExecute ? (
+                    <details className="mx-4 mb-4 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                      <summary className="cursor-pointer font-medium text-foreground">Why unavailable</summary>
+                      <div className="mt-2 space-y-2">
+                        <p>{candidate.blockedReason}</p>
+                        <RouteReadinessList rows={candidate.readinessRows} compact />
+                      </div>
+                    </details>
+                  ) : null}
                 </div>
-                {!candidate.canExecute ? (
-                  <div className="mt-3 space-y-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                    <p>{candidate.blockedReason}</p>
-                    <RouteReadinessList rows={candidate.readinessRows} compact />
-                  </div>
-                ) : null}
-              </button>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <EmptyState icon={Lock} title="No cleanable findings yet" detail="Measured findings were not found or they do not map to a shipped safe executor." />
@@ -1434,6 +1447,7 @@ function DecisionPanel({
   onRescan
 }) {
   const executionLedger = buildExecutionLedgerRows(executionResult);
+  const candidateReady = Boolean(candidate?.canExecute);
   return (
     <Card className="rounded-md">
       <CardHeader>
@@ -1457,24 +1471,27 @@ function DecisionPanel({
                 </div>
                 <div className="shrink-0 md:text-right">
                   <p className="text-2xl font-semibold">{formatBytes(candidate.bytes)}</p>
-                  <p className="text-xs text-muted-foreground">can be cleaned</p>
+                  <p className="text-xs text-muted-foreground">{candidateReady ? "can be cleaned" : "not ready yet"}</p>
                 </div>
               </div>
             </div>
+            {!candidateReady ? (
+              <Notice tone="restricted" icon={Lock} text={candidate.blockedReason || "This item is not available for cleanup yet."} />
+            ) : null}
             <label className="flex items-start gap-3 text-sm">
-              <Checkbox checked={consentChecked} onClick={() => setConsentChecked(!consentChecked)} />
+              <Checkbox checked={candidateReady && consentChecked} disabled={!candidateReady} onClick={() => setConsentChecked(!consentChecked)} />
               <span>I want to clean this selected item from this PC.</span>
             </label>
             {candidate.requiresPermanentConfirmation ? (
               <label className="flex items-start gap-3 text-sm">
-                <Checkbox checked={permanentRemovalConfirmed} onClick={() => setPermanentRemovalConfirmed(!permanentRemovalConfirmed)} />
+                <Checkbox checked={candidateReady && permanentRemovalConfirmed} disabled={!candidateReady} onClick={() => setPermanentRemovalConfirmed(!permanentRemovalConfirmed)} />
                 <span>I understand this permanently empties Recycle Bin contents for the selected drive.</span>
               </label>
             ) : null}
             {candidate.requiresArchiveDestination ? (
               <label className="space-y-1 text-sm">
                 <span className="font-medium">Archive destination</span>
-                <Input value={archiveDestination} onChange={(event) => setArchiveDestination(event.target.value)} placeholder="D:\\Archives" />
+                <Input value={archiveDestination} onChange={(event) => setArchiveDestination(event.target.value)} placeholder="D:\\Archives" disabled={!candidateReady} />
               </label>
             ) : null}
             <Button className="w-full" disabled={!canExecute} onClick={onExecute}>
@@ -2099,6 +2116,15 @@ function buildCleanupCandidates(scan, runtime) {
   return rows
     .filter((row) => row.bytes > 0 || row.executor === "dockerBuildCache" || row.executor === "recycleBin")
     .sort((left, right) => Number(right.canExecute) - Number(left.canExecute) || right.bytes - left.bytes);
+}
+
+function selectDefaultCleanupCandidateId(candidates = []) {
+  return (
+    candidates.find((candidate) => candidate.canExecute)?.id ||
+    candidates.find((candidate) => candidate.executable)?.id ||
+    candidates[0]?.id ||
+    ""
+  );
 }
 
 function buildExploreRows(scan, candidates = [], manualFindings = []) {
