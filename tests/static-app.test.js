@@ -138,7 +138,7 @@ assert(/if \(candidate\.id === selectedId && consentChecked\) \{[\s\S]*setSelect
 assert(!app.includes("Check row"), "selected cleanup rows should not render a disabled check-row action");
 assert(app.includes("function selectWorkflowCandidate(id, options = {})"), "cleanup target selection should support checked handoff state");
 assert(app.includes("setConsentChecked(Boolean(options.checked && target?.canExecute))"), "checked handoff should only check executable cleanup targets");
-assert(/onSelectCandidate=\{\(id\) => \{[\s\S]*selectWorkflowCandidate\(id, \{ checked: Boolean\(candidate\?\.canExecute\) \}\);/.test(app), "Explore cleanup buttons should open Clean with executable rows checked");
+assert(/onSelectCandidate=\{\(id\) => \{[\s\S]*selectWorkflowCandidate\(id, \{ checked: isOneClickCleanupCandidate\(candidate\) \}\);/.test(app), "Explore cleanup buttons should open Clean with one-click rows checked");
 assert(app.includes("onExecute();"), "selected cleanup row action should dispatch the guarded cleanup handler");
 assert(app.includes("Ready to clean"), "post-scan clean screen should lead with the actionable cleanup queue");
 assert(app.includes("Scan details"), "post-scan metrics should be collapsed behind scan details");
@@ -146,8 +146,8 @@ assert(!app.includes("items need review"), "Clean screen should not show a secon
 assert(app.includes("isOneClickCleanupCandidate"), "cleanup queue should use a shared one-click eligibility helper");
 assert(app.includes("candidates.filter(isOneClickCleanupCandidate)"), "main cleanup queue should only show one-click cleanup rows");
 assert(!app.includes("reviewCandidates"), "extra-input cleanup rows should stay out of the main Clean delete queue");
-assert(app.includes("needs destination"), "large-file archive rows should be labelled as needing setup instead of can-clean");
-assert(app.includes("Archive setup required before this item can run."), "Explore and AI context should not present archive rows as immediate delete actions");
+assert(app.includes("candidateId: isOneClickCleanupCandidate(candidate) ? candidate.id : \"\""), "Explore should only hand off ready cleanup rows to Clean");
+assert(app.includes("Choose an archive folder before cleaning this item."), "Explore should keep archive rows out of the immediate delete path");
 assert(app.includes("No items ready to delete"), "cleanup queue should avoid preselecting blocked targets when nothing can run");
 assert(/function selectDefaultCleanupCandidateId\(candidates = \[\]\) \{[\s\S]*return ""/.test(app), "cleanup scan should not auto-select a row before the user checks it");
 assert(!app.includes("candidates.find((candidate) => candidate.executable)?.id"), "default cleanup selection should not choose blocked executable rows");

@@ -772,7 +772,7 @@ function App() {
             manualFindings={manualFindings}
             onSelectCandidate={(id) => {
               const candidate = candidates.find((row) => row.id === id);
-              selectWorkflowCandidate(id, { checked: Boolean(candidate?.canExecute) });
+              selectWorkflowCandidate(id, { checked: isOneClickCleanupCandidate(candidate) });
               setActiveView("clean");
             }}
             onRunScan={() => runRealScan()}
@@ -1293,10 +1293,10 @@ function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCand
                     </div>
                     <div className="flex shrink-0 flex-col items-start gap-2 lg:items-end">
                       <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
-                      {row.candidateId ? (
-                        <Button size="sm" variant={row.ready ? "default" : "outline"} onClick={() => onSelectCandidate(row.candidateId)}>
+                      {row.ready && row.candidateId ? (
+                        <Button size="sm" onClick={() => onSelectCandidate(row.candidateId)}>
                           <Trash2 className="h-3.5 w-3.5" />
-                          {row.ready ? "Clean" : "View"}
+                          Clean
                         </Button>
                       ) : (
                         <Badge variant="outline">manual</Badge>
@@ -1652,11 +1652,6 @@ function isOneClickCleanupCandidate(candidate = {}) {
   return Boolean(candidate?.canExecute && !candidate?.requiresArchiveDestination);
 }
 
-function formatReviewCandidateStatus(candidate = {}) {
-  if (candidate?.requiresArchiveDestination) return "needs destination";
-  return candidate?.executable ? "not ready" : "manual";
-}
-
 function formatManualFindingNote(finding = {}) {
   const text = String(finding.note || "").trim();
   if (!text || /executor|allowlist|native|command/i.test(text)) {
@@ -1702,13 +1697,13 @@ function buildExploreRows(scan, candidates = [], manualFindings = []) {
     kind: candidate.routeInput || "cleanup",
     source: "cleanup-candidate",
     detail: candidate.requiresArchiveDestination
-      ? "Archive setup required before this item can run."
+      ? "Choose an archive folder before cleaning this item."
       : candidate.canExecute
       ? candidate.consequence
       : candidate.blockedReason || "This target needs review before cleanup.",
     cleanable: true,
     ready: isOneClickCleanupCandidate(candidate),
-    candidateId: candidate.id
+    candidateId: isOneClickCleanupCandidate(candidate) ? candidate.id : ""
   }));
   const manualRows = manualFindings.map((finding) => ({
     id: `manual-${finding.recipeId}-${finding.path || finding.title}`,
