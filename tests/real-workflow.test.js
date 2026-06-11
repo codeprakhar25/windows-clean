@@ -720,6 +720,7 @@ const assert = require("assert");
   const manualOnlyRow = manualOnlyAgentQueue.rows.find((row) => row.source === "manual-review");
   assert.strictEqual(manualOnlyRow.status, "manual-only", "manual review targets should become manual-only app agent rows");
   assert.strictEqual(manualOnlyRow.canExecuteNow, false, "manual review targets must not become executable recommendations");
+  assert.strictEqual(manualOnlyRow.buttonLabel, "Open Explore", "manual review targets should route users to Explore");
   assert(manualOnlyRow.checks.some((check) => check.id === "no-executor" && check.passed), "manual review rows should state that no executor is mapped");
   assert.strictEqual(manualOnlyAgentQueue.counts.manual, 1, "manual review rows should be counted separately from executor rows");
 

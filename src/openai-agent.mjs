@@ -1149,7 +1149,7 @@ function buildOpenAIReviewTaskRows(targets = [], {
       canExecuteNow: false,
       manualOnly: Boolean(manualOnly),
       executorFlag: "",
-      buttonLabel: manualOnly ? "Open manual review" : "Open review",
+      buttonLabel: "Open Explore",
       reason: redactAgentText(target.reason || reason),
       blocker: manualOnly ? "manual-only" : "user-review-required",
       checks: [
@@ -1301,12 +1301,12 @@ function buildOpenAIAgentRecommendationBrokerRow(row = {}, context = null, execu
       status: targetId ? "ready" : "needs-target",
       tone: targetId ? "safe" : "review",
       canAct: true,
-      buttonLabel: "Open review",
-      targetPanel: "item-review-panel",
-      blockedReason: targetId ? "" : "OpenAI did not name a review target; opening item review instead.",
+      buttonLabel: "Open Explore",
+      targetPanel: "drive-explorer-panel",
+      blockedReason: targetId ? "" : "Open Explore to inspect review items.",
       checks: [
         buildBrokerCheck("target", "Review target", Boolean(targetId), targetId || "missing target id"),
-        buildBrokerCheck("focus-action", "Review action focus", Boolean(focusActionId), focusActionId || "open generic item review")
+        buildBrokerCheck("focus-action", "Review action focus", Boolean(focusActionId), focusActionId || "open Explore")
       ]
     });
   }
@@ -1333,10 +1333,10 @@ function buildOpenAIAgentRecommendationBrokerRow(row = {}, context = null, execu
     status: "manual-only",
     tone: "advisory",
     canAct: true,
-    buttonLabel: "Open manual review",
-    targetPanel: getManualRecommendationPanel(row),
+    buttonLabel: "Open Explore",
+    targetPanel: "drive-explorer-panel",
     blockedReason: "Manual-only recommendations never create executor authority.",
-    checks: [buildBrokerCheck("manual-only", "Manual-only boundary", true, "Routes to review panels, not filesystem mutation.")]
+    checks: [buildBrokerCheck("manual-only", "Manual-only boundary", true, "Opens Explore for inspection, not filesystem mutation.")]
   });
 }
 
@@ -1650,17 +1650,6 @@ function getExecutorRecommendationPanel(actionType) {
     default:
       return "openai-agent-panel";
   }
-}
-
-function getManualRecommendationPanel(row = {}) {
-  const targetId = String(row.targetId || row.target_id || row.id || "").toLowerCase();
-  const route = String(row.route || "").toLowerCase();
-  if (targetId.startsWith("custom-root") || route.includes("custom-root")) return "custom-root-triage-panel";
-  if (targetId.startsWith("drive-") || route.includes("drive-inventory")) return "drive-inventory-panel";
-  if (targetId.includes("spaceguard-support-bundle") || route.includes("support-bundle")) return "real-cleanup-command-flow-panel";
-  if (targetId.includes("installed-app") || route.includes("manual-app-uninstall")) return "app-uninstall-work-order-panel";
-  if (targetId.includes("wsl") || route.includes("advanced-checklist")) return "wsl-compaction-work-order-panel";
-  return "item-review-panel";
 }
 
 function compactOpenAIAgentRecommendationBroker(broker = null) {

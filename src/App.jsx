@@ -75,6 +75,43 @@ const DRIVE_ALLOCATION_LABELS = {
   manual: "Review",
   unlisted: "Not itemized"
 };
+const DRIVE_ALLOCATION_GROUPS = {
+  cleanable: {
+    label: "Can delete after confirmation",
+    detail: "Exact cleanup targets found by SpaceGuard. These are the only rows that become Delete buttons.",
+    status: "actionable"
+  },
+  "user-data-review": {
+    label: "Users, downloads, and app data",
+    detail: "Profiles, Downloads, Desktop data, and per-user app storage. Delete only from specific cleanable rows.",
+    status: "inspect"
+  },
+  "system-or-protected": {
+    label: "Windows, apps, and protected folders",
+    detail: "Windows, Program Files, ProgramData, recovery folders, and other protected locations.",
+    status: "system"
+  },
+  "advanced-system": {
+    label: "Windows-managed files",
+    detail: "Pagefile, hibernation, swap, or similar files. Reclaim through Windows settings when available.",
+    status: "system"
+  },
+  manual: {
+    label: "Needs review",
+    detail: "Measured items that need user judgement before any cleanup path is created.",
+    status: "inspect"
+  },
+  "unknown-review": {
+    label: "Other measured C: entries",
+    detail: "Top-level files or folders measured from C: that are not classified as a safe cleanup target.",
+    status: "inspect"
+  },
+  unlisted: {
+    label: "Not itemized by scan",
+    detail: "Windows reports this as used, but the scanner could not assign it to a measured row.",
+    status: "estimated"
+  }
+};
 const EXECUTOR_RECIPES = {
   "windows-temp": {
     label: "Windows temp cleanup",
@@ -692,6 +729,10 @@ function App() {
       selectWorkflowCandidate(brokerCandidate.id, {
         checked: row.kind === "scoped-executor" && isOneClickCleanupCandidate(brokerCandidate)
       });
+      return;
+    }
+    if (row.kind === "review" || row.kind === "manual") {
+      setActiveView("explore");
       return;
     }
 
@@ -1477,6 +1518,8 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
           </Button>
         </div>
       ) : null}
+      <ExploreCategorySummary allocation={allocation} />
+      <ExploreMeasuredTargets rows={rows} onShowList={onShowList} />
       {visualRows.length ? (
         <>
           <div className="flex h-4 overflow-hidden rounded-md bg-muted">
@@ -1504,12 +1547,7 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
               );
             })}
           </div>
-          {otherRow ? (
-            <div className="rounded-md border bg-muted/20 p-3 text-sm">
-              <p className="font-medium">Other used space</p>
-              <p className="mt-1 text-xs text-muted-foreground">{otherRow.detail}</p>
-            </div>
-          ) : null}
+          <ExploreOtherSpaceBreakdown allocation={allocation} otherRow={otherRow} />
           <div className="rounded-md border bg-background">
             <div className="border-b px-3 py-2">
               <p className="text-sm font-semibold">Full C: breakdown</p>
@@ -1546,6 +1584,154 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
       ) : (
         <EmptyState icon={PieChart} title="No visual data yet" detail="Run a fresh scan to build the C: space map." />
       )}
+    </div>
+  );
+}
+
+function ExploreCategorySummary({ allocation }) {
+  const categoryRows = allocation?.categoryRows || [];
+  if (!categoryRows.length) return null;
+  return (
+    <div className="rounded-md border bg-background">
+      <div className="border-b px-3 py-2">
+        <p className="text-sm font-semibold">Where C: space is coming from</p>
+        <p className="text-xs text-muted-foreground">Exact measured totals by source. Cleanable findings are shown separately because they live inside these folders.</p>
+      </div>
+      <div className="divide-y">
+        {categoryRows.map((row) => (
+          <div key={row.key} className="grid gap-3 px-3 py-3 text-sm lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_auto] lg:items-center">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={row.key === "cleanable" ? "safe" : "outline"}>{formatAllocationGroupStatus(row)}</Badge>
+                <p className="font-medium">{row.label}</p>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{row.detail}</p>
+              {row.rows?.length ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {row.rows.slice(0, 4).map((item) => (
+                    <span key={item.id} className="max-w-full truncate rounded border bg-muted/30 px-2 py-1 text-xs text-muted-foreground">
+                      {item.title}: {formatBytes(item.bytes)}
+                    </span>
+                  ))}
+                  {row.count > 4 ? <span className="rounded border bg-muted/30 px-2 py-1 text-xs text-muted-foreground">+{row.count - 4} more</span> : null}
+                </div>
+              ) : null}
+            </div>
+            <div className="space-y-1">
+              <Progress value={row.percentOfUsed} />
+              <p className="text-xs text-muted-foreground">{formatPercent(row.percentOfUsed)} of used C: across {formatCount(row.count)} measured row{row.count === 1 ? "" : "s"}</p>
+            </div>
+            <div className="shrink-0 lg:text-right">
+              <p className="text-base font-semibold">{formatBytes(row.bytes)}</p>
+              <p className="text-xs text-muted-foreground">{row.files || row.dirs ? `${formatCount(row.files)} files, ${formatCount(row.dirs)} folders` : "measured total"}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExploreMeasuredTargets({ rows = [], onShowList = () => {} }) {
+  const measuredRows = rows
+    .filter((row) => row.source !== "drive-inventory" && Number(row.bytes || 0) > 0)
+    .sort((left, right) => Number(right.ready) - Number(left.ready) || Number(right.bytes || 0) - Number(left.bytes || 0));
+  if (!measuredRows.length) return null;
+  const readyRows = measuredRows.filter((row) => row.ready && row.candidateId);
+  const readyBytes = readyRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+  return (
+    <div className="rounded-md border bg-background">
+      <div className="flex flex-col gap-3 border-b px-3 py-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-semibold">Exact measured items inside those folders</p>
+          <p className="text-xs text-muted-foreground">These are subpaths inside the C: allocation above, so they explain space without being added twice.</p>
+        </div>
+        {readyRows.length ? (
+          <Button type="button" variant="outline" size="sm" onClick={onShowList}>
+            <Trash2 className="h-4 w-4" />
+            Delete options
+          </Button>
+        ) : null}
+      </div>
+      <div className="divide-y">
+        {measuredRows.slice(0, 12).map((row) => (
+          <div key={row.id} className="grid gap-3 px-3 py-2 text-sm md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={row.ready ? "safe" : "outline"}>{row.ready ? "can delete" : "inspect"}</Badge>
+                <p className="truncate font-medium">{row.title}</p>
+              </div>
+              <p className="mt-1 truncate text-xs text-muted-foreground">{row.path || row.detail}</p>
+            </div>
+            <p className="shrink-0 font-semibold md:text-right">{formatBytes(row.bytes)}</p>
+          </div>
+        ))}
+        {measuredRows.length > 12 ? (
+          <div className="px-3 py-2 text-xs text-muted-foreground">
+            {measuredRows.length - 12} more measured item{measuredRows.length - 12 === 1 ? "" : "s"} are available in the List tab.
+          </div>
+        ) : null}
+      </div>
+      {readyRows.length ? (
+        <div className="border-t bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+          {formatBytes(readyBytes)} is ready to delete after confirmation.
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ExploreOtherSpaceBreakdown({ allocation, otherRow }) {
+  const otherMeasuredRows = allocation?.otherMeasuredRows || [];
+  const unlistedRow = allocation?.unlistedRow || null;
+  const reasonRows = allocation?.unlistedReasonRows || [];
+  if (!otherRow && !otherMeasuredRows.length && !unlistedRow) return null;
+  return (
+    <div className="rounded-md border bg-muted/20 p-3 text-sm">
+      <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="font-medium">Other used space, expanded</p>
+          <p className="text-xs text-muted-foreground">{otherRow?.detail || "No measured C: rows are hidden from the full breakdown."}</p>
+        </div>
+        {otherRow ? <p className="shrink-0 font-semibold">{formatBytes(otherRow.bytes)}</p> : null}
+      </div>
+      {otherMeasuredRows.length ? (
+        <div className="mt-3 rounded-md border bg-background">
+          <div className="border-b px-3 py-2">
+            <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Smaller measured C: entries</p>
+          </div>
+          <div className="max-h-64 divide-y overflow-auto">
+            {otherMeasuredRows.map((row) => (
+              <div key={row.id} className="grid gap-2 px-3 py-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{row.title}</p>
+                  <p className="truncate text-xs text-muted-foreground">{row.path || row.detail}</p>
+                </div>
+                <p className="shrink-0 font-semibold md:text-right">{formatBytes(row.bytes)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {unlistedRow ? (
+        <div className="mt-3 rounded-md border bg-background p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-medium">Not itemized by scan</p>
+              <p className="mt-1 text-xs text-muted-foreground">{unlistedRow.detail}</p>
+            </div>
+            <p className="shrink-0 font-semibold">{formatBytes(unlistedRow.bytes)}</p>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {reasonRows.map((row) => (
+              <div key={row.id} className="rounded border bg-muted/20 px-3 py-2">
+                <p className="text-xs font-medium">{row.title}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{row.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1680,14 +1866,14 @@ function canRunAgentBrokerAction(row = {}) {
 function formatAgentActionTitle(row = {}) {
   if (row.kind === "scoped-executor") return "Select this cleanup";
   if (row.kind === "scan") return "Refresh the scan";
-  if (row.kind === "review-target") return "Open item";
+  if (row.kind === "review" || row.kind === "manual" || row.kind === "review-target") return "Inspect in Explore";
   return row.actionType === "manual-only" ? "Inspect item" : "Use recommendation";
 }
 
 function formatAgentButtonLabel(row = {}) {
   if (row.kind === "scoped-executor") return "Select cleanup";
   if (row.kind === "scan") return "Run scan";
-  if (row.kind === "review-target") return "Open item";
+  if (row.kind === "review" || row.kind === "manual" || row.kind === "review-target") return "Open Explore";
   return row.buttonLabel || "Use recommendation";
 }
 
@@ -1969,7 +2155,12 @@ function buildExploreAllocationBreakdown(scan, rows = []) {
       accountedBytes: 0,
       unlistedBytes: 0,
       detailRows: [],
-      segmentRows: []
+      segmentRows: [],
+      categoryRows: [],
+      otherRows: [],
+      otherMeasuredRows: [],
+      unlistedRow: null,
+      unlistedReasonRows: []
     };
   }
   const inventoryRows = (scan.driveInventory || [])
@@ -2027,6 +2218,10 @@ function buildExploreAllocationBreakdown(scan, rows = []) {
   const topRows = detailRows.slice(0, 7);
   const hiddenRows = detailRows.slice(7);
   const hiddenBytes = hiddenRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+  const otherMeasuredRows = hiddenRows.filter((row) => row.id !== "visual-unlisted-used-space");
+  const finalUnlistedRow = detailRows.find((row) => row.id === "visual-unlisted-used-space") || null;
+  const categoryRows = buildExploreCategoryRows(detailRows, usedBytes);
+  const unlistedReasonRows = buildNotItemizedReasonRows(unlistedBytes);
   const segmentRows = hiddenBytes > 0
     ? [
         ...topRows,
@@ -2051,8 +2246,71 @@ function buildExploreAllocationBreakdown(scan, rows = []) {
     accountedBytes,
     unlistedBytes,
     detailRows,
-    segmentRows
+    segmentRows,
+    categoryRows,
+    otherRows: hiddenRows,
+    otherMeasuredRows,
+    unlistedRow: finalUnlistedRow,
+    unlistedReasonRows
   };
+}
+
+function buildExploreCategoryRows(detailRows = [], usedBytes = 0) {
+  const groups = new Map();
+  for (const row of detailRows) {
+    const key = DRIVE_ALLOCATION_GROUPS[row.classification] ? row.classification : "unknown-review";
+    const group = groups.get(key) || {
+      key,
+      label: DRIVE_ALLOCATION_GROUPS[key]?.label || DRIVE_ALLOCATION_LABELS[key] || "Other measured C: entries",
+      detail: DRIVE_ALLOCATION_GROUPS[key]?.detail || "Measured from C: filesystem metadata.",
+      status: DRIVE_ALLOCATION_GROUPS[key]?.status || "inspect",
+      bytes: 0,
+      files: 0,
+      dirs: 0,
+      count: 0,
+      rows: []
+    };
+    group.bytes += Number(row.bytes || 0);
+    group.files += Number(row.files || 0);
+    group.dirs += Number(row.dirs || 0);
+    group.count += 1;
+    group.rows.push(row);
+    groups.set(key, group);
+  }
+  return Array.from(groups.values())
+    .map((row) => ({
+      ...row,
+      rows: row.rows.sort((left, right) => Number(right.bytes || 0) - Number(left.bytes || 0)),
+      percentOfUsed: usedBytes ? Math.min(100, Math.max(0, (Number(row.bytes || 0) / usedBytes) * 100)) : 0
+    }))
+    .sort((left, right) => Number(right.bytes || 0) - Number(left.bytes || 0));
+}
+
+function buildNotItemizedReasonRows(unlistedBytes = 0) {
+  if (Number(unlistedBytes || 0) <= 0) return [];
+  const total = formatBytes(unlistedBytes);
+  return [
+    {
+      id: "ntfs-metadata",
+      title: "NTFS metadata and file table",
+      detail: `Part of the ${total} total can be filesystem metadata that Windows does not expose as normal files.`
+    },
+    {
+      id: "restore-shadow-copies",
+      title: "Restore points and shadow copies",
+      detail: `Part of the ${total} total can be System Restore, VSS snapshots, or protected recovery data.`
+    },
+    {
+      id: "reserved-update-storage",
+      title: "Reserved storage and Windows Update staging",
+      detail: `Part of the ${total} total can be reserved storage, update staging, servicing data, or component-store state.`
+    },
+    {
+      id: "locked-or-capped-paths",
+      title: "Locked folders and scan caps",
+      detail: `Part of the ${total} total can be access-limited folders, in-use files, reparse points, or inventory caps.`
+    }
+  ];
 }
 
 function formatDriveInventoryDetail(row = {}) {
@@ -2091,6 +2349,14 @@ function formatAllocationStatus(row = {}) {
   if (row.status === "cleanable") return "cleanable";
   if (row.status === "review") return "review";
   return "measured";
+}
+
+function formatAllocationGroupStatus(row = {}) {
+  if (row.key === "cleanable") return "can delete";
+  if (row.status === "system") return "system";
+  if (row.status === "estimated") return "estimated";
+  if (row.status === "actionable") return "can delete";
+  return "inspect";
 }
 
 function formatCount(value = 0) {

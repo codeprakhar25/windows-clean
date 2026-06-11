@@ -1295,11 +1295,11 @@ export function buildAppAgentTaskQueue({
       canExecuteNow: false,
       manualOnly: true,
       executorFlag: "",
-      buttonLabel: "Open manual review",
-      reason: target.reason || "Manual review only; no SpaceGuard executor is mapped to this finding.",
+      buttonLabel: "Open Explore",
+      reason: target.reason || "Open Explore to inspect this item; no SpaceGuard executor is mapped to this finding.",
       blocker: "manual-only",
       checks: [
-        appTaskCheck("manual-only", "Manual-only boundary", true, "Routes to review guidance only."),
+        appTaskCheck("manual-only", "Manual-only boundary", true, "Opens Explore for inspection only."),
         appTaskCheck("no-executor", "No executor", true, "SpaceGuard will not delete or modify this target.")
       ]
     });
