@@ -732,7 +732,6 @@ function App() {
     >
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 py-5 lg:px-7">
         <TopBar
-          runtime={runtime}
           scan={scan}
         />
         {activeView === "clean" ? (
@@ -956,19 +955,14 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh })
   );
 }
 
-function TopBar({ runtime, scan }) {
+function TopBar({ scan }) {
   const free = scan?.volume?.freeBytes || 0;
   const total = scan?.volume?.totalBytes || 0;
   const usedPercent = total ? Math.min(100, Math.max(0, ((total - free) / total) * 100)) : 0;
   return (
     <header className="flex flex-col gap-4 rounded-md border bg-card p-4 shadow-sm md:flex-row md:items-center md:justify-between">
       <div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={runtime?.realRunEnabled ? "safe" : "review"}>
-            {runtime?.realRunEnabled ? "cleanup available" : "desktop required"}
-          </Badge>
-        </div>
-        <h1 className="mt-2 text-2xl font-semibold tracking-normal">SpaceGuard Windows cleanup</h1>
+        <h1 className="text-2xl font-semibold tracking-normal">SpaceGuard Windows cleanup</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Scan your PC, choose what to clean, then delete the selected files.
         </p>
@@ -1131,10 +1125,7 @@ function CleanPanel({
                               }}
                             />
                             <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge variant="safe">ready</Badge>
-                                <span className="font-medium">{row.title}</span>
-                              </div>
+                              <p className="font-medium">{row.title}</p>
                               <p className="mt-2 truncate text-sm text-muted-foreground">{row.targetPath || row.targetKind}</p>
                             </div>
                           </div>

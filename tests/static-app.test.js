@@ -143,6 +143,8 @@ assert(app.includes("const [checkedIds, setCheckedIds] = useState([])"), "cleanu
 assert(app.includes("const nextCheckedIds = isChecked"), "clicking an already checked cleanup row should remove it from the checked set");
 assert(!app.includes("Check row"), "selected cleanup rows should not render a disabled check-row action");
 assert(!app.includes("Cleanup status"), "sidebar should not duplicate the active cleanup status");
+assert(!app.includes("cleanup available"), "top bar should not expose redundant runtime status copy");
+assert(!app.includes("<Badge variant=\"safe\">ready</Badge>"), "ready-only cleanup rows should not repeat a ready badge on every row");
 assert(app.includes("function selectWorkflowCandidate(id, options = {})"), "cleanup target selection should support checked handoff state");
 assert(app.includes("setCheckedIds(checked ? [id] : [])"), "checked handoff should only check executable cleanup targets");
 assert(/onSelectCandidate=\{\(id\) => \{[\s\S]*selectWorkflowCandidate\(id, \{ checked: isOneClickCleanupCandidate\(candidate\) \}\);/.test(app), "Explore cleanup buttons should open Clean with one-click rows checked");
