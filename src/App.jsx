@@ -1539,8 +1539,6 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
           </Button>
         </div>
       ) : null}
-      <ExploreCategorySummary allocation={allocation} />
-      <ExploreMeasuredTargets rows={rows} onShowList={onShowList} />
       {visualRows.length ? (
         <>
           <div className="flex h-4 overflow-hidden rounded-md bg-muted">
@@ -1568,6 +1566,7 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
               );
             })}
           </div>
+          <ExploreSpaceDetails allocation={allocation} rows={rows} onShowList={onShowList} />
           <ExploreOtherSpaceBreakdown allocation={allocation} otherRow={otherRow} />
           <details className="rounded-md border bg-background">
             <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1609,6 +1608,27 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
         <EmptyState icon={PieChart} title="No visual data yet" detail="Run a fresh scan to build the C: space map." />
       )}
     </div>
+  );
+}
+
+function ExploreSpaceDetails({ allocation, rows = [], onShowList = () => {} }) {
+  const hasCategoryRows = Boolean(allocation?.categoryRows?.length);
+  const hasMeasuredRows = rows.some((row) => row.source !== "drive-inventory" && Number(row.bytes || 0) > 0);
+  if (!hasCategoryRows && !hasMeasuredRows) return null;
+  return (
+    <details className="rounded-md border bg-background">
+      <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+        <span>
+          <span className="block text-sm font-semibold">Breakdown details</span>
+          <span className="block text-xs text-muted-foreground">Open for source totals and measured cleanup items.</span>
+        </span>
+        <span className="text-xs font-medium text-muted-foreground">Show details</span>
+      </summary>
+      <div className="space-y-3 border-t p-3">
+        <ExploreCategorySummary allocation={allocation} />
+        <ExploreMeasuredTargets rows={rows} onShowList={onShowList} />
+      </div>
+    </details>
   );
 }
 
