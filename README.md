@@ -21,8 +21,8 @@ If Tauri reports `icons/icon.ico` not found, confirm `src-tauri/icons/icon.ico` 
 Inside the desktop app:
 
 1. Click `Scan PC`.
-2. Select one or more cleanup rows.
-3. Click `Delete selected`.
+2. Click `Delete all`, or check specific rows.
+3. Click `Delete selected` if you checked specific rows.
 
 If the app opens in a normal browser, it will only show connection/setup steps. It will not scan local folders or run cleanup.
 
@@ -36,7 +36,7 @@ npm run windows:ready
 npm run native:dev
 ```
 
-For a real cleanup test, use the desktop app as the control point: scan, select one cleanup row, and click `Delete selected`.
+For a real cleanup test, use the desktop app as the control point: scan, then click `Delete all` or check one row and click `Delete selected`.
 Support export tools are for troubleshooting only. They are not required to clean files.
 
 ## Safety Boundary

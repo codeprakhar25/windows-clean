@@ -43,8 +43,8 @@ The desktop app should show the native bridge as connected. A normal browser tab
 In the app:
 
 1. Click `Scan PC`.
-2. Select one or more cleanup rows.
-3. Click `Delete selected`.
+2. Click `Delete all`, or check specific rows.
+3. Click `Delete selected` if you checked specific rows.
 
 Support export is only for troubleshooting. It is not required to clean files.
 

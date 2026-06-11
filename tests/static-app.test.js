@@ -511,8 +511,9 @@ assert(readme.includes("npm run native:dev"), "README should document the Tauri 
 assert(!readme.includes("npm run setup:route -- --route npm-cache"), "README should not put route setup in the normal cleanup path");
 assert(readme.indexOf("npm run windows:ready") < readme.indexOf("npm run native:dev"), "README quick start should check Windows readiness before launch");
 assert(readme.includes("Cleanup does not require route arming"), "README should explain that production cleanup uses built-in allowlists");
-assert(readme.includes("Select one or more cleanup rows."), "README should match the current cleanup row label");
-assert(readme.includes("Click `Delete selected`"), "README should match the current cleanup button label");
+assert(readme.includes("Click `Delete all`, or check specific rows."), "README should match the current cleanup row label");
+assert(readme.includes("Click `Delete selected` if you checked specific rows."), "README should match the current cleanup button label");
+assert(readme.includes("click `Delete all` or check one row and click `Delete selected`"), "README real cleanup test should match the current cleanup flow");
 assert(!readme.includes("marked `ready`"), "README should not mention removed ready row labels");
 assert(!readme.includes("can clean"), "README should not mention obsolete cleanup row labels");
 assert(!readme.includes("Delete selected files"), "README should not mention obsolete cleanup button labels");
@@ -523,8 +524,8 @@ assert(readme.includes("Support export tools are for troubleshooting only"), "RE
 assert(realDataGuide.includes("npm run native:dev"), "Windows setup guide should document the Tauri Windows desktop launcher");
 assert(realDataGuide.indexOf("npm run windows:ready") < realDataGuide.indexOf("npm run native:dev"), "Windows setup guide should check readiness before launch");
 assert(realDataGuide.includes("Cleanup does not require route arming"), "Windows setup guide should explain built-in allowlists");
-assert(realDataGuide.includes("Select one or more cleanup rows."), "Windows setup guide should match the current cleanup row label");
-assert(realDataGuide.includes("Click `Delete selected`"), "Windows setup guide should match the current cleanup button label");
+assert(realDataGuide.includes("Click `Delete all`, or check specific rows."), "Windows setup guide should match the current cleanup row label");
+assert(realDataGuide.includes("Click `Delete selected` if you checked specific rows."), "Windows setup guide should match the current cleanup button label");
 assert(!realDataGuide.includes("marked `ready`"), "Windows setup guide should not mention removed ready row labels");
 assert(!realDataGuide.includes("can clean"), "Windows setup guide should not mention obsolete cleanup row labels");
 assert(!realDataGuide.includes("Delete selected files"), "Windows setup guide should not mention obsolete cleanup button labels");
@@ -533,7 +534,7 @@ assert(!realDataGuide.includes("npm run validate:workflow-proof -- --file"), "Wi
 assert(!realDataGuide.includes("spaceguard-workflow-proof-check.json"), "Windows setup guide should not list proof artifact files in the normal cleanup path");
 assert(!realDataGuide.includes("npm run support:bundle"), "Windows setup guide should not require support bundle capture for normal cleanup");
 assert(realDataGuide.includes("Support export is only for troubleshooting"), "Windows setup guide should keep support export clearly optional");
-assert(windowsReadinessScript.includes("select one or more cleanup rows"), "Windows readiness next steps should match the simplified cleanup flow");
+assert(windowsReadinessScript.includes("use Delete all or check rows and click Delete selected"), "Windows readiness next steps should match the simplified cleanup flow");
 assert(!/can clean|delete confirmation|delete selected files|refresh space/i.test(windowsReadinessScript), "Windows readiness next steps should not mention obsolete cleanup UI labels");
 
 console.log("static app ok");

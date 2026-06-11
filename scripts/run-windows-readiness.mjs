@@ -384,7 +384,7 @@ function buildReadinessNextSteps({ status, doctor, windowsHost, toolchain }) {
   }
   if (status === "ready-for-native-dev") {
     steps.push("Run npm run native:dev.");
-    steps.push("In the app: click Scan PC, select one or more cleanup rows, then click Delete selected.");
+    steps.push("In the app: click Scan PC, then use Delete all or check rows and click Delete selected.");
   }
   if (!doctor.openAi.configured) {
     steps.push("Set OPENAI_API_KEY in .env only if you want the Ask AI page.");
