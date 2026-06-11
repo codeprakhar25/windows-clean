@@ -274,6 +274,11 @@ assert(app.includes("can delete"), "Explore should use product-facing delete lab
 assert(app.includes("inspect"), "Explore should use product-facing inspection labels");
 assert(app.includes("Delete this item?"), "Explore delete action should ask for modal confirmation");
 assert(app.includes("variant=\"destructive\" onClick={() => onRequestCleanup(row.candidateId)}"), "Explore cleanable rows should expose a direct Delete action");
+assert(app.includes("label: \"Downloads cleanup\""), "Downloads cleanup should use direct product wording");
+assert(app.includes("label: \"Project dependency cleanup\""), "project dependency cleanup should use direct product wording");
+assert(!app.includes("Reviewed Downloads cleanup"), "Explore should not expose reviewed-downloads fallback copy");
+assert(!app.includes("Reviewed project dependency cleanup"), "Explore should not expose reviewed-dependency fallback copy");
+assert(app.includes("Inspect this area before removing anything."), "manual fallback guidance should use inspect wording");
 assert(app.includes("manualFindings.map"), "Explore should render manual findings in the same allocation list");
 assert(app.includes("finding.manualGuidance?.primaryAction"), "Explore should show simple manual guidance without an extra panel");
 assert(app.includes("formatManualFindingNote"), "manual findings should convert internal notes into plain copy");

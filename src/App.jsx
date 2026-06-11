@@ -204,7 +204,7 @@ const EXECUTOR_RECIPES = {
 
 const ITEM_REVIEW_RECIPES = {
   "node-modules-old": {
-    label: "Reviewed project dependency cleanup",
+    label: "Project dependency cleanup",
     route: "item-review-project-cache",
     routeInput: "project-deps",
     flagKey: "projectDependencyExecutor",
@@ -212,11 +212,11 @@ const ITEM_REVIEW_RECIPES = {
     executor: "projectDeps",
     actionType: "run-project-deps-executor",
     risk: "review",
-    targetKind: "reviewed project dependency",
-    consequence: "Only the selected node_modules target is removed after review."
+    targetKind: "project dependency",
+    consequence: "Only the selected node_modules target is removed."
   },
   "downloads-installers": {
-    label: "Reviewed Downloads cleanup",
+    label: "Downloads cleanup",
     route: "item-review-recycle-bin",
     routeInput: "downloads",
     flagKey: "downloadsCleanupExecutor",
@@ -224,7 +224,7 @@ const ITEM_REVIEW_RECIPES = {
     executor: "downloads",
     actionType: "run-downloads-cleanup-executor",
     risk: "review",
-    targetKind: "reviewed file",
+    targetKind: "file",
     consequence: "Only the selected Downloads file is moved to Recycle Bin."
   }
 };
@@ -238,7 +238,7 @@ const ARCHIVE_RECIPE = {
   executor: "largeFileArchive",
   actionType: "run-large-file-archive-executor",
   risk: "review",
-  targetKind: "reviewed file",
+  targetKind: "file",
   consequence: "Only the selected large file is moved to the archive destination."
 };
 
@@ -1633,7 +1633,7 @@ function isOneClickCleanupCandidate(candidate = {}) {
 function formatManualFindingNote(finding = {}) {
   const text = String(finding.note || "").trim();
   if (!text || /executor|allowlist|native|command/i.test(text)) {
-    return "Review this area yourself before removing anything.";
+    return "Inspect this area before removing anything.";
   }
   return text;
 }
