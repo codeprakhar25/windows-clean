@@ -146,10 +146,11 @@ assert(!app.includes("Check row"), "selected cleanup rows should not render a di
 assert(app.includes("function selectWorkflowCandidate(id, options = {})"), "cleanup target selection should support checked handoff state");
 assert(app.includes("setCheckedIds(checked ? [id] : [])"), "checked handoff should only check executable cleanup targets");
 assert(/onSelectCandidate=\{\(id\) => \{[\s\S]*selectWorkflowCandidate\(id, \{ checked: isOneClickCleanupCandidate\(candidate\) \}\);/.test(app), "Explore cleanup buttons should open Clean with one-click rows checked");
-assert(app.includes("async function executeSelectedCleanup(candidateOverride = null)"), "cleanup handler should support direct execution from a ready row");
-assert(app.includes("const candidateForExecution = candidateOverride || selectedCandidate"), "direct cleanup should execute the clicked row without waiting for selection state");
-assert(app.includes("onExecuteCandidate(row);"), "ready cleanup row Delete buttons should dispatch the guarded cleanup handler directly");
+assert(!app.includes("async function executeSelectedCleanup"), "Clean screen should not carry a second per-row delete handler");
+assert(!app.includes("onExecuteCandidate(row);"), "ready cleanup rows should use checkbox selection instead of per-row Delete buttons");
+assert(!app.includes("onExecuteCandidate={"), "CleanPanel should expose one delete action for checked rows");
 assert(app.includes("async function executeCheckedCleanups()"), "cleanup queue should execute multiple checked rows from one action");
+assert(app.includes("const targets = checkedCandidates;"), "Delete selected should only run checked cleanup rows");
 assert(app.includes("onExecuteChecked={executeCheckedCleanups}"), "Clean screen should wire the Delete selected action");
 assert(app.includes("Delete selected"), "Clean screen should expose a simple Delete selected action");
 assert(app.includes("Select all"), "Clean screen should expose a simple select-all action");

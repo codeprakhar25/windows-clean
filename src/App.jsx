@@ -435,14 +435,8 @@ function App() {
     }
   }
 
-  async function executeSelectedCleanup(candidateOverride = null) {
-    const candidateForExecution = candidateOverride || selectedCandidate;
-    if (!candidateForExecution) return;
-    await executeCleanupCandidate(candidateForExecution);
-  }
-
   async function executeCheckedCleanups() {
-    const targets = checkedCandidates.length ? checkedCandidates : selectedCandidate ? [selectedCandidate] : [];
+    const targets = checkedCandidates;
     if (!targets.length) return;
     if (targets.length === 1) {
       await executeCleanupCandidate(targets[0]);
@@ -745,7 +739,6 @@ function App() {
         <TopBar
           runtime={runtime}
           scan={scan}
-          onRefreshRuntime={refreshRuntime}
         />
         {activeView === "clean" ? (
           <section className="grid gap-4">
@@ -767,7 +760,6 @@ function App() {
                 scan={scan}
                 onToggleCandidate={toggleCleanupCandidate}
                 onSetCheckedCandidates={setCheckedCleanupCandidates}
-                onExecuteCandidate={executeSelectedCleanup}
                 onExecuteChecked={executeCheckedCleanups}
                 onScanAgain={() => runRealScan()}
                 onRescan={() => runRealScan({ afterExecution: true })}
@@ -976,7 +968,7 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh })
   );
 }
 
-function TopBar({ runtime, scan, onRefreshRuntime }) {
+function TopBar({ runtime, scan }) {
   const free = scan?.volume?.freeBytes || 0;
   const total = scan?.volume?.totalBytes || 0;
   const usedPercent = total ? Math.min(100, Math.max(0, ((total - free) / total) * 100)) : 0;
@@ -999,10 +991,6 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
           <span className="font-medium">{total ? `${formatBytes(free)} free` : "scan pending"}</span>
         </div>
         <Progress value={usedPercent} />
-        <Button variant="outline" size="sm" onClick={onRefreshRuntime}>
-          <RefreshCcw className="h-4 w-4" />
-          Refresh
-        </Button>
       </div>
     </header>
   );
@@ -1040,7 +1028,6 @@ function ScanPanel({ scanStatus, scanError, onRunScan }) {
 
 function CleanPanel({
   candidates,
-  selectedId,
   checkedIds = [],
   executionStatus,
   executionError,
@@ -1049,7 +1036,6 @@ function CleanPanel({
   scan,
   onToggleCandidate,
   onSetCheckedCandidates,
-  onExecuteCandidate,
   onExecuteChecked,
   onScanAgain,
   onRescan
@@ -1116,15 +1102,22 @@ function CleanPanel({
                     </Button>
                   </div>
                 </div>
+                {executionError ? <Notice tone="restricted" icon={AlertTriangle} text={executionError} /> : null}
+                {executionResult ? (
+                  <CleanupResult
+                    result={executionResult}
+                    scanStatus={scanStatus}
+                    onRescan={onRescan}
+                  />
+                ) : null}
                 <div className="grid gap-3">
                   {readyCandidates.map((row) => {
                     const checked = checkedIds.includes(row.id);
-                    const selected = row.id === selectedId;
                     return (
                       <div
                         key={row.id}
                         className={`rounded-md border bg-background transition hover:border-primary ${
-                          selected ? "border-primary bg-primary/5" : ""
+                          checked ? "border-primary bg-primary/5" : ""
                         }`}
                       >
                         <div
@@ -1139,6 +1132,7 @@ function CleanPanel({
                           <div className="flex min-w-0 gap-3">
                             <Checkbox
                               checked={checked}
+                              aria-label={`Select ${row.title}`}
                               onClick={(event) => {
                                 event.stopPropagation();
                                 onToggleCandidate(row);
@@ -1154,19 +1148,6 @@ function CleanPanel({
                           </div>
                           <div className="shrink-0 md:text-right">
                             <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
-                            <Button
-                              className="mt-2 w-full md:w-auto"
-                              size="sm"
-                              variant={selected ? "default" : "outline"}
-                              disabled={running}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                onExecuteCandidate(row);
-                              }}
-                            >
-                              {running && selected ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                              {running && selected ? "Deleting" : row.requiresPermanentConfirmation ? "Empty" : "Delete"}
-                            </Button>
                           </div>
                         </div>
                       </div>
@@ -1177,14 +1158,6 @@ function CleanPanel({
             ) : (
               <EmptyState icon={Lock} title="No items ready to delete" detail="Run another scan or open Explore to review what was found." />
             )}
-            {executionError ? <Notice tone="restricted" icon={AlertTriangle} text={executionError} /> : null}
-            {executionResult ? (
-              <CleanupResult
-                result={executionResult}
-                scanStatus={scanStatus}
-                onRescan={onRescan}
-              />
-            ) : null}
           </>
         ) : (
           <EmptyState icon={Lock} title="No cleanable findings yet" detail="Run a scan to find items SpaceGuard can delete safely." />
