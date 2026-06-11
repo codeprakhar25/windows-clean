@@ -796,6 +796,7 @@ function App() {
                 onExecuteChecked={executeCheckedCleanups}
                 onScanAgain={() => runRealScan()}
                 onRescan={() => runRealScan({ afterExecution: true })}
+                onOpenExplore={() => setActiveView("explore")}
               />
             )}
           </section>
@@ -1055,7 +1056,8 @@ function CleanPanel({
   onSetCheckedCandidates,
   onExecuteChecked,
   onScanAgain,
-  onRescan
+  onRescan,
+  onOpenExplore
 }) {
   const readyCandidates = candidates.filter(isOneClickCleanupCandidate);
   const hasReadyCandidates = readyCandidates.length > 0;
@@ -1174,11 +1176,25 @@ function CleanPanel({
                 </div>
               </>
             ) : (
-              <EmptyState icon={Lock} title="No items available to delete" detail="Run another scan or open Explore to inspect what was found." />
+              <EmptyState
+                icon={Lock}
+                title="No items available to delete"
+                detail="Open Explore to inspect what is using space."
+                actionLabel="Open Explore"
+                actionIcon={ListTree}
+                onAction={onOpenExplore}
+              />
             )}
           </>
         ) : (
-          <EmptyState icon={Lock} title="No cleanable findings yet" detail="Run a scan to find items SpaceGuard can delete safely." />
+          <EmptyState
+            icon={Lock}
+            title="No cleanable findings yet"
+            detail="Open Explore to see the C: space map."
+            actionLabel="Open Explore"
+            actionIcon={ListTree}
+            onAction={onOpenExplore}
+          />
         )}
       </CardContent>
     </Card>
@@ -1695,12 +1711,18 @@ function Notice({ tone = "review", icon: Icon = AlertTriangle, text }) {
   );
 }
 
-function EmptyState({ icon: Icon, title, detail }) {
+function EmptyState({ icon: Icon, title, detail, actionLabel = "", actionIcon: ActionIcon = ChevronRight, onAction = null }) {
   return (
     <div className="flex min-h-36 flex-col items-center justify-center rounded-md border border-dashed bg-muted/25 p-6 text-center">
       <Icon className="h-6 w-6 text-muted-foreground" />
       <p className="mt-3 text-sm font-medium">{title}</p>
       <p className="mt-1 max-w-md text-sm text-muted-foreground">{detail}</p>
+      {actionLabel && onAction ? (
+        <Button type="button" size="sm" className="mt-4" onClick={onAction}>
+          <ActionIcon className="h-4 w-4" />
+          {actionLabel}
+        </Button>
+      ) : null}
     </div>
   );
 }

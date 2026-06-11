@@ -197,7 +197,11 @@ assert(!app.includes("reviewCandidates"), "extra-input cleanup rows should stay 
 assert(app.includes("candidateId: isOneClickCleanupCandidate(candidate) ? candidate.id : \"\""), "Explore should only hand off ready cleanup rows to Clean");
 assert(app.includes("Choose an archive folder before cleaning this item."), "Explore should keep archive rows out of the immediate delete path");
 assert(app.includes("No items available to delete"), "cleanup queue should avoid preselecting blocked targets when nothing can run");
-assert(app.includes("Run another scan or open Explore to inspect what was found."), "cleanup queue should route non-deletable findings to inspection without review jargon");
+assert(app.includes("onOpenExplore={() => setActiveView(\"explore\")}"), "cleanup queue empty states should route directly to Explore");
+assert(app.includes("Open Explore to inspect what is using space."), "cleanup queue should route non-deletable findings to inspection without review jargon");
+assert(app.includes("Open Explore to see the C: space map."), "cleanup queue should route no-finding states to the space map");
+assert(app.includes("actionLabel=\"Open Explore\""), "cleanup queue empty states should expose an Open Explore button");
+assert(app.includes("function EmptyState({ icon: Icon, title, detail, actionLabel = \"\""), "empty states should support direct action buttons");
 assert(/function selectDefaultCleanupCandidateId\(candidates = \[\]\) \{[\s\S]*return ""/.test(app), "cleanup scan should not auto-select a row before the user checks it");
 assert(!app.includes("candidates.find((candidate) => candidate.executable)?.id"), "default cleanup selection should not choose blocked executable rows");
 assert(!app.includes("Technical details"), "clean panel should not expose native diagnostics in the primary cleanup result");
