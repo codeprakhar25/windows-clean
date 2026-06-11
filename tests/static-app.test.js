@@ -43,7 +43,6 @@ const requiredAppMarkers = [
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Scan PC",
   "Scan for cleanup",
-  "Cleanup status",
   "Explore C:",
   "Select one or more rows, then delete them.",
   "Ready to clean",
@@ -143,6 +142,7 @@ assert(app.includes("formatExecutionGateError"), "execute handler should convert
 assert(app.includes("const [checkedIds, setCheckedIds] = useState([])"), "cleanup queue should support multiple checked rows");
 assert(app.includes("const nextCheckedIds = isChecked"), "clicking an already checked cleanup row should remove it from the checked set");
 assert(!app.includes("Check row"), "selected cleanup rows should not render a disabled check-row action");
+assert(!app.includes("Cleanup status"), "sidebar should not duplicate the active cleanup status");
 assert(app.includes("function selectWorkflowCandidate(id, options = {})"), "cleanup target selection should support checked handoff state");
 assert(app.includes("setCheckedIds(checked ? [id] : [])"), "checked handoff should only check executable cleanup targets");
 assert(/onSelectCandidate=\{\(id\) => \{[\s\S]*selectWorkflowCandidate\(id, \{ checked: isOneClickCleanupCandidate\(candidate\) \}\);/.test(app), "Explore cleanup buttons should open Clean with one-click rows checked");
@@ -151,6 +151,9 @@ assert(!app.includes("onExecuteCandidate(row);"), "ready cleanup rows should use
 assert(!app.includes("onExecuteCandidate={"), "CleanPanel should expose one delete action for checked rows");
 assert(app.includes("async function executeCheckedCleanups()"), "cleanup queue should execute multiple checked rows from one action");
 assert(app.includes("const targets = checkedCandidates;"), "Delete selected should only run checked cleanup rows");
+assert(app.includes("if (scanStatus === \"scanning\" || scanStatus === \"rescanning\") return;"), "Delete selected should not run while a scan refresh is in progress");
+assert(app.includes("const actionDisabled = running || refreshing"), "Clean rows should share one disabled state while deleting or scanning");
+assert(app.includes("disabled={actionDisabled}"), "Clean row selection should be disabled while deleting or scanning");
 assert(app.includes("onExecuteChecked={executeCheckedCleanups}"), "Clean screen should wire the Delete selected action");
 assert(app.includes("Delete selected"), "Clean screen should expose a simple Delete selected action");
 assert(app.includes("Select all"), "Clean screen should expose a simple select-all action");
@@ -209,6 +212,8 @@ assert(app.includes("visibleTargets"), "OpenAI panel should unlock for executabl
 assert(app.includes("scan.driveInventory"), "manual findings should include native drive inventory evidence");
 assert(app.includes("Drive inventory:"), "drive inventory rows should be visible as manual review cards");
 assert(app.includes("slugifyId"), "drive inventory manual finding ids should be stable and normalized");
+assert(app.includes("function ExplorePanel({ scan, scanStatus = \"idle\""), "Explore scan button should share scan status with the rest of the app");
+assert(app.includes("disabled={scanning}"), "Explore scan button should not launch another scan while one is running");
 assert(!app.includes("selected-route-proof-reviewed"), "app shell should not require selected-route proof review before more cleanup");
 assert(!app.includes("selected-route-proof-import"), "app workflow proof should not require obsolete selected-route proof import");
 assert(!app.includes("Export proof, let the in-app verifier accept it, and capture the support bundle before selecting another cleanup target."), "cleanup queue should not describe proof export as a target-switch lock");

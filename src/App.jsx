@@ -436,6 +436,7 @@ function App() {
   }
 
   async function executeCheckedCleanups() {
+    if (scanStatus === "scanning" || scanStatus === "rescanning") return;
     const targets = checkedCandidates;
     if (!targets.length) return;
     if (targets.length === 1) {
@@ -705,9 +706,6 @@ function App() {
   if (!nativeConnected) {
     return (
       <AppFrame
-        runtime={runtime}
-        runtimeStatus={runtimeStatus}
-        nativeConnected={nativeConnected}
         scan={scan}
         selectedCandidate={selectedCandidate}
         executionRecord={executionRecord}
@@ -726,9 +724,6 @@ function App() {
 
   return (
     <AppFrame
-      runtime={runtime}
-      runtimeStatus={runtimeStatus}
-      nativeConnected={nativeConnected}
       scan={scan}
       selectedCandidate={selectedCandidate}
       executionRecord={executionRecord}
@@ -751,7 +746,6 @@ function App() {
             ) : (
               <CleanPanel
                 candidates={candidates}
-                selectedId={selectedId}
                 checkedIds={checkedIds}
                 executionStatus={executionStatus}
                 executionError={executionError}
@@ -770,6 +764,7 @@ function App() {
         {activeView === "explore" ? (
           <ExplorePanel
             scan={scan}
+            scanStatus={scanStatus}
             candidates={candidates}
             manualFindings={manualFindings}
             onSelectCandidate={(id) => {
@@ -809,7 +804,7 @@ function App() {
   );
 }
 
-function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, selectedCandidate, executionRecord, activeView = "clean", setActiveView = () => {} }) {
+function AppFrame({ children, scan, selectedCandidate, executionRecord, activeView = "clean", setActiveView = () => {} }) {
   const navRows = [
     { id: "clean", label: "Clean", icon: Trash2, state: selectedCandidate ? "ready" : scan ? "waiting" : "idle" },
     { id: "explore", label: "Explore C:", icon: ListTree, state: scan ? "ready" : "waiting" },
@@ -854,13 +849,6 @@ function AppFrame({ children, runtime, runtimeStatus, nativeConnected, scan, sel
                 );
               })}
             </nav>
-            <div className="mt-auto rounded-md border bg-muted/35 p-3 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground">Cleanup status</p>
-              <p className="mt-1 truncate">
-                {scan ? selectedCandidate?.title || "Choose an item to delete" : "Scan your PC to begin"}
-              </p>
-              <p className="mt-3 font-medium text-foreground">{runtime?.realRunEnabled ? "Ready to clean" : "Desktop app needed"}</p>
-            </div>
           </div>
         </aside>
         <div className="min-w-0">
@@ -1048,6 +1036,7 @@ function CleanPanel({
   const allReadyChecked = hasReadyCandidates && checkedCount === readyCandidates.length;
   const running = executionStatus === "running";
   const refreshing = scanStatus === "scanning" || scanStatus === "rescanning";
+  const actionDisabled = running || refreshing;
   return (
     <Card id="cleanup-actions-panel" className="rounded-md">
       <CardHeader>
@@ -1086,7 +1075,7 @@ function CleanPanel({
                       type="button"
                       variant="outline"
                       className="w-full sm:w-auto"
-                      disabled={running}
+                      disabled={actionDisabled}
                       onClick={() => onSetCheckedCandidates(allReadyChecked ? [] : readyCandidates)}
                     >
                       {allReadyChecked ? <X className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -1094,7 +1083,7 @@ function CleanPanel({
                     </Button>
                     <Button
                       className="w-full sm:w-auto"
-                      disabled={!checkedCount || running}
+                      disabled={!checkedCount || actionDisabled}
                       onClick={onExecuteChecked}
                     >
                       {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -1123,19 +1112,22 @@ function CleanPanel({
                         <div
                           role="button"
                           tabIndex={0}
-                          onClick={() => onToggleCandidate(row)}
+                          onClick={() => {
+                            if (!actionDisabled) onToggleCandidate(row);
+                          }}
                           onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") onToggleCandidate(row);
+                            if (!actionDisabled && (event.key === "Enter" || event.key === " ")) onToggleCandidate(row);
                           }}
                           className="flex cursor-pointer flex-col gap-3 p-4 md:flex-row md:items-start md:justify-between"
                         >
                           <div className="flex min-w-0 gap-3">
                             <Checkbox
                               checked={checked}
+                              disabled={actionDisabled}
                               aria-label={`Select ${row.title}`}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                onToggleCandidate(row);
+                                if (!actionDisabled) onToggleCandidate(row);
                               }}
                             />
                             <div className="min-w-0">
@@ -1209,8 +1201,9 @@ function CleanupResult({ result, scanStatus, onRescan }) {
   );
 }
 
-function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCandidate, onRunScan }) {
+function ExplorePanel({ scan, scanStatus = "idle", candidates = [], manualFindings = [], onSelectCandidate, onRunScan }) {
   const rows = buildExploreRows(scan, candidates, manualFindings);
+  const scanning = scanStatus === "scanning" || scanStatus === "rescanning";
   return (
     <Card id="drive-explorer-panel" className="rounded-md">
       <CardHeader>
@@ -1222,9 +1215,9 @@ function ExplorePanel({ scan, candidates = [], manualFindings = [], onSelectCand
             </CardTitle>
             <CardDescription>See what is using space and jump to a cleanable item.</CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={onRunScan} disabled={false}>
-            <ScanLine className="h-4 w-4" />
-            Scan again
+          <Button variant="outline" size="sm" onClick={onRunScan} disabled={scanning}>
+            {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+            {scanning ? "Scanning" : scan ? "Scan again" : "Scan PC"}
           </Button>
         </div>
       </CardHeader>

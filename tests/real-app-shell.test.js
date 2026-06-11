@@ -31,7 +31,6 @@ const requiredRealShellMarkers = [
   "Scan PC",
   "Scan for cleanup",
   "Ready to clean",
-  "Cleanup status",
   "Explore C:",
   "Select one or more rows, then delete them.",
   "Scan again",
@@ -46,6 +45,7 @@ for (const marker of requiredRealShellMarkers) {
 }
 
 assert(!app.includes(removedModelImport), "real app shell must not import bundled sample model data");
+assert(!app.includes("Cleanup status"), "real app shell should not duplicate cleanup status in the sidebar");
 assert(app.includes("@/components/ui/button"), "real app shell should keep shadcn Button composition");
 assert(app.includes("@/components/ui/card"), "real app shell should keep shadcn Card composition");
 
