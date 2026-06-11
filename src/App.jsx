@@ -922,7 +922,7 @@ function MobileTabNav({ rows = [], activeView = "clean", setActiveView = () => {
 
 function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh }) {
   const cleanupSteps = [
-    ["Scan PC", "Find cleanable cache and temp files."],
+    ["Scan PC", "Find cleanable files and see where C: space is going."],
     ["Choose item", "Select what you want to remove."],
     ["Delete", "Clear the selected files from this PC."]
   ];
@@ -974,10 +974,10 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh })
               <Trash2 className="h-4 w-4" />
               Safe cleanup areas
             </CardTitle>
-            <CardDescription>SpaceGuard only deletes from built-in cleanup areas after you select them.</CardDescription>
+            <CardDescription>SpaceGuard maps C: space and deletes only from built-in cleanup areas after you select them.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
-            {["Windows temp files", "Browser caches", "Developer caches", "Recycle Bin", "Old downloads", "Large folders"].map((item) => (
+            {["Windows temp files", "Browser caches", "Developer caches", "Recycle Bin", "Old downloads", "C: space map"].map((item) => (
               <div key={item} className="flex items-center gap-2 rounded-md border bg-background px-3 py-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 <span>{item}</span>

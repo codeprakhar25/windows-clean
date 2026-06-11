@@ -332,6 +332,10 @@ assert(!app.includes("Developer launch"), "browser-only setup state should not e
 assert(!app.includes("npm run native:dev"), "browser-only setup state should not show terminal launch commands");
 assert(!app.includes("npm run windows:ready"), "browser-only setup state should not show setup command boxes");
 assert(app.includes("Safe cleanup areas"), "browser-only setup should describe the simplified cleanup flow");
+assert(app.includes("Find cleanable files and see where C: space is going."), "browser-only setup should describe a complete space cleaner, not a cache-only scanner");
+assert(app.includes("SpaceGuard maps C: space and deletes only from built-in cleanup areas"), "browser-only setup should pair allocation mapping with guarded cleanup");
+assert(app.includes("C: space map"), "browser-only setup should mention the full-drive allocation view");
+assert(!app.includes("Find cleanable cache and temp files."), "browser-only setup should not position the app as cache-only");
 assert(!app.includes("Activity summary"), "browser-only setup should not advertise a diagnostic activity area as a cleanup target");
 assert(!app.includes("Desktop connection"), "browser-only setup should not expose runtime diagnostics as a product panel");
 assert(!app.includes("Native bridge"), "browser-only setup should not expose internal bridge metrics");
