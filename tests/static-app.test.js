@@ -49,8 +49,7 @@ const requiredAppMarkers = [
   "Check what you want to remove.",
   "Delete all",
   "Select items to delete",
-  "Scan again",
-  "Ask AI"
+  "Scan again"
 ];
 
 for (const marker of requiredAppMarkers) {
@@ -134,7 +133,7 @@ assert(!app.includes("@/components/ui/input"), "app shell should not import unus
 assert(!app.includes("Entry cap"), "Clean screen should not expose native scan cap controls");
 assert(!app.includes("Protected paths"), "Clean screen should not expose protected-path editing");
 assert(!app.includes("Extra folders to scan"), "Clean screen should not expose custom root setup");
-assert(/activeView === "clean"[\s\S]*!scan \? \([\s\S]*<ScanPanel[\s\S]*\) : \([\s\S]*<CleanPanel/.test(app), "Clean screen should show scan setup only before the first scan and then show the cleanup queue");
+assert(/visibleView === "clean"[\s\S]*!scan \? \([\s\S]*<ScanPanel[\s\S]*\) : \([\s\S]*<CleanPanel/.test(app), "Clean screen should show scan setup only before the first scan and then show the cleanup queue");
 assert(app.includes("onScanAgain={() => runRealScan()}"), "post-scan cleanup queue header should run a normal scan refresh");
 assert(app.includes("onRescan={() => runRealScan({ afterExecution: true })}"), "cleanup result retry should keep the post-execution rescan path");
 assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
@@ -192,7 +191,11 @@ assert(app.includes("app-dispatch-error"), "checked cleanup should record simple
 assert(app.includes("Select items to delete"), "post-scan clean screen should lead with the actionable cleanup queue");
 assert(!app.includes("{ id: \"history\""), "primary navigation should not include a separate activity page");
 assert(!app.includes("function HistoryPanel"), "cleanup results should stay inline instead of moving to a separate Activity screen");
-assert(/role="tablist"[\s\S]*grid-cols-3/.test(app), "mobile navigation should expose the simplified three-tab app");
+assert(app.includes("const aiAvailable = Boolean(runtime?.openAiAgentAdvice && runtime?.openAiAdvisorConfigured)"), "AI navigation should depend on configured advisor availability");
+assert(app.includes("showAgent={aiAvailable}"), "app frame should hide optional AI navigation when the advisor is not configured");
+assert(app.includes("...(showAgent ? [{ id: \"agent\", label: \"Ask AI\", icon: Bot }] : [])"), "Ask AI should stay optional instead of always occupying primary navigation");
+assert(app.includes('rows.length > 2 ? "grid-cols-3" : "grid-cols-2"'), "mobile navigation should collapse to two tabs when Ask AI is hidden");
+assert(/visibleView === "agent" && aiAvailable[\s\S]*<OpenAIPanel/.test(app), "Ask AI panel should render only when the advisor is configured");
 assert(!app.includes("Scan details"), "Clean screen should not carry post-scan metrics or diagnostic details");
 assert(!app.includes("items need review"), "Clean screen should not show a secondary review queue beside delete actions");
 assert(app.includes("formatCleanRowSummary(row)"), "Clean rows should show simple cleanup summaries instead of raw full paths");
@@ -366,6 +369,7 @@ assert(!app.includes("Desktop connection"), "browser-only setup should not expos
 assert(!app.includes("Native bridge"), "browser-only setup should not expose internal bridge metrics");
 assert(!/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup state should not render the route setup wizard");
 assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context should keep a stable schema");
+assert(app.includes("Ask AI"), "OpenAI panel should remain available when the optional advisor is configured");
 assert(!app.includes("Recommendation diagnostics"), "OpenAI panel should not expose deterministic broker diagnostics");
 assert(app.includes("agentBroker?.rows"), "OpenAI panel should still read broker rows to choose the best recommendation");
 assert(app.includes("Open Explore to inspect this item."), "OpenAI panel should show simple inspection guidance for blocked recommendations");

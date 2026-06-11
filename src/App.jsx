@@ -328,6 +328,8 @@ function App() {
   }, []);
 
   const nativeConnected = Boolean(capability.available && runtime?.available);
+  const aiAvailable = Boolean(runtime?.openAiAgentAdvice && runtime?.openAiAdvisorConfigured);
+  const visibleView = activeView === "agent" && !aiAvailable ? "clean" : activeView;
   const candidates = useMemo(() => buildCleanupCandidates(scan, runtime), [scan, runtime]);
   const checkedCandidates = useMemo(
     () => checkedIds
@@ -795,8 +797,9 @@ function App() {
   if (!nativeConnected) {
     return (
       <AppFrame
-        activeView={activeView}
+        activeView={visibleView}
         setActiveView={setActiveView}
+        showAgent={aiAvailable}
       >
         <ConnectionRequired
           runtime={runtime}
@@ -810,14 +813,15 @@ function App() {
 
   return (
     <AppFrame
-      activeView={activeView}
+      activeView={visibleView}
       setActiveView={setActiveView}
+      showAgent={aiAvailable}
     >
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 py-5 lg:px-7">
         <TopBar
           scan={scan}
         />
-        {activeView === "clean" ? (
+        {visibleView === "clean" ? (
           <section className="grid gap-4">
             {!scan ? (
               <ScanPanel
@@ -844,7 +848,7 @@ function App() {
             )}
           </section>
         ) : null}
-        {activeView === "explore" ? (
+        {visibleView === "explore" ? (
           <ExplorePanel
             scan={scan}
             scanStatus={scanStatus}
@@ -858,7 +862,7 @@ function App() {
             onRescan={() => runRealScan({ afterExecution: true, nextView: "explore" })}
           />
         ) : null}
-        {activeView === "agent" ? (
+        {visibleView === "agent" && aiAvailable ? (
           <OpenAIPanel
             runtime={runtime}
             scan={scan}
@@ -886,11 +890,11 @@ function App() {
   );
 }
 
-function AppFrame({ children, activeView = "clean", setActiveView = () => {} }) {
+function AppFrame({ children, activeView = "clean", setActiveView = () => {}, showAgent = false }) {
   const navRows = [
     { id: "clean", label: "Clean", icon: Trash2 },
     { id: "explore", label: "Explore C:", icon: ListTree },
-    { id: "agent", label: "Ask AI", icon: Bot }
+    ...(showAgent ? [{ id: "agent", label: "Ask AI", icon: Bot }] : [])
   ];
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -940,7 +944,7 @@ function AppFrame({ children, activeView = "clean", setActiveView = () => {} }) 
 
 function MobileTabNav({ rows = [], activeView = "clean", setActiveView = () => {} }) {
   return (
-    <nav role="tablist" aria-label="SpaceGuard views" className="sticky top-0 z-20 grid grid-cols-3 border-b bg-card/95 px-2 py-2 shadow-sm backdrop-blur lg:hidden">
+    <nav role="tablist" aria-label="SpaceGuard views" className={`sticky top-0 z-20 grid ${rows.length > 2 ? "grid-cols-3" : "grid-cols-2"} border-b bg-card/95 px-2 py-2 shadow-sm backdrop-blur lg:hidden`}>
       {rows.map((row) => {
         const Icon = row.icon;
         const active = activeView === row.id;
