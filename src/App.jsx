@@ -232,14 +232,14 @@ const ARCHIVE_RECIPE = {
 };
 
 const MANUAL_RECIPE_LABELS = {
-  "installed-app-footprints": "Installed app review",
-  "large-user-files": "Large file review",
-  "android-studio": "Android Studio footprint review",
-  "docker-volumes": "Docker volume review",
-  "windows-old": "Previous Windows installation review",
-  hibernation: "Hibernation file review",
-  pagefile: "Pagefile review",
-  "wsl-vhdx": "WSL virtual disk review"
+  "installed-app-footprints": "Installed apps",
+  "large-user-files": "Large files",
+  "android-studio": "Android Studio",
+  "docker-volumes": "Docker volumes",
+  "windows-old": "Previous Windows installation",
+  hibernation: "Hibernation file",
+  pagefile: "Pagefile",
+  "wsl-vhdx": "WSL virtual disk"
 };
 
 function App() {
@@ -1121,7 +1121,7 @@ function CleanPanel({
                 </div>
               </>
             ) : (
-              <EmptyState icon={Lock} title="No items available to delete" detail="Run another scan or open Explore to review what was found." />
+              <EmptyState icon={Lock} title="No items available to delete" detail="Run another scan or open Explore to inspect what was found." />
             )}
           </>
         ) : (
@@ -1186,7 +1186,7 @@ function ExplorePanel({ scan, scanStatus = "idle", candidates = [], manualFindin
               <ListTree className="h-4 w-4" />
               Explore C:
             </CardTitle>
-            <CardDescription>See what is using space and jump to a cleanable item.</CardDescription>
+            <CardDescription>See what is using space and select cleanable items.</CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={onRunScan} disabled={scanning}>
             {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
@@ -1213,8 +1213,8 @@ function ExplorePanel({ scan, scanStatus = "idle", candidates = [], manualFindin
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={row.cleanable ? row.ready ? "safe" : "review" : "outline"}>
-                          {row.cleanable ? row.ready ? "cleanable" : "review" : "manual"}
+                        <Badge variant={row.ready ? "safe" : "outline"}>
+                          {row.ready ? "can delete" : "inspect"}
                         </Badge>
                         <p className="font-medium">{row.title}</p>
                       </div>
@@ -1229,7 +1229,7 @@ function ExplorePanel({ scan, scanStatus = "idle", candidates = [], manualFindin
                           Select
                         </Button>
                       ) : (
-                        <Badge variant="outline">manual</Badge>
+                        <Badge variant="outline">inspect</Badge>
                       )}
                     </div>
                   </div>
@@ -1283,12 +1283,12 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={suggestedAction.canAct ? "safe" : suggestedAction.status === "manual-only" ? "outline" : "review"}>
-                        {suggestedAction.canAct ? "cleanable" : suggestedAction.status === "manual-only" ? "manual" : "needs review"}
+                      <Badge variant={suggestedAction.canAct ? "safe" : "outline"}>
+                        {suggestedAction.canAct ? "can delete" : "inspect"}
                       </Badge>
                       <p className="font-medium">{formatAgentActionTitle(suggestedAction)}</p>
                     </div>
-                    {!suggestedAction.canAct ? <p className="mt-2 text-xs text-muted-foreground">Open Clean or Explore to review this item.</p> : null}
+                    {!suggestedAction.canAct ? <p className="mt-2 text-xs text-muted-foreground">Open Explore to inspect this item.</p> : null}
                   </div>
                   {canRunAgentBrokerAction(suggestedAction) ? (
                     <Button size="sm" onClick={() => onBrokerAction(suggestedAction)}>
@@ -1313,14 +1313,14 @@ function canRunAgentBrokerAction(row = {}) {
 function formatAgentActionTitle(row = {}) {
   if (row.kind === "scoped-executor") return "Select this cleanup";
   if (row.kind === "scan") return "Refresh the scan";
-  if (row.kind === "review-target") return "Open review";
-  return row.actionType === "manual-only" ? "Review manually" : "Review recommendation";
+  if (row.kind === "review-target") return "Open item";
+  return row.actionType === "manual-only" ? "Inspect item" : "Use recommendation";
 }
 
 function formatAgentButtonLabel(row = {}) {
   if (row.kind === "scoped-executor") return "Select cleanup";
   if (row.kind === "scan") return "Run scan";
-  if (row.kind === "review-target") return "Open review";
+  if (row.kind === "review-target") return "Open item";
   return row.buttonLabel || "Use recommendation";
 }
 
@@ -1498,14 +1498,14 @@ function buildExploreRows(scan, candidates = [], manualFindings = []) {
       ? "Choose an archive folder before cleaning this item."
       : candidate.canExecute
       ? candidate.consequence
-      : candidate.blockedReason || "This target needs review before cleanup.",
+      : candidate.blockedReason || "Inspect this item before deleting anything.",
     cleanable: true,
     ready: isOneClickCleanupCandidate(candidate),
     candidateId: isOneClickCleanupCandidate(candidate) ? candidate.id : ""
   }));
   const manualRows = manualFindings.map((finding) => ({
     id: `manual-${finding.recipeId}-${finding.path || finding.title}`,
-    title: finding.title || "Manual review",
+    title: finding.title || "Inspect item",
     path: finding.path || "",
     bytes: Number(finding.bytes || 0),
     kind: finding.manualGuidance?.kind || "manual",
@@ -1522,7 +1522,7 @@ function buildExploreRows(scan, candidates = [], manualFindings = []) {
     bytes: Number(row.bytes || 0),
     kind: row.classification || row.kind || "drive inventory",
     source: "drive-inventory",
-    detail: row.note || "Top-level C: allocation. Use cleanable rows or manual review guidance for action.",
+    detail: row.note || "Top-level C: allocation. Select cleanable rows or inspect this area yourself.",
     cleanable: false,
     ready: false,
     candidateId: ""
@@ -1631,7 +1631,7 @@ function buildManualFindings(scan) {
 function decorateManualFinding(finding) {
   return {
     ...finding,
-    title: MANUAL_RECIPE_LABELS[finding.recipeId] || finding.title || "Manual review",
+    title: MANUAL_RECIPE_LABELS[finding.recipeId] || finding.title || "Inspect item",
     manualGuidance: buildManualFindingGuidance(finding)
   };
 }
@@ -1736,7 +1736,7 @@ function buildAgentContext({
     const agentTargetId = buildAgentManualTargetId(finding, index);
     return {
       id: agentTargetId,
-      title: finding.title || "Manual review",
+      title: finding.title || "Inspect item",
       route: finding.manualGuidance?.kind || "manual-review",
       actionType: "manual-only",
       targetId: agentTargetId,
@@ -1744,7 +1744,7 @@ function buildAgentContext({
       status: finding.status || "unknown",
       confidence: finding.manualGuidance?.confidence || "manual-only",
       targetPath: redactPath(finding.path || ""),
-      reason: redactAgentContextText(finding.manualGuidance?.primaryAction || finding.note || "Manual review needed."),
+      reason: redactAgentContextText(finding.manualGuidance?.primaryAction || finding.note || "Inspect this item."),
       blockedActions: Array.isArray(finding.manualGuidance?.blockedActions)
         ? finding.manualGuidance.blockedActions.slice(0, 4).map((row) => redactAgentContextText(row))
         : []

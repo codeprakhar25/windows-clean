@@ -182,6 +182,7 @@ assert(!app.includes("reviewCandidates"), "extra-input cleanup rows should stay 
 assert(app.includes("candidateId: isOneClickCleanupCandidate(candidate) ? candidate.id : \"\""), "Explore should only hand off ready cleanup rows to Clean");
 assert(app.includes("Choose an archive folder before cleaning this item."), "Explore should keep archive rows out of the immediate delete path");
 assert(app.includes("No items available to delete"), "cleanup queue should avoid preselecting blocked targets when nothing can run");
+assert(app.includes("Run another scan or open Explore to inspect what was found."), "cleanup queue should route non-deletable findings to inspection without review jargon");
 assert(/function selectDefaultCleanupCandidateId\(candidates = \[\]\) \{[\s\S]*return ""/.test(app), "cleanup scan should not auto-select a row before the user checks it");
 assert(!app.includes("candidates.find((candidate) => candidate.executable)?.id"), "default cleanup selection should not choose blocked executable rows");
 assert(!app.includes("Technical details"), "clean panel should not expose native diagnostics in the primary cleanup result");
@@ -257,10 +258,12 @@ assert(/if \(rescanAfter && result\.accepted\) \{[\s\S]*await runRealScan\(\{ af
 assert(app.includes("buildManualFindingGuidance"), "app should use tested manual finding guidance");
 assert(!app.includes("buildManualFindingReviewRows"), "app shell should not carry nested manual review rows");
 assert(!app.includes("function ManualReviewPanel"), "app shell should not carry an unused manual review panel");
-assert(app.includes("\"windows-old\": \"Previous Windows installation review\""), "Explore should surface Windows.old findings");
-assert(app.includes("hibernation: \"Hibernation file review\""), "Explore should surface hibernation file findings");
-assert(app.includes("pagefile: \"Pagefile review\""), "Explore should surface pagefile findings");
-assert(app.includes("\"wsl-vhdx\": \"WSL virtual disk review\""), "Explore should surface WSL virtual disk findings");
+assert(app.includes("\"windows-old\": \"Previous Windows installation\""), "Explore should surface Windows.old findings");
+assert(app.includes("hibernation: \"Hibernation file\""), "Explore should surface hibernation file findings");
+assert(app.includes("pagefile: \"Pagefile\""), "Explore should surface pagefile findings");
+assert(app.includes("\"wsl-vhdx\": \"WSL virtual disk\""), "Explore should surface WSL virtual disk findings");
+assert(app.includes("can delete"), "Explore should use product-facing delete labels");
+assert(app.includes("inspect"), "Explore should use product-facing inspection labels");
 assert(app.includes("manualFindings.map"), "Explore should render manual findings in the same allocation list");
 assert(app.includes("finding.manualGuidance?.primaryAction"), "Explore should show simple manual guidance without an extra panel");
 assert(app.includes("formatManualFindingNote"), "manual findings should convert internal notes into plain copy");
@@ -290,7 +293,7 @@ assert(!/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup st
 assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context should keep a stable schema");
 assert(!app.includes("Recommendation diagnostics"), "OpenAI panel should not expose deterministic broker diagnostics");
 assert(app.includes("agentBroker?.rows"), "OpenAI panel should still read broker rows to choose the best recommendation");
-assert(app.includes("Open Clean or Explore to review this item."), "OpenAI panel should show simple review guidance for blocked recommendations");
+assert(app.includes("Open Explore to inspect this item."), "OpenAI panel should show simple inspection guidance for blocked recommendations");
 assert(!app.includes("suggestedAction.blockedReason"), "OpenAI panel should not expose internal broker blocker text");
 assert(!app.includes("Why this recommendation"), "OpenAI panel should not expose recommendation diagnostic details");
 assert(!app.includes("Current selection:"), "OpenAI panel should not repeat cleanup selection status");
