@@ -706,9 +706,6 @@ function App() {
   if (!nativeConnected) {
     return (
       <AppFrame
-        scan={scan}
-        selectedCandidate={selectedCandidate}
-        executionRecord={executionRecord}
         activeView={activeView}
         setActiveView={setActiveView}
       >
@@ -724,9 +721,6 @@ function App() {
 
   return (
     <AppFrame
-      scan={scan}
-      selectedCandidate={selectedCandidate}
-      executionRecord={executionRecord}
       activeView={activeView}
       setActiveView={setActiveView}
     >
@@ -803,12 +797,12 @@ function App() {
   );
 }
 
-function AppFrame({ children, scan, selectedCandidate, executionRecord, activeView = "clean", setActiveView = () => {} }) {
+function AppFrame({ children, activeView = "clean", setActiveView = () => {} }) {
   const navRows = [
-    { id: "clean", label: "Clean", icon: Trash2, state: selectedCandidate ? "ready" : scan ? "waiting" : "idle" },
-    { id: "explore", label: "Explore C:", icon: ListTree, state: scan ? "ready" : "waiting" },
-    { id: "agent", label: "Ask AI", icon: Bot, state: scan ? "waiting" : "idle" },
-    { id: "history", label: "Activity", icon: History, state: executionRecord ? "ready" : "waiting" }
+    { id: "clean", label: "Clean", icon: Trash2 },
+    { id: "explore", label: "Explore C:", icon: ListTree },
+    { id: "agent", label: "Ask AI", icon: Bot },
+    { id: "history", label: "Activity", icon: History }
   ];
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -835,15 +829,12 @@ function AppFrame({ children, scan, selectedCandidate, executionRecord, activeVi
                     key={row.id}
                     type="button"
                     onClick={() => setActiveView(row.id)}
-                    className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition hover:bg-muted ${
+                    className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition hover:bg-muted ${
                       activeView === row.id ? "bg-primary text-primary-foreground hover:bg-primary" : ""
                     }`}
                   >
-                    <span className="flex items-center gap-2">
-                      <Icon className={`h-4 w-4 ${activeView === row.id ? "text-primary-foreground" : "text-muted-foreground"}`} />
-                      {row.label}
-                    </span>
-                    <StatusDot state={row.state} />
+                    <Icon className={`h-4 w-4 ${activeView === row.id ? "text-primary-foreground" : "text-muted-foreground"}`} />
+                    {row.label}
                   </button>
                 );
               })}
@@ -1502,18 +1493,6 @@ function formatCleanupRejectMessage(result = {}) {
     return "Windows blocked some files because they are in use. Close the related apps, scan again, and retry.";
   }
   return "Nothing was deleted. Close apps using these files, scan again, and try once more.";
-}
-
-function StatusDot({ state }) {
-  const ready = state === "ready" || state === true;
-  const waiting = state === "waiting" || state === "loading";
-  return (
-    <span
-      className={`h-2.5 w-2.5 rounded-full ${
-        ready ? "bg-emerald-500" : waiting ? "bg-amber-500" : "bg-red-500"
-      }`}
-    />
-  );
 }
 
 function toNativeScanRequest(request) {
