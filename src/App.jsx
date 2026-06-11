@@ -1283,7 +1283,7 @@ function ExplorePanel({
               <Metric label="Items" value={String(rows.length)} />
             </div>
             {mode === "visualize" ? (
-              <ExploreVisualization scan={scan} rows={rows} />
+              <ExploreVisualization scan={scan} rows={rows} onShowList={() => setMode("list")} />
             ) : (
               <ExploreList rows={rows} deleteDisabled={deleteDisabled} onRequestCleanup={onRequestCleanup} />
             )}
@@ -1328,8 +1328,10 @@ function ExploreList({ rows = [], deleteDisabled = false, onRequestCleanup = () 
   );
 }
 
-function ExploreVisualization({ scan, rows = [] }) {
+function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
   const visualRows = buildExploreVisualRows(scan, rows);
+  const cleanableRows = rows.filter((row) => row.ready && row.candidateId);
+  const cleanableBytes = cleanableRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
   const usedBytes = Number(scan?.volume?.usedBytes || 0) || visualRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
   const freeBytes = Number(scan?.volume?.freeBytes || 0);
   const totalBytes = Number(scan?.volume?.totalBytes || 0) || usedBytes + freeBytes;
@@ -1345,6 +1347,18 @@ function ExploreVisualization({ scan, rows = [] }) {
         <p className="text-sm font-semibold">{formatPercent(usedPercent)} used</p>
       </div>
       <Progress value={usedPercent} />
+      {cleanableRows.length ? (
+        <div className="flex flex-col gap-3 rounded-md border bg-emerald-50 p-3 text-emerald-950 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-semibold">{formatBytes(cleanableBytes)} can be deleted</p>
+            <p className="text-xs text-emerald-800">Open the list to choose items and confirm deletion.</p>
+          </div>
+          <Button type="button" size="sm" onClick={onShowList}>
+            <ListTree className="h-4 w-4" />
+            Show delete list
+          </Button>
+        </div>
+      ) : null}
       {visualRows.length ? (
         <>
           <div className="flex h-4 overflow-hidden rounded-md bg-muted">
@@ -1364,7 +1378,7 @@ function ExploreVisualization({ scan, rows = [] }) {
                 <div key={row.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm">
                   <span className={`h-3 w-3 rounded-sm ${EXPLORE_VISUAL_COLORS[index % EXPLORE_VISUAL_COLORS.length].dot}`} />
                   <span className="truncate">{row.title}</span>
-                  <span className="whitespace-nowrap text-muted-foreground">{formatBytes(row.bytes)} · {formatPercent(percent)}</span>
+                  <span className="whitespace-nowrap text-muted-foreground">{formatBytes(row.bytes)} - {formatPercent(percent)}</span>
                 </div>
               );
             })}
