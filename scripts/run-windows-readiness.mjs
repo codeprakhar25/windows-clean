@@ -21,11 +21,12 @@ const root = path.resolve(path.dirname(scriptPath), "..");
 const dotenvPath = path.join(root, ".env");
 
 function parseArgs(argv = []) {
-  const args = { route: "npm-cache" };
+  const args = { route: "npm-cache", json: false };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === "--route") args.route = argv[index + 1] || "";
     if (value.startsWith("--route=")) args.route = value.slice("--route=".length);
+    if (value === "--json" || value === "--verbose") args.json = true;
   }
   return args;
 }
@@ -395,10 +396,33 @@ function buildReadinessNextSteps({ status, doctor, windowsHost, toolchain }) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const report = buildWindowsReadinessReport({ routeInput: args.route || "npm-cache" });
-  console.log(JSON.stringify(report, null, 2));
+  console.log(args.json ? JSON.stringify(report, null, 2) : formatWindowsReadinessSummary(report));
   if (shouldFailReadinessCli(report)) {
     process.exitCode = 1;
   }
+}
+
+export function formatWindowsReadinessSummary(report = {}) {
+  const ready = Boolean(report.readyForNativeDev);
+  const lines = [
+    ready ? "SpaceGuard is ready to launch." : "SpaceGuard is not ready yet.",
+    `Status: ${report.status || "unknown"}`
+  ];
+  const missing = report.toolchain?.missingLabels || report.toolchain?.missing || [];
+  if (missing.length) {
+    lines.push(`Missing: ${missing.join(", ")}`);
+  }
+  const nextSteps = Array.isArray(report.nextSteps) ? report.nextSteps : [];
+  if (nextSteps.length) {
+    lines.push("", "Next steps:");
+    nextSteps.forEach((step, index) => {
+      lines.push(`${index + 1}. ${step}`);
+    });
+  }
+  if (!ready) {
+    lines.push("", "Run npm run windows:ready -- --json for technical details.");
+  }
+  return lines.join("\n");
 }
 
 export function shouldFailReadinessCli(report) {

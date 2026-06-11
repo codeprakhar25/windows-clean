@@ -26,7 +26,8 @@ OPENAI_API_KEY=sk-...
 ```
 
 Cleanup does not require route arming. The desktop runtime exposes shipped native allowlists and validates each selected target before deletion.
-`windows:ready` exits nonzero until the Windows desktop app can launch; treat that as a stop signal and follow the JSON `nextSteps`.
+`windows:ready` exits nonzero until the Windows desktop app can launch; treat that as a stop signal and follow the printed next steps.
+Use `npm run windows:ready -- --json` only when you need technical readiness details.
 If `windows:ready` reports `toolchain-blocked`, run `npm install`, install or repair Node.js, Rustup/Cargo, and the Tauri Windows prerequisites, restart PowerShell, and run readiness again.
 If the missing tool is `Visual Studio C++ Build Tools`, modify Visual Studio Build Tools, select **Desktop development with C++**, then restart PowerShell or use Developer PowerShell for VS before rerunning readiness.
 

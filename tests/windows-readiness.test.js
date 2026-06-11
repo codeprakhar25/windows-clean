@@ -97,6 +97,11 @@ const script = path.join(root, "scripts", "run-windows-readiness.mjs");
   assert(ready.nextSteps.some((step) => step.includes("Delete all") && step.includes("Delete selected")), "ready preflight should match the simplified cleanup flow");
   assert(!ready.nextSteps.some((step) => /can clean|delete confirmation|delete selected files|refresh space/i.test(step)), "ready preflight should not mention obsolete cleanup UI labels");
   assert(!ready.nextSteps.some((step) => /setup:route|route:arm|openai:smoke|windows:dev/.test(step)), "ready preflight should not require advanced route commands");
+  const readySummary = readiness.formatWindowsReadinessSummary(ready);
+  assert(readySummary.includes("SpaceGuard is ready to launch."), "readiness CLI summary should lead with a simple ready message");
+  assert(readySummary.includes("Delete all") && readySummary.includes("Delete selected"), "readiness CLI summary should include the simple cleanup flow");
+  assert(!readySummary.includes("\"schemaVersion\""), "readiness CLI summary should not print raw JSON by default");
+  assert(!/routeAudit|localContract|selectedEnvVar/.test(readySummary), "readiness CLI summary should hide optional route diagnostics");
 
   const unknownRoute = readiness.buildWindowsReadinessReport({
     routeInput: "not-a-real-route",
