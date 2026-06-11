@@ -46,9 +46,8 @@ const requiredAppMarkers = [
   "Scan for cleanup",
   "Explore C:",
   "Select one or more rows, then delete them.",
-  "Ready to clean",
+  "Select items to delete",
   "Scan again",
-  "Activity",
   "Ask AI"
 ];
 
@@ -168,7 +167,10 @@ assert(app.includes("Could not clean selected items"), "selected cleanup result 
 assert(app.includes("formatCheckedCleanupMessage"), "checked cleanup result should use dedicated user-facing copy");
 assert(app.includes("buildRejectedCheckedCleanupEntry"), "checked cleanup should keep going when one selected row cannot start");
 assert(app.includes("app-dispatch-error"), "checked cleanup should record simple per-row failures");
-assert(app.includes("Ready to clean"), "post-scan clean screen should lead with the actionable cleanup queue");
+assert(app.includes("Select items to delete"), "post-scan clean screen should lead with the actionable cleanup queue");
+assert(!app.includes("{ id: \"history\""), "primary navigation should not include a separate activity page");
+assert(!app.includes("function HistoryPanel"), "cleanup results should stay inline instead of moving to a separate Activity screen");
+assert(/role="tablist"[\s\S]*grid-cols-3/.test(app), "mobile navigation should expose the simplified three-tab app");
 assert(!app.includes("Scan details"), "Clean screen should not carry post-scan metrics or diagnostic details");
 assert(!app.includes("items need review"), "Clean screen should not show a secondary review queue beside delete actions");
 assert(app.includes("isOneClickCleanupCandidate"), "cleanup queue should use a shared one-click eligibility helper");
@@ -184,8 +186,7 @@ assert(app.includes("formatAcceptedCleanupMessage"), "clean panel should format 
 assert(!app.includes("formatSignedBytes"), "app shell should not carry unused signed-byte formatting helpers");
 assert(app.includes("Nothing to remove"), "accepted zero-byte cleanup should not be presented as cleaned space");
 assert(app.includes("No eligible files were removed"), "accepted zero-byte cleanup should explain that nothing was eligible");
-assert(app.includes("Nothing needed cleaning"), "activity summary should use simple zero-byte cleanup copy");
-assert(app.includes("Last cleanup result"), "activity screen should present one compact latest-result summary");
+assert(!app.includes("Last cleanup result"), "activity screen should not duplicate the inline cleanup result");
 assert(app.includes("formatCleanupRejectMessage"), "clean panel should translate native rejection details into plain user-facing copy");
 assert(app.includes("Cleanup could not verify the current scan"), "cleanup rejection copy should tell users to scan again when confirmation evidence is stale");
 assert(app.includes("cleanable"), "secondary screens should describe selectable cleanup items without internal readiness language");

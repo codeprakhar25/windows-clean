@@ -30,11 +30,10 @@ const requiredRealShellMarkers = [
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Scan PC",
   "Scan for cleanup",
-  "Ready to clean",
+  "Select items to delete",
   "Explore C:",
   "Select one or more rows, then delete them.",
   "Scan again",
-  "Activity",
   "getNativeRuntimeCapabilities",
   "runNativeReadonlyScan",
   "requestOpenAIAgentAdvice"

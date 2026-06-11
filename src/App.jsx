@@ -7,7 +7,6 @@ import {
   ClipboardCheck,
   FolderSearch,
   HardDrive,
-  History,
   KeyRound,
   ListTree,
   Loader2,
@@ -46,7 +45,7 @@ import {
   runNativeUserCacheExecutor
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildAppAgentTaskQueue, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildManualFindingGuidance, buildPostRunProof, buildRouteReadiness, buildWorkflowAgentTargetId, buildWorkflowLocks, formatBytes, parseWorkflowTimestamp, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
+import { buildAppAgentTaskQueue, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildManualFindingGuidance, buildPostRunProof, buildRouteReadiness, buildWorkflowAgentTargetId, buildWorkflowLocks, formatBytes, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
   targetDrive: "C:",
@@ -785,13 +784,6 @@ function App() {
             onBrokerAction={runAgentBrokerAction}
           />
         ) : null}
-        {activeView === "history" ? (
-          <HistoryPanel
-            executionRecord={executionRecord}
-            scanStatus={scanStatus}
-            onRescan={() => runRealScan({ afterExecution: true })}
-          />
-        ) : null}
       </main>
     </AppFrame>
   );
@@ -801,8 +793,7 @@ function AppFrame({ children, activeView = "clean", setActiveView = () => {} }) 
   const navRows = [
     { id: "clean", label: "Clean", icon: Trash2 },
     { id: "explore", label: "Explore C:", icon: ListTree },
-    { id: "agent", label: "Ask AI", icon: Bot },
-    { id: "history", label: "Activity", icon: History }
+    { id: "agent", label: "Ask AI", icon: Bot }
   ];
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -852,7 +843,7 @@ function AppFrame({ children, activeView = "clean", setActiveView = () => {} }) 
 
 function MobileTabNav({ rows = [], activeView = "clean", setActiveView = () => {} }) {
   return (
-    <nav role="tablist" aria-label="SpaceGuard views" className="sticky top-0 z-20 grid grid-cols-4 border-b bg-card/95 px-2 py-2 shadow-sm backdrop-blur lg:hidden">
+    <nav role="tablist" aria-label="SpaceGuard views" className="sticky top-0 z-20 grid grid-cols-3 border-b bg-card/95 px-2 py-2 shadow-sm backdrop-blur lg:hidden">
       {rows.map((row) => {
         const Icon = row.icon;
         const active = activeView === row.id;
@@ -1029,7 +1020,7 @@ function CleanPanel({
           <div>
             <CardTitle className="flex items-center gap-2">
               <ClipboardCheck className="h-4 w-4" />
-              Ready to clean
+              Select items to delete
             </CardTitle>
             <CardDescription>Select one or more rows, then delete them.</CardDescription>
           </div>
@@ -1235,7 +1226,7 @@ function ExplorePanel({ scan, scanStatus = "idle", candidates = [], manualFindin
                       {row.ready && row.candidateId ? (
                         <Button size="sm" onClick={() => onSelectCandidate(row.candidateId)}>
                           <Trash2 className="h-3.5 w-3.5" />
-                          Clean
+                          Select
                         </Button>
                       ) : (
                         <Badge variant="outline">manual</Badge>
@@ -1249,54 +1240,6 @@ function ExplorePanel({ scan, scanStatus = "idle", candidates = [], manualFindin
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function HistoryPanel({
-  executionRecord,
-  scanStatus,
-  onRescan
-}) {
-  const accepted = Boolean(executionRecord?.accepted);
-  const bytes = Number(executionRecord?.bytes || 0);
-  return (
-    <div className="grid gap-5">
-      <Card className="rounded-md">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <History className="h-4 w-4" />
-            Activity
-          </CardTitle>
-          <CardDescription>Last cleanup result.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!executionRecord ? (
-            <EmptyState icon={History} title="No cleanup has run yet" detail="Run a cleanable item to see what happened." />
-          ) : (
-            <>
-              <div className={`rounded-md border p-4 ${accepted ? "bg-emerald-50 text-emerald-950" : "bg-red-50 text-red-950"}`}>
-                <div className="flex items-start gap-3">
-                  {accepted ? <CheckCircle2 className="mt-0.5 h-5 w-5" /> : <AlertTriangle className="mt-0.5 h-5 w-5" />}
-                  <div className="min-w-0">
-                    <p className="font-semibold">
-                      {accepted ? bytes > 0 ? `${formatBytes(bytes)} cleaned` : "Nothing needed cleaning" : "Nothing was deleted"}
-                    </p>
-                    <p className="mt-1 text-sm">{formatHistorySummary(executionRecord)}</p>
-                    <p className="mt-3 truncate text-xs opacity-80">
-                      {(executionRecord.title || "Cleanup target")} - {formatShortDate(executionRecord.executedAt)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <Button variant="outline" onClick={onRescan} disabled={scanStatus === "rescanning"}>
-                {scanStatus === "rescanning" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-                Scan again
-              </Button>
-            </>
-          )}
-        </CardContent>
-      </Card>
-    </div>
   );
 }
 
@@ -1418,16 +1361,6 @@ function Metric({ label, value }) {
       <p className="mt-1 truncate text-sm font-semibold">{value}</p>
     </div>
   );
-}
-
-function formatHistorySummary(executionRecord = {}) {
-  if (executionRecord.accepted) {
-    const bytes = formatBytes(executionRecord.bytes || 0);
-    return Number(executionRecord.bytes || 0) > 0
-      ? `${bytes} removed. The list is up to date.`
-      : "No eligible files were removed. The list is up to date.";
-  }
-  return "Nothing was deleted. Refresh the scan, close apps that may be using these files, and try again.";
 }
 
 function formatAcceptedCleanupMessage({ reclaimedBytes = 0, removedFiles = false, runningRescan = false, scanStatus = "" } = {}) {
@@ -2085,14 +2018,6 @@ function buildRejectedCheckedCleanupEntry(candidate = {}, error = null) {
       }
     ]
   };
-}
-
-function formatShortDate(value = "") {
-  if (!value) return "not run";
-  const timestamp = parseWorkflowTimestamp(value);
-  if (!Number.isFinite(timestamp)) return value;
-  const date = new Date(timestamp);
-  return date.toLocaleString();
 }
 
 export default App;
