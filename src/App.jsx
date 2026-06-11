@@ -8,6 +8,7 @@ import {
   FolderSearch,
   HardDrive,
   KeyRound,
+  PieChart,
   ListTree,
   Loader2,
   Lock,
@@ -55,6 +56,16 @@ const DEFAULT_SCAN_REQUEST = {
   maxDepth: 8,
   maxEntriesPerRoot: 25000
 };
+const EXPLORE_VISUAL_COLORS = [
+  { bar: "bg-emerald-500", dot: "bg-emerald-500" },
+  { bar: "bg-sky-500", dot: "bg-sky-500" },
+  { bar: "bg-amber-500", dot: "bg-amber-500" },
+  { bar: "bg-rose-500", dot: "bg-rose-500" },
+  { bar: "bg-violet-500", dot: "bg-violet-500" },
+  { bar: "bg-cyan-500", dot: "bg-cyan-500" },
+  { bar: "bg-lime-500", dot: "bg-lime-500" },
+  { bar: "bg-zinc-500", dot: "bg-zinc-500" }
+];
 const EXECUTOR_RECIPES = {
   "windows-temp": {
     label: "Windows temp cleanup",
@@ -260,6 +271,7 @@ function App() {
   const [executionError, setExecutionError] = useState("");
   const [executionResult, setExecutionResult] = useState(null);
   const [executionRecord, setExecutionRecord] = useState(null);
+  const [exploreConfirmId, setExploreConfirmId] = useState("");
   const [agentPrompt, setAgentPrompt] = useState("Find the safest next cleanup step from the current real scan.");
   const [agentStatus, setAgentStatus] = useState("idle");
   const [agentError, setAgentError] = useState("");
@@ -280,6 +292,10 @@ function App() {
   const selectedCandidate = useMemo(
     () => candidates.find((candidate) => candidate.id === selectedId) || checkedCandidates[0] || null,
     [candidates, selectedId, checkedCandidates]
+  );
+  const exploreConfirmCandidate = useMemo(
+    () => candidates.find((candidate) => candidate.id === exploreConfirmId && isOneClickCleanupCandidate(candidate)) || null,
+    [candidates, exploreConfirmId]
   );
   const manualFindings = useMemo(() => buildManualFindings(scan), [scan]);
   const scanFingerprint = useMemo(() => buildScanFingerprint(scan), [scan]);
@@ -400,7 +416,7 @@ function App() {
     }
   }
 
-  async function runRealScan({ afterExecution = false } = {}) {
+  async function runRealScan({ afterExecution = false, nextView = "clean" } = {}) {
     setScanStatus(afterExecution ? "rescanning" : "scanning");
     setScanError("");
     try {
@@ -427,7 +443,7 @@ function App() {
         setConsentChecked(false);
       }
       setScanStatus("complete");
-      setActiveView("clean");
+      setActiveView(nextView);
     } catch (error) {
       setScanStatus("error");
       setScanError(error instanceof Error ? error.message : "Native scan failed.");
@@ -511,6 +527,17 @@ function App() {
     } catch (error) {
       setExecutionStatus("error");
       setExecutionError(formatCleanupStartError(error));
+    }
+  }
+
+  async function executeExploreCleanupCandidate() {
+    const candidate = exploreConfirmCandidate;
+    if (!candidate || executionStatus === "running") return;
+    setExploreConfirmId("");
+    setActiveView("explore");
+    const { result } = await executeCleanupCandidate(candidate, { rescanAfter: false });
+    if (result?.accepted) {
+      await runRealScan({ afterExecution: true, nextView: "explore" });
     }
   }
 
@@ -757,14 +784,14 @@ function App() {
           <ExplorePanel
             scan={scan}
             scanStatus={scanStatus}
+            executionStatus={executionStatus}
+            executionError={executionError}
+            executionResult={executionResult}
             candidates={candidates}
             manualFindings={manualFindings}
-            onSelectCandidate={(id) => {
-              const candidate = candidates.find((row) => row.id === id);
-              selectWorkflowCandidate(id, { checked: isOneClickCleanupCandidate(candidate) });
-              setActiveView("clean");
-            }}
-            onRunScan={() => runRealScan()}
+            onRequestCleanup={(id) => setExploreConfirmId(id)}
+            onRunScan={() => runRealScan({ nextView: "explore" })}
+            onRescan={() => runRealScan({ afterExecution: true, nextView: "explore" })}
           />
         ) : null}
         {activeView === "agent" ? (
@@ -785,6 +812,12 @@ function App() {
           />
         ) : null}
       </main>
+      <CleanupConfirmModal
+        candidate={exploreConfirmCandidate}
+        running={executionStatus === "running"}
+        onCancel={() => setExploreConfirmId("")}
+        onConfirm={executeExploreCleanupCandidate}
+      />
     </AppFrame>
   );
 }
@@ -1174,9 +1207,23 @@ function CleanupResult({ result, scanStatus, onRescan }) {
   );
 }
 
-function ExplorePanel({ scan, scanStatus = "idle", candidates = [], manualFindings = [], onSelectCandidate, onRunScan }) {
+function ExplorePanel({
+  scan,
+  scanStatus = "idle",
+  executionStatus = "idle",
+  executionError = "",
+  executionResult = null,
+  candidates = [],
+  manualFindings = [],
+  onRequestCleanup,
+  onRunScan,
+  onRescan
+}) {
+  const [mode, setMode] = useState("visualize");
   const rows = buildExploreRows(scan, candidates, manualFindings);
   const scanning = scanStatus === "scanning" || scanStatus === "rescanning";
+  const deleting = executionStatus === "running";
+  const deleteDisabled = scanning || deleting;
   return (
     <Card id="drive-explorer-panel" className="rounded-md">
       <CardHeader>
@@ -1201,45 +1248,171 @@ function ExplorePanel({ scan, scanStatus = "idle", candidates = [], manualFindin
           <EmptyState icon={HardDrive} title="No large areas found" detail="Run a fresh scan to refresh the allocation list." />
         ) : (
           <>
+            <div className="flex rounded-md border bg-muted/30 p-1" role="tablist" aria-label="Explore views">
+              {[
+                ["visualize", "Visualize", PieChart],
+                ["list", "List", ListTree]
+              ].map(([id, label, Icon]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === id}
+                  onClick={() => setMode(id)}
+                  className={`flex min-h-9 flex-1 items-center justify-center gap-2 rounded px-3 text-sm font-medium transition ${
+                    mode === id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </button>
+              ))}
+            </div>
+            {executionError ? <Notice tone="restricted" icon={AlertTriangle} text={executionError} /> : null}
+            {executionResult ? (
+              <CleanupResult
+                result={executionResult}
+                scanStatus={scanStatus}
+                onRescan={onRescan}
+              />
+            ) : null}
             <div className="grid gap-3 md:grid-cols-4">
               <Metric label="Drive" value={scan.volume?.drive || scan.targetDrive || "C:"} />
               <Metric label="Used" value={formatBytes(scan.volume?.usedBytes || 0)} />
               <Metric label="Free" value={formatBytes(scan.volume?.freeBytes || 0)} />
               <Metric label="Items" value={String(rows.length)} />
             </div>
-            <div className="grid gap-3">
-              {rows.map((row) => (
-                <div key={row.id} className="rounded-md border bg-background p-3">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={row.ready ? "safe" : "outline"}>
-                          {row.ready ? "can delete" : "inspect"}
-                        </Badge>
-                        <p className="font-medium">{row.title}</p>
-                      </div>
-                      <p className="mt-2 truncate text-sm text-muted-foreground">{row.path || row.source}</p>
-                      <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{row.detail}</p>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-start gap-2 lg:items-end">
-                      <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
-                      {row.ready && row.candidateId ? (
-                        <Button size="sm" onClick={() => onSelectCandidate(row.candidateId)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Select
-                        </Button>
-                      ) : (
-                        <Badge variant="outline">inspect</Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {mode === "visualize" ? (
+              <ExploreVisualization scan={scan} rows={rows} />
+            ) : (
+              <ExploreList rows={rows} deleteDisabled={deleteDisabled} onRequestCleanup={onRequestCleanup} />
+            )}
           </>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function ExploreList({ rows = [], deleteDisabled = false, onRequestCleanup = () => {} }) {
+  return (
+    <div className="grid gap-3">
+      {rows.map((row) => (
+        <div key={row.id} className="rounded-md border bg-background p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={row.ready ? "safe" : "outline"}>
+                  {row.ready ? "can delete" : "inspect"}
+                </Badge>
+                <p className="font-medium">{row.title}</p>
+              </div>
+              <p className="mt-2 truncate text-sm text-muted-foreground">{row.path || row.source}</p>
+              <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{row.detail}</p>
+            </div>
+            <div className="flex shrink-0 flex-col items-start gap-2 lg:items-end">
+              <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
+              {row.ready && row.candidateId ? (
+                <Button size="sm" variant="destructive" onClick={() => onRequestCleanup(row.candidateId)} disabled={deleteDisabled}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </Button>
+              ) : (
+                <Badge variant="outline">inspect</Badge>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ExploreVisualization({ scan, rows = [] }) {
+  const visualRows = buildExploreVisualRows(scan, rows);
+  const usedBytes = Number(scan?.volume?.usedBytes || 0) || visualRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+  const freeBytes = Number(scan?.volume?.freeBytes || 0);
+  const totalBytes = Number(scan?.volume?.totalBytes || 0) || usedBytes + freeBytes;
+  const usedPercent = totalBytes ? Math.min(100, Math.max(0, (usedBytes / totalBytes) * 100)) : 0;
+  const segmentTotal = Math.max(1, visualRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0));
+  return (
+    <div className="space-y-4 rounded-md border bg-background p-4">
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="text-sm font-medium">C: space map</p>
+          <p className="text-xs text-muted-foreground">{formatBytes(usedBytes)} used{freeBytes ? `, ${formatBytes(freeBytes)} free` : ""}</p>
+        </div>
+        <p className="text-sm font-semibold">{formatPercent(usedPercent)} used</p>
+      </div>
+      <Progress value={usedPercent} />
+      {visualRows.length ? (
+        <>
+          <div className="flex h-4 overflow-hidden rounded-md bg-muted">
+            {visualRows.map((row, index) => (
+              <div
+                key={row.id}
+                className={EXPLORE_VISUAL_COLORS[index % EXPLORE_VISUAL_COLORS.length].bar}
+                style={{ width: `${Math.max(2, (Number(row.bytes || 0) / segmentTotal) * 100)}%` }}
+                title={`${row.title}: ${formatBytes(row.bytes)}`}
+              />
+            ))}
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">
+            {visualRows.map((row, index) => {
+              const percent = segmentTotal ? (Number(row.bytes || 0) / segmentTotal) * 100 : 0;
+              return (
+                <div key={row.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                  <span className={`h-3 w-3 rounded-sm ${EXPLORE_VISUAL_COLORS[index % EXPLORE_VISUAL_COLORS.length].dot}`} />
+                  <span className="truncate">{row.title}</span>
+                  <span className="whitespace-nowrap text-muted-foreground">{formatBytes(row.bytes)} · {formatPercent(percent)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <EmptyState icon={PieChart} title="No visual data yet" detail="Run a fresh scan to build the C: space map." />
+      )}
+    </div>
+  );
+}
+
+function CleanupConfirmModal({ candidate, running = false, onCancel, onConfirm }) {
+  if (!candidate) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6" role="presentation">
+      <div role="dialog" aria-modal="true" aria-labelledby="cleanup-confirm-title" className="w-full max-w-lg rounded-md border bg-card p-5 text-card-foreground shadow-xl">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-red-50 text-red-700">
+            <Trash2 className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p id="cleanup-confirm-title" className="text-base font-semibold">Delete this item?</p>
+            <p className="mt-1 text-sm text-muted-foreground">{candidate.title}</p>
+          </div>
+        </div>
+        <div className="mt-4 space-y-3 rounded-md border bg-background p-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-muted-foreground">Space</span>
+            <span className="font-medium">{formatBytes(candidate.bytes)}</span>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Location</p>
+            <p className="mt-1 truncate font-medium">{candidate.targetPath || candidate.targetKind}</p>
+          </div>
+          <p className="text-muted-foreground">{candidate.consequence}</p>
+        </div>
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" onClick={onCancel} disabled={running}>
+            Cancel
+          </Button>
+          <Button type="button" variant="destructive" onClick={onConfirm} disabled={running}>
+            {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            {running ? "Deleting" : "Delete"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1361,6 +1534,13 @@ function Metric({ label, value }) {
       <p className="mt-1 truncate text-sm font-semibold">{value}</p>
     </div>
   );
+}
+
+function formatPercent(value = 0) {
+  if (!Number.isFinite(value)) return "0%";
+  if (value >= 10) return `${Math.round(value)}%`;
+  if (value > 0) return `${value.toFixed(1)}%`;
+  return "0%";
 }
 
 function formatAcceptedCleanupMessage({ reclaimedBytes = 0, removedFiles = false, runningRescan = false, scanStatus = "" } = {}) {
@@ -1531,6 +1711,34 @@ function buildExploreRows(scan, candidates = [], manualFindings = []) {
     .filter((row) => row.bytes > 0 || row.cleanable)
     .sort((left, right) => Number(right.cleanable) - Number(left.cleanable) || right.bytes - left.bytes)
     .slice(0, 80);
+}
+
+function buildExploreVisualRows(scan, rows = []) {
+  if (!scan) return [];
+  const inventoryRows = (scan.driveInventory || [])
+    .filter((row) => Number(row?.bytes || 0) > 0)
+    .map((row) => ({
+      id: `visual-inventory-${row.id || row.path || row.name}`,
+      title: row.name || row.path || "Drive area",
+      bytes: Number(row.bytes || 0)
+    }));
+  const fallbackRows = rows
+    .filter((row) => Number(row?.bytes || 0) > 0)
+    .map((row) => ({
+      id: `visual-row-${row.id}`,
+      title: row.title || row.path || "Scanned area",
+      bytes: Number(row.bytes || 0)
+    }));
+  const sourceRows = inventoryRows.length ? inventoryRows : fallbackRows;
+  const usedBytes = Number(scan.volume?.usedBytes || 0) || sourceRows.reduce((sum, row) => sum + row.bytes, 0);
+  const topRows = sourceRows
+    .sort((left, right) => right.bytes - left.bytes)
+    .slice(0, 7);
+  const shownBytes = topRows.reduce((sum, row) => sum + row.bytes, 0);
+  const otherBytes = Math.max(0, usedBytes - shownBytes);
+  return otherBytes > 0
+    ? [...topRows, { id: "visual-other-used-space", title: "Other used space", bytes: otherBytes }]
+    : topRows;
 }
 
 function buildCandidateFromFinding(finding, recipe, runtime) {

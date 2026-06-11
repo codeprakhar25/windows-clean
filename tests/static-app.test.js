@@ -148,7 +148,10 @@ assert(!app.includes("<Badge variant=\"safe\">ready</Badge>"), "ready-only clean
 assert(!app.includes("StatusDot"), "sidebar navigation should not show extra status dots");
 assert(app.includes("function selectWorkflowCandidate(id, options = {})"), "cleanup target selection should support checked handoff state");
 assert(app.includes("setCheckedIds(checked ? [id] : [])"), "checked handoff should only check executable cleanup targets");
-assert(/onSelectCandidate=\{\(id\) => \{[\s\S]*selectWorkflowCandidate\(id, \{ checked: isOneClickCleanupCandidate\(candidate\) \}\);/.test(app), "Explore cleanup buttons should open Clean with one-click rows checked");
+assert(app.includes("const [exploreConfirmId, setExploreConfirmId] = useState(\"\")"), "Explore cleanup buttons should open a confirmation modal");
+assert(app.includes("function CleanupConfirmModal"), "Explore cleanup should confirm before deleting from the PC");
+assert(app.includes("executeExploreCleanupCandidate"), "Explore confirmation should execute through the guarded cleanup path");
+assert(app.includes("runRealScan({ afterExecution: true, nextView: \"explore\" })"), "Explore cleanup should refresh and stay on Explore after deletion");
 assert(!app.includes("async function executeSelectedCleanup"), "Clean screen should not carry a second per-row delete handler");
 assert(!app.includes("onExecuteCandidate(row);"), "ready cleanup rows should use checkbox selection instead of per-row Delete buttons");
 assert(!app.includes("onExecuteCandidate={"), "CleanPanel should expose one delete action for checked rows");
@@ -224,8 +227,13 @@ assert(app.includes("visibleTargets"), "OpenAI panel should unlock for executabl
 assert(app.includes("scan.driveInventory"), "manual findings should include native drive inventory evidence");
 assert(app.includes("Drive inventory:"), "drive inventory rows should be visible as manual review cards");
 assert(app.includes("slugifyId"), "drive inventory manual finding ids should be stable and normalized");
-assert(app.includes("function ExplorePanel({ scan, scanStatus = \"idle\""), "Explore scan button should share scan status with the rest of the app");
+assert(app.includes("function ExplorePanel({"), "Explore scan button should share scan status with the rest of the app");
 assert(app.includes("disabled={scanning}"), "Explore scan button should not launch another scan while one is running");
+assert(app.includes("Visualize"), "Explore should expose a visual space view");
+assert(app.includes("C: space map"), "Explore visualization should show a C: allocation map");
+assert(app.includes("buildExploreVisualRows"), "Explore visualization should derive rows from scan inventory");
+assert(app.includes("Other used space"), "Explore visualization should account for remaining drive usage");
+assert(app.includes("onRunScan={() => runRealScan({ nextView: \"explore\" })}"), "Explore scan refresh should stay on Explore");
 assert(!app.includes("selected-route-proof-reviewed"), "app shell should not require selected-route proof review before more cleanup");
 assert(!app.includes("selected-route-proof-import"), "app workflow proof should not require obsolete selected-route proof import");
 assert(!app.includes("Export proof, let the in-app verifier accept it, and capture the support bundle before selecting another cleanup target."), "cleanup queue should not describe proof export as a target-switch lock");
@@ -264,6 +272,8 @@ assert(app.includes("pagefile: \"Pagefile\""), "Explore should surface pagefile 
 assert(app.includes("\"wsl-vhdx\": \"WSL virtual disk\""), "Explore should surface WSL virtual disk findings");
 assert(app.includes("can delete"), "Explore should use product-facing delete labels");
 assert(app.includes("inspect"), "Explore should use product-facing inspection labels");
+assert(app.includes("Delete this item?"), "Explore delete action should ask for modal confirmation");
+assert(app.includes("variant=\"destructive\" onClick={() => onRequestCleanup(row.candidateId)}"), "Explore cleanable rows should expose a direct Delete action");
 assert(app.includes("manualFindings.map"), "Explore should render manual findings in the same allocation list");
 assert(app.includes("finding.manualGuidance?.primaryAction"), "Explore should show simple manual guidance without an extra panel");
 assert(app.includes("formatManualFindingNote"), "manual findings should convert internal notes into plain copy");
