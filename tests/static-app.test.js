@@ -44,6 +44,7 @@ const requiredAppMarkers = [
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Scan PC",
   "Scan for cleanup",
+  "Fast scan first",
   "Explore C:",
   "Select one or more rows, then delete them.",
   "Select items to delete",
@@ -141,6 +142,10 @@ assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should
 assert(app.includes("formatExecutionGateError"), "execute handler should convert dispatch blockers into plain user-facing copy");
 assert(app.includes("const [checkedIds, setCheckedIds] = useState([])"), "cleanup queue should support multiple checked rows");
 assert(app.includes("const nextCheckedIds = isChecked"), "clicking an already checked cleanup row should remove it from the checked set");
+assert(app.includes("includeProjectArtifacts: false"), "default scan should skip slower project artifact digging");
+assert(app.includes("maxDepth: 6"), "default scan should use a faster native depth");
+assert(app.includes("maxEntriesPerRoot: 12000"), "default scan should use a smaller per-root entry cap");
+assert(app.includes("DEFAULT_SCAN_REQUEST.maxDepth"), "native scan conversion should reuse the fast default depth");
 assert(!app.includes("Check row"), "selected cleanup rows should not render a disabled check-row action");
 assert(!app.includes("Cleanup status"), "sidebar should not duplicate the active cleanup status");
 assert(!app.includes("cleanup available"), "top bar should not expose redundant runtime status copy");
@@ -148,9 +153,14 @@ assert(!app.includes("<Badge variant=\"safe\">ready</Badge>"), "ready-only clean
 assert(!app.includes("StatusDot"), "sidebar navigation should not show extra status dots");
 assert(app.includes("function selectWorkflowCandidate(id, options = {})"), "cleanup target selection should support checked handoff state");
 assert(app.includes("setCheckedIds(checked ? [id] : [])"), "checked handoff should only check executable cleanup targets");
-assert(app.includes("const [exploreConfirmId, setExploreConfirmId] = useState(\"\")"), "Explore cleanup buttons should open a confirmation modal");
+assert(app.includes("const [exploreConfirmIds, setExploreConfirmIds] = useState([])"), "Explore cleanup buttons should open a confirmation modal");
 assert(app.includes("function CleanupConfirmModal"), "Explore cleanup should confirm before deleting from the PC");
-assert(app.includes("executeExploreCleanupCandidate"), "Explore confirmation should execute through the guarded cleanup path");
+assert(app.includes("function CleanupConfirmModal({ candidates = []"), "Explore cleanup modal should support selected rows from Explore");
+assert(app.includes("executeExploreCleanupCandidates"), "Explore confirmation should execute through the guarded cleanup path");
+assert(app.includes("onRequestSelectedCleanup"), "Explore list should support deleting multiple selected items");
+assert(app.includes("selectedIds.includes(row.candidateId)"), "Explore cleanable rows should expose checkbox selection");
+assert(app.includes("selected cleanable items"), "Explore delete confirmation should describe multi-select cleanup simply");
+assert(app.includes("Only the selected cleanable items are deleted."), "Explore multi-delete confirmation should keep consequences simple");
 assert(app.includes("runRealScan({ afterExecution: true, nextView: \"explore\" })"), "Explore cleanup should refresh and stay on Explore after deletion");
 assert(!app.includes("async function executeSelectedCleanup"), "Clean screen should not carry a second per-row delete handler");
 assert(!app.includes("onExecuteCandidate(row);"), "ready cleanup rows should use checkbox selection instead of per-row Delete buttons");
@@ -233,6 +243,8 @@ assert(app.includes("Visualize"), "Explore should expose a visual space view");
 assert(app.includes("C: space map"), "Explore visualization should show a C: allocation map");
 assert(app.includes("buildExploreVisualRows"), "Explore visualization should derive rows from scan inventory");
 assert(app.includes("Other used space"), "Explore visualization should account for remaining drive usage");
+assert(app.includes("formatDriveInventoryDetail"), "Explore visualization should explain major drive allocation categories");
+assert(app.includes("Some of it can become removable"), "Other used space should explain possible future cleanup without implying unsafe deletion");
 assert(app.includes("Show delete list"), "Explore visualization should lead users to actionable cleanup rows");
 assert(app.includes("can be deleted"), "Explore visualization should summarize cleanable space");
 assert(app.includes("onShowList={() => setMode(\"list\")}"), "Explore visualization should switch directly to the delete list");

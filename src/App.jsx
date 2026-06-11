@@ -52,9 +52,9 @@ const DEFAULT_SCAN_REQUEST = {
   targetDrive: "C:",
   protectedPaths: "",
   customRoots: "",
-  includeProjectArtifacts: true,
-  maxDepth: 8,
-  maxEntriesPerRoot: 25000
+  includeProjectArtifacts: false,
+  maxDepth: 6,
+  maxEntriesPerRoot: 12000
 };
 const EXPLORE_VISUAL_COLORS = [
   { bar: "bg-emerald-500", dot: "bg-emerald-500" },
@@ -271,7 +271,7 @@ function App() {
   const [executionError, setExecutionError] = useState("");
   const [executionResult, setExecutionResult] = useState(null);
   const [executionRecord, setExecutionRecord] = useState(null);
-  const [exploreConfirmId, setExploreConfirmId] = useState("");
+  const [exploreConfirmIds, setExploreConfirmIds] = useState([]);
   const [agentPrompt, setAgentPrompt] = useState("Find the safest next cleanup step from the current real scan.");
   const [agentStatus, setAgentStatus] = useState("idle");
   const [agentError, setAgentError] = useState("");
@@ -293,9 +293,11 @@ function App() {
     () => candidates.find((candidate) => candidate.id === selectedId) || checkedCandidates[0] || null,
     [candidates, selectedId, checkedCandidates]
   );
-  const exploreConfirmCandidate = useMemo(
-    () => candidates.find((candidate) => candidate.id === exploreConfirmId && isOneClickCleanupCandidate(candidate)) || null,
-    [candidates, exploreConfirmId]
+  const exploreConfirmCandidates = useMemo(
+    () => exploreConfirmIds
+      .map((id) => candidates.find((candidate) => candidate.id === id))
+      .filter(isOneClickCleanupCandidate),
+    [candidates, exploreConfirmIds]
   );
   const manualFindings = useMemo(() => buildManualFindings(scan), [scan]);
   const scanFingerprint = useMemo(() => buildScanFingerprint(scan), [scan]);
@@ -458,6 +460,11 @@ function App() {
       await executeCleanupCandidate(targets[0]);
       return;
     }
+    await executeCleanupBatch(targets);
+  }
+
+  async function executeCleanupBatch(targets = [], { nextView = "clean" } = {}) {
+    if (!targets.length) return;
     setExecutionStatus("running");
     setExecutionError("");
     setExecutionResult(null);
@@ -522,7 +529,7 @@ function App() {
       setPostRunScan(null);
       setExecutionStatus(accepted ? "complete" : "rejected");
       if (accepted) {
-        await runRealScan({ afterExecution: true });
+        await runRealScan({ afterExecution: true, nextView });
       }
     } catch (error) {
       setExecutionStatus("error");
@@ -530,15 +537,19 @@ function App() {
     }
   }
 
-  async function executeExploreCleanupCandidate() {
-    const candidate = exploreConfirmCandidate;
-    if (!candidate || executionStatus === "running") return;
-    setExploreConfirmId("");
+  async function executeExploreCleanupCandidates() {
+    const targets = exploreConfirmCandidates;
+    if (!targets.length || executionStatus === "running") return;
+    setExploreConfirmIds([]);
     setActiveView("explore");
-    const { result } = await executeCleanupCandidate(candidate, { rescanAfter: false });
-    if (result?.accepted) {
-      await runRealScan({ afterExecution: true, nextView: "explore" });
+    if (targets.length === 1) {
+      const { result } = await executeCleanupCandidate(targets[0], { rescanAfter: false });
+      if (result?.accepted) {
+        await runRealScan({ afterExecution: true, nextView: "explore" });
+      }
+      return;
     }
+    await executeCleanupBatch(targets, { nextView: "explore" });
   }
 
   async function executeCleanupCandidate(candidateForExecution, { updateUi = true, rescanAfter = true } = {}) {
@@ -789,7 +800,7 @@ function App() {
             executionResult={executionResult}
             candidates={candidates}
             manualFindings={manualFindings}
-            onRequestCleanup={(id) => setExploreConfirmId(id)}
+            onRequestCleanup={(ids) => setExploreConfirmIds(Array.isArray(ids) ? ids : [ids])}
             onRunScan={() => runRealScan({ nextView: "explore" })}
             onRescan={() => runRealScan({ afterExecution: true, nextView: "explore" })}
           />
@@ -813,10 +824,10 @@ function App() {
         ) : null}
       </main>
       <CleanupConfirmModal
-        candidate={exploreConfirmCandidate}
+        candidates={exploreConfirmCandidates}
         running={executionStatus === "running"}
-        onCancel={() => setExploreConfirmId("")}
-        onConfirm={executeExploreCleanupCandidate}
+        onCancel={() => setExploreConfirmIds([])}
+        onConfirm={executeExploreCleanupCandidates}
       />
     </AppFrame>
   );
@@ -1005,7 +1016,7 @@ function ScanPanel({ scanStatus, scanError, onRunScan }) {
               Scan for cleanup
             </CardTitle>
             <CardDescription>
-              Scan first. Nothing is deleted until you choose an item.
+              Fast scan first. Nothing is deleted until you choose an item.
             </CardDescription>
           </div>
         </div>
@@ -1220,10 +1231,28 @@ function ExplorePanel({
   onRescan
 }) {
   const [mode, setMode] = useState("visualize");
+  const [selectedIds, setSelectedIds] = useState([]);
   const rows = buildExploreRows(scan, candidates, manualFindings);
+  const readyRows = rows.filter((row) => row.ready && row.candidateId);
+  const selectedRows = readyRows.filter((row) => selectedIds.includes(row.candidateId));
+  const selectedBytes = selectedRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+  const allSelected = readyRows.length > 0 && selectedRows.length === readyRows.length;
   const scanning = scanStatus === "scanning" || scanStatus === "rescanning";
   const deleting = executionStatus === "running";
   const deleteDisabled = scanning || deleting;
+  function toggleSelectedId(id) {
+    if (!id || deleteDisabled) return;
+    setSelectedIds((current) => current.includes(id) ? current.filter((rowId) => rowId !== id) : [...current, id]);
+  }
+  function setAllSelected() {
+    if (deleteDisabled) return;
+    setSelectedIds(allSelected ? [] : readyRows.map((row) => row.candidateId));
+  }
+  function requestSelectedCleanup() {
+    if (!selectedRows.length || deleteDisabled) return;
+    onRequestCleanup(selectedRows.map((row) => row.candidateId));
+    setSelectedIds([]);
+  }
   return (
     <Card id="drive-explorer-panel" className="rounded-md">
       <CardHeader>
@@ -1285,7 +1314,17 @@ function ExplorePanel({
             {mode === "visualize" ? (
               <ExploreVisualization scan={scan} rows={rows} onShowList={() => setMode("list")} />
             ) : (
-              <ExploreList rows={rows} deleteDisabled={deleteDisabled} onRequestCleanup={onRequestCleanup} />
+              <ExploreList
+                rows={rows}
+                selectedIds={selectedIds}
+                selectedBytes={selectedBytes}
+                allSelected={allSelected}
+                deleteDisabled={deleteDisabled}
+                onToggleSelected={toggleSelectedId}
+                onSetAllSelected={setAllSelected}
+                onRequestSelectedCleanup={requestSelectedCleanup}
+                onRequestCleanup={onRequestCleanup}
+              />
             )}
           </>
         )}
@@ -1294,21 +1333,65 @@ function ExplorePanel({
   );
 }
 
-function ExploreList({ rows = [], deleteDisabled = false, onRequestCleanup = () => {} }) {
+function ExploreList({
+  rows = [],
+  selectedIds = [],
+  selectedBytes = 0,
+  allSelected = false,
+  deleteDisabled = false,
+  onToggleSelected = () => {},
+  onSetAllSelected = () => {},
+  onRequestSelectedCleanup = () => {},
+  onRequestCleanup = () => {}
+}) {
+  const readyRows = rows.filter((row) => row.ready && row.candidateId);
+  const selectedCount = readyRows.filter((row) => selectedIds.includes(row.candidateId)).length;
   return (
     <div className="grid gap-3">
+      {readyRows.length ? (
+        <div className="sticky top-16 z-10 flex flex-col gap-3 rounded-md border bg-card p-3 shadow-sm md:flex-row md:items-center md:justify-between lg:top-4">
+          <div>
+            <p className="text-sm font-medium">
+              {selectedCount ? `${selectedCount} item${selectedCount === 1 ? "" : "s"} selected` : "Choose items to delete"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {selectedCount ? `${formatBytes(selectedBytes)} will be cleaned` : "Use the checkboxes or delete one item at a time."}
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Button type="button" variant="outline" className="w-full sm:w-auto" disabled={deleteDisabled} onClick={onSetAllSelected}>
+              {allSelected ? <X className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+              {allSelected ? "Clear" : "Select all"}
+            </Button>
+            <Button type="button" className="w-full sm:w-auto" variant="destructive" disabled={!selectedCount || deleteDisabled} onClick={onRequestSelectedCleanup}>
+              <Trash2 className="h-4 w-4" />
+              Delete selected
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {rows.map((row) => (
         <div key={row.id} className="rounded-md border bg-background p-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={row.ready ? "safe" : "outline"}>
-                  {row.ready ? "can delete" : "inspect"}
-                </Badge>
-                <p className="font-medium">{row.title}</p>
+            <div className="flex min-w-0 gap-3">
+              {row.ready && row.candidateId ? (
+                <Checkbox
+                  checked={selectedIds.includes(row.candidateId)}
+                  disabled={deleteDisabled}
+                  aria-label={`Select ${row.title}`}
+                  onClick={() => onToggleSelected(row.candidateId)}
+                />
+              ) : null}
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={row.ready ? "safe" : "outline"}>
+                    {row.ready ? "can delete" : "inspect"}
+                  </Badge>
+                  <p className="font-medium">{row.title}</p>
+                </div>
+                <p className="mt-2 truncate text-sm text-muted-foreground">{row.path || row.source}</p>
+                <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{row.detail}</p>
               </div>
-              <p className="mt-2 truncate text-sm text-muted-foreground">{row.path || row.source}</p>
-              <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{row.detail}</p>
             </div>
             <div className="flex shrink-0 flex-col items-start gap-2 lg:items-end">
               <p className="text-lg font-semibold">{formatBytes(row.bytes)}</p>
@@ -1337,6 +1420,7 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
   const totalBytes = Number(scan?.volume?.totalBytes || 0) || usedBytes + freeBytes;
   const usedPercent = totalBytes ? Math.min(100, Math.max(0, (usedBytes / totalBytes) * 100)) : 0;
   const segmentTotal = Math.max(1, visualRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0));
+  const otherRow = visualRows.find((row) => row.id === "visual-other-used-space");
   return (
     <div className="space-y-4 rounded-md border bg-background p-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
@@ -1377,12 +1461,21 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
               return (
                 <div key={row.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm">
                   <span className={`h-3 w-3 rounded-sm ${EXPLORE_VISUAL_COLORS[index % EXPLORE_VISUAL_COLORS.length].dot}`} />
-                  <span className="truncate">{row.title}</span>
+                  <div className="min-w-0">
+                    <p className="truncate">{row.title}</p>
+                    {row.detail ? <p className="truncate text-xs text-muted-foreground">{row.detail}</p> : null}
+                  </div>
                   <span className="whitespace-nowrap text-muted-foreground">{formatBytes(row.bytes)} - {formatPercent(percent)}</span>
                 </div>
               );
             })}
           </div>
+          {otherRow ? (
+            <div className="rounded-md border bg-muted/20 p-3 text-sm">
+              <p className="font-medium">Other used space</p>
+              <p className="mt-1 text-xs text-muted-foreground">{otherRow.detail}</p>
+            </div>
+          ) : null}
         </>
       ) : (
         <EmptyState icon={PieChart} title="No visual data yet" detail="Run a fresh scan to build the C: space map." />
@@ -1391,8 +1484,14 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
   );
 }
 
-function CleanupConfirmModal({ candidate, running = false, onCancel, onConfirm }) {
-  if (!candidate) return null;
+function CleanupConfirmModal({ candidates = [], running = false, onCancel, onConfirm }) {
+  const selectedCandidates = candidates.filter(Boolean);
+  if (!selectedCandidates.length) return null;
+  const single = selectedCandidates.length === 1;
+  const primaryCandidate = selectedCandidates[0];
+  const totalBytes = selectedCandidates.reduce((sum, candidate) => sum + Number(candidate.bytes || 0), 0);
+  const visibleCandidates = selectedCandidates.slice(0, 5);
+  const hiddenCount = Math.max(0, selectedCandidates.length - visibleCandidates.length);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6" role="presentation">
       <div role="dialog" aria-modal="true" aria-labelledby="cleanup-confirm-title" className="w-full max-w-lg rounded-md border bg-card p-5 text-card-foreground shadow-xl">
@@ -1401,20 +1500,35 @@ function CleanupConfirmModal({ candidate, running = false, onCancel, onConfirm }
             <Trash2 className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <p id="cleanup-confirm-title" className="text-base font-semibold">Delete this item?</p>
-            <p className="mt-1 text-sm text-muted-foreground">{candidate.title}</p>
+            <p id="cleanup-confirm-title" className="text-base font-semibold">{single ? "Delete this item?" : `Delete ${selectedCandidates.length} items?`}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{single ? primaryCandidate.title : `${selectedCandidates.length} selected cleanable items`}</p>
           </div>
         </div>
         <div className="mt-4 space-y-3 rounded-md border bg-background p-3 text-sm">
           <div className="flex items-center justify-between gap-3">
             <span className="text-muted-foreground">Space</span>
-            <span className="font-medium">{formatBytes(candidate.bytes)}</span>
+            <span className="font-medium">{formatBytes(totalBytes)}</span>
           </div>
-          <div>
-            <p className="text-muted-foreground">Location</p>
-            <p className="mt-1 truncate font-medium">{candidate.targetPath || candidate.targetKind}</p>
-          </div>
-          <p className="text-muted-foreground">{candidate.consequence}</p>
+          {single ? (
+            <div>
+              <p className="text-muted-foreground">Location</p>
+              <p className="mt-1 truncate font-medium">{primaryCandidate.targetPath || primaryCandidate.targetKind}</p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-muted-foreground">Items</p>
+              <div className="mt-2 max-h-44 space-y-2 overflow-auto pr-1">
+                {visibleCandidates.map((candidate) => (
+                  <div key={candidate.id} className="flex items-center justify-between gap-3 rounded border bg-muted/20 px-2 py-1.5">
+                    <span className="min-w-0 truncate font-medium">{candidate.title}</span>
+                    <span className="shrink-0 text-muted-foreground">{formatBytes(candidate.bytes)}</span>
+                  </div>
+                ))}
+                {hiddenCount ? <p className="text-xs text-muted-foreground">And {hiddenCount} more selected item{hiddenCount === 1 ? "" : "s"}.</p> : null}
+              </div>
+            </div>
+          )}
+          <p className="text-muted-foreground">{single ? primaryCandidate.consequence : "Only the selected cleanable items are deleted."}</p>
         </div>
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onCancel} disabled={running}>
@@ -1422,7 +1536,7 @@ function CleanupConfirmModal({ candidate, running = false, onCancel, onConfirm }
           </Button>
           <Button type="button" variant="destructive" onClick={onConfirm} disabled={running}>
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            {running ? "Deleting" : "Delete"}
+            {running ? "Deleting" : single ? "Delete" : `Delete ${selectedCandidates.length} items`}
           </Button>
         </div>
       </div>
@@ -1628,8 +1742,8 @@ function toNativeScanRequest(request) {
     protectedPaths: splitLines(request.protectedPaths),
     customRoots: splitLines(request.customRoots),
     includeProjectArtifacts: request.includeProjectArtifacts,
-    maxDepth: Number(request.maxDepth || 8),
-    maxEntriesPerRoot: Number(request.maxEntriesPerRoot || 25000)
+    maxDepth: Number(request.maxDepth || DEFAULT_SCAN_REQUEST.maxDepth),
+    maxEntriesPerRoot: Number(request.maxEntriesPerRoot || DEFAULT_SCAN_REQUEST.maxEntriesPerRoot)
   };
 }
 
@@ -1734,14 +1848,16 @@ function buildExploreVisualRows(scan, rows = []) {
     .map((row) => ({
       id: `visual-inventory-${row.id || row.path || row.name}`,
       title: row.name || row.path || "Drive area",
-      bytes: Number(row.bytes || 0)
+      bytes: Number(row.bytes || 0),
+      detail: row.note || formatDriveInventoryDetail(row)
     }));
   const fallbackRows = rows
     .filter((row) => Number(row?.bytes || 0) > 0)
     .map((row) => ({
       id: `visual-row-${row.id}`,
       title: row.title || row.path || "Scanned area",
-      bytes: Number(row.bytes || 0)
+      bytes: Number(row.bytes || 0),
+      detail: row.detail || row.path || ""
     }));
   const sourceRows = inventoryRows.length ? inventoryRows : fallbackRows;
   const usedBytes = Number(scan.volume?.usedBytes || 0) || sourceRows.reduce((sum, row) => sum + row.bytes, 0);
@@ -1751,8 +1867,17 @@ function buildExploreVisualRows(scan, rows = []) {
   const shownBytes = topRows.reduce((sum, row) => sum + row.bytes, 0);
   const otherBytes = Math.max(0, usedBytes - shownBytes);
   return otherBytes > 0
-    ? [...topRows, { id: "visual-other-used-space", title: "Other used space", bytes: otherBytes }]
+    ? [...topRows, { id: "visual-other-used-space", title: "Other used space", bytes: otherBytes, detail: "Usually Windows, installed apps, protected folders, and smaller scan results. Some of it can become removable when it appears as a can delete item." }]
     : topRows;
+}
+
+function formatDriveInventoryDetail(row = {}) {
+  const text = String(row.classification || row.kind || "").toLowerCase();
+  if (/windows|system/.test(text)) return "Windows and protected system files.";
+  if (/program|app/.test(text)) return "Installed apps and app data.";
+  if (/cache|temp/.test(text)) return "Potential cleanup area when the scan marks it as can delete.";
+  if (/user|profile/.test(text)) return "User files and app data.";
+  return "Top-level C: allocation from the scan.";
 }
 
 function buildCandidateFromFinding(finding, recipe, runtime) {
