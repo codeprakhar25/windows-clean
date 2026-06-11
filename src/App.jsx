@@ -498,9 +498,11 @@ function App() {
     }
   }
 
-  async function executeCheckedCleanups() {
+  async function executeCheckedCleanups(targetOverride = null) {
     if (scanStatus === "scanning" || scanStatus === "rescanning") return;
-    const targets = checkedCandidates;
+    const targets = Array.isArray(targetOverride)
+      ? targetOverride.filter(isOneClickCleanupCandidate)
+      : checkedCandidates;
     if (!targets.length) return;
     if (targets.length === 1) {
       await executeCleanupCandidate(targets[0]);
@@ -1109,6 +1111,12 @@ function CleanPanel({
   const running = executionStatus === "running";
   const refreshing = scanStatus === "scanning" || scanStatus === "rescanning";
   const actionDisabled = running || refreshing;
+  const deleteAllDisabled = !hasReadyCandidates || actionDisabled;
+  function deleteAllReadyCandidates() {
+    if (deleteAllDisabled) return;
+    onSetCheckedCandidates(readyCandidates);
+    onExecuteChecked(readyCandidates);
+  }
   return (
     <Card id="cleanup-actions-panel" className="rounded-md">
       <CardHeader>
@@ -1118,12 +1126,20 @@ function CleanPanel({
               <ClipboardCheck className="h-4 w-4" />
               Select items to delete
             </CardTitle>
-            <CardDescription>Select one or more rows, then delete them.</CardDescription>
+            <CardDescription>Check what you want to remove. SpaceGuard deletes only built-in cleanable items.</CardDescription>
           </div>
-          <Button className="w-full md:w-auto" variant="outline" onClick={onScanAgain} disabled={running || refreshing}>
-            {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-            {refreshing ? "Scanning" : "Scan again"}
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row md:justify-end">
+            {hasReadyCandidates ? (
+              <Button className="w-full sm:w-auto" variant="destructive" onClick={deleteAllReadyCandidates} disabled={deleteAllDisabled}>
+                {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Delete all
+              </Button>
+            ) : null}
+            <Button className="w-full sm:w-auto" variant="outline" onClick={onScanAgain} disabled={running || refreshing}>
+              {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+              {refreshing ? "Scanning" : "Scan again"}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -1139,7 +1155,7 @@ function CleanPanel({
                       {checkedCount ? `${checkedCount} item${checkedCount === 1 ? "" : "s"} selected` : "Choose items to delete"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {checkedCount ? `${formatBytes(checkedBytes)} selected to delete` : "Use the checkboxes, then click Delete selected."}
+                      {checkedCount ? `${formatBytes(checkedBytes)} selected` : "Use checkboxes or delete everything cleanable."}
                     </p>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -1155,6 +1171,7 @@ function CleanPanel({
                     </Button>
                     <Button
                       className="w-full sm:w-auto"
+                      variant="destructive"
                       disabled={!checkedCount || actionDisabled}
                       onClick={onExecuteChecked}
                     >
@@ -1204,7 +1221,7 @@ function CleanPanel({
                             />
                             <div className="min-w-0">
                               <p className="font-medium">{row.title}</p>
-                              <p className="mt-2 truncate text-sm text-muted-foreground">{row.targetPath || row.targetKind}</p>
+                              <p className="mt-1 text-sm text-muted-foreground">{formatCleanRowSummary(row)}</p>
                             </div>
                           </div>
                           <div className="shrink-0 md:text-right">
@@ -2035,6 +2052,15 @@ function formatBlockedCleanupDetail(candidate = {}) {
     return "This item is not ready for one-click deletion. Scan again or choose another cleanable item.";
   }
   return detail;
+}
+
+function formatCleanRowSummary(candidate = {}) {
+  if (candidate.recipeId === "downloads-installers") return "Moves only the selected file to Recycle Bin.";
+  if (candidate.recipeId === "recycle-bin") return "Empties the Recycle Bin for this drive.";
+  if (candidate.recipeId === "docker-build-cache") return "Clears Docker build cache only.";
+  if (candidate.recipeId === "large-user-files") return "Archive required before removal.";
+  if (/cache|store|temp/i.test(`${candidate.title} ${candidate.targetKind} ${candidate.routeInput}`)) return "Safe cleanable cache files.";
+  return candidate.consequence || "Deletes only this cleanable item.";
 }
 
 function toNativeScanRequest(request) {

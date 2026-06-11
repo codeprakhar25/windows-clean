@@ -46,7 +46,8 @@ const requiredAppMarkers = [
   "Scan for cleanup",
   "Fast scan first",
   "Explore C:",
-  "Select one or more rows, then delete them.",
+  "Check what you want to remove.",
+  "Delete all",
   "Select items to delete",
   "Scan again",
   "Ask AI"
@@ -165,17 +166,20 @@ assert(app.includes("runRealScan({ afterExecution: true, nextView: \"explore\" }
 assert(!app.includes("async function executeSelectedCleanup"), "Clean screen should not carry a second per-row delete handler");
 assert(!app.includes("onExecuteCandidate(row);"), "ready cleanup rows should use checkbox selection instead of per-row Delete buttons");
 assert(!app.includes("onExecuteCandidate={"), "CleanPanel should expose one delete action for checked rows");
-assert(app.includes("async function executeCheckedCleanups()"), "cleanup queue should execute multiple checked rows from one action");
-assert(app.includes("const targets = checkedCandidates;"), "Delete selected should only run checked cleanup rows");
+assert(app.includes("async function executeCheckedCleanups(targetOverride = null)"), "cleanup queue should execute checked rows or a direct cleanable-row list from one action");
+assert(app.includes("targetOverride.filter(isOneClickCleanupCandidate)"), "direct clean actions should still execute only one-click cleanup rows");
+assert(app.includes(": checkedCandidates;"), "Delete selected should only run checked cleanup rows when no direct list is provided");
 assert(app.includes("if (scanStatus === \"scanning\" || scanStatus === \"rescanning\") return;"), "Delete selected should not run while a scan refresh is in progress");
 assert(app.includes("const actionDisabled = running || refreshing"), "Clean rows should share one disabled state while deleting or scanning");
 assert(app.includes("disabled={actionDisabled}"), "Clean row selection should be disabled while deleting or scanning");
 assert(app.includes("onExecuteChecked={executeCheckedCleanups}"), "Clean screen should wire the Delete selected action");
 assert(app.includes("Delete selected"), "Clean screen should expose a simple Delete selected action");
+assert(app.includes("Delete all"), "Clean screen should expose a one-click delete-all action for cleanable rows");
+assert(app.includes("deleteAllReadyCandidates"), "Delete all should dispatch the current ready rows directly");
 assert(app.includes("Select all"), "Clean screen should expose a simple select-all action");
 assert(app.includes("Choose items to delete"), "Clean screen should lead empty selection state with direct checkbox guidance");
-assert(app.includes("Use the checkboxes, then click Delete selected."), "Clean screen should explain the checkbox-to-delete flow without internal details");
-assert(app.includes("selected to delete"), "selected cleanup rows should use direct delete copy");
+assert(app.includes("Use checkboxes or delete everything cleanable."), "Clean screen should explain the checkbox-to-delete flow without internal details");
+assert(app.includes("${formatBytes(checkedBytes)} selected"), "selected cleanup rows should use compact selected-space copy");
 assert(!app.includes("will be cleaned"), "cleanup selection copy should avoid vague cleaned wording");
 assert(!app.includes("Nothing selected"), "Clean action bar should avoid dead-end empty selection copy");
 assert(app.includes("sticky top-16"), "Clean delete controls should stay reachable while scrolling long cleanup lists");
@@ -191,6 +195,8 @@ assert(!app.includes("function HistoryPanel"), "cleanup results should stay inli
 assert(/role="tablist"[\s\S]*grid-cols-3/.test(app), "mobile navigation should expose the simplified three-tab app");
 assert(!app.includes("Scan details"), "Clean screen should not carry post-scan metrics or diagnostic details");
 assert(!app.includes("items need review"), "Clean screen should not show a secondary review queue beside delete actions");
+assert(app.includes("formatCleanRowSummary(row)"), "Clean rows should show simple cleanup summaries instead of raw full paths");
+assert(!app.includes("{row.targetPath || row.targetKind}"), "Clean rows should not show raw path details in the primary delete list");
 assert(app.includes("isOneClickCleanupCandidate"), "cleanup queue should use a shared one-click eligibility helper");
 assert(app.includes("candidates.filter(isOneClickCleanupCandidate)"), "main cleanup queue should only show one-click cleanup rows");
 assert(!app.includes("reviewCandidates"), "extra-input cleanup rows should stay out of the main Clean delete queue");
