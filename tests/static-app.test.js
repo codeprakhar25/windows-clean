@@ -175,6 +175,8 @@ assert(app.includes("Delete selected"), "Clean screen should expose a simple Del
 assert(app.includes("Select all"), "Clean screen should expose a simple select-all action");
 assert(app.includes("Choose items to delete"), "Clean screen should lead empty selection state with direct checkbox guidance");
 assert(app.includes("Use the checkboxes, then click Delete selected."), "Clean screen should explain the checkbox-to-delete flow without internal details");
+assert(app.includes("selected to delete"), "selected cleanup rows should use direct delete copy");
+assert(!app.includes("will be cleaned"), "cleanup selection copy should avoid vague cleaned wording");
 assert(!app.includes("Nothing selected"), "Clean action bar should avoid dead-end empty selection copy");
 assert(app.includes("sticky top-16"), "Clean delete controls should stay reachable while scrolling long cleanup lists");
 assert(app.includes("function setCheckedCleanupCandidates(rows = [])"), "Clean screen should support selecting all ready cleanup rows");
@@ -242,8 +244,15 @@ assert(app.includes("disabled={scanning}"), "Explore scan button should not laun
 assert(app.includes("Visualize"), "Explore should expose a visual space view");
 assert(app.includes("C: space map"), "Explore visualization should show a C: allocation map");
 assert(app.includes("buildExploreVisualRows"), "Explore visualization should derive rows from scan inventory");
+assert(app.includes("buildExploreAllocationBreakdown"), "Explore visualization should build a detailed drive allocation model");
 assert(app.includes("Other used space"), "Explore visualization should account for remaining drive usage");
 assert(app.includes("formatDriveInventoryDetail"), "Explore visualization should explain major drive allocation categories");
+assert(app.includes("Full C: breakdown"), "Explore visualization should show a full measured C: allocation list");
+assert(app.includes("Mapped from C:"), "Explore visualization should show how much used space is itemized");
+assert(app.includes("Not itemized"), "Explore visualization should label space that Windows reports but the scanner cannot assign");
+assert(app.includes("NTFS metadata"), "Other used space should explain low-level Windows storage contributors");
+assert(app.includes("formatAllocationKindLabel"), "Explore breakdown rows should label system, user, review, and cleanable categories");
+assert(app.includes("formatCount(row.files)"), "Explore breakdown rows should show file and folder counts when available");
 assert(app.includes("Some of it can become removable"), "Other used space should explain possible future cleanup without implying unsafe deletion");
 assert(app.includes("Show delete list"), "Explore visualization should lead users to actionable cleanup rows");
 assert(app.includes("can be deleted"), "Explore visualization should summarize cleanable space");

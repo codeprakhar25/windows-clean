@@ -66,6 +66,15 @@ const EXPLORE_VISUAL_COLORS = [
   { bar: "bg-lime-500", dot: "bg-lime-500" },
   { bar: "bg-zinc-500", dot: "bg-zinc-500" }
 ];
+const DRIVE_ALLOCATION_LABELS = {
+  "system-or-protected": "Windows/system",
+  "user-data-review": "Users and app data",
+  "advanced-system": "System file",
+  "unknown-review": "Other C: item",
+  cleanable: "Can delete",
+  manual: "Review",
+  unlisted: "Not itemized"
+};
 const EXECUTOR_RECIPES = {
   "windows-temp": {
     label: "Windows temp cleanup",
@@ -1087,7 +1096,7 @@ function CleanPanel({
                       {checkedCount ? `${checkedCount} item${checkedCount === 1 ? "" : "s"} selected` : "Choose items to delete"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {checkedCount ? `${formatBytes(checkedBytes)} will be cleaned` : "Use the checkboxes, then click Delete selected."}
+                      {checkedCount ? `${formatBytes(checkedBytes)} selected to delete` : "Use the checkboxes, then click Delete selected."}
                     </p>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -1355,7 +1364,7 @@ function ExploreList({
               {selectedCount ? `${selectedCount} item${selectedCount === 1 ? "" : "s"} selected` : "Choose items to delete"}
             </p>
             <p className="text-xs text-muted-foreground">
-              {selectedCount ? `${formatBytes(selectedBytes)} will be cleaned` : "Use the checkboxes or delete one item at a time."}
+              {selectedCount ? `${formatBytes(selectedBytes)} selected to delete` : "Use the checkboxes or delete one item at a time."}
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -1412,12 +1421,15 @@ function ExploreList({
 }
 
 function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
-  const visualRows = buildExploreVisualRows(scan, rows);
+  const allocation = buildExploreAllocationBreakdown(scan, rows);
+  const visualRows = allocation.segmentRows;
   const cleanableRows = rows.filter((row) => row.ready && row.candidateId);
   const cleanableBytes = cleanableRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
-  const usedBytes = Number(scan?.volume?.usedBytes || 0) || visualRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
-  const freeBytes = Number(scan?.volume?.freeBytes || 0);
-  const totalBytes = Number(scan?.volume?.totalBytes || 0) || usedBytes + freeBytes;
+  const reviewRows = rows.filter((row) => !row.ready && row.source !== "drive-inventory" && Number(row.bytes || 0) > 0);
+  const reviewBytes = reviewRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+  const usedBytes = allocation.usedBytes;
+  const freeBytes = allocation.freeBytes;
+  const totalBytes = allocation.totalBytes;
   const usedPercent = totalBytes ? Math.min(100, Math.max(0, (usedBytes / totalBytes) * 100)) : 0;
   const segmentTotal = Math.max(1, visualRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0));
   const otherRow = visualRows.find((row) => row.id === "visual-other-used-space");
@@ -1431,6 +1443,12 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
         <p className="text-sm font-semibold">{formatPercent(usedPercent)} used</p>
       </div>
       <Progress value={usedPercent} />
+      <div className="grid gap-3 md:grid-cols-4">
+        <Metric label="Mapped from C:" value={formatBytes(allocation.accountedBytes)} />
+        <Metric label="Not itemized" value={formatBytes(allocation.unlistedBytes)} />
+        <Metric label="Can delete now" value={formatBytes(cleanableBytes)} />
+        <Metric label="Needs review" value={formatBytes(reviewBytes)} />
+      </div>
       {cleanableRows.length ? (
         <div className="flex flex-col gap-3 rounded-md border bg-emerald-50 p-3 text-emerald-950 md:flex-row md:items-center md:justify-between">
           <div>
@@ -1476,6 +1494,38 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
               <p className="mt-1 text-xs text-muted-foreground">{otherRow.detail}</p>
             </div>
           ) : null}
+          <div className="rounded-md border bg-background">
+            <div className="border-b px-3 py-2">
+              <p className="text-sm font-semibold">Full C: breakdown</p>
+              <p className="text-xs text-muted-foreground">Measured top-level C: entries plus anything Windows reports as used but the scan could not itemize.</p>
+            </div>
+            <div className="divide-y">
+              {allocation.detailRows.map((row) => (
+                <div key={row.id} className="grid gap-3 px-3 py-3 text-sm lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] lg:items-center">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={row.classification === "cleanable" ? "safe" : "outline"}>
+                        {formatAllocationKindLabel(row)}
+                      </Badge>
+                      <p className="truncate font-medium">{row.title}</p>
+                    </div>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">{row.path || row.detail}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{row.detail}</p>
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <Progress value={row.percentOfUsed} />
+                    <p className="text-xs text-muted-foreground">
+                      {formatPercent(row.percentOfUsed)} of used C:{row.files || row.dirs ? ` - ${formatCount(row.files)} files, ${formatCount(row.dirs)} folders` : ""}
+                    </p>
+                  </div>
+                  <div className="shrink-0 lg:text-right">
+                    <p className="text-base font-semibold">{formatBytes(row.bytes)}</p>
+                    <p className="text-xs text-muted-foreground">{formatAllocationStatus(row)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </>
       ) : (
         <EmptyState icon={PieChart} title="No visual data yet" detail="Run a fresh scan to build the C: space map." />
@@ -1830,7 +1880,7 @@ function buildExploreRows(scan, candidates = [], manualFindings = []) {
     bytes: Number(row.bytes || 0),
     kind: row.classification || row.kind || "drive inventory",
     source: "drive-inventory",
-    detail: row.note || "Top-level C: allocation. Select cleanable rows or inspect this area yourself.",
+    detail: formatDriveInventoryDetail(row),
     cleanable: false,
     ready: false,
     candidateId: ""
@@ -1842,42 +1892,145 @@ function buildExploreRows(scan, candidates = [], manualFindings = []) {
 }
 
 function buildExploreVisualRows(scan, rows = []) {
-  if (!scan) return [];
+  return buildExploreAllocationBreakdown(scan, rows).segmentRows;
+}
+
+function buildExploreAllocationBreakdown(scan, rows = []) {
+  if (!scan) {
+    return {
+      usedBytes: 0,
+      freeBytes: 0,
+      totalBytes: 0,
+      accountedBytes: 0,
+      unlistedBytes: 0,
+      detailRows: [],
+      segmentRows: []
+    };
+  }
   const inventoryRows = (scan.driveInventory || [])
     .filter((row) => Number(row?.bytes || 0) > 0)
     .map((row) => ({
       id: `visual-inventory-${row.id || row.path || row.name}`,
       title: row.name || row.path || "Drive area",
+      path: row.path || "",
       bytes: Number(row.bytes || 0),
-      detail: row.note || formatDriveInventoryDetail(row)
+      files: Number(row.files || 0),
+      dirs: Number(row.dirs || 0),
+      status: row.status || "measured",
+      classification: row.classification || "unknown-review",
+      detail: formatDriveInventoryDetail(row)
     }));
   const fallbackRows = rows
     .filter((row) => Number(row?.bytes || 0) > 0)
     .map((row) => ({
       id: `visual-row-${row.id}`,
       title: row.title || row.path || "Scanned area",
+      path: row.path || "",
       bytes: Number(row.bytes || 0),
+      files: 0,
+      dirs: 0,
+      status: row.ready ? "cleanable" : "review",
+      classification: row.ready ? "cleanable" : "manual",
       detail: row.detail || row.path || ""
     }));
   const sourceRows = inventoryRows.length ? inventoryRows : fallbackRows;
   const usedBytes = Number(scan.volume?.usedBytes || 0) || sourceRows.reduce((sum, row) => sum + row.bytes, 0);
-  const topRows = sourceRows
+  const freeBytes = Number(scan.volume?.freeBytes || 0);
+  const totalBytes = Number(scan.volume?.totalBytes || 0) || usedBytes + freeBytes;
+  const accountedBytes = sourceRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+  const unlistedBytes = Math.max(0, usedBytes - accountedBytes);
+  const unlistedRow = unlistedBytes > 0
+    ? {
+        id: "visual-unlisted-used-space",
+        title: "Not itemized by scan",
+        path: "",
+        bytes: unlistedBytes,
+        files: 0,
+        dirs: 0,
+        status: "estimated",
+        classification: "unlisted",
+        detail: "Windows reports this as used space, but it was not assigned to a measured top-level C: entry."
+      }
+    : null;
+  const detailRows = [...sourceRows, unlistedRow]
+    .filter(Boolean)
     .sort((left, right) => right.bytes - left.bytes)
-    .slice(0, 7);
-  const shownBytes = topRows.reduce((sum, row) => sum + row.bytes, 0);
-  const otherBytes = Math.max(0, usedBytes - shownBytes);
-  return otherBytes > 0
-    ? [...topRows, { id: "visual-other-used-space", title: "Other used space", bytes: otherBytes, detail: "Usually Windows, installed apps, protected folders, and smaller scan results. Some of it can become removable when it appears as a can delete item." }]
+    .map((row) => ({
+      ...row,
+      percentOfUsed: usedBytes ? Math.min(100, Math.max(0, (Number(row.bytes || 0) / usedBytes) * 100)) : 0
+    }));
+  const topRows = detailRows.slice(0, 7);
+  const hiddenRows = detailRows.slice(7);
+  const hiddenBytes = hiddenRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+  const segmentRows = hiddenBytes > 0
+    ? [
+        ...topRows,
+        {
+          id: "visual-other-used-space",
+          title: "Other used space",
+          path: "",
+          bytes: hiddenBytes,
+          files: hiddenRows.reduce((sum, row) => sum + Number(row.files || 0), 0),
+          dirs: hiddenRows.reduce((sum, row) => sum + Number(row.dirs || 0), 0),
+          status: "mixed",
+          classification: "unlisted",
+          percentOfUsed: usedBytes ? Math.min(100, Math.max(0, (hiddenBytes / usedBytes) * 100)) : 0,
+          detail: formatOtherUsedSpaceDetail({ hiddenRows, unlistedBytes })
+        }
+      ]
     : topRows;
+  return {
+    usedBytes,
+    freeBytes,
+    totalBytes,
+    accountedBytes,
+    unlistedBytes,
+    detailRows,
+    segmentRows
+  };
 }
 
 function formatDriveInventoryDetail(row = {}) {
   const text = String(row.classification || row.kind || "").toLowerCase();
-  if (/windows|system/.test(text)) return "Windows and protected system files.";
-  if (/program|app/.test(text)) return "Installed apps and app data.";
+  const status = String(row.status || "").toLowerCase();
+  const limited = status === "limited" || Number(row.errors || 0) > 0;
+  if (/advanced-system/.test(text)) return "Windows-managed file. Reclaim only through Windows settings or a guarded cleanup item.";
+  if (/system|protected/.test(text)) return limited ? "Windows or protected app area; some folders could not be fully measured." : "Windows, installed apps, or protected system data.";
+  if (/user|profile/.test(text)) return limited ? "User profiles and app data; some nested folders were capped or locked." : "User profiles, Downloads, desktop data, and per-user app storage.";
   if (/cache|temp/.test(text)) return "Potential cleanup area when the scan marks it as can delete.";
-  if (/user|profile/.test(text)) return "User files and app data.";
-  return "Top-level C: allocation from the scan.";
+  return limited ? "Top-level C: entry measured with scan caps or access limits." : "Top-level C: entry measured from filesystem metadata.";
+}
+
+function formatOtherUsedSpaceDetail({ hiddenRows = [], unlistedBytes = 0 } = {}) {
+  const smallerRows = hiddenRows.filter((row) => row.id !== "visual-unlisted-used-space");
+  const smallerBytes = smallerRows.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+  const parts = [];
+  if (smallerBytes > 0) {
+    parts.push(`${formatBytes(smallerBytes)} from ${smallerRows.length} smaller measured C: entries`);
+  }
+  if (unlistedBytes > 0) {
+    parts.push(`${formatBytes(unlistedBytes)} not itemized by the scan`);
+  }
+  const prefix = parts.length ? `Includes ${parts.join(" plus ")}.` : "No extra used space is hidden from the detailed list.";
+  return `${prefix} Not itemized space can include NTFS metadata, restore points, protected folders, locked files, reserved storage, and scan-cap leftovers. Some of it can become removable if a later scan exposes it as a can delete item.`;
+}
+
+function formatAllocationKindLabel(row = {}) {
+  return DRIVE_ALLOCATION_LABELS[row.classification] || DRIVE_ALLOCATION_LABELS[row.kind] || "C: entry";
+}
+
+function formatAllocationStatus(row = {}) {
+  if (row.status === "estimated") return "estimated";
+  if (row.status === "limited") return "limited scan";
+  if (row.status === "mixed") return "mixed";
+  if (row.status === "cleanable") return "cleanable";
+  if (row.status === "review") return "review";
+  return "measured";
+}
+
+function formatCount(value = 0) {
+  const number = Number(value || 0);
+  return new Intl.NumberFormat("en-US").format(number);
 }
 
 function buildCandidateFromFinding(finding, recipe, runtime) {
