@@ -157,6 +157,7 @@ assert(app.includes("disabled={actionDisabled}"), "Clean row selection should be
 assert(app.includes("onExecuteChecked={executeCheckedCleanups}"), "Clean screen should wire the Delete selected action");
 assert(app.includes("Delete selected"), "Clean screen should expose a simple Delete selected action");
 assert(app.includes("Select all"), "Clean screen should expose a simple select-all action");
+assert(app.includes("sticky top-16"), "Clean delete controls should stay reachable while scrolling long cleanup lists");
 assert(app.includes("function setCheckedCleanupCandidates(rows = [])"), "Clean screen should support selecting all ready cleanup rows");
 assert(app.includes("Some selected items cleaned"), "selected cleanup result should explain partial success simply");
 assert(app.includes("Could not clean selected items"), "selected cleanup result should use selected-items failure copy");
@@ -281,6 +282,7 @@ assert(app.includes("agentBroker?.rows"), "OpenAI panel should still read broker
 assert(app.includes("Open Clean or Explore to review this item."), "OpenAI panel should show simple review guidance for blocked recommendations");
 assert(!app.includes("suggestedAction.blockedReason"), "OpenAI panel should not expose internal broker blocker text");
 assert(!app.includes("Why this recommendation"), "OpenAI panel should not expose recommendation diagnostic details");
+assert(!app.includes("Current selection:"), "OpenAI panel should not repeat cleanup selection status");
 assert(/resolveWorkflowAgentBrokerCandidate\(row, candidates\)[\s\S]*selectWorkflowCandidate\(brokerCandidate\.id, \{[\s\S]*checked: row\.kind === "scoped-executor" && isOneClickCleanupCandidate\(brokerCandidate\)/.test(app), "OpenAI cleanup recommendations should check one-click cleanup rows before returning to Clean");
 assert(app.includes("runAgentBrokerAction"), "OpenAI broker recommendations should route through guarded app actions");
 assert(app.includes("resolveWorkflowAgentBrokerCandidate"), "OpenAI broker actions should resolve model target ids to real cleanup candidates");

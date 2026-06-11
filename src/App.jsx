@@ -1061,7 +1061,7 @@ function CleanPanel({
           <>
             {hasReadyCandidates ? (
               <>
-                <div className="flex flex-col gap-3 rounded-md border bg-muted/20 p-3 md:flex-row md:items-center md:justify-between">
+                <div className="sticky top-16 z-10 flex flex-col gap-3 rounded-md border bg-card p-3 shadow-sm md:flex-row md:items-center md:justify-between lg:top-4">
                   <div>
                     <p className="text-sm font-medium">
                       {checkedCount ? `${checkedCount} selected` : "Nothing selected"}
@@ -1350,7 +1350,6 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
         {assistant ? (
           <div className="space-y-3 rounded-md border bg-background p-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="safe">{assistant.confidence}</Badge>
               <span className="font-medium">{assistant.nextAction || "Recommended cleanup"}</span>
             </div>
             <p className="text-muted-foreground">{assistant.summary}</p>
@@ -1374,9 +1373,6 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
                   ) : null}
                 </div>
               </div>
-            ) : null}
-            {selectedCandidate ? (
-              <p className="text-xs text-muted-foreground">Current selection: {selectedCandidate.title}</p>
             ) : null}
           </div>
         ) : null}
