@@ -126,8 +126,8 @@ export async function runNativeWriteBoundary(boundary = {}, host = globalThis) {
       requestMode: preview.mode || "capsule-probe",
       planId: preview.planId || boundary.planId || capsule.planId || "",
       route,
-      scanFingerprint: preview.scanFingerprint || "",
-      consentPlanId: preview.consentPlanId || "",
+      scanFingerprint: preview.scanFingerprint || boundary.scanFingerprint || capsule.scanFingerprint || "",
+      consentPlanId: preview.consentPlanId || boundary.consentPlanId || capsule.consentPlanId || "",
       expectedBytes,
       dryRunOnly: preview.dryRunOnly !== false,
       mutationAttempted: Boolean(preview.mutationAttempted),
@@ -198,8 +198,8 @@ export async function runNativeTempCleanupExecutor(boundary = {}, host = globalT
       requestMode: "execute-first-safe",
       planId: preview.planId || boundary.planId || capsule.planId || "",
       route,
-      scanFingerprint: preview.scanFingerprint || "",
-      consentPlanId: preview.consentPlanId || "",
+      scanFingerprint: preview.scanFingerprint || boundary.scanFingerprint || capsule.scanFingerprint || "",
+      consentPlanId: preview.consentPlanId || boundary.consentPlanId || capsule.consentPlanId || "",
       expectedBytes,
       dryRunOnly: false,
       mutationAttempted: true,
@@ -1129,7 +1129,7 @@ export function normalizeNativeRuntimeCapabilities(result = {}) {
     result.executorScopeStatus ||
     result.executor_scope_status ||
     (enabledScopedExecutorFlagCount > 1 ? "multiple-scoped-flags" : enabledScopedExecutorFlagCount === 1 ? "single-scoped-flag" : "no-scoped-flags");
-  const multiScopedFlagBlock = enabledScopedExecutorFlagCount > 1 || executorScopeStatus === "multiple-scoped-flags";
+  const multiScopedFlagBlock = executorScopeStatus === "multiple-scoped-flags";
   return {
     available: true,
     mode: result.mode || "native-readonly",

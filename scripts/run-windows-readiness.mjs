@@ -21,11 +21,12 @@ const root = path.resolve(path.dirname(scriptPath), "..");
 const dotenvPath = path.join(root, ".env");
 
 function parseArgs(argv = []) {
-  const args = { route: "npm-cache" };
+  const args = { route: "npm-cache", json: false };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === "--route") args.route = argv[index + 1] || "";
     if (value.startsWith("--route=")) args.route = value.slice("--route=".length);
+    if (value === "--json" || value === "--verbose") args.json = true;
   }
   return args;
 }
@@ -47,7 +48,20 @@ function readDotEnv(filePath) {
 }
 
 function buildLocalContractCheck(routeInput) {
-  const route = resolveSmokeRoute(routeInput);
+  let route;
+  try {
+    route = resolveSmokeRoute(routeInput);
+  } catch (error) {
+    return {
+      passed: false,
+      route: "",
+      routeInput,
+      expectedActionType: "",
+      expectedTargetId: "",
+      brokerStatus: "unsupported-route",
+      blockers: [error?.message || "Unsupported optional route audit input."]
+    };
+  }
   const requiredRecommendation = route.requiredRecommendation;
   const context = buildRouteContractContext({ routeInput });
   const result = buildRouteContractAdviceResult({ requiredRecommendation });
@@ -195,6 +209,21 @@ function checkWindowsMsvcBuildTools({ platform = process.platform, env = process
     };
   }
 
+  const usingProcessEnv = env === process.env;
+  const hasDiscoveryEnv = Boolean(
+    String(env["ProgramFiles(x86)"] || env.ProgramFiles || env.Path || env.PATH || "").trim()
+  );
+  if (!usingProcessEnv && !hasDiscoveryEnv) {
+    return {
+      id: "msvc-build-tools",
+      label: "Visual Studio C++ Build Tools",
+      command: "VCINSTALLDIR, VCToolsInstallDir, VSINSTALLDIR, ProgramFiles, or PATH",
+      available: false,
+      version: "",
+      error: "Visual Studio Build Tools were not visible in the provided environment."
+    };
+  }
+
   const vswhere = checkVsWhereForComponent({
     env,
     component: "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
@@ -278,23 +307,16 @@ export function buildWindowsReadinessReport({
   });
   const contract = buildLocalContractCheck(routeInput);
   const windowsHost = platform === "win32";
+  const toolchainReady = Boolean(toolchain.ready);
   const routeArmed = routePacket.status === "ready";
   const singleRouteReady = doctor.scopedExecutors.validationStatus === "one-route-ready";
-  const toolchainReady = Boolean(toolchain.ready);
-  const readyForNativeDev = Boolean(windowsHost && toolchainReady && routeArmed && singleRouteReady && contract.passed);
+  const routeAuditReady = Boolean(routeArmed && singleRouteReady && contract.passed);
+  const readyForNativeDev = Boolean(windowsHost && toolchainReady);
   const status = readyForNativeDev
     ? "ready-for-native-dev"
     : !windowsHost
       ? "host-not-windows"
-      : !toolchainReady
-        ? "toolchain-blocked"
-        : routePacket.status === "multiple-flags" || doctor.scopedExecutors.validationStatus === "multi-flag-blocked"
-          ? "multi-route-blocked"
-          : !routeArmed
-            ? "route-arm-required"
-            : contract.passed
-              ? "setup-review-required"
-              : "local-contract-blocked";
+      : "toolchain-blocked";
 
   return {
     schemaVersion: "spaceguard-windows-readiness/v1",
@@ -330,25 +352,29 @@ export function buildWindowsReadinessReport({
       safeToLaunchWriteMode: doctor.scopedExecutors.safeToLaunchWriteMode
     },
     localContract: contract,
+    routeAudit: {
+      status: routeAuditReady ? "ready" : "optional",
+      ready: routeAuditReady,
+      routeArmed,
+      singleRouteReady,
+      localContractPassed: contract.passed
+    },
     nextSteps: buildReadinessNextSteps({
       status,
-      routeInput,
-      routePacket,
       doctor,
       windowsHost,
-      contract,
       toolchain
     })
   };
 }
 
-function buildReadinessNextSteps({ status, routeInput, routePacket, doctor, windowsHost, contract, toolchain }) {
-  const armCommand = routePacket.commands?.armRoute || `npm run route:arm -- --route ${routeInput}`;
+function buildReadinessNextSteps({ status, doctor, windowsHost, toolchain }) {
   const steps = [];
   if (!windowsHost) {
     steps.push("Run this readiness command again on the Windows PC before launching the desktop app.");
+    return steps;
   }
-  if (windowsHost && !toolchain?.ready) {
+  if (!toolchain?.ready) {
     steps.push(`Install or repair missing desktop toolchain command(s): ${(toolchain?.missingLabels || toolchain?.missing || []).join(", ")}.`);
     if ((toolchain?.missing || []).includes("msvc-build-tools")) {
       steps.push("Install Visual Studio Build Tools with the Desktop development with C++ workload so cl.exe, link.exe, and lib.exe are available to native crates.");
@@ -357,25 +383,12 @@ function buildReadinessNextSteps({ status, routeInput, routePacket, doctor, wind
     steps.push("Run npm install after pulling this repo, then restart the terminal after installing Rustup/Cargo or Tauri Windows prerequisites.");
     steps.push("Rerun npm run windows:ready before launching the desktop app.");
   }
-  if (!routePacket.selected) {
-    steps.push("Choose a supported route with npm run setup:route -- --list.");
-    return steps;
-  }
-  if (routePacket.status !== "ready") {
-    steps.push(`Run ${armCommand}.`);
-    steps.push(`Run npm run setup:route -- --route ${routeInput}.`);
+  if (status === "ready-for-native-dev") {
+    steps.push("Run npm run native:dev.");
+    steps.push("In the app: click Scan PC, then use Delete all or check rows and click Delete selected.");
   }
   if (!doctor.openAi.configured) {
-    steps.push("Set OPENAI_API_KEY in .env if you want the OpenAI advisor during the app run.");
-  }
-  if (!contract.passed) {
-    steps.push(`Run npm run openai:smoke -- --local-contract --route ${routeInput} and fix the reported local contract blocker.`);
-  }
-  if (status === "ready-for-native-dev") {
-    steps.push(`Run npm run windows:dev -- --route ${routeInput}.`);
-    steps.push("In the app: scan, select one ready row, consent, execute, post-run rescan, export proof.");
-  } else if (windowsHost && routePacket.status === "ready" && contract.passed) {
-    steps.push(`Run npm run windows:dev -- --route ${routeInput} after resolving any setup warnings above.`);
+    steps.push("Set OPENAI_API_KEY in .env only if you want the Ask AI page.");
   }
   return steps;
 }
@@ -383,10 +396,33 @@ function buildReadinessNextSteps({ status, routeInput, routePacket, doctor, wind
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const report = buildWindowsReadinessReport({ routeInput: args.route || "npm-cache" });
-  console.log(JSON.stringify(report, null, 2));
+  console.log(args.json ? JSON.stringify(report, null, 2) : formatWindowsReadinessSummary(report));
   if (shouldFailReadinessCli(report)) {
     process.exitCode = 1;
   }
+}
+
+export function formatWindowsReadinessSummary(report = {}) {
+  const ready = Boolean(report.readyForNativeDev);
+  const lines = [
+    ready ? "SpaceGuard is ready to launch." : "SpaceGuard is not ready yet.",
+    `Status: ${report.status || "unknown"}`
+  ];
+  const missing = report.toolchain?.missingLabels || report.toolchain?.missing || [];
+  if (missing.length) {
+    lines.push(`Missing: ${missing.join(", ")}`);
+  }
+  const nextSteps = Array.isArray(report.nextSteps) ? report.nextSteps : [];
+  if (nextSteps.length) {
+    lines.push("", "Next steps:");
+    nextSteps.forEach((step, index) => {
+      lines.push(`${index + 1}. ${step}`);
+    });
+  }
+  if (!ready) {
+    lines.push("", "Run npm run windows:ready -- --json for technical details.");
+  }
+  return lines.join("\n");
 }
 
 export function shouldFailReadinessCli(report) {

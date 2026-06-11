@@ -2,7 +2,7 @@
   "name": "windows-clean",
   "version": "0.1.0",
   "private": true,
-  "description": "Real Windows space recovery assistant with native scan, guarded cleanup, and proof export workflows.",
+  "description": "Production Windows space recovery assistant with native scan, guarded cleanup, and post-clean rescan.",
   "scripts": {
     "start": "vite --host 127.0.0.1",
     "dev": "vite --host 127.0.0.1",

@@ -25,22 +25,18 @@ for (const marker of forbiddenRuntimeMarkers) {
 }
 
 const requiredRealShellMarkers = [
-  "Connect the Windows desktop app",
-  "No local folders are scanned from this browser session.",
-  "npm run windows:ready -- --route ${routeInput}",
-  "npm run windows:dev -- --route ${routeInput}",
-  "OPENAI_API_KEY",
+  "Open SpaceGuard for Windows",
+  "This browser page cannot scan or delete files.",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
-  "Run real scan",
-  "Real cleanup queue",
-  "Type the confirmation phrase",
-  "Execute selected cleanup",
-  "Run post-run rescan",
-  "Export proof packet",
-  "spaceguard-real-workflow-proof.md",
+  "Scan PC",
+  "Scan for cleanup",
+  "Select items to delete",
+  "Explore C:",
+  "Check what you want to remove.",
+  "Delete all",
+  "Scan again",
   "getNativeRuntimeCapabilities",
   "runNativeReadonlyScan",
-  "writeNativeProofArtifact",
   "requestOpenAIAgentAdvice"
 ];
 
@@ -49,6 +45,7 @@ for (const marker of requiredRealShellMarkers) {
 }
 
 assert(!app.includes(removedModelImport), "real app shell must not import bundled sample model data");
+assert(!app.includes("Cleanup status"), "real app shell should not duplicate cleanup status in the sidebar");
 assert(app.includes("@/components/ui/button"), "real app shell should keep shadcn Button composition");
 assert(app.includes("@/components/ui/card"), "real app shell should keep shadcn Card composition");
 

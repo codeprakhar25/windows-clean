@@ -1270,6 +1270,24 @@ const GB = 1024 * MB;
   assert.strictEqual(capabilities.openAiAdvisorConfigured, true, "native capabilities should expose OpenAI key configuration without the key");
   assert.strictEqual(capabilities.openAiKeySource, ".env:OPENAI_API_KEY", "native capabilities should expose only the OpenAI key source");
   assert(!Object.prototype.hasOwnProperty.call(capabilities, "firstRouteProof"), "native capabilities should not expose prior seeded proof state");
+  const builtInAllowlistCapabilities = native.normalizeNativeRuntimeCapabilities({
+    mode: "native-production-write",
+    platform: "windows",
+    windows: true,
+    real_run_enabled: true,
+    destructive_commands: true,
+    safe_executors_enabled: true,
+    enabled_scoped_executor_flags: ["SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR", "SPACEGUARD_ENABLE_PNPM_STORE_EXECUTOR"],
+    enabled_scoped_executor_flag_count: 2,
+    executor_scope_status: "built-in-allowlists",
+    executor_flags: {
+      npm_cache_executor: true,
+      pnpm_store_executor: true
+    }
+  });
+  assert.strictEqual(builtInAllowlistCapabilities.realRunEnabled, true, "built-in allowlists should not be blocked by legacy multiple route flags");
+  assert.strictEqual(builtInAllowlistCapabilities.destructiveCommands, true, "built-in allowlists should preserve cleanup authority with legacy route flags present");
+  assert.strictEqual(builtInAllowlistCapabilities.safeExecutorsEnabled, true, "built-in allowlists should keep safe executors enabled with legacy route flags present");
   const directRouteCapability = native.normalizeNativeRuntimeCapabilities({
     mode: "native-scoped-write",
     platform: "windows",
