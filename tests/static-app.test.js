@@ -208,6 +208,13 @@ assert(app.includes("No eligible files were removed"), "accepted zero-byte clean
 assert(!app.includes("Last cleanup result"), "activity screen should not duplicate the inline cleanup result");
 assert(app.includes("formatCleanupRejectMessage"), "clean panel should translate native rejection details into plain user-facing copy");
 assert(app.includes("Cleanup could not verify the current scan"), "cleanup rejection copy should tell users to scan again when confirmation evidence is stale");
+assert(app.includes("setScanError(formatScanError(error))"), "scan failures should be converted to product-facing copy");
+assert(app.includes("setAgentError(formatAgentError(error))"), "AI failures should be converted to product-facing copy");
+assert(app.includes("formatBlockedCleanupDetail(candidate)"), "Explore blocked cleanup rows should not expose raw backend blocker text");
+assert(app.includes("This item is not ready for one-click deletion"), "blocked cleanup rows should keep route and executor details out of the UI");
+assert(!app.includes("Native scan failed"), "scan errors should not expose native implementation wording");
+assert(!app.includes("OpenAI advisor failed"), "AI errors should not expose provider adapter wording");
+assert(!app.includes("`Cleanup did not start. ${detail}`"), "cleanup start failures should not append raw backend exceptions");
 assert(app.includes("cleanable"), "secondary screens should describe selectable cleanup items without internal readiness language");
 assert(!app.includes("{suggestedAction.canAct ? \"ready\""), "AI recommendations should not show internal ready status copy");
 assert(app.includes("Windows blocked some files because they are in use"), "cleanup rejection copy should explain locked-file retries without reject codes");

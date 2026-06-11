@@ -457,7 +457,7 @@ function App() {
       setActiveView(nextView);
     } catch (error) {
       setScanStatus("error");
-      setScanError(error instanceof Error ? error.message : "Native scan failed.");
+      setScanError(formatScanError(error));
     }
   }
 
@@ -673,7 +673,7 @@ function App() {
     } catch (error) {
       if (agentContextKeyRef.current !== requestContextKey) return;
       setAgentStatus("error");
-      setAgentError(error instanceof Error ? error.message : "OpenAI advisor failed.");
+      setAgentError(formatAgentError(error));
     }
   }
 
@@ -1786,6 +1786,49 @@ function formatCleanupRejectMessage(result = {}) {
   return "Nothing was deleted. Close apps using these files, scan again, and try once more.";
 }
 
+function formatScanError(error) {
+  const detail = error instanceof Error ? error.message : String(error || "");
+  const text = detail.toLowerCase();
+  if (/desktop|tauri|native scanner|bridge|runtime/.test(text)) {
+    return "The Windows desktop connection is not ready. Restart SpaceGuard and scan again.";
+  }
+  if (/access denied|permission|unauthorized/.test(text)) {
+    return "Windows blocked access to part of the scan. Close protected apps or restart SpaceGuard with the needed permissions, then scan again.";
+  }
+  if (/timeout|timed out|busy|locked|in use/.test(text)) {
+    return "Windows was busy reading some files. Close active apps and scan again.";
+  }
+  return "Scan could not finish. Restart SpaceGuard and scan again.";
+}
+
+function formatAgentError(error) {
+  const detail = error instanceof Error ? error.message : String(error || "");
+  const text = detail.toLowerCase();
+  if (/api key|openai|401|403|429|quota|rate limit/.test(text)) {
+    return "AI recommendation is unavailable right now. You can still clean selected items from the scan.";
+  }
+  if (/network|fetch|timeout|timed out|request failed/.test(text)) {
+    return "AI recommendation could not connect. You can still clean selected items from the scan.";
+  }
+  return "AI recommendation is unavailable right now. Use Clean or Explore to continue.";
+}
+
+function formatBlockedCleanupDetail(candidate = {}) {
+  if (candidate?.requiresArchiveDestination) {
+    return "Choose an archive folder before cleaning this item.";
+  }
+  const detail = String(candidate?.blockedReason || "").trim();
+  const text = detail.toLowerCase();
+  if (!detail) return "Inspect this item before deleting anything.";
+  if (/access denied|permission|locked|in use|using these files/.test(text)) {
+    return "Windows is using this item. Close related apps, scan again, and retry.";
+  }
+  if (/fingerprint|consent|plan|proof|workflow|route|executor|feature flag|allowlist|native|env|spaceguard_enable/.test(text)) {
+    return "This item is not ready for one-click deletion. Scan again or choose another cleanable item.";
+  }
+  return detail;
+}
+
 function toNativeScanRequest(request) {
   return {
     targetDrive: request.targetDrive,
@@ -1856,7 +1899,7 @@ function buildExploreRows(scan, candidates = [], manualFindings = []) {
       ? "Choose an archive folder before cleaning this item."
       : candidate.canExecute
       ? candidate.consequence
-      : candidate.blockedReason || "Inspect this item before deleting anything.",
+      : formatBlockedCleanupDetail(candidate),
     cleanable: true,
     ready: isOneClickCleanupCandidate(candidate),
     candidateId: isOneClickCleanupCandidate(candidate) ? candidate.id : ""
@@ -2489,13 +2532,17 @@ function formatExecutionGateError(gate = {}) {
 
 function formatCleanupStartError(error) {
   const detail = error instanceof Error ? error.message : "";
+  const text = detail.toLowerCase();
   if (/native scanner|native bridge|desktop/i.test(detail)) {
     return "The Windows desktop connection is not ready. Restart the desktop app and try again.";
   }
   if (/permission|access denied|denied/i.test(detail)) {
     return "Windows blocked access to this item. Close related apps or run the desktop app with the needed permissions, then try again.";
   }
-  return detail ? `Cleanup did not start. ${detail}` : "Cleanup did not start. Refresh the scan and try again.";
+  if (/fingerprint|consent|plan|proof|workflow|request mode|route|executor|feature flag|allowlist|native|env|spaceguard_enable/.test(text)) {
+    return "Cleanup did not start. Scan again, check the item, and delete it.";
+  }
+  return "Cleanup did not start. Refresh the scan and try again.";
 }
 
 function buildRejectedCheckedCleanupEntry(candidate = {}, error = null) {
