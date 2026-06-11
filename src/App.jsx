@@ -23,7 +23,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
@@ -250,7 +249,6 @@ function App() {
   const [runtime, setRuntime] = useState(null);
   const [runtimeStatus, setRuntimeStatus] = useState("loading");
   const [runtimeError, setRuntimeError] = useState("");
-  const [scanRequest, setScanRequest] = useState(DEFAULT_SCAN_REQUEST);
   const [scanStatus, setScanStatus] = useState("idle");
   const [scanError, setScanError] = useState("");
   const [scan, setScan] = useState(null);
@@ -407,7 +405,7 @@ function App() {
     setScanStatus(afterExecution ? "rescanning" : "scanning");
     setScanError("");
     try {
-      const result = await runNativeReadonlyScan(toNativeScanRequest(scanRequest));
+      const result = await runNativeReadonlyScan(toNativeScanRequest(DEFAULT_SCAN_REQUEST));
       if (!result.available || !result.windows) {
         throw new Error("The native scanner is not available on this Windows desktop session.");
       }
@@ -752,8 +750,6 @@ function App() {
         {activeView === "clean" ? (
           <section className="grid gap-4">
             <ScanPanel
-              request={scanRequest}
-              setRequest={setScanRequest}
               candidates={candidates}
               scan={scan}
               scanStatus={scanStatus}
@@ -1012,7 +1008,7 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
   );
 }
 
-function ScanPanel({ request, setRequest, candidates = [], scan, scanStatus, scanError, onRunScan }) {
+function ScanPanel({ candidates = [], scan, scanStatus, scanError, onRunScan }) {
   const running = scanStatus === "scanning" || scanStatus === "rescanning";
   const hasScan = Boolean(scan);
   const readyCount = candidates.filter(isOneClickCleanupCandidate).length;
@@ -1040,17 +1036,11 @@ function ScanPanel({ request, setRequest, candidates = [], scan, scanStatus, sca
       </CardHeader>
       <CardContent className="space-y-4">
         {!hasScan ? (
-          <div className="grid gap-3 md:grid-cols-[minmax(180px,260px)_minmax(180px,220px)]">
-            <label className="space-y-1 text-sm">
-              <span className="font-medium">Target drive</span>
-              <Input value={request.targetDrive} onChange={(event) => setRequest({ ...request, targetDrive: event.target.value })} />
-            </label>
-            <div className="flex items-end">
-              <Button className="w-full" onClick={onRunScan} disabled={running}>
-                {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
-                Scan PC
-              </Button>
-            </div>
+          <div className="max-w-xs">
+            <Button className="w-full" onClick={onRunScan} disabled={running}>
+              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+              Scan PC
+            </Button>
           </div>
         ) : null}
         {scanError ? <Notice tone="restricted" icon={AlertTriangle} text={scanError} /> : null}

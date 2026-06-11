@@ -128,6 +128,8 @@ assert(!app.includes("id: \"overview\""), "sidebar should not force users throug
 assert(app.includes("function MobileTabNav"), "mobile layout should expose tab switching between app views");
 assert(app.includes("role=\"tablist\""), "mobile view switching should use tab semantics");
 assert(!app.includes("Advanced scan options"), "Clean screen should not expose advanced scan tuning");
+assert(!app.includes("Target drive"), "Clean screen should not ask users to configure the target drive before scanning");
+assert(!app.includes("@/components/ui/input"), "app shell should not import unused input controls");
 assert(!app.includes("Entry cap"), "Clean screen should not expose native scan cap controls");
 assert(!app.includes("Protected paths"), "Clean screen should not expose protected-path editing");
 assert(!app.includes("Extra folders to scan"), "Clean screen should not expose custom root setup");
