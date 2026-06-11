@@ -176,7 +176,7 @@ assert(app.includes("candidates.filter(isOneClickCleanupCandidate)"), "main clea
 assert(!app.includes("reviewCandidates"), "extra-input cleanup rows should stay out of the main Clean delete queue");
 assert(app.includes("candidateId: isOneClickCleanupCandidate(candidate) ? candidate.id : \"\""), "Explore should only hand off ready cleanup rows to Clean");
 assert(app.includes("Choose an archive folder before cleaning this item."), "Explore should keep archive rows out of the immediate delete path");
-assert(app.includes("No items ready to delete"), "cleanup queue should avoid preselecting blocked targets when nothing can run");
+assert(app.includes("No items available to delete"), "cleanup queue should avoid preselecting blocked targets when nothing can run");
 assert(/function selectDefaultCleanupCandidateId\(candidates = \[\]\) \{[\s\S]*return ""/.test(app), "cleanup scan should not auto-select a row before the user checks it");
 assert(!app.includes("candidates.find((candidate) => candidate.executable)?.id"), "default cleanup selection should not choose blocked executable rows");
 assert(!app.includes("Technical details"), "clean panel should not expose native diagnostics in the primary cleanup result");
@@ -188,6 +188,8 @@ assert(app.includes("Nothing needed cleaning"), "activity summary should use sim
 assert(app.includes("Last cleanup result"), "activity screen should present one compact latest-result summary");
 assert(app.includes("formatCleanupRejectMessage"), "clean panel should translate native rejection details into plain user-facing copy");
 assert(app.includes("Cleanup could not verify the current scan"), "cleanup rejection copy should tell users to scan again when confirmation evidence is stale");
+assert(app.includes("cleanable"), "secondary screens should describe selectable cleanup items without internal readiness language");
+assert(!app.includes("{suggestedAction.canAct ? \"ready\""), "AI recommendations should not show internal ready status copy");
 assert(app.includes("Windows blocked some files because they are in use"), "cleanup rejection copy should explain locked-file retries without reject codes");
 assert(!app.includes("Delete this selected item from this PC."), "normal cleanup should use the selected row checkbox as the confirmation");
 assert(app.includes("effectivePermanentRemovalConfirmed"), "Recycle Bin cleanup should use the selected row checkbox as the permanent-removal confirmation");
@@ -276,7 +278,8 @@ assert(/if \(!nativeConnected\) \{[\s\S]*return \(\s*<AppFrame[\s\S]*<Connection
 assert(!app.includes("Developer launch"), "browser-only setup state should not expose developer command boxes in the production UI");
 assert(!app.includes("npm run native:dev"), "browser-only setup state should not show terminal launch commands");
 assert(!app.includes("npm run windows:ready"), "browser-only setup state should not show setup command boxes");
-assert(app.includes("What happens in the app"), "browser-only setup should describe the simplified cleanup flow");
+assert(app.includes("Safe cleanup areas"), "browser-only setup should describe the simplified cleanup flow");
+assert(!app.includes("Activity summary"), "browser-only setup should not advertise a diagnostic activity area as a cleanup target");
 assert(!app.includes("Desktop connection"), "browser-only setup should not expose runtime diagnostics as a product panel");
 assert(!app.includes("Native bridge"), "browser-only setup should not expose internal bridge metrics");
 assert(!/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup state should not render the route setup wizard");

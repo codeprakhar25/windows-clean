@@ -879,8 +879,8 @@ function MobileTabNav({ rows = [], activeView = "clean", setActiveView = () => {
 function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh }) {
   const cleanupSteps = [
     ["Scan PC", "Find cleanable cache and temp files."],
-    ["Check item", "Choose one safe cleanup row."],
-    ["Delete", "Clear the selected files."]
+    ["Choose item", "Select what you want to remove."],
+    ["Delete", "Clear the selected files from this PC."]
   ];
 
   return (
@@ -928,12 +928,12 @@ function ConnectionRequired({ runtime, runtimeStatus, runtimeError, onRefresh })
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Trash2 className="h-4 w-4" />
-              What happens in the app
+              Safe cleanup areas
             </CardTitle>
-            <CardDescription>SpaceGuard only deletes from built-in safe cleanup areas after you check a row.</CardDescription>
+            <CardDescription>SpaceGuard only deletes from built-in cleanup areas after you select them.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
-            {["Windows temp files", "Browser caches", "Developer caches", "Recycle Bin", "Old downloads", "Activity summary"].map((item) => (
+            {["Windows temp files", "Browser caches", "Developer caches", "Recycle Bin", "Old downloads", "Large folders"].map((item) => (
               <div key={item} className="flex items-center gap-2 rounded-md border bg-background px-3 py-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 <span>{item}</span>
@@ -1130,7 +1130,7 @@ function CleanPanel({
                 </div>
               </>
             ) : (
-              <EmptyState icon={Lock} title="No items ready to delete" detail="Run another scan or open Explore to review what was found." />
+              <EmptyState icon={Lock} title="No items available to delete" detail="Run another scan or open Explore to review what was found." />
             )}
           </>
         ) : (
@@ -1223,7 +1223,7 @@ function ExplorePanel({ scan, scanStatus = "idle", candidates = [], manualFindin
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant={row.cleanable ? row.ready ? "safe" : "review" : "outline"}>
-                          {row.cleanable ? row.ready ? "ready" : "review" : "manual"}
+                          {row.cleanable ? row.ready ? "cleanable" : "review" : "manual"}
                         </Badge>
                         <p className="font-medium">{row.title}</p>
                       </div>
@@ -1341,7 +1341,7 @@ function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedC
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant={suggestedAction.canAct ? "safe" : suggestedAction.status === "manual-only" ? "outline" : "review"}>
-                        {suggestedAction.canAct ? "ready" : suggestedAction.status === "manual-only" ? "manual" : "needs review"}
+                        {suggestedAction.canAct ? "cleanable" : suggestedAction.status === "manual-only" ? "manual" : "needs review"}
                       </Badge>
                       <p className="font-medium">{formatAgentActionTitle(suggestedAction)}</p>
                     </div>
@@ -1484,10 +1484,10 @@ function formatCleanupRejectMessage(result = {}) {
     return "Check the Recycle Bin row, then try again.";
   }
   if (/target-(not-allowlisted|forbidden|blocked|missing)|outside|allowlist/.test(text)) {
-    return "This item is outside the safe cleanup list. Choose another ready item or scan again.";
+    return "This item is outside the safe cleanup list. Choose another cleanable item or scan again.";
   }
   if (/executor-disabled|feature-flag|cleanup authority|not available|runtime/.test(text)) {
-    return "Cleanup is not available for this item in this app session. Restart SpaceGuard, scan again, and try another ready item.";
+    return "Cleanup is not available for this item in this app session. Restart SpaceGuard, scan again, and try another cleanable item.";
   }
   if (/access denied|permission|locked|in use|using these files/.test(text)) {
     return "Windows blocked some files because they are in use. Close the related apps, scan again, and retry.";
@@ -2044,14 +2044,14 @@ function totalEntryBytes(entries = []) {
 
 function formatExecutionGateError(gate = {}) {
   const blocker = Array.isArray(gate.blockers) ? gate.blockers[0] : null;
-  if (!blocker) return "Cleanup is not ready yet. Check one cleanable item and try again.";
-  if (blocker.id === "selected-target") return "Select one ready item before deleting.";
-  if (blocker.id === "route-readiness") return "This item is not ready to delete. Choose another ready item or scan again.";
-  if (blocker.id === "consent-checkbox") return "Select one ready item before deleting.";
+  if (!blocker) return "Cleanup is not available yet. Select one cleanable item and try again.";
+  if (blocker.id === "selected-target") return "Select one cleanable item before deleting.";
+  if (blocker.id === "route-readiness") return "This item is not available to delete. Choose another cleanable item or scan again.";
+  if (blocker.id === "consent-checkbox") return "Select one cleanable item before deleting.";
   if (blocker.id === "scan-fingerprint") return "Refresh the scan, then try deleting again.";
   if (blocker.id === "execution-prerequisites") return "Finish the extra requirement shown for this item, then try again.";
   if (blocker.id === "executor-not-running") return "Cleanup is already running. Wait for it to finish.";
-  return blocker.detail || "Cleanup is not ready yet. Refresh the scan and try again.";
+  return blocker.detail || "Cleanup is not available yet. Refresh the scan and try again.";
 }
 
 function formatCleanupStartError(error) {
