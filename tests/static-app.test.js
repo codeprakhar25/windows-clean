@@ -160,6 +160,9 @@ assert(app.includes("disabled={actionDisabled}"), "Clean row selection should be
 assert(app.includes("onExecuteChecked={executeCheckedCleanups}"), "Clean screen should wire the Delete selected action");
 assert(app.includes("Delete selected"), "Clean screen should expose a simple Delete selected action");
 assert(app.includes("Select all"), "Clean screen should expose a simple select-all action");
+assert(app.includes("Choose items to delete"), "Clean screen should lead empty selection state with direct checkbox guidance");
+assert(app.includes("Use the checkboxes, then click Delete selected."), "Clean screen should explain the checkbox-to-delete flow without internal details");
+assert(!app.includes("Nothing selected"), "Clean action bar should avoid dead-end empty selection copy");
 assert(app.includes("sticky top-16"), "Clean delete controls should stay reachable while scrolling long cleanup lists");
 assert(app.includes("function setCheckedCleanupCandidates(rows = [])"), "Clean screen should support selecting all ready cleanup rows");
 assert(app.includes("Some selected items cleaned"), "selected cleanup result should explain partial success simply");

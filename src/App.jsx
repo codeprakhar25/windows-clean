@@ -1040,10 +1040,10 @@ function CleanPanel({
                 <div className="sticky top-16 z-10 flex flex-col gap-3 rounded-md border bg-card p-3 shadow-sm md:flex-row md:items-center md:justify-between lg:top-4">
                   <div>
                     <p className="text-sm font-medium">
-                      {checkedCount ? `${checkedCount} selected` : "Nothing selected"}
+                      {checkedCount ? `${checkedCount} item${checkedCount === 1 ? "" : "s"} selected` : "Choose items to delete"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {checkedCount ? `${formatBytes(checkedBytes)} selected` : "Select rows to clean several items together."}
+                      {checkedCount ? `${formatBytes(checkedBytes)} will be cleaned` : "Use the checkboxes, then click Delete selected."}
                     </p>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
