@@ -1565,12 +1565,15 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
             })}
           </div>
           <ExploreOtherSpaceBreakdown allocation={allocation} otherRow={otherRow} />
-          <div className="rounded-md border bg-background">
-            <div className="border-b px-3 py-2">
-              <p className="text-sm font-semibold">Full C: breakdown</p>
-              <p className="text-xs text-muted-foreground">Measured top-level C: entries plus anything Windows reports as used but the scan could not itemize.</p>
-            </div>
-            <div className="divide-y">
+          <details className="rounded-md border bg-background">
+            <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                <span className="block text-sm font-semibold">Full C: breakdown</span>
+                <span className="block text-xs text-muted-foreground">Open for every measured top-level entry and not-itemized space.</span>
+              </span>
+              <span className="text-xs font-medium text-muted-foreground">Show details</span>
+            </summary>
+            <div className="divide-y border-t">
               {allocation.detailRows.map((row) => (
                 <div key={row.id} className="grid gap-3 px-3 py-3 text-sm lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] lg:items-center">
                   <div className="min-w-0">
@@ -1596,7 +1599,7 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
                 </div>
               ))}
             </div>
-          </div>
+          </details>
         </>
       ) : (
         <EmptyState icon={PieChart} title="No visual data yet" detail="Run a fresh scan to build the C: space map." />
@@ -1704,14 +1707,16 @@ function ExploreOtherSpaceBreakdown({ allocation, otherRow }) {
   const reasonRows = allocation?.unlistedReasonRows || [];
   if (!otherRow && !otherMeasuredRows.length && !unlistedRow) return null;
   return (
-    <div className="rounded-md border bg-muted/20 p-3 text-sm">
-      <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="font-medium">Other used space, expanded</p>
-          <p className="text-xs text-muted-foreground">{otherRow?.detail || "No measured C: rows are hidden from the full breakdown."}</p>
-        </div>
-        {otherRow ? <p className="shrink-0 font-semibold">{formatBytes(otherRow.bytes)}</p> : null}
-      </div>
+    <details className="rounded-md border bg-muted/20 text-sm">
+      <summary className="flex cursor-pointer list-none flex-col gap-1 p-3 md:flex-row md:items-end md:justify-between">
+        <span>
+          <span className="block font-medium">Other used space, expanded</span>
+          <span className="block text-xs text-muted-foreground">Open to see smaller measured rows and Windows space that cannot be itemized.</span>
+        </span>
+        {otherRow ? <span className="shrink-0 font-semibold">{formatBytes(otherRow.bytes)}</span> : null}
+      </summary>
+      <div className="border-t p-3">
+        <p className="text-xs text-muted-foreground">{otherRow?.detail || "No measured C: rows are hidden from the full breakdown."}</p>
       {otherMeasuredRows.length ? (
         <div className="mt-3 rounded-md border bg-background">
           <div className="border-b px-3 py-2">
@@ -1749,7 +1754,8 @@ function ExploreOtherSpaceBreakdown({ allocation, otherRow }) {
           </div>
         </div>
       ) : null}
-    </div>
+      </div>
+    </details>
   );
 }
 

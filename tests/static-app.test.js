@@ -266,6 +266,8 @@ assert(app.includes("Other used space"), "Explore visualization should account f
 assert(app.includes("Where C: space is coming from"), "Explore visualization should show source categories for used space");
 assert(app.includes("Exact measured items inside those folders"), "Explore visualization should explain cleanup/review targets inside top-level folders");
 assert(app.includes("Other used space, expanded"), "Explore visualization should expand collapsed other space");
+assert(app.includes("<details className=\"rounded-md border bg-muted/20 text-sm\""), "Other used space details should be collapsed until the user opens them");
+assert(app.includes("Open to see smaller measured rows and Windows space that cannot be itemized."), "Other used space should describe what expands without rendering all details by default");
 assert(app.includes("Smaller measured C: entries"), "Explore visualization should show measured entries hidden behind the other segment");
 assert(app.includes("buildExploreCategoryRows"), "Explore allocation should aggregate measured rows into source categories");
 assert(app.includes("buildNotItemizedReasonRows"), "Explore allocation should explain not-itemized Windows space without inventing exact sub-splits");
@@ -273,6 +275,8 @@ assert(app.includes("unlistedReasonRows"), "Explore allocation should expose not
 assert(app.includes("Part of the ${total} total"), "Not-itemized reasons should identify their exact parent byte total");
 assert(app.includes("formatDriveInventoryDetail"), "Explore visualization should explain major drive allocation categories");
 assert(app.includes("Full C: breakdown"), "Explore visualization should show a full measured C: allocation list");
+assert(app.includes("Open for every measured top-level entry and not-itemized space."), "Full C: breakdown should be available as an on-demand section");
+assert(app.includes("Show details"), "Explore should label advanced breakdown sections as optional details");
 assert(app.includes("Mapped from C:"), "Explore visualization should show how much used space is itemized");
 assert(app.includes("Not itemized"), "Explore visualization should label space that Windows reports but the scanner cannot assign");
 assert(app.includes("NTFS metadata"), "Other used space should explain low-level Windows storage contributors");
