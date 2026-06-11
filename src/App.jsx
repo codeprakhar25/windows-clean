@@ -749,14 +749,13 @@ function App() {
         />
         {activeView === "clean" ? (
           <section className="grid gap-4">
-            <ScanPanel
-              candidates={candidates}
-              scan={scan}
-              scanStatus={scanStatus}
-              scanError={scanError}
-              onRunScan={() => runRealScan()}
-            />
-            {scan ? (
+            {!scan ? (
+              <ScanPanel
+                scanStatus={scanStatus}
+                scanError={scanError}
+                onRunScan={() => runRealScan()}
+              />
+            ) : (
               <CleanPanel
                 candidates={candidates}
                 selectedId={selectedId}
@@ -772,7 +771,7 @@ function App() {
                 onExecuteChecked={executeCheckedCleanups}
                 onRescan={() => runRealScan({ afterExecution: true })}
               />
-            ) : null}
+            )}
           </section>
         ) : null}
         {activeView === "explore" ? (
@@ -1008,11 +1007,8 @@ function TopBar({ runtime, scan, onRefreshRuntime }) {
   );
 }
 
-function ScanPanel({ candidates = [], scan, scanStatus, scanError, onRunScan }) {
+function ScanPanel({ scanStatus, scanError, onRunScan }) {
   const running = scanStatus === "scanning" || scanStatus === "rescanning";
-  const hasScan = Boolean(scan);
-  const readyCount = candidates.filter(isOneClickCleanupCandidate).length;
-  const readyLabel = readyCount === 1 ? "1 item ready to delete" : `${readyCount} items ready to delete`;
   return (
     <Card className="rounded-md">
       <CardHeader>
@@ -1020,29 +1016,21 @@ function ScanPanel({ candidates = [], scan, scanStatus, scanError, onRunScan }) 
           <div>
             <CardTitle className="flex items-center gap-2">
               <FolderSearch className="h-4 w-4" />
-              {hasScan ? "Ready to clean" : "Scan for cleanup"}
+              Scan for cleanup
             </CardTitle>
             <CardDescription>
-              {hasScan ? `${readyLabel}. Press Delete on a row to clean it.` : "Scan first. Nothing is deleted until you choose an item."}
+              Scan first. Nothing is deleted until you choose an item.
             </CardDescription>
           </div>
-          {hasScan ? (
-            <Button className="w-full md:w-auto" onClick={onRunScan} disabled={running}>
-              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
-              Scan again
-            </Button>
-          ) : null}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!hasScan ? (
-          <div className="max-w-xs">
-            <Button className="w-full" onClick={onRunScan} disabled={running}>
-              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
-              Scan PC
-            </Button>
-          </div>
-        ) : null}
+        <div className="max-w-xs">
+          <Button className="w-full" onClick={onRunScan} disabled={running}>
+            {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+            Scan PC
+          </Button>
+        </div>
         {scanError ? <Notice tone="restricted" icon={AlertTriangle} text={scanError} /> : null}
       </CardContent>
     </Card>
@@ -1071,14 +1059,23 @@ function CleanPanel({
   const checkedBytes = checkedCandidates.reduce((sum, row) => sum + Number(row.bytes || 0), 0);
   const allReadyChecked = hasReadyCandidates && checkedCount === readyCandidates.length;
   const running = executionStatus === "running";
+  const refreshing = scanStatus === "scanning" || scanStatus === "rescanning";
   return (
     <Card id="cleanup-actions-panel" className="rounded-md">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ClipboardCheck className="h-4 w-4" />
-          Clean space
-        </CardTitle>
-        <CardDescription>Select one or more rows, then delete them.</CardDescription>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardCheck className="h-4 w-4" />
+              Ready to clean
+            </CardTitle>
+            <CardDescription>Select one or more rows, then delete them.</CardDescription>
+          </div>
+          <Button className="w-full md:w-auto" variant="outline" onClick={onRescan} disabled={running || refreshing}>
+            {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+            {refreshing ? "Scanning" : "Scan again"}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {!scan ? (

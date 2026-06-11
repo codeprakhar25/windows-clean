@@ -42,7 +42,7 @@ const requiredAppMarkers = [
   "This browser page cannot scan or delete files.",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Scan PC",
-  "Clean space",
+  "Scan for cleanup",
   "Cleanup status",
   "Explore C:",
   "Select one or more rows, then delete them.",
@@ -133,7 +133,8 @@ assert(!app.includes("@/components/ui/input"), "app shell should not import unus
 assert(!app.includes("Entry cap"), "Clean screen should not expose native scan cap controls");
 assert(!app.includes("Protected paths"), "Clean screen should not expose protected-path editing");
 assert(!app.includes("Extra folders to scan"), "Clean screen should not expose custom root setup");
-assert(/activeView === "clean"[\s\S]*<ScanPanel[\s\S]*<CleanPanel/.test(app), "Clean screen should contain scan and cleanup controls in one flow");
+assert(/activeView === "clean"[\s\S]*!scan \? \([\s\S]*<ScanPanel[\s\S]*\) : \([\s\S]*<CleanPanel/.test(app), "Clean screen should show scan setup only before the first scan and then show the cleanup queue");
+assert(app.includes("onRescan={() => runRealScan({ afterExecution: true })}"), "post-scan cleanup queue should keep Scan again available in its header");
 assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
 assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
