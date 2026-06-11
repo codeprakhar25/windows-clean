@@ -769,6 +769,7 @@ function App() {
                 onSetCheckedCandidates={setCheckedCleanupCandidates}
                 onExecuteCandidate={executeSelectedCleanup}
                 onExecuteChecked={executeCheckedCleanups}
+                onScanAgain={() => runRealScan()}
                 onRescan={() => runRealScan({ afterExecution: true })}
               />
             )}
@@ -1050,6 +1051,7 @@ function CleanPanel({
   onSetCheckedCandidates,
   onExecuteCandidate,
   onExecuteChecked,
+  onScanAgain,
   onRescan
 }) {
   const readyCandidates = candidates.filter(isOneClickCleanupCandidate);
@@ -1071,7 +1073,7 @@ function CleanPanel({
             </CardTitle>
             <CardDescription>Select one or more rows, then delete them.</CardDescription>
           </div>
-          <Button className="w-full md:w-auto" variant="outline" onClick={onRescan} disabled={running || refreshing}>
+          <Button className="w-full md:w-auto" variant="outline" onClick={onScanAgain} disabled={running || refreshing}>
             {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
             {refreshing ? "Scanning" : "Scan again"}
           </Button>

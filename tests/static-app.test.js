@@ -134,7 +134,8 @@ assert(!app.includes("Entry cap"), "Clean screen should not expose native scan c
 assert(!app.includes("Protected paths"), "Clean screen should not expose protected-path editing");
 assert(!app.includes("Extra folders to scan"), "Clean screen should not expose custom root setup");
 assert(/activeView === "clean"[\s\S]*!scan \? \([\s\S]*<ScanPanel[\s\S]*\) : \([\s\S]*<CleanPanel/.test(app), "Clean screen should show scan setup only before the first scan and then show the cleanup queue");
-assert(app.includes("onRescan={() => runRealScan({ afterExecution: true })}"), "post-scan cleanup queue should keep Scan again available in its header");
+assert(app.includes("onScanAgain={() => runRealScan()}"), "post-scan cleanup queue header should run a normal scan refresh");
+assert(app.includes("onRescan={() => runRealScan({ afterExecution: true })}"), "cleanup result retry should keep the post-execution rescan path");
 assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
 assert(app.includes("const currentExecutionGate = buildExecutionGate"), "execute handler should recheck the execution gate before native dispatch");
 assert(app.includes("if (!currentExecutionGate.ready)"), "execute handler should block native dispatch when execution gate is not ready");
