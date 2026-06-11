@@ -16,6 +16,7 @@ const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const realDataGuide = fs.readFileSync(path.join(root, "WINDOWS_REAL_DATA_SETUP.md"), "utf8");
 const setupDoctorScript = fs.readFileSync(path.join(root, "scripts", "run-setup-doctor.mjs"), "utf8");
 const setupRouteScript = fs.readFileSync(path.join(root, "scripts", "run-setup-route.mjs"), "utf8");
+const windowsReadinessScript = fs.readFileSync(path.join(root, "scripts", "run-windows-readiness.mjs"), "utf8");
 const openAiSmokeScript = fs.readFileSync(path.join(root, "scripts", "run-openai-advisor-smoke.mjs"), "utf8");
 const workflowProofScript = fs.readFileSync(path.join(root, "scripts", "run-workflow-proof-check.mjs"), "utf8");
 const supportBundleScript = fs.readFileSync(path.join(root, "scripts", "run-support-bundle.mjs"), "utf8");
@@ -441,5 +442,7 @@ assert(!realDataGuide.includes("npm run validate:workflow-proof -- --file"), "Wi
 assert(!realDataGuide.includes("spaceguard-workflow-proof-check.json"), "Windows setup guide should not list proof artifact files in the normal cleanup path");
 assert(!realDataGuide.includes("npm run support:bundle"), "Windows setup guide should not require support bundle capture for normal cleanup");
 assert(realDataGuide.includes("Support export is only for troubleshooting"), "Windows setup guide should keep support export clearly optional");
+assert(windowsReadinessScript.includes("select one or more cleanup rows"), "Windows readiness next steps should match the simplified cleanup flow");
+assert(!/can clean|delete confirmation|delete selected files|refresh space/i.test(windowsReadinessScript), "Windows readiness next steps should not mention obsolete cleanup UI labels");
 
 console.log("static app ok");

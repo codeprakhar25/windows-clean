@@ -94,6 +94,8 @@ const script = path.join(root, "scripts", "run-windows-readiness.mjs");
   assert.strictEqual(ready.route.status, "flag-disabled", "route diagnostics may remain disabled without blocking native launch");
   assert.strictEqual(ready.routeAudit.ready, false, "optional route audit should not be treated as native launch readiness");
   assert(ready.nextSteps.some((step) => step.includes("npm run native:dev")), "ready preflight should point users to the direct native launcher");
+  assert(ready.nextSteps.some((step) => step.includes("select one or more cleanup rows")), "ready preflight should match the simplified cleanup flow");
+  assert(!ready.nextSteps.some((step) => /can clean|delete confirmation|delete selected files|refresh space/i.test(step)), "ready preflight should not mention obsolete cleanup UI labels");
   assert(!ready.nextSteps.some((step) => /setup:route|route:arm|openai:smoke|windows:dev/.test(step)), "ready preflight should not require advanced route commands");
 
   const unknownRoute = readiness.buildWindowsReadinessReport({
