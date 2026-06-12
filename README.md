@@ -2,6 +2,22 @@
 
 SpaceGuard is a real Windows desktop cleanup app. The browser build is setup-only; local scanning and cleanup require the Tauri desktop shell.
 
+## Download
+
+Latest Windows installer:
+
+```text
+https://github.com/codeprakhar25/windows-clean/releases/latest/download/SpaceGuardSetup.exe
+```
+
+Release page:
+
+```text
+https://github.com/codeprakhar25/windows-clean/releases/latest
+```
+
+The direct installer link works after the first tagged GitHub release completes.
+
 ## Run The App
 
 ```powershell
