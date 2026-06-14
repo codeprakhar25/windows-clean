@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  ArrowLeft,
   Bot,
   CheckCircle2,
   ChevronRight,
   ClipboardCheck,
+  File as FileIcon,
+  Folder,
   FolderSearch,
   HardDrive,
   KeyRound,
@@ -16,7 +19,8 @@ import {
   ScanLine,
   ShieldCheck,
   Trash2,
-  X
+  X,
+  Zap
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +43,11 @@ import {
   runNativePipCacheExecutor,
   runNativePnpmStoreExecutor,
   runNativeProjectDependencyExecutor,
+  runNativeExploreDir,
+  runNativeExploreFast,
+  runNativeScanVolume,
+  onNativeMftProgress,
+  runNativeRecycleDelete,
   runNativeReadonlyScan,
   runNativeRecycleBinExecutor,
   runNativeShaderCacheExecutor,
@@ -46,6 +55,7 @@ import {
   runNativeUserCacheExecutor
 } from "./native-scanner.mjs";
 import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
+import { computeTreemapLayout } from "./treemap.mjs";
 import { buildAppAgentTaskQueue, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildManualFindingGuidance, buildPostRunProof, buildRouteReadiness, buildWorkflowAgentTargetId, buildWorkflowLocks, formatBytes, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
@@ -73,7 +83,7 @@ const DRIVE_ALLOCATION_LABELS = {
   "unknown-review": "Other C: item",
   cleanable: "Can delete",
   manual: "Review",
-  unlisted: "Not itemized"
+  unlisted: "Not yet explored"
 };
 const DRIVE_ALLOCATION_GROUPS = {
   cleanable: {
@@ -107,8 +117,8 @@ const DRIVE_ALLOCATION_GROUPS = {
     status: "inspect"
   },
   unlisted: {
-    label: "Not itemized by scan",
-    detail: "Windows reports this as used, but the scanner could not assign it to a measured row.",
+    label: "Not yet explored",
+    detail: "Open Browse C: and drill into the big folders to see what is using this space.",
     status: "estimated"
   }
 };
@@ -857,6 +867,7 @@ function App() {
             executionResult={executionResult}
             candidates={candidates}
             manualFindings={manualFindings}
+            nativeConnected={nativeConnected}
             onRequestCleanup={(ids) => setExploreConfirmIds(Array.isArray(ids) ? ids : [ids])}
             onRunScan={() => runRealScan({ nextView: "explore" })}
             onRescan={() => runRealScan({ afterExecution: true, nextView: "explore" })}
@@ -1313,6 +1324,7 @@ function ExplorePanel({
   executionResult = null,
   candidates = [],
   manualFindings = [],
+  nativeConnected = false,
   onRequestCleanup,
   onRunScan,
   onRescan
@@ -1367,7 +1379,8 @@ function ExplorePanel({
             <div className="flex rounded-md border bg-muted/30 p-1" role="tablist" aria-label="Explore views">
               {[
                 ["visualize", "Visualize", PieChart],
-                ["list", "List", ListTree]
+                ["list", "List", ListTree],
+                ["browse", "Browse C:", Folder]
               ].map(([id, label, Icon]) => (
                 <button
                   key={id}
@@ -1400,6 +1413,13 @@ function ExplorePanel({
             </div>
             {mode === "visualize" ? (
               <ExploreVisualization scan={scan} rows={rows} onShowList={() => setMode("list")} />
+            ) : mode === "browse" ? (
+              <ExploreBrowser
+                rootPath={`${scan.volume?.drive || scan.targetDrive || "C:"}\\`}
+                nativeConnected={nativeConnected}
+                deleteDisabled={deleteDisabled}
+                onAfterDelete={onRescan}
+              />
             ) : (
               <ExploreList
                 rows={rows}
@@ -1417,6 +1437,533 @@ function ExplorePanel({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function splitExplorePath(path = "") {
+  const clean = String(path || "").replace(/\//g, "\\").replace(/\\+$/, "");
+  if (!clean) return [];
+  const driveMatch = clean.match(/^([a-zA-Z]:)(\\(.*))?$/);
+  if (!driveMatch) {
+    return clean.split("\\").filter(Boolean).map((name, index, arr) => ({
+      name,
+      path: arr.slice(0, index + 1).join("\\")
+    }));
+  }
+  const drive = driveMatch[1];
+  const crumbs = [{ name: `${drive}\\`, path: `${drive}\\` }];
+  const rest = driveMatch[3] ? driveMatch[3].split("\\").filter(Boolean) : [];
+  rest.forEach((name, index) => {
+    crumbs.push({ name, path: `${drive}\\${rest.slice(0, index + 1).join("\\")}` });
+  });
+  return crumbs;
+}
+
+const EXPLORE_GUARD_BADGES = {
+  "hard-block": { label: "protected", variant: "outline" },
+  confirm: { label: "confirm needed", variant: "review" },
+  warn: { label: "app data", variant: "review" },
+  allow: { label: "can delete", variant: "safe" }
+};
+
+const TREEMAP_TONES = {
+  allow: "bg-emerald-500/85 hover:bg-emerald-500 border-emerald-700/40 text-white",
+  confirm: "bg-amber-500/85 hover:bg-amber-500 border-amber-700/40 text-white",
+  warn: "bg-amber-500/85 hover:bg-amber-500 border-amber-700/40 text-white",
+  "hard-block": "bg-slate-400/70 hover:bg-slate-400 border-slate-500/40 text-slate-900"
+};
+
+function ExploreTreemap({ entries = [], selectedMap = {}, onDrill = () => {}, onToggle = () => {} }) {
+  const containerRef = useRef(null);
+  const [width, setWidth] = useState(0);
+  const height = 320;
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+    const update = () => setWidth(el.clientWidth);
+    update();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const tiles = useMemo(() => computeTreemapLayout(entries, width, height), [entries, width]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative w-full overflow-hidden rounded-md border bg-muted/20"
+      style={{ height }}
+    >
+      {tiles.map((tile) => {
+        const entry = tile.item;
+        const tone = TREEMAP_TONES[entry.deleteGuard] || TREEMAP_TONES.allow;
+        const selected = Boolean(selectedMap[entry.path]);
+        const showLabel = tile.width > 54 && tile.height > 22;
+        return (
+          <button
+            key={entry.id || entry.path}
+            type="button"
+            title={`${entry.name} · ${formatBytes(entry.bytes)}${entry.isDir ? " · click to open" : ""}`}
+            onClick={() => (entry.isDir ? onDrill(entry) : onToggle(entry))}
+            className={`absolute overflow-hidden border text-left transition ${tone} ${selected ? "z-10 ring-2 ring-sky-600 ring-offset-1" : ""}`}
+            style={{
+              left: tile.x + 1,
+              top: tile.y + 1,
+              width: Math.max(0, tile.width - 2),
+              height: Math.max(0, tile.height - 2)
+            }}
+          >
+            {showLabel ? (
+              <span className="flex h-full flex-col justify-between p-1.5">
+                <span className="flex items-center gap-1 truncate text-xs font-semibold drop-shadow-sm">
+                  {entry.isDir ? <Folder className="h-3 w-3 shrink-0" /> : <FileIcon className="h-3 w-3 shrink-0" />}
+                  <span className="truncate">{entry.name}</span>
+                </span>
+                <span className="text-[10px] font-medium opacity-90">{formatBytes(entry.bytes)}</span>
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ExploreTreemapLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> safe to delete</span>
+      <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-amber-500" /> review / confirm</span>
+      <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-slate-400" /> protected</span>
+      <span className="ml-auto">Click a folder tile to open it.</span>
+    </div>
+  );
+}
+
+function ExploreBrowser({ rootPath = "C:\\", nativeConnected = false, deleteDisabled = false, onAfterDelete = () => {} }) {
+  const [path, setPath] = useState(rootPath);
+  const [level, setLevel] = useState(null);
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState("");
+  const [selected, setSelected] = useState({});
+  const [confirmEntries, setConfirmEntries] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [resultNote, setResultNote] = useState(null);
+  const [turbo, setTurbo] = useState(true);
+  const [engine, setEngine] = useState("");
+  // Turbo scan lifecycle: "idle" | "scanning" | "done" | "failed"
+  const [scanState, setScanState] = useState("idle");
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scanSummary, setScanSummary] = useState(null);
+
+  const driveLetter = String(rootPath || "C").slice(0, 1).toUpperCase();
+
+  useEffect(() => {
+    setPath(rootPath);
+  }, [rootPath]);
+
+  // Stream live record counts during a Turbo scan so it never looks frozen.
+  useEffect(() => {
+    return onNativeMftProgress((count) => setScanProgress(count));
+  }, []);
+
+  // Build (or rebuild) the cached MFT tree when Turbo is on. One scan per drive;
+  // navigation afterwards is served instantly from the cache.
+  useEffect(() => {
+    if (!nativeConnected) return undefined;
+    if (!turbo) {
+      setScanState("idle");
+      return undefined;
+    }
+    let cancelled = false;
+    setScanState("scanning");
+    setScanProgress(0);
+    (async () => {
+      try {
+        const summary = await runNativeScanVolume(driveLetter);
+        if (cancelled) return;
+        if (summary.available === false) {
+          setScanState("failed");
+        } else {
+          setScanSummary(summary);
+          setScanState("done");
+        }
+      } catch (err) {
+        if (!cancelled) setScanState("failed");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [turbo, driveLetter, nativeConnected]);
+
+  async function fetchLevel(target) {
+    if (turbo && scanState === "done") {
+      const fast = await runNativeExploreFast(target, { protectedPaths: [] });
+      if (fast.available !== false) return { result: fast, engine: "fast" };
+    }
+    const walk = await runNativeExploreDir(target, { protectedPaths: [] });
+    return { result: walk, engine: "walk" };
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!nativeConnected) {
+        setStatus("unavailable");
+        return;
+      }
+      // Wait for an in-flight Turbo scan; this effect re-runs when scanState settles.
+      if (turbo && scanState === "scanning") return;
+      setStatus("loading");
+      setError("");
+      setSelected({});
+      try {
+        const { result, engine: usedEngine } = await fetchLevel(path);
+        if (cancelled) return;
+        setLevel(result);
+        setEngine(usedEngine);
+        setStatus("idle");
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Could not open this folder.");
+        setStatus("error");
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, nativeConnected, turbo, scanState]);
+
+  async function reloadLevel() {
+    if (!nativeConnected) return;
+    setStatus("loading");
+    try {
+      const { result, engine: usedEngine } = await fetchLevel(path);
+      setLevel(result);
+      setEngine(usedEngine);
+      setStatus("idle");
+      setSelected({});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not refresh this folder.");
+      setStatus("error");
+    }
+  }
+
+  const entries = level?.entries || [];
+  const crumbs = splitExplorePath(path);
+  const selectedEntries = entries.filter((entry) => selected[entry.path]);
+  const selectedBytes = selectedEntries.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+  const maxBytes = entries.reduce((max, entry) => Math.max(max, Number(entry.bytes || 0)), 0) || 1;
+  const busy = deleting || deleteDisabled;
+
+  function toggleSelected(entry) {
+    if (entry.deleteGuard === "hard-block" || busy) return;
+    setSelected((current) => {
+      const next = { ...current };
+      if (next[entry.path]) delete next[entry.path];
+      else next[entry.path] = entry;
+      return next;
+    });
+  }
+
+  function drillInto(entry) {
+    if (!entry.isDir || busy) return;
+    setResultNote(null);
+    setPath(entry.path);
+  }
+
+  function goUp() {
+    if (busy || !level?.parent) return;
+    setResultNote(null);
+    setPath(level.parent);
+  }
+
+  function openDeleteDialog(list) {
+    if (!list.length || busy) return;
+    setConfirmEntries(list);
+  }
+
+  async function confirmDelete(confirmedPaths) {
+    if (!confirmEntries?.length) return;
+    setDeleting(true);
+    setError("");
+    try {
+      const result = await runNativeRecycleDelete(
+        confirmEntries.map((entry) => entry.path),
+        { confirmedPaths }
+      );
+      setConfirmEntries(null);
+      setResultNote(result);
+      await reloadLevel();
+      if (result.accepted) onAfterDelete();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Deletion failed.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  if (!nativeConnected) {
+    return (
+      <div className="rounded-md border bg-background p-4">
+        <EmptyState
+          icon={Folder}
+          title="Browse C: needs the desktop app"
+          detail="Folder-by-folder exploring and deletion run only inside the SpaceGuard Windows app, not a browser tab."
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border bg-background p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" size="sm" variant="outline" onClick={goUp} disabled={!level?.parent || busy}>
+          <ArrowLeft className="h-4 w-4" />
+          Up
+        </Button>
+        <div className="flex min-w-0 flex-wrap items-center gap-1 text-sm">
+          {crumbs.map((crumb, index) => (
+            <span key={crumb.path} className="flex items-center gap-1">
+              {index > 0 ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /> : null}
+              <button
+                type="button"
+                className={`max-w-[12rem] truncate rounded px-1.5 py-0.5 hover:bg-muted ${
+                  index === crumbs.length - 1 ? "font-semibold text-foreground" : "text-muted-foreground"
+                }`}
+                onClick={() => !busy && setPath(crumb.path)}
+                disabled={busy}
+                title={crumb.path}
+              >
+                {crumb.name}
+              </button>
+            </span>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => setTurbo((value) => !value)}
+          disabled={busy}
+          title="Turbo uses a direct NTFS scan (needs admin). Falls back to standard scan automatically."
+          className={`ml-auto flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition ${
+            turbo ? "border-sky-300 bg-sky-50 text-sky-700" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Zap className="h-3.5 w-3.5" />
+          Turbo {turbo ? "on" : "off"}
+        </button>
+      </div>
+      {turbo && scanState === "failed" ? (
+        <p className="text-xs text-amber-700">
+          Turbo needs the app run as administrator — using the standard scan for now.
+        </p>
+      ) : null}
+      {turbo && scanState === "done" && scanSummary ? (
+        <p className="text-xs text-muted-foreground">
+          Turbo scanned {scanSummary.files.toLocaleString()} files in{" "}
+          {(scanSummary.elapsedMs / 1000).toFixed(1)}s.
+        </p>
+      ) : null}
+
+      {selectedEntries.length ? (
+        <div className="sticky top-16 z-10 flex flex-col gap-2 rounded-md border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between lg:top-4">
+          <p className="text-sm font-medium">
+            {selectedEntries.length} selected · {formatBytes(selectedBytes)}
+          </p>
+          <Button type="button" variant="destructive" size="sm" disabled={busy} onClick={() => openDeleteDialog(selectedEntries)}>
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Move selected to Recycle Bin
+          </Button>
+        </div>
+      ) : null}
+
+      {error ? <Notice tone="restricted" icon={AlertTriangle} text={error} /> : null}
+      {resultNote ? <ExploreDeleteResult result={resultNote} onDismiss={() => setResultNote(null)} /> : null}
+
+      {turbo && scanState === "scanning" ? (
+        <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          {scanProgress > 0
+            ? `Scanning ${driveLetter}: drive… ${scanProgress.toLocaleString()} files`
+            : `Scanning ${driveLetter}: drive…`}
+        </div>
+      ) : status === "loading" ? (
+        <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Measuring folder…
+        </div>
+      ) : status === "error" ? (
+        <EmptyState icon={AlertTriangle} title="Could not open folder" detail={error || "Try going up a level."} />
+      ) : !entries.length ? (
+        <EmptyState icon={Folder} title="Empty or unreadable" detail="No readable items in this folder." />
+      ) : (
+        <div className="grid gap-3">
+          <ExploreTreemap
+            entries={entries}
+            selectedMap={selected}
+            onDrill={drillInto}
+            onToggle={toggleSelected}
+          />
+          <ExploreTreemapLegend />
+          {(level?.warnings || []).map((warning, index) => (
+            <p key={index} className="px-1 text-xs text-amber-700">{warning}</p>
+          ))}
+          {entries.map((entry) => {
+            const badge = EXPLORE_GUARD_BADGES[entry.deleteGuard] || EXPLORE_GUARD_BADGES.allow;
+            const widthPercent = Math.max(2, (Number(entry.bytes || 0) / maxBytes) * 100);
+            const selectable = entry.deleteGuard !== "hard-block";
+            return (
+              <div key={entry.id || entry.path} className="rounded-md border bg-card p-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={Boolean(selected[entry.path])}
+                    disabled={!selectable || busy}
+                    aria-label={`Select ${entry.name}`}
+                    onClick={() => toggleSelected(entry)}
+                  />
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                    onClick={() => drillInto(entry)}
+                    disabled={!entry.isDir || busy}
+                    title={entry.isDir ? `Open ${entry.name}` : entry.path}
+                  >
+                    {entry.isDir ? <Folder className="h-4 w-4 shrink-0 text-sky-600" /> : <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate text-sm font-medium">{entry.name}</span>
+                        {entry.isDir ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : null}
+                      </span>
+                      {entry.status === "limited" ? (
+                        <span className="block text-xs text-amber-700">Partially measured — open to itemize.</span>
+                      ) : null}
+                    </span>
+                  </button>
+                  <Badge variant={badge.variant}>{badge.label}</Badge>
+                  <span className="w-24 shrink-0 text-right text-sm font-semibold">{formatBytes(entry.bytes)}</span>
+                </div>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div className={`h-full rounded-full ${entry.isDir ? "bg-sky-500" : "bg-muted-foreground/50"}`} style={{ width: `${widthPercent}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {confirmEntries ? (
+        <ExploreDeleteDialog
+          entries={confirmEntries}
+          deleting={deleting}
+          onCancel={() => setConfirmEntries(null)}
+          onConfirm={confirmDelete}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ExploreDeleteResult({ result, onDismiss = () => {} }) {
+  const deleted = (result.entries || []).filter((entry) => entry.result === "deleted");
+  const blocked = (result.entries || []).filter((entry) => entry.result === "blocked" || entry.result === "needs-confirm");
+  const failed = (result.entries || []).filter((entry) => entry.result === "error");
+  const tone = deleted.length ? "safe" : "restricted";
+  return (
+    <div className={`rounded-md border p-3 text-sm ${tone === "safe" ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          {deleted.length ? (
+            <p className="font-semibold">
+              Moved {deleted.length} item{deleted.length === 1 ? "" : "s"} to Recycle Bin · {formatBytes(result.freedBytes)} freed
+            </p>
+          ) : (
+            <p className="font-semibold">Nothing was deleted.</p>
+          )}
+          {blocked.length ? <p className="mt-1 text-xs">{blocked.length} item(s) were protected or still need confirmation.</p> : null}
+          {failed.length ? <p className="mt-1 text-xs">{failed.length} item(s) could not be moved.</p> : null}
+          <p className="mt-1 text-xs">Recoverable from the Windows Recycle Bin until you empty it.</p>
+        </div>
+        <button type="button" className="text-muted-foreground hover:text-foreground" onClick={onDismiss} aria-label="Dismiss">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ExploreDeleteDialog({ entries = [], deleting = false, onCancel = () => {}, onConfirm = () => {} }) {
+  const confirmEntries = entries.filter((entry) => entry.deleteGuard === "confirm");
+  const warnEntries = entries.filter((entry) => entry.deleteGuard === "warn");
+  const totalBytes = entries.reduce((sum, entry) => sum + Number(entry.bytes || 0), 0);
+  // Everything here goes to the Recycle Bin (recoverable), so the only real friction
+  // is a single acknowledgement when something large/top-level or app-data is in the set.
+  const needsAck = confirmEntries.length > 0 || warnEntries.length > 0;
+  const [ack, setAck] = useState(false);
+  const canConfirm = !deleting && (!needsAck || ack);
+
+  function confirm() {
+    if (!canConfirm) return;
+    // Auto-confirm the gated paths server-side; the Recycle Bin is the safety net.
+    onConfirm(confirmEntries.map((entry) => entry.path));
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-lg rounded-lg border bg-background p-5 shadow-lg">
+        <div className="flex items-center gap-2">
+          <Trash2 className="h-5 w-5 text-destructive" />
+          <h2 className="text-lg font-semibold">Move {entries.length} item{entries.length === 1 ? "" : "s"} to Recycle Bin</h2>
+        </div>
+        <div className="mt-2 flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          <RefreshCcw className="h-4 w-4 shrink-0" />
+          <span>Frees {formatBytes(totalBytes)}. Recoverable from the Recycle Bin until you empty it.</span>
+        </div>
+
+        <div className="mt-3 max-h-40 space-y-1 overflow-auto">
+          {entries.map((entry) => (
+            <div key={entry.path} className="flex items-center justify-between gap-2 rounded border bg-card px-2 py-1 text-sm">
+              <span className="flex min-w-0 items-center gap-1.5">
+                {entry.isDir ? <Folder className="h-3.5 w-3.5 shrink-0 text-sky-600" /> : <FileIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                <span className="truncate" title={entry.path}>{entry.name}</span>
+              </span>
+              <span className="shrink-0 text-xs font-semibold">{formatBytes(entry.bytes)}</span>
+            </div>
+          ))}
+        </div>
+
+        {warnEntries.length ? (
+          <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            Heads up: {warnEntries.length} item{warnEntries.length === 1 ? " looks" : "s look"} like active app data — deleting may sign you out or reset settings.
+          </p>
+        ) : null}
+        {confirmEntries.length ? (
+          <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            {confirmEntries.length} large or top-level item{confirmEntries.length === 1 ? "" : "s"} included.
+          </p>
+        ) : null}
+
+        {needsAck ? (
+          <label className="mt-3 flex items-start gap-2 text-sm">
+            <Checkbox checked={ack} onClick={() => setAck((value) => !value)} aria-label="Acknowledge" />
+            <span>I understand these move to the Recycle Bin.</span>
+          </label>
+        ) : null}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onCancel} disabled={deleting}>Cancel</Button>
+          <Button type="button" variant="destructive" onClick={confirm} disabled={!canConfirm}>
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Move to Recycle Bin
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1522,8 +2069,8 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
       </div>
       <Progress value={usedPercent} />
       <div className="grid gap-3 md:grid-cols-4">
-        <Metric label="Mapped from C:" value={formatBytes(allocation.accountedBytes)} />
-        <Metric label="Not itemized" value={formatBytes(allocation.unlistedBytes)} />
+        <Metric label="Explored" value={formatBytes(allocation.accountedBytes)} />
+        <Metric label="Not yet explored" value={formatBytes(allocation.unlistedBytes)} />
         <Metric label="Can delete now" value={formatBytes(cleanableBytes)} />
         <Metric label="Needs review" value={formatBytes(reviewBytes)} />
       </div>
@@ -1763,7 +2310,7 @@ function ExploreOtherSpaceBreakdown({ allocation, otherRow }) {
         <div className="mt-3 rounded-md border bg-background p-3">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="font-medium">Not itemized by scan</p>
+              <p className="font-medium">Not yet explored</p>
               <p className="mt-1 text-xs text-muted-foreground">{unlistedRow.detail}</p>
             </div>
             <p className="shrink-0 font-semibold">{formatBytes(unlistedRow.bytes)}</p>
@@ -2254,14 +2801,14 @@ function buildExploreAllocationBreakdown(scan, rows = []) {
   const unlistedRow = unlistedBytes > 0
     ? {
         id: "visual-unlisted-used-space",
-        title: "Not itemized by scan",
+        title: "Not yet explored",
         path: "",
         bytes: unlistedBytes,
         files: 0,
         dirs: 0,
         status: "estimated",
         classification: "unlisted",
-        detail: "Windows reports this as used space, but it was not assigned to a measured top-level C: entry."
+        detail: "Open Browse C: and drill into the big folders to see what is using this space."
       }
     : null;
   const detailRows = [...sourceRows, unlistedRow]
@@ -2388,10 +2935,10 @@ function formatOtherUsedSpaceDetail({ hiddenRows = [], unlistedBytes = 0 } = {})
     parts.push(`${formatBytes(smallerBytes)} from ${smallerRows.length} smaller measured C: entries`);
   }
   if (unlistedBytes > 0) {
-    parts.push(`${formatBytes(unlistedBytes)} not itemized by the scan`);
+    parts.push(`${formatBytes(unlistedBytes)} not yet explored`);
   }
   const prefix = parts.length ? `Includes ${parts.join(" plus ")}.` : "No extra used space is hidden from the detailed list.";
-  return `${prefix} Not itemized space can include NTFS metadata, restore points, protected folders, locked files, reserved storage, and scan-cap leftovers. Some of it can become removable if a later scan exposes it as a can delete item.`;
+  return `${prefix} This is space inside folders you have not opened yet. Use Browse C: to drill in and see what is there.`;
 }
 
 function formatAllocationKindLabel(row = {}) {
