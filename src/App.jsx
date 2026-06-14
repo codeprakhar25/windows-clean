@@ -1571,7 +1571,8 @@ function ExploreBrowser({ rootPath = "C:\\", nativeConnected = false, deleteDisa
   }, []);
 
   // Build (or rebuild) the cached MFT tree when Turbo is on. One scan per drive;
-  // navigation afterwards is served instantly from the cache.
+  // navigation afterwards is served instantly from the cache. On re-mount we probe
+  // the cache first — if it's already warm for this drive we skip the rescan.
   useEffect(() => {
     if (!nativeConnected) return undefined;
     if (!turbo) {
@@ -1579,9 +1580,20 @@ function ExploreBrowser({ rootPath = "C:\\", nativeConnected = false, deleteDisa
       return undefined;
     }
     let cancelled = false;
-    setScanState("scanning");
-    setScanProgress(0);
     (async () => {
+      try {
+        // Probe: if the cache is already warm, skip the full scan.
+        const probe = await runNativeExploreFast(`${driveLetter}:\\`, { protectedPaths: [] });
+        if (!cancelled && probe.available !== false) {
+          setScanState("done");
+          return;
+        }
+      } catch {
+        // Probe error — fall through to full scan
+      }
+      if (cancelled) return;
+      setScanState("scanning");
+      setScanProgress(0);
       try {
         const summary = await runNativeScanVolume(driveLetter);
         if (cancelled) return;
@@ -1640,11 +1652,15 @@ function ExploreBrowser({ rootPath = "C:\\", nativeConnected = false, deleteDisa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, nativeConnected, turbo, scanState]);
 
-  async function reloadLevel() {
+  async function reloadLevel(afterDelete = false) {
     if (!nativeConnected) return;
     setStatus("loading");
     try {
-      const { result, engine: usedEngine } = await fetchLevel(path);
+      // After deletion the MFT cache still holds the old entries; use the live
+      // walk so the deleted items disappear from the list immediately.
+      const { result, engine: usedEngine } = afterDelete
+        ? { result: await runNativeExploreDir(path, { protectedPaths: [] }), engine: "walk" }
+        : await fetchLevel(path);
       setLevel(result);
       setEngine(usedEngine);
       setStatus("idle");
@@ -1700,7 +1716,7 @@ function ExploreBrowser({ rootPath = "C:\\", nativeConnected = false, deleteDisa
       );
       setConfirmEntries(null);
       setResultNote(result);
-      await reloadLevel();
+      await reloadLevel(true);
       if (result.accepted) onAfterDelete();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Deletion failed.");
