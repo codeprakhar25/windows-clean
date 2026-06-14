@@ -1,4 +1,4 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+﻿#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -1627,7 +1627,7 @@ fn explore_dir_fast(
         is_dir: true,
         entries,
         measured_bytes,
-        warnings: vec!["Turbo (MFT) scan.".to_string()],
+        warnings: vec![],
     }
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -1790,7 +1790,7 @@ function ExploreBrowser({ rootPath = "C:\\", nativeConnected = false, deleteDisa
         <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           {scanProgress > 0
-            ? `Scanning ${driveLetter}: drive… ${scanProgress.toLocaleString()} files`
+            ? `Scanning ${driveLetter}: drive… ${scanProgress.toLocaleString()} items`
             : `Scanning ${driveLetter}: drive…`}
         </div>
       ) : status === "loading" ? (
