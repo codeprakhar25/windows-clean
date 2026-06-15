@@ -1,6 +1,6 @@
 [package]
 name = "spaceguard"
-version = "0.2.0"
+version = "0.2.1"
 description = "Developer junk cleaner for Windows — safely removes caches, temp files, and stale build artifacts."
 authors = ["SpaceGuard"]
 edition = "2021"
