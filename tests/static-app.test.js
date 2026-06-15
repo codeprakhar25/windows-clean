@@ -43,8 +43,7 @@ const requiredAppMarkers = [
   "This browser page cannot scan or delete files.",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Scan PC",
-  "Scan for cleanup",
-  "Fast scan first",
+  "Developer junk cleaner",
   "Explore C:",
   "Check what you want to remove.",
   "Delete all",
@@ -129,13 +128,7 @@ assert(app.includes("function MobileTabNav"), "mobile layout should expose tab s
 assert(app.includes("role=\"tablist\""), "mobile view switching should use tab semantics");
 assert(!app.includes("Advanced scan options"), "Clean screen should not expose advanced scan tuning");
 assert(!app.includes("Target drive"), "Clean screen should not ask users to configure the target drive before scanning");
-assert(
-  !app.includes("@/components/ui/input") || app.includes("function ExploreDeleteDialog"),
-  "input control may only be imported for the explore delete confirmation dialog"
-);
-assert(app.includes("function ExploreBrowser"), "explore should offer folder-by-folder drill-down browsing of C:");
-assert(app.includes("runNativeExploreDir"), "explore browser should drill into folders through the native explore command");
-assert(app.includes("runNativeRecycleDelete"), "explore browser should delete to the Recycle Bin through the native command");
+assert(!app.includes("@/components/ui/input"), "input control should not be imported — no dialog needs it after Browse C: removal");
 assert(!app.includes("Entry cap"), "Clean screen should not expose native scan cap controls");
 assert(!app.includes("Protected paths"), "Clean screen should not expose protected-path editing");
 assert(!app.includes("Extra folders to scan"), "Clean screen should not expose custom root setup");
@@ -297,7 +290,7 @@ assert(app.includes("Reserved storage and Windows Update staging"), "Other used 
 assert(app.includes("formatAllocationKindLabel"), "Explore breakdown rows should label system, user, review, and cleanable categories");
 assert(app.includes("formatAllocationGroupStatus"), "Explore source categories should use simple status labels");
 assert(app.includes("formatCount(row.files)"), "Explore breakdown rows should show file and folder counts when available");
-assert(app.includes("Use Browse C: to drill in"), "Not-yet-explored space should point users to Browse C: in plain language");
+assert(app.includes("Scan again for more detail"), "Not-yet-explored space should prompt users to scan again for detail");
 assert(app.includes("Show delete list"), "Explore visualization should lead users to actionable cleanup rows");
 assert(app.includes("can be deleted"), "Explore visualization should summarize cleanable space");
 assert(app.includes("onShowList={() => setMode(\"list\")}"), "Explore visualization should switch directly to the delete list");

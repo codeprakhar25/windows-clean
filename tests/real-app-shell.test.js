@@ -29,7 +29,7 @@ const requiredRealShellMarkers = [
   "This browser page cannot scan or delete files.",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Scan PC",
-  "Scan for cleanup",
+  "Developer junk cleaner",
   "Select items to delete",
   "Explore C:",
   "Check what you want to remove.",
