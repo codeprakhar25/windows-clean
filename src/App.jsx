@@ -2386,6 +2386,17 @@ function buildItemCandidates(finding, recipe, runtime, options = {}) {
     });
 }
 
+function buildScanFingerprint(scan) {
+  if (!scan) return "";
+  return [
+    scan.targetDrive,
+    scan.generatedAt,
+    scan.findings?.length || 0,
+    scan.totalBytes || 0,
+    scan.volume?.freeBytes || 0
+  ].join(":");
+}
+
 function buildManualFindings(scan) {
   if (!scan) return [];
   const findingRows = (scan.findings || [])
