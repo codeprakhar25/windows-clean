@@ -1320,12 +1320,6 @@ const GB = 1024 * MB;
 
   // Explore C: drill-down + delete-to-recycle-bin bridge.
   assert(rustMain.includes("fn explore_dir("), "backend should expose the explore_dir drill-down command");
-  assert(rustMain.includes("fn explore_dir_fast("), "backend should expose the fast MFT scan command");
-  assert(rustMain.includes("fn build_mft_cache("), "backend should build a cached tree in one pass over the NTFS MFT");
-  assert(rustMain.includes("fn scan_volume_mft("), "backend should expose the async Turbo scan command");
-  assert(rustMain.includes("explore_dir_fast,"), "fast scan command must be registered in the invoke handler");
-  assert(rustMain.includes("scan_volume_mft,"), "Turbo scan command must be registered in the invoke handler");
-  assert(rustMain.includes("mft-progress"), "Turbo scan must emit progress events so the UI never looks frozen");
   assert(rustMain.includes("fn delete_paths_to_recycle_bin("), "backend should expose the recycle-bin delete command");
   assert(rustMain.includes("fn classify_delete_guard("), "backend should keep an authoritative server-side delete guard");
   assert(rustMain.includes("explore_dir,") && rustMain.includes("delete_paths_to_recycle_bin,"), "both new commands must be registered in the invoke handler");

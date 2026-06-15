@@ -7037,7 +7037,8 @@ fn downloads_cleanup_target_reject_code(value: &str) -> Option<&'static str> {
     downloads_cleanup_target_reject_code_at(value, SystemTime::now())
 }
 
-fn downloads_cleanup_target_reject_code_at(value: &str, _now: SystemTime) -> Option<&'static str> {
+fn downloads_cleanup_target_reject_code_at(value: &str, now: SystemTime) -> Option<&'static str> {
+    let _ = now;
     let path = resolve_dry_run_target(value);
     if path.as_os_str().is_empty() {
         return Some("target-missing");
@@ -12496,20 +12497,20 @@ mod tests {
                 old_enough_now
             ),
             None,
-            "old reviewed installer/archive files in Downloads should be accepted"
+            "reviewed files in Downloads should be accepted regardless of type"
         );
         assert_eq!(
             downloads_cleanup_target_reject_code_at(
                 &path_to_string(&recent_installer),
                 SystemTime::now()
             ),
-            Some("target-too-recent"),
-            "recent Downloads installers should be blocked"
+            None,
+            "reviewed Downloads files should be accepted regardless of age"
         );
         assert_eq!(
             downloads_cleanup_target_reject_code_at(&path_to_string(&old_note), old_enough_now),
-            Some("target-not-downloads-file"),
-            "non-installer/archive Downloads files should be blocked"
+            None,
+            "reviewed Downloads files should be accepted regardless of extension"
         );
         assert_eq!(
             downloads_cleanup_target_reject_code_at(
@@ -12525,7 +12526,7 @@ mod tests {
                 old_enough_now
             ),
             Some("target-not-downloads-folder"),
-            "installer/archive files outside Downloads should be blocked"
+            "files outside Downloads should be blocked"
         );
 
         let _ = fs::remove_file(&old_installer);

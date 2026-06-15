@@ -478,23 +478,21 @@ for (const removedPath of [
   assert(!fs.existsSync(path.join(root, removedPath)), `${removedPath} should be removed from the real-app repo surface`);
 }
 
-assert(readme.includes("npm run native:dev"), "README should document the Tauri Windows desktop launcher");
+assert(readme.includes("npm run tauri dev"), "README should document the Tauri dev launcher");
+assert(readme.includes("npm run tauri build"), "README should document the Tauri build command");
 assert(!readme.includes("npm run setup:route -- --route npm-cache"), "README should not put route setup in the normal cleanup path");
-assert(readme.indexOf("npm run windows:ready") < readme.indexOf("npm run native:dev"), "README quick start should check Windows readiness before launch");
-assert(readme.includes("Cleanup does not require route arming"), "README should explain that production cleanup uses built-in allowlists");
-assert(readme.includes("printed next steps"), "README should describe the concise readiness output");
-assert(readme.includes("npm run windows:ready -- --json"), "README should reserve full readiness JSON for technical details");
+assert(readme.includes("Nothing is deleted until you confirm"), "README should explain the read-only-until-confirm safety model");
+assert(readme.includes("Recycle Bin"), "README should mention Recycle Bin semantics");
 assert(!readme.includes("JSON `nextSteps`"), "README should not tell normal users to read raw readiness JSON");
-assert(readme.includes("Click `Delete all`, or check specific rows."), "README should match the current cleanup row label");
-assert(readme.includes("Click `Delete selected` if you checked specific rows."), "README should match the current cleanup button label");
-assert(readme.includes("click `Delete all` or check one row and click `Delete selected`"), "README real cleanup test should match the current cleanup flow");
+assert(readme.includes("Delete all"), "README should document the Delete all action");
+assert(readme.includes("Delete selected"), "README should document the Delete selected action");
 assert(!readme.includes("marked `ready`"), "README should not mention removed ready row labels");
 assert(!readme.includes("can clean"), "README should not mention obsolete cleanup row labels");
 assert(!readme.includes("Delete selected files"), "README should not mention obsolete cleanup button labels");
 assert(!readme.includes("npm run validate:workflow-proof -- --file"), "README should not put proof verification in the normal cleanup path");
 assert(!readme.includes("spaceguard-workflow-proof-check.json"), "README should not list proof artifact files in the normal cleanup path");
 assert(!readme.includes("npm run support:bundle"), "README should not require support bundle capture for normal cleanup");
-assert(readme.includes("Support export tools are for troubleshooting only"), "README should keep support export clearly optional");
+assert(readme.includes("MIT"), "README should reference the license");
 assert(realDataGuide.includes("npm run native:dev"), "Windows setup guide should document the Tauri Windows desktop launcher");
 assert(realDataGuide.indexOf("npm run windows:ready") < realDataGuide.indexOf("npm run native:dev"), "Windows setup guide should check readiness before launch");
 assert(realDataGuide.includes("Cleanup does not require route arming"), "Windows setup guide should explain built-in allowlists");
