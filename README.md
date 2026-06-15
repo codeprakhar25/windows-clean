@@ -2,6 +2,10 @@
 
 SpaceGuard is a real Windows desktop cleanup app. The browser build is setup-only; local scanning and cleanup require the Tauri desktop shell.
 
+> **Testing the Turbo (MFT) scan?** Read [`WINDOWS_HANDOFF.md`](WINDOWS_HANDOFF.md)
+> first — it covers the goal, the current design, what's verified vs untested, and
+> the exact test steps (scan time, correctness, no-admin fallback) to run on Windows.
+
 ## Download
 
 Latest Windows installer:

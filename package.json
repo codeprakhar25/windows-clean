@@ -21,7 +21,7 @@
     "setup:route": "node scripts/run-setup-route.mjs",
     "validate:workflow-proof": "node scripts/run-workflow-proof-check.mjs",
     "support:bundle": "node scripts/run-support-bundle.mjs",
-    "test": "node tests/native-scanner.test.js && node tests/setup-route.test.js && node tests/setup-doctor.test.js && node tests/windows-readiness.test.js && node tests/openai-smoke.test.js && node tests/workflow-proof-check.test.js && node tests/support-bundle.test.js && node tests/native-executor-coverage.test.js && node tests/real-workflow.test.js && node tests/real-app-shell.test.js && node tests/static-app.test.js",
+    "test": "node tests/native-scanner.test.js && node tests/setup-route.test.js && node tests/setup-doctor.test.js && node tests/windows-readiness.test.js && node tests/openai-smoke.test.js && node tests/workflow-proof-check.test.js && node tests/support-bundle.test.js && node tests/native-executor-coverage.test.js && node tests/real-workflow.test.js && node tests/real-app-shell.test.js && node tests/static-app.test.js && node tests/treemap.test.js",
     "check": "npm run build"
   },
   "dependencies": {

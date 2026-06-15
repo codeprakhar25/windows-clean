@@ -129,7 +129,13 @@ assert(app.includes("function MobileTabNav"), "mobile layout should expose tab s
 assert(app.includes("role=\"tablist\""), "mobile view switching should use tab semantics");
 assert(!app.includes("Advanced scan options"), "Clean screen should not expose advanced scan tuning");
 assert(!app.includes("Target drive"), "Clean screen should not ask users to configure the target drive before scanning");
-assert(!app.includes("@/components/ui/input"), "app shell should not import unused input controls");
+assert(
+  !app.includes("@/components/ui/input") || app.includes("function ExploreDeleteDialog"),
+  "input control may only be imported for the explore delete confirmation dialog"
+);
+assert(app.includes("function ExploreBrowser"), "explore should offer folder-by-folder drill-down browsing of C:");
+assert(app.includes("runNativeExploreDir"), "explore browser should drill into folders through the native explore command");
+assert(app.includes("runNativeRecycleDelete"), "explore browser should delete to the Recycle Bin through the native command");
 assert(!app.includes("Entry cap"), "Clean screen should not expose native scan cap controls");
 assert(!app.includes("Protected paths"), "Clean screen should not expose protected-path editing");
 assert(!app.includes("Extra folders to scan"), "Clean screen should not expose custom root setup");
@@ -283,15 +289,15 @@ assert(app.includes("formatDriveInventoryDetail"), "Explore visualization should
 assert(app.includes("Full C: breakdown"), "Explore visualization should show a full measured C: allocation list");
 assert(app.includes("Open for every measured top-level entry and not-itemized space."), "Full C: breakdown should be available as an on-demand section");
 assert(app.includes("Show details"), "Explore should label advanced breakdown sections as optional details");
-assert(app.includes("Mapped from C:"), "Explore visualization should show how much used space is itemized");
-assert(app.includes("Not itemized"), "Explore visualization should label space that Windows reports but the scanner cannot assign");
+assert(app.includes("Explored"), "Explore visualization should show how much used space has been explored");
+assert(app.includes("Not yet explored"), "Explore visualization should label space the user has not drilled into yet, in plain language");
 assert(app.includes("NTFS metadata"), "Other used space should explain low-level Windows storage contributors");
 assert(app.includes("Restore points and shadow copies"), "Other used space should explain Windows restore storage contributors");
 assert(app.includes("Reserved storage and Windows Update staging"), "Other used space should explain Windows update/reserved storage contributors");
 assert(app.includes("formatAllocationKindLabel"), "Explore breakdown rows should label system, user, review, and cleanable categories");
 assert(app.includes("formatAllocationGroupStatus"), "Explore source categories should use simple status labels");
 assert(app.includes("formatCount(row.files)"), "Explore breakdown rows should show file and folder counts when available");
-assert(app.includes("Some of it can become removable"), "Other used space should explain possible future cleanup without implying unsafe deletion");
+assert(app.includes("Use Browse C: to drill in"), "Not-yet-explored space should point users to Browse C: in plain language");
 assert(app.includes("Show delete list"), "Explore visualization should lead users to actionable cleanup rows");
 assert(app.includes("can be deleted"), "Explore visualization should summarize cleanable space");
 assert(app.includes("onShowList={() => setMode(\"list\")}"), "Explore visualization should switch directly to the delete list");

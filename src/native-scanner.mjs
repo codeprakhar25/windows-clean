@@ -51,6 +51,173 @@ export async function runNativeReadonlyScan(request = {}, host = globalThis) {
   };
 }
 
+export async function runNativeExploreDir(path = "", options = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  const target = String(path || "").trim();
+  if (!capability.available) {
+    return {
+      available: false,
+      path: target,
+      displayPath: target,
+      parent: null,
+      exists: false,
+      isDir: false,
+      entries: [],
+      measuredBytes: 0,
+      warnings: ["Folder exploring requires the Windows desktop app."]
+    };
+  }
+  const protectedPaths = normalizeRequestStringList(options.protectedPaths || options.protected_paths);
+  const result = await host.__TAURI__.core.invoke("explore_dir", {
+    request: { path: target, protectedPaths }
+  });
+  return normalizeExploreDir(result, target);
+}
+
+export async function runNativeExploreFast(path = "", options = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  const target = String(path || "").trim();
+  if (!capability.available) {
+    return {
+      available: false,
+      path: target,
+      displayPath: target,
+      parent: null,
+      exists: false,
+      isDir: false,
+      entries: [],
+      measuredBytes: 0,
+      warnings: ["Fast scan requires the Windows desktop app."]
+    };
+  }
+  const protectedPaths = normalizeRequestStringList(options.protectedPaths || options.protected_paths);
+  const result = await host.__TAURI__.core.invoke("explore_dir_fast", {
+    request: { path: target, protectedPaths }
+  });
+  return normalizeExploreDir(result, target);
+}
+
+export async function runNativeScanVolume(drive = "C", host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  if (!capability.available) {
+    return { available: false, drive: String(drive || ""), files: 0, dirs: 0, bytes: 0, elapsedMs: 0 };
+  }
+  const result = await host.__TAURI__.core.invoke("scan_volume_mft", {
+    drive: String(drive || "C")
+  });
+  return {
+    available: true,
+    drive: String(result?.drive ?? drive ?? ""),
+    files: Number(result?.files ?? 0),
+    dirs: Number(result?.dirs ?? 0),
+    bytes: Number(result?.bytes ?? 0),
+    elapsedMs: Number(result?.elapsedMs ?? 0)
+  };
+}
+
+export function onNativeMftProgress(handler, host = globalThis) {
+  const event = host?.__TAURI__?.event;
+  if (!event || typeof event.listen !== "function" || typeof handler !== "function") {
+    return () => {};
+  }
+  const unlistenPromise = event.listen("mft-progress", (payload) => {
+    handler(Number(payload?.payload ?? 0));
+  });
+  return () => {
+    Promise.resolve(unlistenPromise)
+      .then((unlisten) => {
+        if (typeof unlisten === "function") unlisten();
+      })
+      .catch(() => {});
+  };
+}
+
+export async function runNativeRecycleDelete(paths = [], options = {}, host = globalThis) {
+  const capability = getNativeScannerCapability(host);
+  const targets = normalizeRequestStringList(Array.isArray(paths) ? paths : [paths]);
+  if (!capability.available) {
+    return {
+      available: false,
+      accepted: false,
+      entries: targets.map((path) => ({
+        path,
+        result: "unavailable",
+        bytes: 0,
+        guard: "hard-block",
+        reason: "Recycle Bin deletion requires the Windows desktop app.",
+        errorCode: -1
+      })),
+      freedBytes: 0,
+      volumeBefore: null,
+      volumeAfter: null,
+      freeBytesDelta: 0,
+      warnings: ["Recycle Bin deletion requires the Windows desktop app."]
+    };
+  }
+  const protectedPaths = normalizeRequestStringList(options.protectedPaths || options.protected_paths);
+  const confirmedPaths = normalizeRequestStringList(options.confirmedPaths || options.confirmed_paths);
+  const result = await host.__TAURI__.core.invoke("delete_paths_to_recycle_bin", {
+    request: { paths: targets, protectedPaths, confirmedPaths }
+  });
+  return normalizeRecycleDelete(result);
+}
+
+function normalizeExploreDir(result, requestedPath = "") {
+  const source = result && typeof result === "object" ? result : {};
+  const entries = Array.isArray(source.entries) ? source.entries : [];
+  return {
+    available: Boolean(source.available ?? true),
+    path: String(source.path || requestedPath || ""),
+    displayPath: String(source.displayPath || source.path || requestedPath || ""),
+    parent: source.parent ? String(source.parent) : null,
+    exists: Boolean(source.exists),
+    isDir: Boolean(source.isDir),
+    entries: entries.map(normalizeExploreEntry),
+    measuredBytes: Number(source.measuredBytes || 0),
+    warnings: Array.isArray(source.warnings) ? source.warnings.map(String) : []
+  };
+}
+
+function normalizeExploreEntry(entry = {}) {
+  const source = entry && typeof entry === "object" ? entry : {};
+  return {
+    id: String(source.id || source.path || source.name || ""),
+    name: String(source.name || source.path || ""),
+    path: String(source.path || ""),
+    bytes: Number(source.bytes || 0),
+    files: Number(source.files || 0),
+    dirs: Number(source.dirs || 0),
+    isDir: Boolean(source.isDir),
+    status: String(source.status || "measured"),
+    classification: String(source.classification || "unknown-review"),
+    deleteGuard: String(source.deleteGuard || "allow"),
+    deleteReason: String(source.deleteReason || ""),
+    errors: Number(source.errors || 0)
+  };
+}
+
+function normalizeRecycleDelete(result) {
+  const source = result && typeof result === "object" ? result : {};
+  const entries = Array.isArray(source.entries) ? source.entries : [];
+  return {
+    available: Boolean(source.available),
+    accepted: Boolean(source.accepted),
+    entries: entries.map((entry) => ({
+      path: String(entry?.path || ""),
+      result: String(entry?.result || ""),
+      bytes: Number(entry?.bytes || 0),
+      guard: String(entry?.guard || ""),
+      reason: String(entry?.reason || ""),
+      errorCode: Number(entry?.errorCode || 0)
+    })),
+    freedBytes: Number(source.freedBytes || 0),
+    volumeBefore: source.volumeBefore || null,
+    volumeAfter: source.volumeAfter || null,
+    freeBytesDelta: Number(source.freeBytesDelta || 0),
+    warnings: Array.isArray(source.warnings) ? source.warnings.map(String) : []
+  };
+}
+
 function normalizeTargetDriveRequest(value = "C:") {
   const raw = String(value || "").trim();
   const match = raw.match(/^([a-zA-Z])(?::)?(?:\\)?$/);

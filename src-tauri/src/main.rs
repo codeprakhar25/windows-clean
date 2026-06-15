@@ -1,13 +1,19 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::env;
 use std::fs;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::sync::Once;
+use tauri::Emitter;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -399,8 +405,13 @@ struct InstalledAppUsageEvidence {
 
 fn main() {
     tauri::Builder::default()
+        .manage(MftCacheState::default())
         .invoke_handler(tauri::generate_handler![
             scan_known_roots,
+            explore_dir,
+            explore_dir_fast,
+            scan_volume_mft,
+            delete_paths_to_recycle_bin,
             execute_cleanup_plan,
             write_proof_artifact,
             openai_agent_advice,
@@ -493,6 +504,1130 @@ fn scan_known_roots(request: Option<ScanRequest>) -> ScanResponse {
         warnings,
         write_capability: false,
         destructive_commands: false,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Explore C: on-demand drill-down + delete-from-anywhere (Recycle Bin)
+// ---------------------------------------------------------------------------
+
+const DELETE_CONFIRM_BYTE_THRESHOLD: u64 = 5 * 1024 * 1024 * 1024; // 5 GiB
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExploreDirRequest {
+    path: String,
+    #[serde(default)]
+    protected_paths: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExploreDirResponse {
+    available: bool,
+    path: String,
+    display_path: String,
+    parent: Option<String>,
+    exists: bool,
+    is_dir: bool,
+    entries: Vec<ExploreEntry>,
+    measured_bytes: u64,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExploreEntry {
+    id: String,
+    name: String,
+    path: String,
+    bytes: u64,
+    files: u64,
+    dirs: u64,
+    is_dir: bool,
+    status: String,
+    classification: String,
+    delete_guard: String,
+    delete_reason: String,
+    errors: u64,
+}
+
+/// Read a single directory level and measure each child. Directory children are
+/// sized with a full recursive walk (generous caps) because this is on-demand:
+/// the user explicitly drilled into this one folder.
+#[tauri::command]
+fn explore_dir(request: Option<ExploreDirRequest>) -> ExploreDirResponse {
+    let request = request.unwrap_or(ExploreDirRequest {
+        path: String::new(),
+        protected_paths: Vec::new(),
+    });
+    let mut warnings = Vec::new();
+    let raw = request.path.trim();
+    if raw.is_empty() {
+        warnings.push("Explore path was empty.".to_string());
+        return ExploreDirResponse {
+            available: true,
+            path: String::new(),
+            display_path: String::new(),
+            parent: None,
+            exists: false,
+            is_dir: false,
+            entries: Vec::new(),
+            measured_bytes: 0,
+            warnings,
+        };
+    }
+
+    let root = PathBuf::from(raw);
+    let display_path = path_to_string(&root);
+    let parent = root
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(path_to_string);
+
+    let Ok(metadata) = fs::symlink_metadata(&root) else {
+        warnings.push(format!("Could not open {display_path} for exploring."));
+        return ExploreDirResponse {
+            available: true,
+            path: display_path.clone(),
+            display_path,
+            parent,
+            exists: false,
+            is_dir: false,
+            entries: Vec::new(),
+            measured_bytes: 0,
+            warnings,
+        };
+    };
+
+    if !metadata.is_dir() {
+        return ExploreDirResponse {
+            available: true,
+            path: display_path.clone(),
+            display_path,
+            parent,
+            exists: true,
+            is_dir: false,
+            entries: Vec::new(),
+            measured_bytes: metadata.len(),
+            warnings,
+        };
+    }
+
+    let walk_request = ScanRequest {
+        protected_paths: request.protected_paths.clone(),
+        include_project_artifacts: true,
+        max_depth: Some(64),
+        max_entries_per_root: Some(3_000_000),
+        target_drive: None,
+        custom_roots: Vec::new(),
+    };
+
+    let mut entries = Vec::new();
+    match fs::read_dir(&root) {
+        Ok(read) => {
+            for entry in read.flatten() {
+                if entries.len() >= 2_000 {
+                    warnings.push("Folder has more than 2000 entries; list was capped.".to_string());
+                    break;
+                }
+                entries.push(measure_explore_entry(&entry.path(), &walk_request));
+            }
+        }
+        Err(_) => {
+            warnings.push(format!("Could not list contents of {display_path}."));
+        }
+    }
+
+    entries.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.name.cmp(&b.name)));
+    let measured_bytes = entries.iter().map(|entry| entry.bytes).sum();
+
+    ExploreDirResponse {
+        available: true,
+        path: display_path.clone(),
+        display_path,
+        parent,
+        exists: true,
+        is_dir: true,
+        entries,
+        measured_bytes,
+        warnings,
+    }
+}
+
+fn measure_explore_entry(path: &Path, walk_request: &ScanRequest) -> ExploreEntry {
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| path_to_string(path));
+    let display_path = path_to_string(path);
+    let classification = drive_inventory_classification(&name);
+
+    let mut entry = ExploreEntry {
+        id: stable_item_id("explore", path),
+        name,
+        path: display_path.clone(),
+        bytes: 0,
+        files: 0,
+        dirs: 0,
+        is_dir: false,
+        status: "measured".to_string(),
+        classification: classification.to_string(),
+        delete_guard: "allow".to_string(),
+        delete_reason: String::new(),
+        errors: 0,
+    };
+
+    if is_path_protected(path, &walk_request.protected_paths) {
+        entry.status = "protected".to_string();
+        entry.delete_guard = "hard-block".to_string();
+        entry.delete_reason = "Path is user-protected.".to_string();
+        return entry;
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        entry.status = "error".to_string();
+        entry.errors = 1;
+        entry.delete_guard = "hard-block".to_string();
+        entry.delete_reason = "Entry could not be read.".to_string();
+        return entry;
+    };
+
+    if metadata.file_type().is_symlink() {
+        entry.status = "limited".to_string();
+        entry.delete_guard = "hard-block".to_string();
+        entry.delete_reason = "Symbolic links and reparse points are not deletable here.".to_string();
+        return entry;
+    }
+
+    if metadata.is_file() {
+        entry.is_dir = false;
+        entry.bytes = metadata.len();
+        entry.files = 1;
+        entry.status = "file".to_string();
+    } else if metadata.is_dir() {
+        entry.is_dir = true;
+        let stats = walk_dir_size_parallel(path, MeasureKind::FullTree, walk_request);
+        entry.bytes = stats.bytes;
+        entry.files = stats.files;
+        entry.dirs = stats.dirs;
+        entry.errors = stats.errors;
+        entry.status = if stats.limited { "limited" } else { "measured" }.to_string();
+    } else {
+        entry.status = "limited".to_string();
+        entry.delete_guard = "hard-block".to_string();
+        entry.delete_reason = "Unsupported entry type.".to_string();
+        return entry;
+    }
+
+    let (guard, reason) = classify_delete_guard(&display_path, entry.bytes);
+    entry.delete_guard = guard.to_string();
+    entry.delete_reason = reason;
+    entry
+}
+
+/// Authoritative, server-side deletion guard. The frontend renders its own copy
+/// of this for UX, but the native command re-runs it and refuses hard-blocked
+/// targets regardless of what the renderer claims.
+fn classify_delete_guard(path: &str, bytes: u64) -> (&'static str, String) {
+    let norm = normalize_path(path);
+    if norm.is_empty() {
+        return ("hard-block", "Empty path cannot be deleted.".to_string());
+    }
+
+    // Drive root, e.g. "c:" after normalize (trailing slash trimmed).
+    let is_drive_root = norm.len() <= 3
+        && norm.as_bytes().get(1) == Some(&b':')
+        && norm[2..].chars().all(|c| c == '\\');
+    if is_drive_root {
+        return ("hard-block", "The drive root cannot be deleted.".to_string());
+    }
+
+    // Split "c:\\windows\\system32" -> rest "windows\\system32".
+    let rest = match norm.split_once(":\\") {
+        Some((_, rest)) => rest,
+        None => norm.as_str(),
+    };
+    let segments: Vec<&str> = rest.split('\\').filter(|s| !s.is_empty()).collect();
+    let first = segments.first().copied().unwrap_or("");
+
+    const HARD_BLOCK_TOP_LEVEL: [&str; 10] = [
+        "windows",
+        "program files",
+        "program files (x86)",
+        "programdata",
+        "$recycle.bin",
+        "system volume information",
+        "recovery",
+        "pagefile.sys",
+        "hiberfil.sys",
+        "swapfile.sys",
+    ];
+    if HARD_BLOCK_TOP_LEVEL.contains(&first) || first.starts_with('$') {
+        return (
+            "hard-block",
+            "This is a protected Windows system location. Deleting it can break the OS.".to_string(),
+        );
+    }
+
+    let is_top_level = segments.len() == 1;
+    if is_top_level {
+        return (
+            "confirm",
+            "Top-level C: folder. Type the folder name to confirm deletion.".to_string(),
+        );
+    }
+    if bytes >= DELETE_CONFIRM_BYTE_THRESHOLD {
+        return (
+            "confirm",
+            "Larger than 5 GB. Type the folder name to confirm deletion.".to_string(),
+        );
+    }
+
+    // Warn (not block) on active application state.
+    let is_app_state = segments.iter().any(|s| *s == "appdata")
+        || rest.contains("\\user data\\")
+        || rest.contains("\\profiles\\")
+        || rest.contains("\\mozilla\\firefox");
+    if is_app_state {
+        return (
+            "warn",
+            "Looks like active app data. Deleting it may sign you out or reset settings.".to_string(),
+        );
+    }
+
+    ("allow", String::new())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RecycleDeleteRequest {
+    paths: Vec<String>,
+    #[serde(default)]
+    protected_paths: Vec<String>,
+    #[serde(default)]
+    confirmed_paths: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecycleDeleteResponse {
+    available: bool,
+    accepted: bool,
+    entries: Vec<RecycleDeleteEntry>,
+    freed_bytes: u64,
+    volume_before: Option<VolumeInfo>,
+    volume_after: Option<VolumeInfo>,
+    free_bytes_delta: i64,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecycleDeleteEntry {
+    path: String,
+    result: String,
+    bytes: u64,
+    guard: String,
+    reason: String,
+    error_code: i32,
+}
+
+/// Move user-selected paths to the Recycle Bin (recoverable). Every target is
+/// re-classified server-side: hard-blocked targets are refused, and "confirm"
+/// targets must appear in `confirmed_paths` or they are held back.
+#[tauri::command]
+fn delete_paths_to_recycle_bin(request: Option<RecycleDeleteRequest>) -> RecycleDeleteResponse {
+    let request = request.unwrap_or(RecycleDeleteRequest {
+        paths: Vec::new(),
+        protected_paths: Vec::new(),
+        confirmed_paths: Vec::new(),
+    });
+    let mut warnings = Vec::new();
+
+    if !cfg!(target_os = "windows") {
+        warnings.push(
+            "Recycle Bin deletion is only available in the Windows desktop app.".to_string(),
+        );
+    }
+
+    let confirmed: Vec<String> = request
+        .confirmed_paths
+        .iter()
+        .map(|p| normalize_path(p))
+        .collect();
+
+    let drive = request
+        .paths
+        .first()
+        .and_then(|p| normalize_drive_value(p))
+        .unwrap_or_else(system_drive_fallback);
+    let volume_before = primary_volume_info(&drive);
+
+    let mut entries = Vec::new();
+    let mut freed_bytes = 0_u64;
+    let mut any_deleted = false;
+
+    for raw in request.paths.iter() {
+        let clean = raw.trim();
+        if clean.is_empty() {
+            continue;
+        }
+        let path = PathBuf::from(clean);
+        let display_path = path_to_string(&path);
+
+        if is_path_protected(&path, &request.protected_paths) {
+            entries.push(RecycleDeleteEntry {
+                path: display_path,
+                result: "blocked".to_string(),
+                bytes: 0,
+                guard: "hard-block".to_string(),
+                reason: "Path is user-protected.".to_string(),
+                error_code: 0,
+            });
+            continue;
+        }
+
+        if !path.exists() {
+            entries.push(RecycleDeleteEntry {
+                path: display_path,
+                result: "missing".to_string(),
+                bytes: 0,
+                guard: "allow".to_string(),
+                reason: "Path no longer exists.".to_string(),
+                error_code: 0,
+            });
+            continue;
+        }
+
+        let bytes = recycle_target_bytes(&path, &request.protected_paths);
+        let (guard, reason) = classify_delete_guard(&display_path, bytes);
+
+        if guard == "hard-block" {
+            entries.push(RecycleDeleteEntry {
+                path: display_path,
+                result: "blocked".to_string(),
+                bytes,
+                guard: guard.to_string(),
+                reason,
+                error_code: 0,
+            });
+            continue;
+        }
+
+        if guard == "confirm" && !confirmed.contains(&normalize_path(&display_path)) {
+            entries.push(RecycleDeleteEntry {
+                path: display_path,
+                result: "needs-confirm".to_string(),
+                bytes,
+                guard: guard.to_string(),
+                reason,
+                error_code: 0,
+            });
+            continue;
+        }
+
+        let error_code = move_path_to_recycle_bin(&path);
+        let succeeded = error_code == 0 && !path.exists();
+        if succeeded {
+            freed_bytes = freed_bytes.saturating_add(bytes);
+            any_deleted = true;
+            entries.push(RecycleDeleteEntry {
+                path: display_path,
+                result: "deleted".to_string(),
+                bytes,
+                guard: guard.to_string(),
+                reason,
+                error_code,
+            });
+        } else {
+            entries.push(RecycleDeleteEntry {
+                path: display_path,
+                result: "error".to_string(),
+                bytes: 0,
+                guard: guard.to_string(),
+                reason: "Windows Shell could not move this item to the Recycle Bin.".to_string(),
+                error_code,
+            });
+        }
+    }
+
+    let volume_after = if any_deleted {
+        primary_volume_info(&drive)
+    } else {
+        None
+    };
+    let free_bytes_delta = match (&volume_before, &volume_after) {
+        (Some(before), Some(after)) => {
+            write_volume_free_bytes_delta(before.free_bytes, after.free_bytes)
+        }
+        _ => 0,
+    };
+
+    RecycleDeleteResponse {
+        available: cfg!(target_os = "windows"),
+        accepted: any_deleted,
+        entries,
+        freed_bytes,
+        volume_before,
+        volume_after,
+        free_bytes_delta,
+        warnings,
+    }
+}
+
+fn recycle_target_bytes(path: &Path, protected_paths: &[String]) -> u64 {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_file() => metadata.len(),
+        Ok(metadata) if metadata.is_dir() => {
+            let walk_request = ScanRequest {
+                protected_paths: protected_paths.to_vec(),
+                include_project_artifacts: true,
+                max_depth: Some(64),
+                max_entries_per_root: Some(3_000_000),
+                target_drive: None,
+                custom_roots: Vec::new(),
+            };
+            walk_dir_size_parallel(path, MeasureKind::FullTree, &walk_request).bytes
+        }
+        _ => 0,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn move_path_to_recycle_bin(path: &Path) -> i32 {
+    let from = wide_double_null(&path_to_string(path));
+    let mut operation = ShFileOpStructW {
+        hwnd: std::ptr::null_mut(),
+        w_func: FO_DELETE,
+        p_from: from.as_ptr(),
+        p_to: std::ptr::null(),
+        f_flags: FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT,
+        f_any_operations_aborted: 0,
+        h_name_mappings: std::ptr::null_mut(),
+        lpsz_progress_title: std::ptr::null(),
+    };
+    let error_code = unsafe { SHFileOperationW(&mut operation) };
+    if error_code != 0 {
+        return error_code;
+    }
+    if operation.f_any_operations_aborted != 0 {
+        return -1;
+    }
+    0
+}
+
+#[cfg(not(target_os = "windows"))]
+fn move_path_to_recycle_bin(_path: &Path) -> i32 {
+    -1
+}
+
+// ---------------------------------------------------------------------------
+// Fast MFT-based scan (WizTree-style). Reads the NTFS Master File Table via the
+// `ntfs` crate instead of walking the filesystem with read_dir. Requires admin
+// (raw volume access). On any failure (no admin, non-NTFS, parse error) the
+// command returns available:false so the renderer falls back to explore_dir.
+// ---------------------------------------------------------------------------
+
+/// Wraps a reader so all reads/seeks land on sector boundaries, which raw
+/// `\\.\C:` volume access on Windows requires. Adapted from the `ntfs` crate's
+/// ntfs-shell example (MIT/Apache-2.0, Colin Finck).
+struct MftSectorReader<R: Read + Seek> {
+    inner: R,
+    sector_size: usize,
+    stream_position: u64,
+    temp_buf: Vec<u8>,
+}
+
+impl<R: Read + Seek> MftSectorReader<R> {
+    fn new(inner: R, sector_size: usize) -> std::io::Result<Self> {
+        if !sector_size.is_power_of_two() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "sector_size is not a power of two",
+            ));
+        }
+        Ok(Self {
+            inner,
+            sector_size,
+            stream_position: 0,
+            temp_buf: Vec::new(),
+        })
+    }
+
+    fn align_down(&self, n: u64) -> u64 {
+        n / self.sector_size as u64 * self.sector_size as u64
+    }
+
+    fn align_up(&self, n: u64) -> u64 {
+        self.align_down(n) + self.sector_size as u64
+    }
+}
+
+impl<R: Read + Seek> Read for MftSectorReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let aligned_position = self.align_down(self.stream_position);
+        let start = (self.stream_position - aligned_position) as usize;
+        let end = start + buf.len();
+        let aligned_bytes_to_read = self.align_up(end as u64) as usize;
+        self.temp_buf.resize(aligned_bytes_to_read, 0);
+        self.inner.read_exact(&mut self.temp_buf)?;
+        buf.copy_from_slice(&self.temp_buf[start..end]);
+        self.stream_position += buf.len() as u64;
+        Ok(buf.len())
+    }
+}
+
+impl<R: Read + Seek> Seek for MftSectorReader<R> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        let new_pos = match pos {
+            SeekFrom::Start(n) => Some(n),
+            SeekFrom::End(_) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "SeekFrom::End is unsupported for raw volume access",
+                ));
+            }
+            SeekFrom::Current(n) => {
+                if n >= 0 {
+                    self.stream_position.checked_add(n as u64)
+                } else {
+                    self.stream_position.checked_sub(n.wrapping_neg() as u64)
+                }
+            }
+        };
+        match new_pos {
+            Some(n) => {
+                let aligned = self.align_down(n);
+                self.inner.seek(SeekFrom::Start(aligned))?;
+                self.stream_position = n;
+                Ok(self.stream_position)
+            }
+            None => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "invalid seek position",
+            )),
+        }
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// One-pass MFT engine. The previous version recursively walked the NTFS
+// directory index, issuing O(folders) random seeks; on a full C: it never
+// finished. WizTree's model instead reads every $MFT record once in
+// record-number order, pulls each record's $FILE_NAME (name + parent) and
+// $DATA (size), and rebuilds the tree from parent pointers. We cache the
+// finished tree so navigation is instant, and run the scan on a background
+// thread that streams progress events so the UI never looks frozen.
+// ---------------------------------------------------------------------------
+
+/// `Ntfs::file` re-reads the $MFT root record on every call, which would mean
+/// two physical reads per record. This wrapper caches fixed-size aligned blocks
+/// so the hot root block plus the sequentially advancing record blocks collapse
+/// the whole scan to roughly one physical read per `CACHE_BLOCK` bytes.
+const CACHE_BLOCK: u64 = 1 << 16; // 64 KiB
+const CACHE_CAPACITY: usize = 64; // ~4 MiB resident
+
+struct CachingBlockReader<R: Read + Seek> {
+    inner: R,
+    pos: u64,
+    blocks: VecDeque<(u64, Vec<u8>)>,
+}
+
+impl<R: Read + Seek> CachingBlockReader<R> {
+    fn new(inner: R) -> Self {
+        Self {
+            inner,
+            pos: 0,
+            blocks: VecDeque::new(),
+        }
+    }
+
+    fn block(&mut self, index: u64) -> std::io::Result<&[u8]> {
+        if let Some(slot) = self.blocks.iter().position(|(idx, _)| *idx == index) {
+            let entry = self.blocks.remove(slot).unwrap();
+            self.blocks.push_front(entry);
+            return Ok(&self.blocks.front().unwrap().1);
+        }
+        self.inner.seek(SeekFrom::Start(index * CACHE_BLOCK))?;
+        let mut buf = vec![0u8; CACHE_BLOCK as usize];
+        let mut filled = 0usize;
+        // The sector-aligned raw volume reader may return short reads or hit the
+        // end of the readable region near the MFT tail; tolerate both.
+        loop {
+            match self.inner.read(&mut buf[filled..]) {
+                Ok(0) => break,
+                Ok(n) => {
+                    filled += n;
+                    if filled == buf.len() {
+                        break;
+                    }
+                }
+                Err(ref err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => break,
+            }
+        }
+        if self.blocks.len() >= CACHE_CAPACITY {
+            self.blocks.pop_back();
+        }
+        self.blocks.push_front((index, buf));
+        Ok(&self.blocks.front().unwrap().1)
+    }
+}
+
+impl<R: Read + Seek> Read for CachingBlockReader<R> {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        if out.is_empty() {
+            return Ok(0);
+        }
+        let index = self.pos / CACHE_BLOCK;
+        let offset = (self.pos % CACHE_BLOCK) as usize;
+        let block = self.block(index)?;
+        let available = block.len().saturating_sub(offset);
+        let n = available.min(out.len());
+        out[..n].copy_from_slice(&block[offset..offset + n]);
+        self.pos += n as u64;
+        Ok(n)
+    }
+}
+
+impl<R: Read + Seek> Seek for CachingBlockReader<R> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        let new_pos = match pos {
+            SeekFrom::Start(n) => n,
+            SeekFrom::Current(n) => {
+                if n >= 0 {
+                    self.pos.checked_add(n as u64)
+                } else {
+                    self.pos.checked_sub(n.wrapping_neg() as u64)
+                }
+                .ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid seek")
+                })?
+            }
+            SeekFrom::End(_) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "SeekFrom::End unsupported for raw volume access",
+                ));
+            }
+        };
+        self.pos = new_pos;
+        Ok(self.pos)
+    }
+}
+
+/// One parsed MFT record: where it lives in the tree and its own data size.
+struct MftNode {
+    parent: u64,
+    name: String,
+    is_dir: bool,
+    self_bytes: u64,
+}
+
+/// The finished, cached volume tree. `subtree_*` are aggregates computed once
+/// after the scan so each navigation is a constant-time lookup.
+struct MftCache {
+    drive: String, // single uppercase letter, e.g. "C"
+    root: u64,
+    total_files: u64,
+    total_dirs: u64,
+    nodes: HashMap<u64, MftNode>,
+    children: HashMap<u64, Vec<u64>>,
+    subtree_bytes: HashMap<u64, u64>,
+    subtree_files: HashMap<u64, u64>,
+    subtree_dirs: HashMap<u64, u64>,
+}
+
+#[derive(Default)]
+struct MftCacheState(Mutex<Option<MftCache>>);
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MftScanSummary {
+    drive: String,
+    files: u64,
+    dirs: u64,
+    bytes: u64,
+    elapsed_ms: u128,
+}
+
+fn normalize_drive_letter(input: &str) -> Result<String, String> {
+    let c = input
+        .trim()
+        .chars()
+        .next()
+        .ok_or_else(|| "missing drive letter".to_string())?;
+    if !c.is_ascii_alphabetic() {
+        return Err(format!("invalid drive letter: {input}"));
+    }
+    Ok(c.to_ascii_uppercase().to_string())
+}
+
+/// Sum of the unnamed $DATA attribute length(s) of a file record.
+fn mft_unnamed_data_len<T: Read + Seek>(reader: &mut T, file: &ntfs::NtfsFile) -> u64 {
+    let mut total = 0u64;
+    let mut attrs = file.attributes();
+    while let Some(item) = attrs.next(reader) {
+        let item = match item {
+            Ok(item) => item,
+            Err(_) => break,
+        };
+        let attr = match item.to_attribute() {
+            Ok(attr) => attr,
+            Err(_) => continue,
+        };
+        if let Ok(ntfs::NtfsAttributeType::Data) = attr.ty() {
+            if attr.name_length() == 0 {
+                total = total.saturating_add(attr.value_length());
+            }
+        }
+    }
+    total
+}
+
+/// Reads the entire $MFT once and builds the cached tree. Emits `mft-progress`
+/// (records scanned) every 50k records so the renderer can show live counts.
+fn build_mft_cache(letter: &str, window: &tauri::Window) -> Result<MftCache, String> {
+    let volume = format!("\\\\.\\{}:", letter);
+    let file = fs::File::open(&volume)
+        .map_err(|err| format!("cannot open {volume} (administrator rights required): {err}"))?;
+    let sector_reader =
+        MftSectorReader::new(file, 4096).map_err(|err| format!("sector reader: {err}"))?;
+    let mut reader = CachingBlockReader::new(sector_reader);
+    let ntfs = ntfs::Ntfs::new(&mut reader).map_err(|err| format!("not an NTFS volume: {err}"))?;
+    let record_size = ntfs.file_record_size() as u64;
+    if record_size == 0 {
+        return Err("invalid file record size".to_string());
+    }
+
+    let mft = ntfs
+        .file(&mut reader, 0)
+        .map_err(|err| format!("open $MFT: {err}"))?;
+    let mft_bytes = mft_unnamed_data_len(&mut reader, &mft);
+    let total = mft_bytes / record_size;
+    if total == 0 {
+        return Err("empty MFT".to_string());
+    }
+
+    let mut nodes: HashMap<u64, MftNode> = HashMap::with_capacity((total / 2) as usize);
+    let mut scanned: u64 = 0;
+    for record in 0..total {
+        let file = match ntfs.file(&mut reader, record) {
+            Ok(file) => file,
+            Err(_) => continue,
+        };
+        if !file.flags().contains(ntfs::NtfsFileFlags::IN_USE) {
+            continue;
+        }
+
+        let mut best: Option<(u8, String, u64)> = None; // (namespace rank, name, parent)
+        let mut data_bytes = 0u64;
+        let mut attrs = file.attributes();
+        while let Some(item) = attrs.next(&mut reader) {
+            let item = match item {
+                Ok(item) => item,
+                Err(_) => break,
+            };
+            let attr = match item.to_attribute() {
+                Ok(attr) => attr,
+                Err(_) => continue,
+            };
+            match attr.ty() {
+                Ok(ntfs::NtfsAttributeType::FileName) => {
+                    if let Ok(file_name) = attr
+                        .structured_value::<_, ntfs::structured_values::NtfsFileName>(&mut reader)
+                    {
+                        let rank = match file_name.namespace() {
+                            ntfs::structured_values::NtfsFileNamespace::Dos => 0,
+                            ntfs::structured_values::NtfsFileNamespace::Posix => 1,
+                            ntfs::structured_values::NtfsFileNamespace::Win32 => 3,
+                            ntfs::structured_values::NtfsFileNamespace::Win32AndDos => 3,
+                        };
+                        if rank == 0 {
+                            continue;
+                        }
+                        let take = match &best {
+                            Some((existing, _, _)) => rank > *existing,
+                            None => true,
+                        };
+                        if take {
+                            let name = format!("{}", file_name.name());
+                            let parent = file_name.parent_directory_reference().file_record_number();
+                            best = Some((rank, name, parent));
+                        }
+                    }
+                }
+                Ok(ntfs::NtfsAttributeType::Data) => {
+                    if attr.name_length() == 0 {
+                        data_bytes = data_bytes.saturating_add(attr.value_length());
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if let Some((_rank, name, parent)) = best {
+            let is_dir = file.is_directory();
+            nodes.insert(
+                record,
+                MftNode {
+                    parent,
+                    name,
+                    is_dir,
+                    self_bytes: if is_dir { 0 } else { data_bytes },
+                },
+            );
+        }
+
+        scanned += 1;
+        if scanned % 50_000 == 0 {
+            let _ = window.emit("mft-progress", scanned);
+        }
+    }
+    let _ = window.emit("mft-progress", scanned);
+
+    // NTFS root directory is always record 5.
+    let root = 5u64;
+
+    let mut children: HashMap<u64, Vec<u64>> = HashMap::new();
+    for (&record, node) in &nodes {
+        if record == node.parent {
+            continue; // root points at itself
+        }
+        children.entry(node.parent).or_default().push(record);
+    }
+
+    // Post-order over the tree reachable from root, aggregating sizes/counts.
+    let mut subtree_bytes: HashMap<u64, u64> = HashMap::new();
+    let mut subtree_files: HashMap<u64, u64> = HashMap::new();
+    let mut subtree_dirs: HashMap<u64, u64> = HashMap::new();
+    let mut visited: std::collections::HashSet<u64> = std::collections::HashSet::new();
+    let mut stack: Vec<(u64, bool)> = vec![(root, false)];
+    while let Some((record, processed)) = stack.pop() {
+        if processed {
+            let node = nodes.get(&record);
+            let mut bytes = node.map(|n| n.self_bytes).unwrap_or(0);
+            let mut files: u64 = node.map(|n| if n.is_dir { 0 } else { 1 }).unwrap_or(0);
+            let mut dirs = 0u64;
+            if let Some(kids) = children.get(&record) {
+                for &kid in kids {
+                    bytes = bytes.saturating_add(*subtree_bytes.get(&kid).unwrap_or(&0));
+                    files = files.saturating_add(*subtree_files.get(&kid).unwrap_or(&0));
+                    dirs = dirs.saturating_add(*subtree_dirs.get(&kid).unwrap_or(&0));
+                    if nodes.get(&kid).map(|n| n.is_dir).unwrap_or(false) {
+                        dirs = dirs.saturating_add(1);
+                    }
+                }
+            }
+            subtree_bytes.insert(record, bytes);
+            subtree_files.insert(record, files);
+            subtree_dirs.insert(record, dirs);
+        } else {
+            if !visited.insert(record) {
+                continue;
+            }
+            stack.push((record, true));
+            if let Some(kids) = children.get(&record) {
+                for &kid in kids {
+                    stack.push((kid, false));
+                }
+            }
+        }
+    }
+
+    let total_files = *subtree_files.get(&root).unwrap_or(&0);
+    let total_dirs = *subtree_dirs.get(&root).unwrap_or(&0);
+
+    Ok(MftCache {
+        drive: letter.to_string(),
+        root,
+        total_files,
+        total_dirs,
+        nodes,
+        children,
+        subtree_bytes,
+        subtree_files,
+        subtree_dirs,
+    })
+}
+
+fn fast_scan_unavailable(raw: &str, reason: &str) -> ExploreDirResponse {
+    ExploreDirResponse {
+        available: false,
+        path: raw.to_string(),
+        display_path: raw.to_string(),
+        parent: None,
+        exists: false,
+        is_dir: false,
+        entries: Vec::new(),
+        measured_bytes: 0,
+        warnings: vec![format!("Fast scan unavailable: {reason}")],
+    }
+}
+
+/// Builds (or rebuilds) the cached MFT tree for a drive on a background thread.
+#[tauri::command]
+async fn scan_volume_mft(
+    window: tauri::Window,
+    state: tauri::State<'_, MftCacheState>,
+    drive: Option<String>,
+) -> Result<MftScanSummary, String> {
+    let letter = normalize_drive_letter(drive.as_deref().unwrap_or("C"))?;
+    let started = Instant::now();
+    let win = window.clone();
+    let task_letter = letter.clone();
+    let cache =
+        tauri::async_runtime::spawn_blocking(move || build_mft_cache(&task_letter, &win))
+            .await
+            .map_err(|err| format!("scan task failed: {err}"))??;
+    let summary = MftScanSummary {
+        drive: format!("{}:", letter),
+        files: cache.total_files,
+        dirs: cache.total_dirs,
+        bytes: *cache.subtree_bytes.get(&cache.root).unwrap_or(&0),
+        elapsed_ms: started.elapsed().as_millis(),
+    };
+    *state
+        .0
+        .lock()
+        .map_err(|_| "scan cache lock poisoned".to_string())? = Some(cache);
+    Ok(summary)
+}
+
+/// Serves one directory level instantly from the cached MFT tree. Returns
+/// `available:false` (so the renderer falls back to the standard walk) when no
+/// scan has run, the cached drive differs, or the path is malformed.
+#[tauri::command]
+fn explore_dir_fast(
+    state: tauri::State<MftCacheState>,
+    request: Option<ExploreDirRequest>,
+) -> ExploreDirResponse {
+    let request = request.unwrap_or(ExploreDirRequest {
+        path: String::new(),
+        protected_paths: Vec::new(),
+    });
+    let raw = request.path.trim();
+    let normalized = raw.replace('/', "\\");
+    let normalized = normalized.trim_end_matches('\\').to_string();
+
+    if normalized.len() < 2 || normalized.as_bytes()[1] != b':' {
+        return fast_scan_unavailable(raw, "needs a drive path like C:\\");
+    }
+    let drive = normalized[..2].to_string(); // "C:"
+    let letter = &normalized[..1];
+    let rest = &normalized[2..];
+    let components: Vec<String> = rest
+        .split('\\')
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| segment.to_string())
+        .collect();
+
+    let guard = match state.0.lock() {
+        Ok(guard) => guard,
+        Err(_) => return fast_scan_unavailable(raw, "scan cache unavailable"),
+    };
+    let cache = match guard.as_ref() {
+        Some(cache) if cache.drive.eq_ignore_ascii_case(letter) => cache,
+        Some(_) => return fast_scan_unavailable(raw, "Turbo scan was for a different drive."),
+        None => return fast_scan_unavailable(raw, "Run the Turbo scan first."),
+    };
+
+    let mut current = cache.root;
+    for component in &components {
+        let kids = match cache.children.get(&current) {
+            Some(kids) => kids,
+            None => return fast_scan_unavailable(raw, &format!("folder not found: {component}")),
+        };
+        let found = kids.iter().copied().find(|&kid| {
+            cache
+                .nodes
+                .get(&kid)
+                .map(|node| node.is_dir && node.name.eq_ignore_ascii_case(component))
+                .unwrap_or(false)
+        });
+        match found {
+            Some(kid) => current = kid,
+            None => return fast_scan_unavailable(raw, &format!("folder not found: {component}")),
+        }
+    }
+
+    let parent_display = if components.is_empty() {
+        format!("{}\\", drive)
+    } else {
+        normalized.clone()
+    };
+
+    let empty: Vec<u64> = Vec::new();
+    let kids = cache.children.get(&current).unwrap_or(&empty);
+    let mut entries: Vec<ExploreEntry> = Vec::with_capacity(kids.len());
+    for &kid in kids {
+        let node = match cache.nodes.get(&kid) {
+            Some(node) => node,
+            None => continue,
+        };
+        if node.name == "." || node.name.starts_with('$') {
+            continue;
+        }
+        let bytes = if node.is_dir {
+            *cache.subtree_bytes.get(&kid).unwrap_or(&0)
+        } else {
+            node.self_bytes
+        };
+        let files = if node.is_dir {
+            *cache.subtree_files.get(&kid).unwrap_or(&0)
+        } else {
+            1
+        };
+        let dirs = *cache.subtree_dirs.get(&kid).unwrap_or(&0);
+        let child_path = if parent_display.ends_with('\\') {
+            format!("{}{}", parent_display, node.name)
+        } else {
+            format!("{}\\{}", parent_display, node.name)
+        };
+        let classification = drive_inventory_classification(&node.name);
+        let (guard_kind, reason) = classify_delete_guard(&child_path, bytes);
+        entries.push(ExploreEntry {
+            id: stable_item_id("explore", Path::new(&child_path)),
+            name: node.name.clone(),
+            path: child_path,
+            bytes,
+            files,
+            dirs,
+            is_dir: node.is_dir,
+            status: "measured".to_string(),
+            classification: classification.to_string(),
+            delete_guard: guard_kind.to_string(),
+            delete_reason: reason,
+            errors: 0,
+        });
+    }
+    entries.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.name.cmp(&b.name)));
+    let measured_bytes = entries.iter().map(|entry| entry.bytes).sum();
+
+    let parent = if components.is_empty() {
+        None
+    } else {
+        let mut parent_components = components.clone();
+        parent_components.pop();
+        Some(if parent_components.is_empty() {
+            format!("{}\\", drive)
+        } else {
+            format!("{}\\{}", drive, parent_components.join("\\"))
+        })
+    };
+
+    ExploreDirResponse {
+        available: true,
+        path: parent_display.clone(),
+        display_path: parent_display,
+        parent,
+        exists: true,
+        is_dir: true,
+        entries,
+        measured_bytes,
+        warnings: vec!["Turbo (MFT) scan.".to_string()],
     }
 }
 
@@ -10675,6 +11810,124 @@ fn walk_dir_size(root: &Path, kind: MeasureKind, request: &ScanRequest) -> SizeS
     stats
 }
 
+struct ParallelWalkCtx<'a> {
+    protected: &'a [String],
+    kind: MeasureKind,
+    max_depth: usize,
+    max_entries: usize,
+    visited: AtomicU64,
+    limited: AtomicBool,
+}
+
+#[derive(Default, Clone, Copy)]
+struct ParallelWalkTotals {
+    bytes: u64,
+    files: u64,
+    dirs: u64,
+    errors: u64,
+}
+
+impl ParallelWalkTotals {
+    fn merge(self, other: Self) -> Self {
+        Self {
+            bytes: self.bytes.saturating_add(other.bytes),
+            files: self.files.saturating_add(other.files),
+            dirs: self.dirs.saturating_add(other.dirs),
+            errors: self.errors.saturating_add(other.errors),
+        }
+    }
+}
+
+/// Same semantics as `walk_dir_size` (depth/entry caps, symlink and protected
+/// skips, `should_count_file` filtering) but fans subdirectories out across the
+/// rayon thread pool. Used by on-demand explore/delete sizing where a single
+/// folder can hold 100k+ files and the sequential walk would stall the UI.
+fn walk_dir_size_parallel(root: &Path, kind: MeasureKind, request: &ScanRequest) -> SizeStats {
+    let ctx = ParallelWalkCtx {
+        protected: &request.protected_paths,
+        kind,
+        max_depth: request.max_depth.unwrap_or(64),
+        max_entries: request.max_entries_per_root.unwrap_or(3_000_000),
+        visited: AtomicU64::new(0),
+        limited: AtomicBool::new(false),
+    };
+    let totals = parallel_walk_node(root, 0, &ctx);
+    SizeStats {
+        bytes: totals.bytes,
+        files: totals.files,
+        dirs: totals.dirs,
+        errors: totals.errors,
+        limited: ctx.limited.load(Ordering::Relaxed),
+    }
+}
+
+fn parallel_walk_node(path: &Path, depth: usize, ctx: &ParallelWalkCtx) -> ParallelWalkTotals {
+    if ctx.visited.fetch_add(1, Ordering::Relaxed) >= ctx.max_entries as u64 {
+        ctx.limited.store(true, Ordering::Relaxed);
+        return ParallelWalkTotals::default();
+    }
+
+    if depth > ctx.max_depth || is_path_protected(path, ctx.protected) {
+        ctx.limited.store(true, Ordering::Relaxed);
+        return ParallelWalkTotals::default();
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return ParallelWalkTotals {
+            errors: 1,
+            ..Default::default()
+        };
+    };
+
+    if metadata.file_type().is_symlink() {
+        return ParallelWalkTotals::default();
+    }
+
+    if metadata.is_file() {
+        if should_count_file(ctx.kind, path) {
+            return ParallelWalkTotals {
+                bytes: metadata.len(),
+                files: 1,
+                ..Default::default()
+            };
+        }
+        return ParallelWalkTotals::default();
+    }
+
+    if !metadata.is_dir() {
+        return ParallelWalkTotals::default();
+    }
+
+    if depth == ctx.max_depth {
+        ctx.limited.store(true, Ordering::Relaxed);
+        return ParallelWalkTotals {
+            dirs: 1,
+            ..Default::default()
+        };
+    }
+
+    let children: Vec<PathBuf> = match fs::read_dir(path) {
+        Ok(entries) => entries.flatten().map(|entry| entry.path()).collect(),
+        Err(_) => {
+            return ParallelWalkTotals {
+                dirs: 1,
+                errors: 1,
+                ..Default::default()
+            };
+        }
+    };
+
+    let subtotal = children
+        .par_iter()
+        .map(|child| parallel_walk_node(child, depth + 1, ctx))
+        .reduce(ParallelWalkTotals::default, ParallelWalkTotals::merge);
+
+    ParallelWalkTotals {
+        dirs: subtotal.dirs.saturating_add(1),
+        ..subtotal
+    }
+}
+
 fn should_count_file(kind: MeasureKind, path: &Path) -> bool {
     match kind {
         MeasureKind::FullTree => true,
@@ -12333,5 +13586,46 @@ mod tests {
         let _ = fs::remove_dir(&root);
         let _ = fs::remove_dir(local_app_data.join("pnpm"));
         let _ = fs::remove_dir(&local_app_data);
+    }
+
+    #[test]
+    fn delete_guard_hard_blocks_system_locations() {
+        for path in [
+            "C:\\",
+            "C:\\Windows",
+            "C:\\Windows\\System32\\drivers",
+            "C:\\Program Files",
+            "C:\\Program Files (x86)\\App",
+            "C:\\ProgramData",
+            "C:\\$Recycle.Bin",
+            "C:\\System Volume Information",
+            "C:\\Recovery",
+            "C:\\pagefile.sys",
+            "C:\\hiberfil.sys",
+        ] {
+            let (guard, _) = classify_delete_guard(path, 1024);
+            assert_eq!(guard, "hard-block", "{path} must be hard-blocked");
+        }
+    }
+
+    #[test]
+    fn delete_guard_requires_confirm_for_top_level_and_large() {
+        let (guard, _) = classify_delete_guard("C:\\MyStuff", 1024);
+        assert_eq!(guard, "confirm", "top-level folders need typed confirm");
+
+        let (guard, _) =
+            classify_delete_guard("C:\\Users\\me\\Videos\\huge", DELETE_CONFIRM_BYTE_THRESHOLD);
+        assert_eq!(guard, "confirm", "folders over 5 GB need typed confirm");
+    }
+
+    #[test]
+    fn delete_guard_warns_on_app_state_and_allows_normal() {
+        let (guard, _) =
+            classify_delete_guard("C:\\Users\\me\\AppData\\Local\\SomeApp", 4096);
+        assert_eq!(guard, "warn", "app data should warn, not block");
+
+        let (guard, _) =
+            classify_delete_guard("C:\\Users\\me\\Downloads\\old-build", 4096);
+        assert_eq!(guard, "allow", "ordinary nested folders are allowed");
     }
 }

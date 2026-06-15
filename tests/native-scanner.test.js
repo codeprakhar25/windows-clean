@@ -1318,5 +1318,102 @@ const GB = 1024 * MB;
     "native capabilities should normalize per-executor feature flags"
   );
 
+  // Explore C: drill-down + delete-to-recycle-bin bridge.
+  assert(rustMain.includes("fn explore_dir("), "backend should expose the explore_dir drill-down command");
+  assert(rustMain.includes("fn explore_dir_fast("), "backend should expose the fast MFT scan command");
+  assert(rustMain.includes("fn build_mft_cache("), "backend should build a cached tree in one pass over the NTFS MFT");
+  assert(rustMain.includes("fn scan_volume_mft("), "backend should expose the async Turbo scan command");
+  assert(rustMain.includes("explore_dir_fast,"), "fast scan command must be registered in the invoke handler");
+  assert(rustMain.includes("scan_volume_mft,"), "Turbo scan command must be registered in the invoke handler");
+  assert(rustMain.includes("mft-progress"), "Turbo scan must emit progress events so the UI never looks frozen");
+  assert(rustMain.includes("fn delete_paths_to_recycle_bin("), "backend should expose the recycle-bin delete command");
+  assert(rustMain.includes("fn classify_delete_guard("), "backend should keep an authoritative server-side delete guard");
+  assert(rustMain.includes("explore_dir,") && rustMain.includes("delete_paths_to_recycle_bin,"), "both new commands must be registered in the invoke handler");
+  assert(rustMain.includes("FOF_ALLOWUNDO"), "recycle delete must use undo (Recycle Bin) semantics, not permanent delete");
+
+  const browserExplore = await native.runNativeExploreDir("C:\\Users", {}, { __TAURI__: undefined });
+  assert.strictEqual(browserExplore.available, false, "explore should be unavailable in the browser setup state");
+  assert.deepStrictEqual(browserExplore.entries, [], "browser explore should return no entries");
+
+  let exploreArgs = null;
+  const fakeExploreHost = {
+    __TAURI__: {
+      core: {
+        invoke: async (command, args) => {
+          exploreArgs = { command, args };
+          return {
+            available: true,
+            path: "C:\\Users",
+            displayPath: "C:\\Users",
+            parent: "C:\\",
+            exists: true,
+            isDir: true,
+            measuredBytes: 4096,
+            entries: [
+              { id: "a", name: "Big", path: "C:\\Users\\Big", bytes: 4096, files: 3, dirs: 1, isDir: true, status: "measured", classification: "user-data-review", deleteGuard: "allow", deleteReason: "" }
+            ],
+            warnings: []
+          };
+        }
+      }
+    }
+  };
+  const exploreResult = await native.runNativeExploreDir("C:\\Users", { protectedPaths: ["C:\\Users\\Big\\keep"] }, fakeExploreHost);
+  assert.strictEqual(exploreArgs.command, "explore_dir", "explore should call the explore_dir command");
+  assert.strictEqual(exploreArgs.args.request.path, "C:\\Users", "explore should pass the requested path");
+  assert.deepStrictEqual(exploreArgs.args.request.protectedPaths, ["C:\\Users\\Big\\keep"], "explore should forward protected paths");
+  assert.strictEqual(exploreResult.entries[0].deleteGuard, "allow", "explore entry guard should normalize through");
+  assert.strictEqual(exploreResult.entries[0].isDir, true, "explore entry directory flag should normalize through");
+
+  // Fast scan bridge: unavailable in browser, calls explore_dir_fast in the app.
+  const browserFast = await native.runNativeExploreFast("C:\\Users", {}, { __TAURI__: undefined });
+  assert.strictEqual(browserFast.available, false, "fast scan should be unavailable in the browser setup state");
+
+  let fastArgs = null;
+  const fakeFastHost = {
+    __TAURI__: {
+      core: {
+        invoke: async (command, args) => {
+          fastArgs = { command, args };
+          return { available: true, path: "C:\\Users", displayPath: "C:\\Users", parent: "C:\\", exists: true, isDir: true, measuredBytes: 0, entries: [], warnings: [] };
+        }
+      }
+    }
+  };
+  await native.runNativeExploreFast("C:\\Users", {}, fakeFastHost);
+  assert.strictEqual(fastArgs.command, "explore_dir_fast", "fast scan should call the explore_dir_fast command");
+
+  const browserDelete = await native.runNativeRecycleDelete(["C:\\Users\\Big"], {}, { __TAURI__: undefined });
+  assert.strictEqual(browserDelete.available, false, "recycle delete should be unavailable in the browser setup state");
+  assert.strictEqual(browserDelete.entries[0].result, "unavailable", "browser delete should report unavailable per path");
+
+  let deleteArgs = null;
+  const fakeDeleteHost = {
+    __TAURI__: {
+      core: {
+        invoke: async (command, args) => {
+          deleteArgs = { command, args };
+          return {
+            available: true,
+            accepted: true,
+            freedBytes: 4096,
+            freeBytesDelta: 4096,
+            volumeBefore: null,
+            volumeAfter: null,
+            warnings: [],
+            entries: [
+              { path: "C:\\Users\\Big", result: "deleted", bytes: 4096, guard: "allow", reason: "", errorCode: 0 }
+            ]
+          };
+        }
+      }
+    }
+  };
+  const deleteResult = await native.runNativeRecycleDelete(["C:\\Users\\Big"], { confirmedPaths: ["C:\\Users\\Big"] }, fakeDeleteHost);
+  assert.strictEqual(deleteArgs.command, "delete_paths_to_recycle_bin", "delete should call the recycle bin command");
+  assert.deepStrictEqual(deleteArgs.args.request.confirmedPaths, ["C:\\Users\\Big"], "delete should forward typed-confirm paths to the backend");
+  assert.strictEqual(deleteResult.accepted, true, "delete result should normalize accepted state");
+  assert.strictEqual(deleteResult.freedBytes, 4096, "delete result should normalize freed bytes");
+
   console.log("native scanner adapter ok");
 })();
