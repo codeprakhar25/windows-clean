@@ -2095,7 +2095,7 @@ fn execute_downloads_review_cleanup(request: WriteExecutionRequest) -> WriteExec
                         if target_reject.is_none() {
                             "Target is a reviewed Downloads installer/archive file."
                         } else {
-                            "Target is missing, too recent, outside Downloads, not a file, link-like, or not an allowed installer/archive type."
+                            "Target is missing, outside Downloads, not a regular file, or is a symbolic link."
                         },
                     ),
                     write_preflight_check(
@@ -7037,7 +7037,7 @@ fn downloads_cleanup_target_reject_code(value: &str) -> Option<&'static str> {
     downloads_cleanup_target_reject_code_at(value, SystemTime::now())
 }
 
-fn downloads_cleanup_target_reject_code_at(value: &str, now: SystemTime) -> Option<&'static str> {
+fn downloads_cleanup_target_reject_code_at(value: &str, _now: SystemTime) -> Option<&'static str> {
     let path = resolve_dry_run_target(value);
     if path.as_os_str().is_empty() {
         return Some("target-missing");
@@ -7068,12 +7068,6 @@ fn downloads_cleanup_target_reject_code_at(value: &str, now: SystemTime) -> Opti
     };
     if !metadata.is_file() || metadata.file_type().is_symlink() {
         return Some("target-link-or-not-file");
-    }
-    if !should_count_file(MeasureKind::DownloadInstallers, &path) {
-        return Some("target-not-downloads-file");
-    }
-    if path_age_days_at(&path, now).unwrap_or(0) < 30 {
-        return Some("target-too-recent");
     }
     None
 }
