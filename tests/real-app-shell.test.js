@@ -36,8 +36,7 @@ const requiredRealShellMarkers = [
   "Delete all",
   "Scan again",
   "getNativeRuntimeCapabilities",
-  "runNativeReadonlyScan",
-  "requestOpenAIAgentAdvice"
+  "runNativeReadonlyScan"
 ];
 
 for (const marker of requiredRealShellMarkers) {
