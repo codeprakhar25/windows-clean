@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 242" width="200" height="242">
+  <defs>
+    <linearGradient id="shieldBg" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0%" stop-color="#172040"/>
+      <stop offset="100%" stop-color="#080d1c"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+    <linearGradient id="accentReverse" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+    <linearGradient id="sweepGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0"/>
+      <stop offset="30%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <filter id="tinyGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="shieldClip">
+      <path d="M100 14 L186 51 L186 127 C186 173 147 210 100 229 C53 210 14 173 14 127 L14 51 Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- Ambient glow layer -->
+  <path d="M100 14 L186 51 L186 127 C186 173 147 210 100 229 C53 210 14 173 14 127 L14 51 Z"
+        fill="#3b82f6" filter="url(#softGlow)" opacity="0.3"/>
+
+  <!-- Shield body -->
+  <path d="M100 14 L186 51 L186 127 C186 173 147 210 100 229 C53 210 14 173 14 127 L14 51 Z"
+        fill="url(#shieldBg)"/>
+
+  <!-- Inner subtle highlight at top of shield -->
+  <path d="M100 18 L182 53 L182 80 C150 68 120 62 100 62 C80 62 50 68 18 80 L18 53 Z"
+        fill="url(#accent)" opacity="0.04"/>
+
+  <!-- Shield border with glow -->
+  <path d="M100 14 L186 51 L186 127 C186 173 147 210 100 229 C53 210 14 173 14 127 L14 51 Z"
+        fill="none" stroke="url(#accent)" stroke-width="2.5" filter="url(#glow)"/>
+
+  <!-- === DISK PLATTER === -->
+
+  <!-- Outermost faint ring -->
+  <circle cx="100" cy="112" r="57" fill="none" stroke="#22d3ee" stroke-width="0.75" opacity="0.12"/>
+
+  <!-- Track ring 1 -->
+  <circle cx="100" cy="112" r="46" fill="none" stroke="url(#accent)" stroke-width="1" opacity="0.28"/>
+
+  <!-- Track ring 2 -->
+  <circle cx="100" cy="112" r="35" fill="none" stroke="url(#accent)" stroke-width="1.5" opacity="0.52"/>
+
+  <!-- Track ring 3 (innermost data track) -->
+  <circle cx="100" cy="112" r="23" fill="none" stroke="url(#accent)" stroke-width="2" opacity="0.82"/>
+
+  <!-- Spindle hub glow -->
+  <circle cx="100" cy="112" r="9" fill="url(#accent)" filter="url(#glow)"/>
+  <circle cx="100" cy="112" r="4.5" fill="#080d1c"/>
+
+  <!-- === READ/WRITE ARM === -->
+  <!-- Arm: pivot upper-right, head tips the inner track at ~(126, 84) -->
+  <line x1="157" y1="61" x2="115" y2="104"
+        stroke="url(#accent)" stroke-width="2.5" stroke-linecap="round" filter="url(#glow)"/>
+  <!-- Pivot actuator -->
+  <circle cx="157" cy="61" r="5.5" fill="url(#accent)" filter="url(#glow)"/>
+  <circle cx="157" cy="61" r="2.5" fill="#080d1c"/>
+  <!-- Head tip -->
+  <circle cx="115" cy="104" r="3.5" fill="#22d3ee" filter="url(#tinyGlow)"/>
+
+  <!-- === SWEEP ARC (clean sweep below disk) === -->
+  <path d="M50 154 Q100 134 150 154"
+        stroke="url(#sweepGrad)" stroke-width="3.5" fill="none"
+        stroke-linecap="round" filter="url(#glow)"/>
+
+  <!-- Velocity trails -->
+  <line x1="150" y1="154" x2="164" y2="146" stroke="#22d3ee" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+  <line x1="164" y1="146" x2="174" y2="140" stroke="#22d3ee" stroke-width="1" stroke-linecap="round" opacity="0.3"/>
+
+  <!-- === DUST PARTICLES (junk being swept away) === -->
+  <circle cx="163" cy="162" r="3.5" fill="#22d3ee" filter="url(#glow)" opacity="0.92"/>
+  <circle cx="174" cy="155" r="2.5" fill="#818cf8" filter="url(#tinyGlow)" opacity="0.85"/>
+  <circle cx="181" cy="165" r="2"   fill="#22d3ee" opacity="0.58"/>
+  <circle cx="170" cy="173" r="3"   fill="#a78bfa" filter="url(#tinyGlow)" opacity="0.72"/>
+  <circle cx="183" cy="174" r="1.5" fill="#38bdf8" opacity="0.46"/>
+  <circle cx="187" cy="159" r="1.5" fill="#818cf8" opacity="0.38"/>
+</svg>

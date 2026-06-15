@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.svg" width="120" alt="SpaceGuard"/>
+</p>
+
 # SpaceGuard
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
@@ -35,6 +39,8 @@
 Grab the latest Windows installer from the **[Releases](https://github.com/codeprakhar25/windows-clean/releases)** page.
 
 > Requires Windows 10 / 11 x64. No Rust or Node needed — the `.exe` is self-contained.
+
+> **Windows SmartScreen warning:** Click **More info** → **Run anyway** on first launch. The app is unsigned (no cert yet). Source code is fully auditable above.
 
 ---
 
