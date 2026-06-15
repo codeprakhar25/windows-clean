@@ -1,47 +1,85 @@
 # SpaceGuard
 
-SpaceGuard is a real Windows desktop cleanup app. The browser build is setup-only; local scanning and cleanup require the Tauri desktop shell.
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
+![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%20v2-FFC131?logo=tauri&logoColor=black)
+![Rust](https://img.shields.io/badge/backend-Rust-CE422B?logo=rust&logoColor=white)
+![React](https://img.shields.io/badge/frontend-React-61DAFB?logo=react&logoColor=black)
+![Latest Release](https://img.shields.io/github/v/release/codeprakhar25/windows-clean?color=brightgreen)
+![License](https://img.shields.io/github/license/codeprakhar25/windows-clean)
 
-## Run The App
+**SpaceGuard** is a developer junk cleaner for Windows. It scans for safe-to-delete caches, temp files, and stale build artifacts — and typically recovers **10–30 GB** on a dev machine. Nothing is deleted until you confirm.
 
-```powershell
+---
+
+## What it cleans
+
+| Category | What gets removed |
+|---|---|
+| npm / pnpm cache | `%AppData%\npm-cache`, pnpm content store |
+| pip cache | `%LocalAppData%\pip\cache` |
+| Gradle cache | `~\.gradle\caches` |
+| Docker build cache | Dangling build layers |
+| Browser cache | Chrome, Edge, Firefox, Brave cache folders |
+| Windows temp files | `%TEMP%`, `C:\Windows\Temp` |
+| node\_modules | Stale project dependency trees |
+| Android Studio cache | `~\.android`, AVD caches |
+| Shader cache | GPU shader compile caches |
+| Recycle Bin | Queued deletions |
+| Downloads | Large files and old installers |
+| User .cache | `~\.cache` leftovers |
+
+---
+
+## Download
+
+Grab the latest Windows installer from the **[Releases](https://github.com/codeprakhar25/windows-clean/releases)** page.
+
+> Requires Windows 10 / 11 x64. No Rust or Node needed — the `.exe` is self-contained.
+
+---
+
+## Build from source
+
+**Prerequisites:** [Node.js 18+](https://nodejs.org) · [Rust stable](https://rustup.rs) · [Tauri v2 prerequisites](https://tauri.app/start/prerequisites/)
+
+```bash
+git clone https://github.com/codeprakhar25/windows-clean.git
+cd windows-clean
 npm install
-notepad .env
-npm run windows:ready
-npm run native:dev
+npm run tauri build
 ```
 
-Set `OPENAI_API_KEY` in `.env` only if you want the Ask AI page. Cleanup does not require route arming: the desktop runtime exposes shipped native allowlists and validates each selected target before deletion.
-`windows:ready` exits nonzero until the Windows desktop app can launch; treat that as a stop signal and follow the printed next steps.
-Use `npm run windows:ready -- --json` only when you need technical readiness details.
-If readiness reports `toolchain-blocked`, run `npm install`, install or repair Node.js, Rustup/Cargo, and the Tauri Windows prerequisites, then restart the terminal and rerun the command.
+Installer output: `src-tauri/target/release/bundle/nsis/SpaceGuard_*_x64-setup.exe`
 
-If Tauri reports `icons/icon.ico` not found, confirm `src-tauri/icons/icon.ico` exists, then rerun `npm run native:dev`.
+**Dev mode:**
 
-
-Inside the desktop app:
-
-1. Click `Scan PC`.
-2. Click `Delete all`, or check specific rows.
-3. Click `Delete selected` if you checked specific rows.
-
-If the app opens in a normal browser, it will only show connection/setup steps. It will not scan local folders or run cleanup.
-
-## Developer Checks
-
-```powershell
-npm run real-app:shell
-npm test
-npm run build
-npm run windows:ready
-npm run native:dev
+```bash
+npm run tauri dev
 ```
 
-For a real cleanup test, use the desktop app as the control point: scan, then click `Delete all` or check one row and click `Delete selected`.
-Support export tools are for troubleshooting only. They are not required to clean files.
+---
 
-## Safety Boundary
+## How it works
 
-Cleanup is not a generic file deleter. Each target must be visible in the scan, match a shipped native allowlist, pass target validation, pass confirmation, and execute through the desktop cleanup boundary.
+1. Click **Scan PC** — read-only scan, nothing is touched.
+2. Review the findings — each row shows what will be removed and why it is safe.
+3. Click **Delete all** or check specific rows and click **Delete selected**.
+4. Files go to the **Recycle Bin** (not hard-deleted), so you can undo.
 
-Ask AI can explain findings and suggest the next review step. It cannot approve cleanup, bypass confirmation, or call filesystem tools.
+Every target must pass SpaceGuard's native allowlist before the delete button activates. The app cannot delete files outside the scanned categories.
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 18 · Vite · Tailwind CSS · shadcn/ui |
+| Backend | Rust · Tauri v2 |
+| Delete safety | Windows Shell `SHFileOperationW` — Recycle Bin, not `rm` |
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE)

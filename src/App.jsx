@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
-  Bot,
+  ArrowLeft,
   CheckCircle2,
   ChevronRight,
   ClipboardCheck,
+  File as FileIcon,
+  Folder,
   FolderSearch,
   HardDrive,
   KeyRound,
@@ -45,8 +47,8 @@ import {
   runNativeTempCleanupExecutor,
   runNativeUserCacheExecutor
 } from "./native-scanner.mjs";
-import { buildOpenAIAgentRecommendationBroker, requestOpenAIAgentAdvice } from "./openai-agent.mjs";
-import { buildAppAgentTaskQueue, buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildManualFindingGuidance, buildPostRunProof, buildRouteReadiness, buildWorkflowAgentTargetId, buildWorkflowLocks, formatBytes, resolveWorkflowAgentBrokerCandidate } from "./real-workflow.mjs";
+import { computeTreemapLayout } from "./treemap.mjs";
+import { buildExecutionGate, buildExecutionLedgerRows, buildExecutionPrerequisites, buildManualFindingGuidance, buildRouteReadiness, buildWorkflowLocks, formatBytes } from "./real-workflow.mjs";
 
 const DEFAULT_SCAN_REQUEST = {
   targetDrive: "C:",
@@ -73,7 +75,7 @@ const DRIVE_ALLOCATION_LABELS = {
   "unknown-review": "Other C: item",
   cleanable: "Can delete",
   manual: "Review",
-  unlisted: "Not itemized"
+  unlisted: "Not yet explored"
 };
 const DRIVE_ALLOCATION_GROUPS = {
   cleanable: {
@@ -107,8 +109,8 @@ const DRIVE_ALLOCATION_GROUPS = {
     status: "inspect"
   },
   unlisted: {
-    label: "Not itemized by scan",
-    detail: "Windows reports this as used, but the scanner could not assign it to a measured row.",
+    label: "Not yet explored",
+    detail: "Run a scan to find cleanable items in the folders using this space.",
     status: "estimated"
   }
 };
@@ -308,7 +310,6 @@ function App() {
   const [scanStatus, setScanStatus] = useState("idle");
   const [scanError, setScanError] = useState("");
   const [scan, setScan] = useState(null);
-  const [postRunScan, setPostRunScan] = useState(null);
   const [selectedId, setSelectedId] = useState("");
   const [checkedIds, setCheckedIds] = useState([]);
   const [consentChecked, setConsentChecked] = useState(false);
@@ -318,18 +319,12 @@ function App() {
   const [executionResult, setExecutionResult] = useState(null);
   const [executionRecord, setExecutionRecord] = useState(null);
   const [exploreConfirmIds, setExploreConfirmIds] = useState([]);
-  const [agentPrompt, setAgentPrompt] = useState("Find the safest next cleanup step from the current real scan.");
-  const [agentStatus, setAgentStatus] = useState("idle");
-  const [agentError, setAgentError] = useState("");
-  const [agentAdvice, setAgentAdvice] = useState(null);
 
   useEffect(() => {
     refreshRuntime();
   }, []);
 
   const nativeConnected = Boolean(capability.available && runtime?.available);
-  const aiAvailable = Boolean(runtime?.openAiAgentAdvice && runtime?.openAiAdvisorConfigured);
-  const visibleView = activeView === "agent" && !aiAvailable ? "clean" : activeView;
   const candidates = useMemo(() => buildCleanupCandidates(scan, runtime), [scan, runtime]);
   const checkedCandidates = useMemo(
     () => checkedIds
@@ -349,18 +344,6 @@ function App() {
   );
   const manualFindings = useMemo(() => buildManualFindings(scan), [scan]);
   const scanFingerprint = useMemo(() => buildScanFingerprint(scan), [scan]);
-  const activePlanId = useMemo(
-    () => buildCurrentPlanId({ candidate: selectedCandidate, scanFingerprint }),
-    [selectedCandidate, scanFingerprint]
-  );
-  const proofCandidate = useMemo(
-    () => selectedCandidate || buildProofCandidateFromExecutionRecord(executionRecord),
-    [selectedCandidate, executionRecord]
-  );
-  const postRunProof = useMemo(
-    () => buildPostRunProof({ candidate: proofCandidate, executionRecord, postRunScan }),
-    [proofCandidate, executionRecord, postRunScan]
-  );
   const effectivePermanentRemovalConfirmed = Boolean(selectedCandidate?.requiresPermanentConfirmation && consentChecked);
   const executionPrerequisites = useMemo(
     () => buildExecutionPrerequisites({
@@ -370,28 +353,6 @@ function App() {
     }),
     [selectedCandidate, archiveDestination, effectivePermanentRemovalConfirmed]
   );
-  const agentContextKey = useMemo(
-    () => buildAgentContextKey({
-      runtime,
-      scanFingerprint,
-      selectedCandidate,
-      executionRecord,
-      postRunProof,
-      archiveDestination,
-      permanentRemovalConfirmed: effectivePermanentRemovalConfirmed,
-      agentPrompt
-    }),
-    [runtime, scanFingerprint, selectedCandidate, executionRecord, postRunProof, archiveDestination, effectivePermanentRemovalConfirmed, agentPrompt]
-  );
-  const agentContextKeyRef = useRef(agentContextKey);
-
-  useEffect(() => {
-    agentContextKeyRef.current = agentContextKey;
-    setAgentAdvice(null);
-    setAgentError("");
-    setAgentStatus("idle");
-  }, [agentContextKey]);
-
   const workflowLocks = useMemo(
     () => buildWorkflowLocks({ executionRecord }),
     [executionRecord]
@@ -410,43 +371,6 @@ function App() {
     [selectedCandidate, consentChecked, executionPrerequisites, scanFingerprint, executionStatus, workflowLocks, executionRecord, scan]
   );
   const canExecute = executionGate.ready;
-  const agentContext = useMemo(
-    () => buildAgentContext({
-      runtime,
-      scan,
-      candidates,
-      manualFindings,
-      selectedCandidate,
-      executionRecord,
-      postRunProof,
-      planId: activePlanId,
-      scanFingerprint,
-      consentPlanId: canExecute ? activePlanId : "",
-      archiveDestination,
-      permanentRemovalConfirmed: effectivePermanentRemovalConfirmed,
-      workflowLocks
-    }),
-    [runtime, scan, candidates, manualFindings, selectedCandidate, executionRecord, postRunProof, activePlanId, scanFingerprint, canExecute, archiveDestination, effectivePermanentRemovalConfirmed, workflowLocks]
-  );
-  const currentAgentAdvice = agentAdvice?.contextKey === agentContextKey ? agentAdvice : null;
-  const agentBroker = useMemo(
-    () => {
-      if (!currentAgentAdvice?.advice) return null;
-      return buildOpenAIAgentRecommendationBroker({
-        advice: currentAgentAdvice.advice,
-        context: agentContext,
-        executionState: {
-          planId: activePlanId,
-          scanFingerprint,
-          consentPlanId: canExecute ? activePlanId : "",
-          proofStatus: getAgentProofStatus(executionRecord, postRunProof),
-          largeFileArchiveDestination: archiveDestination,
-          permanentRemovalConfirmed: effectivePermanentRemovalConfirmed
-        }
-      });
-    },
-    [currentAgentAdvice, agentContext, activePlanId, scanFingerprint, canExecute, executionRecord, postRunProof, archiveDestination, effectivePermanentRemovalConfirmed]
-  );
 
   async function refreshRuntime() {
     setRuntimeStatus("loading");
@@ -477,7 +401,6 @@ function App() {
       const latestRuntime = await refreshRuntime();
       if (afterExecution) {
         setScan(result);
-        setPostRunScan(result);
         setSelectedId("");
         setCheckedIds([]);
         setConsentChecked(false);
@@ -485,7 +408,6 @@ function App() {
       } else {
         const defaultSelection = selectDefaultCleanupCandidateId(buildCleanupCandidates(result, latestRuntime || runtime));
         setScan(result);
-        setPostRunScan(null);
         setExecutionResult(null);
         setExecutionRecord(null);
         setSelectedId(defaultSelection);
@@ -576,8 +498,7 @@ function App() {
       };
       setExecutionResult(aggregateResult);
       setExecutionRecord(aggregateRecord);
-      setPostRunScan(null);
-      setExecutionStatus(accepted ? "complete" : "rejected");
+        setExecutionStatus(accepted ? "complete" : "rejected");
       if (accepted) {
         await runRealScan({ afterExecution: true, nextView });
       }
@@ -673,7 +594,6 @@ function App() {
       if (updateUi) {
         setExecutionResult(result);
         setExecutionRecord(record);
-        setPostRunScan(null);
         setExecutionStatus(result.accepted ? "complete" : "rejected");
       }
       if (rescanAfter && result.accepted) {
@@ -698,51 +618,6 @@ function App() {
     }
   }
 
-  async function askOpenAI() {
-    const requestContextKey = agentContextKey;
-    setAgentStatus("running");
-    setAgentError("");
-    setAgentAdvice(null);
-    try {
-      const result = await requestOpenAIAgentAdvice({
-        context: agentContext,
-        userPrompt: agentPrompt
-      });
-      if (agentContextKeyRef.current !== requestContextKey) return;
-      setAgentAdvice({ ...result, contextKey: requestContextKey });
-      setAgentStatus("complete");
-    } catch (error) {
-      if (agentContextKeyRef.current !== requestContextKey) return;
-      setAgentStatus("error");
-      setAgentError(formatAgentError(error));
-    }
-  }
-
-  async function runAgentBrokerAction(row) {
-    if (!row?.canAct) return;
-    if (row.kind === "scan") {
-      const targetId = String(row.targetId || row.target_id || row.id || "").trim();
-      const route = String(row.route || row.route_id || "").trim();
-      const afterExecution = targetId === "post-run-rescan" || route === "post-run-proof" || row.targetPanel === "execution-proof-handoff-panel";
-      await runRealScan({ afterExecution });
-      return;
-    }
-
-    const brokerCandidate = resolveWorkflowAgentBrokerCandidate(row, candidates);
-    if (brokerCandidate) {
-      selectWorkflowCandidate(brokerCandidate.id, {
-        checked: row.kind === "scoped-executor" && isOneClickCleanupCandidate(brokerCandidate)
-      });
-      return;
-    }
-    if (row.kind === "review" || row.kind === "manual") {
-      setActiveView("explore");
-      return;
-    }
-
-    focusAgentBrokerPanel(row);
-  }
-
   function selectWorkflowCandidate(id, options = {}) {
     if (!id) return;
     const target = candidates.find((candidate) => candidate.id === id);
@@ -750,7 +625,6 @@ function App() {
     setActiveView("clean");
     setExecutionResult(null);
     setExecutionRecord(null);
-    setPostRunScan(null);
     setExecutionStatus("idle");
     setExecutionError("");
     setArchiveDestination("");
@@ -773,7 +647,6 @@ function App() {
     setExecutionError("");
     setExecutionResult(null);
     setExecutionRecord(null);
-    setPostRunScan(null);
     setExecutionStatus("idle");
     setArchiveDestination("");
   }
@@ -789,7 +662,6 @@ function App() {
     setExecutionError("");
     setExecutionResult(null);
     setExecutionRecord(null);
-    setPostRunScan(null);
     setExecutionStatus("idle");
     setArchiveDestination("");
   }
@@ -797,9 +669,8 @@ function App() {
   if (!nativeConnected) {
     return (
       <AppFrame
-        activeView={visibleView}
+        activeView={activeView}
         setActiveView={setActiveView}
-        showAgent={aiAvailable}
       >
         <ConnectionRequired
           runtime={runtime}
@@ -813,15 +684,14 @@ function App() {
 
   return (
     <AppFrame
-      activeView={visibleView}
+      activeView={activeView}
       setActiveView={setActiveView}
-      showAgent={aiAvailable}
     >
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 py-5 lg:px-7">
         <TopBar
           scan={scan}
         />
-        {visibleView === "clean" ? (
+        {activeView === "clean" ? (
           <section className="grid gap-4">
             {!scan ? (
               <ScanPanel
@@ -848,7 +718,7 @@ function App() {
             )}
           </section>
         ) : null}
-        {visibleView === "explore" ? (
+        {activeView === "explore" ? (
           <ExplorePanel
             scan={scan}
             scanStatus={scanStatus}
@@ -862,23 +732,6 @@ function App() {
             onRescan={() => runRealScan({ afterExecution: true, nextView: "explore" })}
           />
         ) : null}
-        {visibleView === "agent" && aiAvailable ? (
-          <OpenAIPanel
-            runtime={runtime}
-            scan={scan}
-            candidates={candidates}
-            manualFindings={manualFindings}
-            selectedCandidate={selectedCandidate}
-            prompt={agentPrompt}
-            setPrompt={setAgentPrompt}
-            status={agentStatus}
-            error={agentError}
-            advice={currentAgentAdvice}
-            agentBroker={agentBroker}
-            onAsk={askOpenAI}
-            onBrokerAction={runAgentBrokerAction}
-          />
-        ) : null}
       </main>
       <CleanupConfirmModal
         candidates={exploreConfirmCandidates}
@@ -890,11 +743,10 @@ function App() {
   );
 }
 
-function AppFrame({ children, activeView = "clean", setActiveView = () => {}, showAgent = false }) {
+function AppFrame({ children, activeView = "clean", setActiveView = () => {} }) {
   const navRows = [
     { id: "clean", label: "Clean", icon: Trash2 },
-    { id: "explore", label: "Explore C:", icon: ListTree },
-    ...(showAgent ? [{ id: "agent", label: "Ask AI", icon: Bot }] : [])
+    { id: "explore", label: "Explore C:", icon: ListTree }
   ];
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -1061,31 +913,56 @@ function TopBar({ scan }) {
   );
 }
 
+const SCAN_CATEGORIES = [
+  "npm / pnpm cache",
+  "pip cache",
+  "Gradle cache",
+  "Docker build cache",
+  "Browser cache",
+  "Windows temp files",
+  "node_modules",
+  "Android Studio cache",
+  "Shader cache",
+  "Recycle Bin",
+  "Downloads",
+  "User .cache"
+];
+
 function ScanPanel({ scanStatus, scanError, onRunScan }) {
   const running = scanStatus === "scanning" || scanStatus === "rescanning";
   return (
     <Card className="rounded-md">
-      <CardHeader>
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <FolderSearch className="h-4 w-4" />
-              Scan for cleanup
-            </CardTitle>
-            <CardDescription>
-              Fast scan first. Nothing is deleted until you choose an item.
-            </CardDescription>
+      <CardContent className="px-6 py-10">
+        <div className="mx-auto flex max-w-lg flex-col items-center gap-6 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl border bg-background shadow-sm">
+            <ShieldCheck className="h-7 w-7 text-primary" />
           </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-semibold tracking-tight">Developer junk cleaner</h2>
+            <p className="text-sm text-muted-foreground">
+              Scans C: for safe-to-delete caches, temp files, and stale builds.
+              Typically recovers 10–30 GB on a dev machine. Nothing is deleted until you choose.
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {SCAN_CATEGORIES.map((label) => (
+              <span
+                key={label}
+                className="rounded-full border bg-muted/50 px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+          <div className="w-full max-w-[200px] space-y-2">
+            <Button className="w-full" size="lg" onClick={onRunScan} disabled={running}>
+              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+              {running ? "Scanning…" : "Scan PC"}
+            </Button>
+            <p className="text-xs text-muted-foreground">Safe — read-only until you confirm deletion.</p>
+          </div>
+          {scanError ? <Notice tone="restricted" icon={AlertTriangle} text={scanError} /> : null}
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="max-w-xs">
-          <Button className="w-full" onClick={onRunScan} disabled={running}>
-            {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
-            Scan PC
-          </Button>
-        </div>
-        {scanError ? <Notice tone="restricted" icon={AlertTriangle} text={scanError} /> : null}
       </CardContent>
     </Card>
   );
@@ -1420,6 +1297,109 @@ function ExplorePanel({
   );
 }
 
+function splitExplorePath(path = "") {
+  const clean = String(path || "").replace(/\//g, "\\").replace(/\\+$/, "");
+  if (!clean) return [];
+  const driveMatch = clean.match(/^([a-zA-Z]:)(\\(.*))?$/);
+  if (!driveMatch) {
+    return clean.split("\\").filter(Boolean).map((name, index, arr) => ({
+      name,
+      path: arr.slice(0, index + 1).join("\\")
+    }));
+  }
+  const drive = driveMatch[1];
+  const crumbs = [{ name: `${drive}\\`, path: `${drive}\\` }];
+  const rest = driveMatch[3] ? driveMatch[3].split("\\").filter(Boolean) : [];
+  rest.forEach((name, index) => {
+    crumbs.push({ name, path: `${drive}\\${rest.slice(0, index + 1).join("\\")}` });
+  });
+  return crumbs;
+}
+
+const EXPLORE_GUARD_BADGES = {
+  "hard-block": { label: "protected", variant: "outline" },
+  confirm: { label: "confirm needed", variant: "review" },
+  warn: { label: "app data", variant: "review" },
+  allow: { label: "can delete", variant: "safe" }
+};
+
+const TREEMAP_TONES = {
+  allow: "bg-emerald-500/85 hover:bg-emerald-500 border-emerald-700/40 text-white",
+  confirm: "bg-amber-500/85 hover:bg-amber-500 border-amber-700/40 text-white",
+  warn: "bg-amber-500/85 hover:bg-amber-500 border-amber-700/40 text-white",
+  "hard-block": "bg-slate-400/70 hover:bg-slate-400 border-slate-500/40 text-slate-900"
+};
+
+function ExploreTreemap({ entries = [], selectedMap = {}, onDrill = () => {}, onToggle = () => {} }) {
+  const containerRef = useRef(null);
+  const [width, setWidth] = useState(0);
+  const height = 320;
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+    const update = () => setWidth(el.clientWidth);
+    update();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const tiles = useMemo(() => computeTreemapLayout(entries, width, height), [entries, width]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative w-full overflow-hidden rounded-md border bg-muted/20"
+      style={{ height }}
+    >
+      {tiles.map((tile) => {
+        const entry = tile.item;
+        const tone = TREEMAP_TONES[entry.deleteGuard] || TREEMAP_TONES.allow;
+        const selected = Boolean(selectedMap[entry.path]);
+        const showLabel = tile.width > 54 && tile.height > 22;
+        return (
+          <button
+            key={entry.id || entry.path}
+            type="button"
+            title={`${entry.name} · ${formatBytes(entry.bytes)}${entry.isDir ? " · click to open" : ""}`}
+            onClick={() => (entry.isDir ? onDrill(entry) : onToggle(entry))}
+            className={`absolute overflow-hidden border text-left transition ${tone} ${selected ? "z-10 ring-2 ring-sky-600 ring-offset-1" : ""}`}
+            style={{
+              left: tile.x + 1,
+              top: tile.y + 1,
+              width: Math.max(0, tile.width - 2),
+              height: Math.max(0, tile.height - 2)
+            }}
+          >
+            {showLabel ? (
+              <span className="flex h-full flex-col justify-between p-1.5">
+                <span className="flex items-center gap-1 truncate text-xs font-semibold drop-shadow-sm">
+                  {entry.isDir ? <Folder className="h-3 w-3 shrink-0" /> : <FileIcon className="h-3 w-3 shrink-0" />}
+                  <span className="truncate">{entry.name}</span>
+                </span>
+                <span className="text-[10px] font-medium opacity-90">{formatBytes(entry.bytes)}</span>
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ExploreTreemapLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> safe to delete</span>
+      <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-amber-500" /> review / confirm</span>
+      <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-slate-400" /> protected</span>
+      <span className="ml-auto">Click a folder tile to open it.</span>
+    </div>
+  );
+}
+
 function ExploreList({
   rows = [],
   selectedIds = [],
@@ -1522,8 +1502,8 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
       </div>
       <Progress value={usedPercent} />
       <div className="grid gap-3 md:grid-cols-4">
-        <Metric label="Mapped from C:" value={formatBytes(allocation.accountedBytes)} />
-        <Metric label="Not itemized" value={formatBytes(allocation.unlistedBytes)} />
+        <Metric label="Explored" value={formatBytes(allocation.accountedBytes)} />
+        <Metric label="Not yet explored" value={formatBytes(allocation.unlistedBytes)} />
         <Metric label="Can delete now" value={formatBytes(cleanableBytes)} />
         <Metric label="Needs review" value={formatBytes(reviewBytes)} />
       </div>
@@ -1539,8 +1519,6 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
           </Button>
         </div>
       ) : null}
-      <ExploreCategorySummary allocation={allocation} />
-      <ExploreMeasuredTargets rows={rows} onShowList={onShowList} />
       {visualRows.length ? (
         <>
           <div className="flex h-4 overflow-hidden rounded-md bg-muted">
@@ -1568,6 +1546,7 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
               );
             })}
           </div>
+          <ExploreSpaceDetails allocation={allocation} rows={rows} onShowList={onShowList} />
           <ExploreOtherSpaceBreakdown allocation={allocation} otherRow={otherRow} />
           <details className="rounded-md border bg-background">
             <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1609,6 +1588,27 @@ function ExploreVisualization({ scan, rows = [], onShowList = () => {} }) {
         <EmptyState icon={PieChart} title="No visual data yet" detail="Run a fresh scan to build the C: space map." />
       )}
     </div>
+  );
+}
+
+function ExploreSpaceDetails({ allocation, rows = [], onShowList = () => {} }) {
+  const hasCategoryRows = Boolean(allocation?.categoryRows?.length);
+  const hasMeasuredRows = rows.some((row) => row.source !== "drive-inventory" && Number(row.bytes || 0) > 0);
+  if (!hasCategoryRows && !hasMeasuredRows) return null;
+  return (
+    <details className="rounded-md border bg-background">
+      <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+        <span>
+          <span className="block text-sm font-semibold">Breakdown details</span>
+          <span className="block text-xs text-muted-foreground">Open for source totals and measured cleanup items.</span>
+        </span>
+        <span className="text-xs font-medium text-muted-foreground">Show details</span>
+      </summary>
+      <div className="space-y-3 border-t p-3">
+        <ExploreCategorySummary allocation={allocation} />
+        <ExploreMeasuredTargets rows={rows} onShowList={onShowList} />
+      </div>
+    </details>
   );
 }
 
@@ -1743,7 +1743,7 @@ function ExploreOtherSpaceBreakdown({ allocation, otherRow }) {
         <div className="mt-3 rounded-md border bg-background p-3">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="font-medium">Not itemized by scan</p>
+              <p className="font-medium">Not yet explored</p>
               <p className="mt-1 text-xs text-muted-foreground">{unlistedRow.detail}</p>
             </div>
             <p className="shrink-0 font-semibold">{formatBytes(unlistedRow.bytes)}</p>
@@ -1821,93 +1821,6 @@ function CleanupConfirmModal({ candidates = [], running = false, onCancel, onCon
       </div>
     </div>
   );
-}
-
-function OpenAIPanel({ runtime, scan, candidates, manualFindings = [], selectedCandidate, prompt, setPrompt, status, error, advice, agentBroker, onAsk, onBrokerAction }) {
-  const visibleTargets = Number(candidates?.length || 0) + Number(manualFindings?.length || 0);
-  const canAsk = Boolean(runtime?.openAiAgentAdvice && runtime?.openAiAdvisorConfigured && scan && visibleTargets);
-  const assistant = advice?.advice;
-  const brokerRows = agentBroker?.rows || [];
-  const suggestedAction = brokerRows.find((row) => row.canAct) || brokerRows[0] || null;
-  return (
-    <Card className="rounded-md">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bot className="h-4 w-4" />
-          Ask AI
-        </CardTitle>
-        <CardDescription>Ask for a safe next cleanup choice from the current scan.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="What should I clean next?" />
-        <Button className="w-full" disabled={!canAsk || status === "running"} onClick={onAsk}>
-          {status === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-          Get recommendation
-        </Button>
-        {!canAsk ? (
-          <Notice
-            tone="review"
-            icon={AlertTriangle}
-            text="Run a scan to ask for a cleanup recommendation."
-          />
-        ) : null}
-        {error ? <Notice tone="restricted" icon={AlertTriangle} text={error} /> : null}
-        {assistant ? (
-          <div className="space-y-3 rounded-md border bg-background p-3 text-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{assistant.nextAction || "Recommended cleanup"}</span>
-            </div>
-            <p className="text-muted-foreground">{assistant.summary}</p>
-            {suggestedAction ? (
-              <div className="rounded-md border bg-muted/25 p-3">
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={suggestedAction.canAct ? "safe" : "outline"}>
-                        {suggestedAction.canAct ? "can delete" : "inspect"}
-                      </Badge>
-                      <p className="font-medium">{formatAgentActionTitle(suggestedAction)}</p>
-                    </div>
-                    {!suggestedAction.canAct ? <p className="mt-2 text-xs text-muted-foreground">Open Explore to inspect this item.</p> : null}
-                  </div>
-                  {canRunAgentBrokerAction(suggestedAction) ? (
-                    <Button size="sm" onClick={() => onBrokerAction(suggestedAction)}>
-                      <ChevronRight className="h-3.5 w-3.5" />
-                      {formatAgentButtonLabel(suggestedAction)}
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}
-
-function canRunAgentBrokerAction(row = {}) {
-  return Boolean(row.canAct && row.kind);
-}
-
-function formatAgentActionTitle(row = {}) {
-  if (row.kind === "scoped-executor") return "Select this cleanup";
-  if (row.kind === "scan") return "Refresh the scan";
-  if (row.kind === "review" || row.kind === "manual" || row.kind === "review-target") return "Inspect in Explore";
-  return row.actionType === "manual-only" ? "Inspect item" : "Use recommendation";
-}
-
-function formatAgentButtonLabel(row = {}) {
-  if (row.kind === "scoped-executor") return "Select cleanup";
-  if (row.kind === "scan") return "Run scan";
-  if (row.kind === "review" || row.kind === "manual" || row.kind === "review-target") return "Open Explore";
-  return row.buttonLabel || "Use recommendation";
-}
-
-function focusAgentBrokerPanel(row = {}) {
-  const panelId = String(row.targetPanel || "").trim();
-  if (!panelId || typeof document === "undefined") return;
-  document.getElementById(panelId)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function Notice({ tone = "review", icon: Icon = AlertTriangle, text }) {
@@ -2118,7 +2031,11 @@ function buildCleanupCandidates(scan, runtime) {
       continue;
     }
     if (finding.recipeId === "large-user-files") {
-      rows.push(...buildItemCandidates(finding, ARCHIVE_RECIPE, runtime, { archive: true }));
+      // Files in Downloads go to Recycle Bin directly; others need an archive destination.
+      const downloadsItems = { ...finding, items: (finding.items || []).filter((i) => /\\downloads\\/i.test(String(i.path || ""))) };
+      const archiveItems = { ...finding, items: (finding.items || []).filter((i) => !/\\downloads\\/i.test(String(i.path || ""))) };
+      if (downloadsItems.items.length) rows.push(...buildItemCandidates(downloadsItems, ITEM_REVIEW_RECIPES["downloads-installers"], runtime));
+      if (archiveItems.items.length) rows.push(...buildItemCandidates(archiveItems, ARCHIVE_RECIPE, runtime, { archive: true }));
     }
   }
   return rows
@@ -2234,14 +2151,14 @@ function buildExploreAllocationBreakdown(scan, rows = []) {
   const unlistedRow = unlistedBytes > 0
     ? {
         id: "visual-unlisted-used-space",
-        title: "Not itemized by scan",
+        title: "Not yet explored",
         path: "",
         bytes: unlistedBytes,
         files: 0,
         dirs: 0,
         status: "estimated",
         classification: "unlisted",
-        detail: "Windows reports this as used space, but it was not assigned to a measured top-level C: entry."
+        detail: "Scan again to find cleanable items in unexplored areas of C:."
       }
     : null;
   const detailRows = [...sourceRows, unlistedRow]
@@ -2368,10 +2285,10 @@ function formatOtherUsedSpaceDetail({ hiddenRows = [], unlistedBytes = 0 } = {})
     parts.push(`${formatBytes(smallerBytes)} from ${smallerRows.length} smaller measured C: entries`);
   }
   if (unlistedBytes > 0) {
-    parts.push(`${formatBytes(unlistedBytes)} not itemized by the scan`);
+    parts.push(`${formatBytes(unlistedBytes)} not yet explored`);
   }
   const prefix = parts.length ? `Includes ${parts.join(" plus ")}.` : "No extra used space is hidden from the detailed list.";
-  return `${prefix} Not itemized space can include NTFS metadata, restore points, protected folders, locked files, reserved storage, and scan-cap leftovers. Some of it can become removable if a later scan exposes it as a can delete item.`;
+  return `${prefix} This is space inside folders not yet measured. Scan again for more detail.`;
 }
 
 function formatAllocationKindLabel(row = {}) {
@@ -2469,6 +2386,17 @@ function buildItemCandidates(finding, recipe, runtime, options = {}) {
     });
 }
 
+function buildScanFingerprint(scan) {
+  if (!scan) return "";
+  return [
+    scan.targetDrive,
+    scan.generatedAt,
+    scan.findings?.length || 0,
+    scan.totalBytes || 0,
+    scan.volume?.freeBytes || 0
+  ].join(":");
+}
+
 function buildManualFindings(scan) {
   if (!scan) return [];
   const findingRows = (scan.findings || [])
@@ -2564,263 +2492,6 @@ async function dispatchExecutor(candidate, { planId, scanFingerprint, archiveDes
     default:
       throw new Error(`No native executor is mapped for ${candidate.routeInput}.`);
   }
-}
-
-function buildAgentContext({
-  runtime,
-  scan,
-  candidates,
-  manualFindings = [],
-  selectedCandidate,
-  executionRecord,
-  postRunProof,
-  planId = "",
-  scanFingerprint = "",
-  consentPlanId = "",
-  archiveDestination = "",
-  permanentRemovalConfirmed = false,
-  workflowLocks = buildWorkflowLocks({ executionRecord })
-}) {
-  const agentCandidateIds = new Map();
-  const cleanupQueue = candidates.slice(0, 24).map((candidate, index) => {
-    const agentTargetId = buildAgentCleanupTargetId(candidate, index);
-    const canRunFromQueue = isOneClickCleanupCandidate(candidate);
-    agentCandidateIds.set(candidate.id, agentTargetId);
-    return {
-      id: agentTargetId,
-      title: candidate.title,
-      route: candidate.route,
-      routeInput: candidate.routeInput,
-      actionType: candidate.actionType,
-      targetId: agentTargetId,
-      bytes: Number(candidate.bytes || 0),
-      canExecute: canRunFromQueue,
-      blockedReason: redactAgentContextText(candidate.requiresArchiveDestination ? "Archive destination required before this item can run." : candidate.blockedReason || ""),
-      targetPath: redactPath(candidate.targetPath || "")
-    };
-  });
-  const manualReviewTargets = manualFindings.slice(0, 24).map((finding, index) => {
-    const agentTargetId = buildAgentManualTargetId(finding, index);
-    return {
-      id: agentTargetId,
-      title: finding.title || "Inspect item",
-      route: finding.manualGuidance?.kind || "manual-review",
-      actionType: "manual-only",
-      targetId: agentTargetId,
-      bytes: Number(finding.bytes || 0),
-      status: finding.status || "unknown",
-      confidence: finding.manualGuidance?.confidence || "manual-only",
-      targetPath: redactPath(finding.path || ""),
-      reason: redactAgentContextText(finding.manualGuidance?.primaryAction || finding.note || "Inspect this item."),
-      blockedActions: Array.isArray(finding.manualGuidance?.blockedActions)
-        ? finding.manualGuidance.blockedActions.slice(0, 4).map((row) => redactAgentContextText(row))
-        : []
-    };
-  });
-  const targetsForRoute = (route) => cleanupQueue.filter((candidate) => candidate.route === route);
-  const execution = executionRecord ? {
-    planId,
-    scanFingerprint,
-    scanFingerprintPresent: Boolean(scanFingerprint),
-    consentPlanId,
-    consentMatchesPlan: Boolean(planId && consentPlanId && consentPlanId === planId),
-    route: executionRecord.route,
-    accepted: executionRecord.accepted,
-    reclaimedBytes: executionRecord.bytes,
-    proofStatus: getAgentProofStatus(executionRecord, postRunProof),
-    proofAllowsNextExecutor: workflowLocks.proofAllowsNextExecutor,
-    proofHandoffRequired: Boolean(workflowLocks.proofHandoffRequired),
-    noOpExecution: Boolean(workflowLocks.noOpExecution),
-    canRunPostRunRescan: Boolean(executionRecord),
-    rescanComparisonStatus: postRunProof.status,
-    postRunScanEvidence: Boolean(postRunProof.scanGeneratedAt),
-    largeFileArchiveDestination: redactPath(String(archiveDestination || "").trim()),
-    archiveDestinationReady: Boolean(String(archiveDestination || "").trim()),
-    permanentRemovalConfirmed: Boolean(permanentRemovalConfirmed)
-  } : {
-    planId,
-    scanFingerprint,
-    scanFingerprintPresent: Boolean(scanFingerprint),
-    consentPlanId,
-    consentMatchesPlan: Boolean(planId && consentPlanId && consentPlanId === planId),
-    proofStatus: "waiting-for-execution",
-    proofAllowsNextExecutor: true,
-    canRunPostRunRescan: false,
-    rescanComparisonStatus: "not-run",
-    postRunScanEvidence: false,
-    largeFileArchiveDestination: redactPath(String(archiveDestination || "").trim()),
-    archiveDestinationReady: Boolean(String(archiveDestination || "").trim()),
-    permanentRemovalConfirmed: Boolean(permanentRemovalConfirmed)
-  };
-  const agentTaskQueue = buildAppAgentTaskQueue({ cleanupQueue, manualReviewTargets, execution });
-  return {
-    schemaVersion: "spaceguard-openai-agent-context/v1",
-    productSurface: "real-windows-desktop-app",
-    runtime: {
-      nativeAvailable: Boolean(runtime?.available),
-      windows: Boolean(runtime?.windows),
-      realRunEnabled: Boolean(runtime?.realRunEnabled),
-      destructiveCommands: Boolean(runtime?.destructiveCommands),
-      executorScopeStatus: runtime?.executorScopeStatus || "",
-      enabledScopedExecutorFlagCount: Number(runtime?.enabledScopedExecutorFlagCount || 0),
-      enabledScopedExecutorFlags: runtime?.enabledScopedExecutorFlags || [],
-      ...(runtime?.executorFlags || {}),
-      openAiAgentAdvice: Boolean(runtime?.openAiAgentAdvice),
-      openAiAdvisorConfigured: Boolean(runtime?.openAiAdvisorConfigured)
-    },
-    scan: {
-      generatedAt: scan?.generatedAt || "",
-      targetDrive: scan?.targetDrive || "",
-      volume: scan?.volume || null,
-      findings: (scan?.findings || []).slice(0, 24).map((finding) => ({
-        recipeId: finding.recipeId,
-        title: finding.title,
-        status: finding.status,
-        bytes: Number(finding.bytes || 0),
-        path: redactPath(finding.path || ""),
-        itemCount: finding.items?.length || 0
-      }))
-    },
-    cleanupQueue,
-    executableRows: cleanupQueue,
-    manualReviewTargets,
-    reviewedDownloadsTargets: targetsForRoute("item-review-recycle-bin"),
-    reviewedProjectTargets: targetsForRoute("item-review-project-cache"),
-    largeFileArchiveTargets: targetsForRoute("item-review-large-files"),
-    browserCacheTargets: targetsForRoute("browser-cache-only"),
-    gradleCacheTargets: targetsForRoute("bounded-cache-delete"),
-    userCacheTargets: targetsForRoute("bounded-user-cache-delete"),
-    androidCacheTargets: targetsForRoute("bounded-android-cache-delete"),
-    shaderCacheTargets: targetsForRoute("launcher-cache-cleanup"),
-    pipCacheTargets: targetsForRoute("bounded-pip-cache-delete"),
-    dockerBuildCacheTargets: targetsForRoute("tool-native-docker-build-cache-prune"),
-    npmCacheTargets: targetsForRoute("bounded-npm-cache-delete"),
-    pnpmStoreTargets: targetsForRoute("bounded-pnpm-store-delete"),
-    recycleBinTargets: targetsForRoute("shell-recycle-bin"),
-    agentTaskQueue,
-    selected: selectedCandidate ? {
-      id: agentCandidateIds.get(selectedCandidate.id) || buildAgentCleanupTargetId(selectedCandidate, 0),
-      route: selectedCandidate.route,
-      routeInput: selectedCandidate.routeInput,
-      canExecute: isOneClickCleanupCandidate(selectedCandidate),
-      bytes: selectedCandidate.bytes
-    } : null,
-    execution
-  };
-}
-
-function buildAgentCleanupTargetId(candidate = {}, index = 0) {
-  return buildWorkflowAgentTargetId(candidate, index);
-}
-
-function buildAgentManualTargetId(finding = {}, index = 0) {
-  const base = finding.manualGuidance?.kind || finding.status || "manual-review";
-  return `manual-${slugifyId(base)}-${index + 1}`;
-}
-
-function getAgentProofStatus(executionRecord, postRunProof) {
-  if (!executionRecord) return "waiting-for-execution";
-  if (postRunProof?.matched || (executionRecord.accepted && Number(executionRecord.bytes || 0) <= 0)) return "proof-complete";
-  return postRunProof?.status || "proof-pending";
-}
-
-function redactPath(value = "") {
-  return String(value || "")
-    .replace(/[A-Za-z]:\\Users\\[^\\]+\\AppData\\LocalLow/gi, "%USERPROFILE%\\AppData\\LocalLow")
-    .replace(/[A-Za-z]:\\Users\\[^\\]+\\AppData\\Local/gi, "%LOCALAPPDATA%")
-    .replace(/[A-Za-z]:\\Users\\[^\\]+\\AppData\\Roaming/gi, "%APPDATA%")
-    .replace(/[A-Za-z]:\\Users\\[^\\]+/gi, "%USERPROFILE%")
-    .replace(/[A-Za-z]:\\Windows/gi, "%WINDIR%")
-    .replace(/[A-Za-z]:\\Program Files \(x86\)/gi, "%PROGRAMFILES(X86)%")
-    .replace(/[A-Za-z]:\\Program Files/gi, "%PROGRAMFILES%")
-    .replace(/[A-Za-z]:\\ProgramData/gi, "%PROGRAMDATA%");
-}
-
-function redactAgentContextText(value = "") {
-  return redactPath(value);
-}
-
-function buildScanFingerprint(scan) {
-  if (!scan) return "";
-  return [
-    scan.targetDrive,
-    scan.generatedAt,
-    scan.findings?.length || 0,
-    scan.totalBytes || 0,
-    scan.volume?.freeBytes || 0
-  ].join(":");
-}
-
-function buildAgentContextKey({
-  runtime,
-  scanFingerprint = "",
-  selectedCandidate,
-  executionRecord,
-  postRunProof,
-  archiveDestination = "",
-  permanentRemovalConfirmed = false,
-  agentPrompt = ""
-}) {
-  const selectedTargetHash = hashContextValue([
-    selectedCandidate?.id || "",
-    selectedCandidate?.targetPath || "",
-    selectedCandidate?.reviewTarget?.path || ""
-  ].join("|"));
-  const executionHash = hashContextValue([
-    executionRecord?.planId || "",
-    executionRecord?.id || "",
-    executionRecord?.targetPath || "",
-    executionRecord?.executedAt || ""
-  ].join("|"));
-  const archiveHash = archiveDestination ? hashContextValue(redactPath(archiveDestination)) : "archive-missing";
-  return [
-    scanFingerprint || "scan-missing",
-    runtime?.available ? "native-ready" : "native-missing",
-    runtime?.windows ? "windows" : "not-windows",
-    runtime?.realRunEnabled ? "real-run" : "real-run-blocked",
-    runtime?.executorScopeStatus || "scope-unknown",
-    runtime?.openAiAdvisorConfigured ? "openai-configured" : "openai-missing",
-    selectedCandidate?.recipeId || "target-missing",
-    selectedCandidate?.routeInput || "target-route-missing",
-    selectedCandidate?.actionType || "target-action-missing",
-    selectedCandidate?.canExecute ? "target-executable" : "target-blocked",
-    Number(selectedCandidate?.bytes || 0),
-    selectedTargetHash,
-    executionRecord?.accepted ? "execution-accepted" : "execution-open",
-    Number(executionRecord?.bytes || 0),
-    executionHash,
-    postRunProof?.status || "proof-not-run",
-    postRunProof?.scanGeneratedAt || "proof-scan-missing",
-    permanentRemovalConfirmed ? "permanent-confirmed" : "permanent-unconfirmed",
-    archiveHash,
-    hashContextValue(agentPrompt)
-  ].join("|");
-}
-
-function hashContextValue(value = "") {
-  let hash = 2166136261;
-  const text = String(value || "");
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(36);
-}
-
-function buildProofCandidateFromExecutionRecord(executionRecord) {
-  if (!executionRecord) return null;
-  return {
-    id: executionRecord.id,
-    title: executionRecord.title,
-    recipeId: executionRecord.recipeId,
-    route: executionRecord.route,
-    routeInput: executionRecord.routeInput,
-    envVar: executionRecord.envVar,
-    targetPath: executionRecord.targetPath,
-    bytes: Number(executionRecord.expectedBytes || executionRecord.bytes || 0),
-    sourceFinding: executionRecord.sourceFinding || null,
-    reviewTarget: executionRecord.reviewTarget || null
-  };
 }
 
 function buildCurrentPlanId({ candidate, scanFingerprint }) {

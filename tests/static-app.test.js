@@ -43,8 +43,7 @@ const requiredAppMarkers = [
   "This browser page cannot scan or delete files.",
   "SPACEGUARD_ENABLE_NPM_CACHE_EXECUTOR",
   "Scan PC",
-  "Scan for cleanup",
-  "Fast scan first",
+  "Developer junk cleaner",
   "Explore C:",
   "Check what you want to remove.",
   "Delete all",
@@ -100,15 +99,8 @@ for (const marker of [
   assert(app.includes(marker), `App.jsx should wire native API ${marker}`);
 }
 
-assert(app.includes("requestOpenAIAgentAdvice"), "OpenAI advisor should be wired into the real desktop shell");
-assert(app.includes("buildOpenAIAgentRecommendationBroker"), "OpenAI advisor should broker model recommendations through deterministic app gates");
-assert(app.includes("useRef"), "OpenAI advisor should track the active workflow context across async requests");
-assert(app.includes("buildAgentContextKey"), "OpenAI advisor should key advice to the current real workflow context");
-assert(app.includes("agentContextKeyRef.current !== requestContextKey"), "OpenAI advisor should ignore stale async responses after workflow context changes");
-assert(app.includes("agentAdvice?.contextKey === agentContextKey"), "OpenAI advisor should hide advice from stale scan, target, proof, or prompt context");
-assert(app.includes("advice={currentAgentAdvice}"), "OpenAI panel should only render advice for the active workflow context");
+assert(app.includes("useRef"), "app should use useRef for DOM measurements");
 assert(app.includes("./real-workflow.mjs"), "app should import tested real workflow helpers");
-assert(app.includes("buildAppAgentTaskQueue"), "app should build a deterministic task queue for OpenAI advisor context");
 assert(app.includes("buildRouteReadiness"), "app should use tested route readiness guardrails");
 assert(app.includes("buildCleanupCandidates(scan, runtime)"), "app cleanup candidates should come from measured native findings and built-in allowlists");
 assert(app.includes("buildExecutionLedgerRows"), "app should normalize native rejection details before converting them to simple user copy");
@@ -129,11 +121,11 @@ assert(app.includes("function MobileTabNav"), "mobile layout should expose tab s
 assert(app.includes("role=\"tablist\""), "mobile view switching should use tab semantics");
 assert(!app.includes("Advanced scan options"), "Clean screen should not expose advanced scan tuning");
 assert(!app.includes("Target drive"), "Clean screen should not ask users to configure the target drive before scanning");
-assert(!app.includes("@/components/ui/input"), "app shell should not import unused input controls");
+assert(!app.includes("@/components/ui/input"), "input control should not be imported — no dialog needs it after Browse C: removal");
 assert(!app.includes("Entry cap"), "Clean screen should not expose native scan cap controls");
 assert(!app.includes("Protected paths"), "Clean screen should not expose protected-path editing");
 assert(!app.includes("Extra folders to scan"), "Clean screen should not expose custom root setup");
-assert(/visibleView === "clean"[\s\S]*!scan \? \([\s\S]*<ScanPanel[\s\S]*\) : \([\s\S]*<CleanPanel/.test(app), "Clean screen should show scan setup only before the first scan and then show the cleanup queue");
+assert(/activeView === "clean"[\s\S]*!scan \? \([\s\S]*<ScanPanel[\s\S]*\) : \([\s\S]*<CleanPanel/.test(app), "Clean screen should show scan setup only before the first scan and then show the cleanup queue");
 assert(app.includes("onScanAgain={() => runRealScan()}"), "post-scan cleanup queue header should run a normal scan refresh");
 assert(app.includes("onRescan={() => runRealScan({ afterExecution: true })}"), "cleanup result retry should keep the post-execution rescan path");
 assert(app.includes("const canExecute = executionGate.ready"), "execute button should stay locked through the shared execution gate");
@@ -191,11 +183,7 @@ assert(app.includes("app-dispatch-error"), "checked cleanup should record simple
 assert(app.includes("Select items to delete"), "post-scan clean screen should lead with the actionable cleanup queue");
 assert(!app.includes("{ id: \"history\""), "primary navigation should not include a separate activity page");
 assert(!app.includes("function HistoryPanel"), "cleanup results should stay inline instead of moving to a separate Activity screen");
-assert(app.includes("const aiAvailable = Boolean(runtime?.openAiAgentAdvice && runtime?.openAiAdvisorConfigured)"), "AI navigation should depend on configured advisor availability");
-assert(app.includes("showAgent={aiAvailable}"), "app frame should hide optional AI navigation when the advisor is not configured");
-assert(app.includes("...(showAgent ? [{ id: \"agent\", label: \"Ask AI\", icon: Bot }] : [])"), "Ask AI should stay optional instead of always occupying primary navigation");
-assert(app.includes('rows.length > 2 ? "grid-cols-3" : "grid-cols-2"'), "mobile navigation should collapse to two tabs when Ask AI is hidden");
-assert(/visibleView === "agent" && aiAvailable[\s\S]*<OpenAIPanel/.test(app), "Ask AI panel should render only when the advisor is configured");
+assert(app.includes('rows.length > 2 ? "grid-cols-3" : "grid-cols-2"'), "mobile navigation should adapt column count to number of nav items");
 assert(!app.includes("Scan details"), "Clean screen should not carry post-scan metrics or diagnostic details");
 assert(!app.includes("items need review"), "Clean screen should not show a secondary review queue beside delete actions");
 assert(app.includes("formatCleanRowSummary(row)"), "Clean rows should show simple cleanup summaries instead of raw full paths");
@@ -222,14 +210,12 @@ assert(!app.includes("Last cleanup result"), "activity screen should not duplica
 assert(app.includes("formatCleanupRejectMessage"), "clean panel should translate native rejection details into plain user-facing copy");
 assert(app.includes("Cleanup could not verify the current scan"), "cleanup rejection copy should tell users to scan again when confirmation evidence is stale");
 assert(app.includes("setScanError(formatScanError(error))"), "scan failures should be converted to product-facing copy");
-assert(app.includes("setAgentError(formatAgentError(error))"), "AI failures should be converted to product-facing copy");
 assert(app.includes("formatBlockedCleanupDetail(candidate)"), "Explore blocked cleanup rows should not expose raw backend blocker text");
 assert(app.includes("This item is not ready for one-click deletion"), "blocked cleanup rows should keep route and executor details out of the UI");
 assert(!app.includes("Native scan failed"), "scan errors should not expose native implementation wording");
 assert(!app.includes("OpenAI advisor failed"), "AI errors should not expose provider adapter wording");
 assert(!app.includes("`Cleanup did not start. ${detail}`"), "cleanup start failures should not append raw backend exceptions");
 assert(app.includes("cleanable"), "secondary screens should describe selectable cleanup items without internal readiness language");
-assert(!app.includes("{suggestedAction.canAct ? \"ready\""), "AI recommendations should not show internal ready status copy");
 assert(app.includes("Windows blocked some files because they are in use"), "cleanup rejection copy should explain locked-file retries without reject codes");
 assert(!app.includes("Delete this selected item from this PC."), "normal cleanup should use the selected row checkbox as the confirmation");
 assert(app.includes("effectivePermanentRemovalConfirmed"), "Recycle Bin cleanup should use the selected row checkbox as the permanent-removal confirmation");
@@ -237,7 +223,6 @@ assert(!app.includes("I understand this permanently empties Recycle Bin contents
 assert(!app.includes("setPermanentRemovalConfirmed"), "Recycle Bin cleanup should not keep a second UI confirmation state");
 assert(app.includes("workflowLocks"), "execution gate should receive workflow lock state from the shared cleanup policy");
 assert(app.includes("activeScanGeneratedAt: scan?.generatedAt || \"\""), "execution gate should receive active scan timestamp for execution context");
-assert(app.includes("executionRecord?.accepted"), "agent context key should track accepted native execution records");
 assert(!app.includes("targetSwitchLocked"), "cleanup queue should not lock target switching behind proof export");
 assert(!app.includes("routeSetupLocked"), "app shell should not carry route setup locks in the production flow");
 assert(!app.includes("workflowProofAccepted"), "app shell should not track hidden proof verifier state");
@@ -251,11 +236,6 @@ assert(!app.includes("buildInAppSupportBundleReport"), "app shell should not bui
 assert(!app.includes("renderInAppSupportBundleMarkdown"), "app shell should not render support-bundle markdown inside the cleanup UI");
 assert(realWorkflow.includes("no post-clean evidence is needed"), "accepted no-op executions should explain that post-clean rescan is skipped");
 assert(!app.includes("supportBundleWritten"), "OpenAI app context should not require support-bundle handoff for cleanup continuation");
-assert(app.includes("proofAllowsNextExecutor: workflowLocks.proofAllowsNextExecutor"), "OpenAI context should use the tested workflow lock policy for next-executor allowance");
-assert(app.includes("noOpExecution: Boolean(workflowLocks.noOpExecution)"), "OpenAI context should expose accepted zero-byte no-op handoff state");
-assert(app.includes("agentTaskQueue"), "OpenAI context should include the app task queue that the advisor instructions require");
-assert(app.includes("manualReviewTargets"), "OpenAI context should include manual review targets");
-assert(app.includes("visibleTargets"), "OpenAI panel should unlock for executable or manual review findings");
 assert(app.includes("scan.driveInventory"), "manual findings should include native drive inventory evidence");
 assert(app.includes("Drive inventory:"), "drive inventory rows should be visible as manual review cards");
 assert(app.includes("slugifyId"), "drive inventory manual finding ids should be stable and normalized");
@@ -265,6 +245,9 @@ assert(app.includes("Visualize"), "Explore should expose a visual space view");
 assert(app.includes("C: space map"), "Explore visualization should show a C: allocation map");
 assert(app.includes("buildExploreVisualRows"), "Explore visualization should derive rows from scan inventory");
 assert(app.includes("buildExploreAllocationBreakdown"), "Explore visualization should build a detailed drive allocation model");
+assert(app.includes("function ExploreSpaceDetails"), "Explore visualization should collapse heavier source details by default");
+assert(app.includes("Breakdown details"), "Explore visualization should keep initial source details behind a collapsed details panel");
+assert(/<ExploreSpaceDetails allocation=\{allocation\} rows=\{rows\} onShowList=\{onShowList\} \/>[\s\S]*<ExploreOtherSpaceBreakdown/.test(app), "Explore source details should stay below the visual map and above the optional other-space details");
 assert(app.includes("Other used space"), "Explore visualization should account for remaining drive usage");
 assert(app.includes("Where C: space is coming from"), "Explore visualization should show source categories for used space");
 assert(app.includes("Exact measured items inside those folders"), "Explore visualization should explain cleanup/review targets inside top-level folders");
@@ -280,15 +263,15 @@ assert(app.includes("formatDriveInventoryDetail"), "Explore visualization should
 assert(app.includes("Full C: breakdown"), "Explore visualization should show a full measured C: allocation list");
 assert(app.includes("Open for every measured top-level entry and not-itemized space."), "Full C: breakdown should be available as an on-demand section");
 assert(app.includes("Show details"), "Explore should label advanced breakdown sections as optional details");
-assert(app.includes("Mapped from C:"), "Explore visualization should show how much used space is itemized");
-assert(app.includes("Not itemized"), "Explore visualization should label space that Windows reports but the scanner cannot assign");
+assert(app.includes("Explored"), "Explore visualization should show how much used space has been explored");
+assert(app.includes("Not yet explored"), "Explore visualization should label space the user has not drilled into yet, in plain language");
 assert(app.includes("NTFS metadata"), "Other used space should explain low-level Windows storage contributors");
 assert(app.includes("Restore points and shadow copies"), "Other used space should explain Windows restore storage contributors");
 assert(app.includes("Reserved storage and Windows Update staging"), "Other used space should explain Windows update/reserved storage contributors");
 assert(app.includes("formatAllocationKindLabel"), "Explore breakdown rows should label system, user, review, and cleanable categories");
 assert(app.includes("formatAllocationGroupStatus"), "Explore source categories should use simple status labels");
 assert(app.includes("formatCount(row.files)"), "Explore breakdown rows should show file and folder counts when available");
-assert(app.includes("Some of it can become removable"), "Other used space should explain possible future cleanup without implying unsafe deletion");
+assert(app.includes("Scan again for more detail"), "Not-yet-explored space should prompt users to scan again for detail");
 assert(app.includes("Show delete list"), "Explore visualization should lead users to actionable cleanup rows");
 assert(app.includes("can be deleted"), "Explore visualization should summarize cleanable space");
 assert(app.includes("onShowList={() => setMode(\"list\")}"), "Explore visualization should switch directly to the delete list");
@@ -305,7 +288,6 @@ assert(!app.includes("Export support file"), "normal Activity UI should not expo
 assert(!app.includes("SupportDetails"), "normal Activity UI should not render a support diagnostics component");
 assert(!app.includes("Refresh space before exporting troubleshooting info."), "support export should not expose troubleshooting proof copy");
 assert(!app.includes("Support details"), "support export should not expose a nested diagnostic details panel");
-assert(app.includes("buildProofCandidateFromExecutionRecord"), "post-clean comparison should preserve executed target context after the selected row clears");
 assert(app.includes("recipeId: candidateForExecution.recipeId"), "execution records should preserve recipe id for post-run proof matching");
 assert(app.includes("envVar: candidateForExecution.envVar"), "execution records should preserve selected route flag for native ledger context");
 assert(!app.includes("const exportCandidate = selectedCandidate || proofCandidate"), "app shell should not carry a hidden proof export candidate");
@@ -314,12 +296,12 @@ assert(!app.includes("setScan(baselinePromotion.activeScan)"), "app shell should
 assert(!app.includes("Latest scan is now active."), "app shell should not show support-export baseline promotion copy");
 assert(!app.includes("npm run validate:workflow-proof -- --file spaceguard-real-workflow-proof.md returned accepted"), "proof panel should not rely on a manual CLI acceptance checkbox");
 assert(
-  /function selectWorkflowCandidate\(id, options = \{\}\) \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setPostRunScan\(null\);[\s\S]*setExecutionStatus\("idle"\);[\s\S]*setExecutionError\(""\);[\s\S]*\}/.test(app),
-  "selecting a different cleanup target should clear stale execution and rescan state"
+  /function selectWorkflowCandidate\(id, options = \{\}\) \{[\s\S]*setSelectedId\(id\);[\s\S]*setExecutionResult\(null\);[\s\S]*setExecutionRecord\(null\);[\s\S]*setExecutionStatus\("idle"\);[\s\S]*setExecutionError\(""\);[\s\S]*\}/.test(app),
+  "selecting a different cleanup target should clear stale execution state"
 );
 assert(
-  /if \(afterExecution\) \{[\s\S]*setScan\(result\);[\s\S]*setPostRunScan\(result\);[\s\S]*setSelectedId\(""\);[\s\S]*setConsentChecked\(false\);[\s\S]*setArchiveDestination\(""\);[\s\S]*\}/.test(app),
-  "post-clean rescan should update the normal cleanup list and clear stale selection state"
+  /if \(afterExecution\) \{[\s\S]*setScan\(result\);[\s\S]*setSelectedId\(""\);[\s\S]*setConsentChecked\(false\);[\s\S]*setArchiveDestination\(""\);[\s\S]*\}/.test(app),
+  "post-clean rescan should update the cleanup list and clear stale selection state"
 );
 assert(/if \(rescanAfter && result\.accepted\) \{[\s\S]*await runRealScan\(\{ afterExecution: true \}\);[\s\S]*\}/.test(app), "accepted cleanup should refresh the list automatically");
 assert(app.includes("buildManualFindingGuidance"), "app should use tested manual finding guidance");
@@ -368,26 +350,11 @@ assert(!app.includes("Activity summary"), "browser-only setup should not adverti
 assert(!app.includes("Desktop connection"), "browser-only setup should not expose runtime diagnostics as a product panel");
 assert(!app.includes("Native bridge"), "browser-only setup should not expose internal bridge metrics");
 assert(!/<RouteSetupPanel\s+routes=\{routes\}/.test(app), "browser-only setup state should not render the route setup wizard");
-assert(app.includes("spaceguard-openai-agent-context/v1"), "OpenAI context should keep a stable schema");
-assert(app.includes("Ask AI"), "OpenAI panel should remain available when the optional advisor is configured");
-assert(!app.includes("Recommendation diagnostics"), "OpenAI panel should not expose deterministic broker diagnostics");
-assert(app.includes("agentBroker?.rows"), "OpenAI panel should still read broker rows to choose the best recommendation");
-assert(app.includes("Open Explore to inspect this item."), "OpenAI panel should show simple inspection guidance for blocked recommendations");
-assert(!app.includes("suggestedAction.blockedReason"), "OpenAI panel should not expose internal broker blocker text");
-assert(!app.includes("Why this recommendation"), "OpenAI panel should not expose recommendation diagnostic details");
-assert(!app.includes("Current selection:"), "OpenAI panel should not repeat cleanup selection status");
-assert(/resolveWorkflowAgentBrokerCandidate\(row, candidates\)[\s\S]*selectWorkflowCandidate\(brokerCandidate\.id, \{[\s\S]*checked: row\.kind === "scoped-executor" && isOneClickCleanupCandidate\(brokerCandidate\)/.test(app), "OpenAI cleanup recommendations should check one-click cleanup rows before returning to Clean");
-assert(app.includes("runAgentBrokerAction"), "OpenAI broker recommendations should route through guarded app actions");
-assert(/row\.kind === "review" \|\| row\.kind === "manual"[\s\S]*setActiveView\("explore"\)/.test(app), "OpenAI review recommendations should route to Explore instead of removed review panels");
-assert(app.includes("resolveWorkflowAgentBrokerCandidate"), "OpenAI broker actions should resolve model target ids to real cleanup candidates");
-assert(app.includes("onBrokerAction(suggestedAction)"), "OpenAI panel should expose a user-clicked broker action button");
-assert(app.includes("formatAgentButtonLabel(suggestedAction)"), "OpenAI broker action button should use simple user-facing labels");
-assert(app.includes("Inspect in Explore"), "OpenAI review recommendations should use Explore wording");
-assert(openAiAgent.includes("targetPanel: \"drive-explorer-panel\""), "OpenAI review and manual recommendations should target Explore");
-assert(!openAiAgent.includes("item-review-panel"), "OpenAI recommendations should not route users to removed item review panels");
-assert(!openAiAgent.includes("Open manual review"), "OpenAI recommendations should not expose old manual-review button copy");
-assert(!openAiAgent.includes("Open review"), "OpenAI recommendations should not expose old review button copy");
-assert(app.includes("redactPath"), "OpenAI context should redact local paths before provider calls");
+assert(!app.includes("Ask AI"), "Ask AI nav tab should be removed");
+assert(openAiAgent.includes("https://api.openai.com/v1/responses"), "OpenAI adapter file should still use the Responses API endpoint");
+assert(!openAiAgent.includes("item-review-panel"), "OpenAI adapter should not route users to removed item review panels");
+assert(!openAiAgent.includes("Open manual review"), "OpenAI adapter should not expose old manual-review button copy");
+assert(!openAiAgent.includes("Open review"), "OpenAI adapter should not expose old review button copy");
 assert(app.includes("This browser page cannot scan or delete files."), "browser-only state should be setup-only");
 assert(!app.includes("Native proof artifact writer is required"), "cleanup UI should not expose proof artifact writer failures");
 assert(!app.includes("downloadTextFile(fileName, content)"), "proof export must not silently fall back to browser downloads");

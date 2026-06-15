@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::VecDeque;
@@ -7,6 +8,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Once;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -401,6 +403,8 @@ fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             scan_known_roots,
+            explore_dir,
+            delete_paths_to_recycle_bin,
             execute_cleanup_plan,
             write_proof_artifact,
             openai_agent_advice,
@@ -494,6 +498,521 @@ fn scan_known_roots(request: Option<ScanRequest>) -> ScanResponse {
         write_capability: false,
         destructive_commands: false,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Explore C: on-demand drill-down + delete-from-anywhere (Recycle Bin)
+// ---------------------------------------------------------------------------
+
+const DELETE_CONFIRM_BYTE_THRESHOLD: u64 = 5 * 1024 * 1024 * 1024; // 5 GiB
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExploreDirRequest {
+    path: String,
+    #[serde(default)]
+    protected_paths: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExploreDirResponse {
+    available: bool,
+    path: String,
+    display_path: String,
+    parent: Option<String>,
+    exists: bool,
+    is_dir: bool,
+    entries: Vec<ExploreEntry>,
+    measured_bytes: u64,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExploreEntry {
+    id: String,
+    name: String,
+    path: String,
+    bytes: u64,
+    files: u64,
+    dirs: u64,
+    is_dir: bool,
+    status: String,
+    classification: String,
+    delete_guard: String,
+    delete_reason: String,
+    errors: u64,
+}
+
+/// Read a single directory level and measure each child. Directory children are
+/// sized with a full recursive walk (generous caps) because this is on-demand:
+/// the user explicitly drilled into this one folder.
+#[tauri::command]
+fn explore_dir(request: Option<ExploreDirRequest>) -> ExploreDirResponse {
+    let request = request.unwrap_or(ExploreDirRequest {
+        path: String::new(),
+        protected_paths: Vec::new(),
+    });
+    let mut warnings = Vec::new();
+    let raw = request.path.trim();
+    if raw.is_empty() {
+        warnings.push("Explore path was empty.".to_string());
+        return ExploreDirResponse {
+            available: true,
+            path: String::new(),
+            display_path: String::new(),
+            parent: None,
+            exists: false,
+            is_dir: false,
+            entries: Vec::new(),
+            measured_bytes: 0,
+            warnings,
+        };
+    }
+
+    let root = PathBuf::from(raw);
+    let display_path = path_to_string(&root);
+    let parent = root
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(path_to_string);
+
+    let Ok(metadata) = fs::symlink_metadata(&root) else {
+        warnings.push(format!("Could not open {display_path} for exploring."));
+        return ExploreDirResponse {
+            available: true,
+            path: display_path.clone(),
+            display_path,
+            parent,
+            exists: false,
+            is_dir: false,
+            entries: Vec::new(),
+            measured_bytes: 0,
+            warnings,
+        };
+    };
+
+    if !metadata.is_dir() {
+        return ExploreDirResponse {
+            available: true,
+            path: display_path.clone(),
+            display_path,
+            parent,
+            exists: true,
+            is_dir: false,
+            entries: Vec::new(),
+            measured_bytes: metadata.len(),
+            warnings,
+        };
+    }
+
+    let walk_request = ScanRequest {
+        protected_paths: request.protected_paths.clone(),
+        include_project_artifacts: true,
+        max_depth: Some(64),
+        max_entries_per_root: Some(3_000_000),
+        target_drive: None,
+        custom_roots: Vec::new(),
+    };
+
+    let mut entries = Vec::new();
+    match fs::read_dir(&root) {
+        Ok(read) => {
+            for entry in read.flatten() {
+                if entries.len() >= 2_000 {
+                    warnings.push("Folder has more than 2000 entries; list was capped.".to_string());
+                    break;
+                }
+                entries.push(measure_explore_entry(&entry.path(), &walk_request));
+            }
+        }
+        Err(_) => {
+            warnings.push(format!("Could not list contents of {display_path}."));
+        }
+    }
+
+    entries.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.name.cmp(&b.name)));
+    let measured_bytes = entries.iter().map(|entry| entry.bytes).sum();
+
+    ExploreDirResponse {
+        available: true,
+        path: display_path.clone(),
+        display_path,
+        parent,
+        exists: true,
+        is_dir: true,
+        entries,
+        measured_bytes,
+        warnings,
+    }
+}
+
+fn measure_explore_entry(path: &Path, walk_request: &ScanRequest) -> ExploreEntry {
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| path_to_string(path));
+    let display_path = path_to_string(path);
+    let classification = drive_inventory_classification(&name);
+
+    let mut entry = ExploreEntry {
+        id: stable_item_id("explore", path),
+        name,
+        path: display_path.clone(),
+        bytes: 0,
+        files: 0,
+        dirs: 0,
+        is_dir: false,
+        status: "measured".to_string(),
+        classification: classification.to_string(),
+        delete_guard: "allow".to_string(),
+        delete_reason: String::new(),
+        errors: 0,
+    };
+
+    if is_path_protected(path, &walk_request.protected_paths) {
+        entry.status = "protected".to_string();
+        entry.delete_guard = "hard-block".to_string();
+        entry.delete_reason = "Path is user-protected.".to_string();
+        return entry;
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        entry.status = "error".to_string();
+        entry.errors = 1;
+        entry.delete_guard = "hard-block".to_string();
+        entry.delete_reason = "Entry could not be read.".to_string();
+        return entry;
+    };
+
+    if metadata.file_type().is_symlink() {
+        entry.status = "limited".to_string();
+        entry.delete_guard = "hard-block".to_string();
+        entry.delete_reason = "Symbolic links and reparse points are not deletable here.".to_string();
+        return entry;
+    }
+
+    if metadata.is_file() {
+        entry.is_dir = false;
+        entry.bytes = metadata.len();
+        entry.files = 1;
+        entry.status = "file".to_string();
+    } else if metadata.is_dir() {
+        entry.is_dir = true;
+        let stats = walk_dir_size_parallel(path, MeasureKind::FullTree, walk_request);
+        entry.bytes = stats.bytes;
+        entry.files = stats.files;
+        entry.dirs = stats.dirs;
+        entry.errors = stats.errors;
+        entry.status = if stats.limited { "limited" } else { "measured" }.to_string();
+    } else {
+        entry.status = "limited".to_string();
+        entry.delete_guard = "hard-block".to_string();
+        entry.delete_reason = "Unsupported entry type.".to_string();
+        return entry;
+    }
+
+    let (guard, reason) = classify_delete_guard(&display_path, entry.bytes);
+    entry.delete_guard = guard.to_string();
+    entry.delete_reason = reason;
+    entry
+}
+
+/// Authoritative, server-side deletion guard. The frontend renders its own copy
+/// of this for UX, but the native command re-runs it and refuses hard-blocked
+/// targets regardless of what the renderer claims.
+fn classify_delete_guard(path: &str, bytes: u64) -> (&'static str, String) {
+    let norm = normalize_path(path);
+    if norm.is_empty() {
+        return ("hard-block", "Empty path cannot be deleted.".to_string());
+    }
+
+    // Drive root, e.g. "c:" after normalize (trailing slash trimmed).
+    let is_drive_root = norm.len() <= 3
+        && norm.as_bytes().get(1) == Some(&b':')
+        && norm[2..].chars().all(|c| c == '\\');
+    if is_drive_root {
+        return ("hard-block", "The drive root cannot be deleted.".to_string());
+    }
+
+    // Split "c:\\windows\\system32" -> rest "windows\\system32".
+    let rest = match norm.split_once(":\\") {
+        Some((_, rest)) => rest,
+        None => norm.as_str(),
+    };
+    let segments: Vec<&str> = rest.split('\\').filter(|s| !s.is_empty()).collect();
+    let first = segments.first().copied().unwrap_or("");
+
+    const HARD_BLOCK_TOP_LEVEL: [&str; 10] = [
+        "windows",
+        "program files",
+        "program files (x86)",
+        "programdata",
+        "$recycle.bin",
+        "system volume information",
+        "recovery",
+        "pagefile.sys",
+        "hiberfil.sys",
+        "swapfile.sys",
+    ];
+    if HARD_BLOCK_TOP_LEVEL.contains(&first) || first.starts_with('$') {
+        return (
+            "hard-block",
+            "This is a protected Windows system location. Deleting it can break the OS.".to_string(),
+        );
+    }
+
+    let is_top_level = segments.len() == 1;
+    if is_top_level {
+        return (
+            "confirm",
+            "Top-level C: folder. Type the folder name to confirm deletion.".to_string(),
+        );
+    }
+    if bytes >= DELETE_CONFIRM_BYTE_THRESHOLD {
+        return (
+            "confirm",
+            "Larger than 5 GB. Type the folder name to confirm deletion.".to_string(),
+        );
+    }
+
+    // Warn (not block) on active application state.
+    let is_app_state = segments.iter().any(|s| *s == "appdata")
+        || rest.contains("\\user data\\")
+        || rest.contains("\\profiles\\")
+        || rest.contains("\\mozilla\\firefox");
+    if is_app_state {
+        return (
+            "warn",
+            "Looks like active app data. Deleting it may sign you out or reset settings.".to_string(),
+        );
+    }
+
+    ("allow", String::new())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RecycleDeleteRequest {
+    paths: Vec<String>,
+    #[serde(default)]
+    protected_paths: Vec<String>,
+    #[serde(default)]
+    confirmed_paths: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecycleDeleteResponse {
+    available: bool,
+    accepted: bool,
+    entries: Vec<RecycleDeleteEntry>,
+    freed_bytes: u64,
+    volume_before: Option<VolumeInfo>,
+    volume_after: Option<VolumeInfo>,
+    free_bytes_delta: i64,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecycleDeleteEntry {
+    path: String,
+    result: String,
+    bytes: u64,
+    guard: String,
+    reason: String,
+    error_code: i32,
+}
+
+/// Move user-selected paths to the Recycle Bin (recoverable). Every target is
+/// re-classified server-side: hard-blocked targets are refused, and "confirm"
+/// targets must appear in `confirmed_paths` or they are held back.
+#[tauri::command]
+fn delete_paths_to_recycle_bin(request: Option<RecycleDeleteRequest>) -> RecycleDeleteResponse {
+    let request = request.unwrap_or(RecycleDeleteRequest {
+        paths: Vec::new(),
+        protected_paths: Vec::new(),
+        confirmed_paths: Vec::new(),
+    });
+    let mut warnings = Vec::new();
+
+    if !cfg!(target_os = "windows") {
+        warnings.push(
+            "Recycle Bin deletion is only available in the Windows desktop app.".to_string(),
+        );
+    }
+
+    let confirmed: Vec<String> = request
+        .confirmed_paths
+        .iter()
+        .map(|p| normalize_path(p))
+        .collect();
+
+    let drive = request
+        .paths
+        .first()
+        .and_then(|p| normalize_drive_value(p))
+        .unwrap_or_else(system_drive_fallback);
+    let volume_before = primary_volume_info(&drive);
+
+    let mut entries = Vec::new();
+    let mut freed_bytes = 0_u64;
+    let mut any_deleted = false;
+
+    for raw in request.paths.iter() {
+        let clean = raw.trim();
+        if clean.is_empty() {
+            continue;
+        }
+        let path = PathBuf::from(clean);
+        let display_path = path_to_string(&path);
+
+        if is_path_protected(&path, &request.protected_paths) {
+            entries.push(RecycleDeleteEntry {
+                path: display_path,
+                result: "blocked".to_string(),
+                bytes: 0,
+                guard: "hard-block".to_string(),
+                reason: "Path is user-protected.".to_string(),
+                error_code: 0,
+            });
+            continue;
+        }
+
+        if !path.exists() {
+            entries.push(RecycleDeleteEntry {
+                path: display_path,
+                result: "missing".to_string(),
+                bytes: 0,
+                guard: "allow".to_string(),
+                reason: "Path no longer exists.".to_string(),
+                error_code: 0,
+            });
+            continue;
+        }
+
+        let bytes = recycle_target_bytes(&path, &request.protected_paths);
+        let (guard, reason) = classify_delete_guard(&display_path, bytes);
+
+        if guard == "hard-block" {
+            entries.push(RecycleDeleteEntry {
+                path: display_path,
+                result: "blocked".to_string(),
+                bytes,
+                guard: guard.to_string(),
+                reason,
+                error_code: 0,
+            });
+            continue;
+        }
+
+        if guard == "confirm" && !confirmed.contains(&normalize_path(&display_path)) {
+            entries.push(RecycleDeleteEntry {
+                path: display_path,
+                result: "needs-confirm".to_string(),
+                bytes,
+                guard: guard.to_string(),
+                reason,
+                error_code: 0,
+            });
+            continue;
+        }
+
+        let error_code = move_path_to_recycle_bin(&path);
+        let succeeded = error_code == 0 && !path.exists();
+        if succeeded {
+            freed_bytes = freed_bytes.saturating_add(bytes);
+            any_deleted = true;
+            entries.push(RecycleDeleteEntry {
+                path: display_path,
+                result: "deleted".to_string(),
+                bytes,
+                guard: guard.to_string(),
+                reason,
+                error_code,
+            });
+        } else {
+            entries.push(RecycleDeleteEntry {
+                path: display_path,
+                result: "error".to_string(),
+                bytes: 0,
+                guard: guard.to_string(),
+                reason: "Windows Shell could not move this item to the Recycle Bin.".to_string(),
+                error_code,
+            });
+        }
+    }
+
+    let volume_after = if any_deleted {
+        primary_volume_info(&drive)
+    } else {
+        None
+    };
+    let free_bytes_delta = match (&volume_before, &volume_after) {
+        (Some(before), Some(after)) => {
+            write_volume_free_bytes_delta(before.free_bytes, after.free_bytes)
+        }
+        _ => 0,
+    };
+
+    RecycleDeleteResponse {
+        available: cfg!(target_os = "windows"),
+        accepted: any_deleted,
+        entries,
+        freed_bytes,
+        volume_before,
+        volume_after,
+        free_bytes_delta,
+        warnings,
+    }
+}
+
+fn recycle_target_bytes(path: &Path, protected_paths: &[String]) -> u64 {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_file() => metadata.len(),
+        Ok(metadata) if metadata.is_dir() => {
+            let walk_request = ScanRequest {
+                protected_paths: protected_paths.to_vec(),
+                include_project_artifacts: true,
+                max_depth: Some(64),
+                max_entries_per_root: Some(3_000_000),
+                target_drive: None,
+                custom_roots: Vec::new(),
+            };
+            walk_dir_size_parallel(path, MeasureKind::FullTree, &walk_request).bytes
+        }
+        _ => 0,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn move_path_to_recycle_bin(path: &Path) -> i32 {
+    let from = wide_double_null(&path_to_string(path));
+    let mut operation = ShFileOpStructW {
+        hwnd: std::ptr::null_mut(),
+        w_func: FO_DELETE,
+        p_from: from.as_ptr(),
+        p_to: std::ptr::null(),
+        f_flags: FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT,
+        f_any_operations_aborted: 0,
+        h_name_mappings: std::ptr::null_mut(),
+        lpsz_progress_title: std::ptr::null(),
+    };
+    let error_code = unsafe { SHFileOperationW(&mut operation) };
+    if error_code != 0 {
+        return error_code;
+    }
+    if operation.f_any_operations_aborted != 0 {
+        return -1;
+    }
+    0
+}
+
+#[cfg(not(target_os = "windows"))]
+fn move_path_to_recycle_bin(_path: &Path) -> i32 {
+    -1
 }
 
 #[tauri::command]
@@ -1576,7 +2095,7 @@ fn execute_downloads_review_cleanup(request: WriteExecutionRequest) -> WriteExec
                         if target_reject.is_none() {
                             "Target is a reviewed Downloads installer/archive file."
                         } else {
-                            "Target is missing, too recent, outside Downloads, not a file, link-like, or not an allowed installer/archive type."
+                            "Target is missing, outside Downloads, not a regular file, or is a symbolic link."
                         },
                     ),
                     write_preflight_check(
@@ -6518,7 +7037,7 @@ fn downloads_cleanup_target_reject_code(value: &str) -> Option<&'static str> {
     downloads_cleanup_target_reject_code_at(value, SystemTime::now())
 }
 
-fn downloads_cleanup_target_reject_code_at(value: &str, now: SystemTime) -> Option<&'static str> {
+fn downloads_cleanup_target_reject_code_at(value: &str, _now: SystemTime) -> Option<&'static str> {
     let path = resolve_dry_run_target(value);
     if path.as_os_str().is_empty() {
         return Some("target-missing");
@@ -6549,12 +7068,6 @@ fn downloads_cleanup_target_reject_code_at(value: &str, now: SystemTime) -> Opti
     };
     if !metadata.is_file() || metadata.file_type().is_symlink() {
         return Some("target-link-or-not-file");
-    }
-    if !should_count_file(MeasureKind::DownloadInstallers, &path) {
-        return Some("target-not-downloads-file");
-    }
-    if path_age_days_at(&path, now).unwrap_or(0) < 30 {
-        return Some("target-too-recent");
     }
     None
 }
@@ -10675,6 +11188,124 @@ fn walk_dir_size(root: &Path, kind: MeasureKind, request: &ScanRequest) -> SizeS
     stats
 }
 
+struct ParallelWalkCtx<'a> {
+    protected: &'a [String],
+    kind: MeasureKind,
+    max_depth: usize,
+    max_entries: usize,
+    visited: AtomicU64,
+    limited: AtomicBool,
+}
+
+#[derive(Default, Clone, Copy)]
+struct ParallelWalkTotals {
+    bytes: u64,
+    files: u64,
+    dirs: u64,
+    errors: u64,
+}
+
+impl ParallelWalkTotals {
+    fn merge(self, other: Self) -> Self {
+        Self {
+            bytes: self.bytes.saturating_add(other.bytes),
+            files: self.files.saturating_add(other.files),
+            dirs: self.dirs.saturating_add(other.dirs),
+            errors: self.errors.saturating_add(other.errors),
+        }
+    }
+}
+
+/// Same semantics as `walk_dir_size` (depth/entry caps, symlink and protected
+/// skips, `should_count_file` filtering) but fans subdirectories out across the
+/// rayon thread pool. Used by on-demand explore/delete sizing where a single
+/// folder can hold 100k+ files and the sequential walk would stall the UI.
+fn walk_dir_size_parallel(root: &Path, kind: MeasureKind, request: &ScanRequest) -> SizeStats {
+    let ctx = ParallelWalkCtx {
+        protected: &request.protected_paths,
+        kind,
+        max_depth: request.max_depth.unwrap_or(64),
+        max_entries: request.max_entries_per_root.unwrap_or(3_000_000),
+        visited: AtomicU64::new(0),
+        limited: AtomicBool::new(false),
+    };
+    let totals = parallel_walk_node(root, 0, &ctx);
+    SizeStats {
+        bytes: totals.bytes,
+        files: totals.files,
+        dirs: totals.dirs,
+        errors: totals.errors,
+        limited: ctx.limited.load(Ordering::Relaxed),
+    }
+}
+
+fn parallel_walk_node(path: &Path, depth: usize, ctx: &ParallelWalkCtx) -> ParallelWalkTotals {
+    if ctx.visited.fetch_add(1, Ordering::Relaxed) >= ctx.max_entries as u64 {
+        ctx.limited.store(true, Ordering::Relaxed);
+        return ParallelWalkTotals::default();
+    }
+
+    if depth > ctx.max_depth || is_path_protected(path, ctx.protected) {
+        ctx.limited.store(true, Ordering::Relaxed);
+        return ParallelWalkTotals::default();
+    }
+
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return ParallelWalkTotals {
+            errors: 1,
+            ..Default::default()
+        };
+    };
+
+    if metadata.file_type().is_symlink() {
+        return ParallelWalkTotals::default();
+    }
+
+    if metadata.is_file() {
+        if should_count_file(ctx.kind, path) {
+            return ParallelWalkTotals {
+                bytes: metadata.len(),
+                files: 1,
+                ..Default::default()
+            };
+        }
+        return ParallelWalkTotals::default();
+    }
+
+    if !metadata.is_dir() {
+        return ParallelWalkTotals::default();
+    }
+
+    if depth == ctx.max_depth {
+        ctx.limited.store(true, Ordering::Relaxed);
+        return ParallelWalkTotals {
+            dirs: 1,
+            ..Default::default()
+        };
+    }
+
+    let children: Vec<PathBuf> = match fs::read_dir(path) {
+        Ok(entries) => entries.flatten().map(|entry| entry.path()).collect(),
+        Err(_) => {
+            return ParallelWalkTotals {
+                dirs: 1,
+                errors: 1,
+                ..Default::default()
+            };
+        }
+    };
+
+    let subtotal = children
+        .par_iter()
+        .map(|child| parallel_walk_node(child, depth + 1, ctx))
+        .reduce(ParallelWalkTotals::default, ParallelWalkTotals::merge);
+
+    ParallelWalkTotals {
+        dirs: subtotal.dirs.saturating_add(1),
+        ..subtotal
+    }
+}
+
 fn should_count_file(kind: MeasureKind, path: &Path) -> bool {
     match kind {
         MeasureKind::FullTree => true,
@@ -12333,5 +12964,46 @@ mod tests {
         let _ = fs::remove_dir(&root);
         let _ = fs::remove_dir(local_app_data.join("pnpm"));
         let _ = fs::remove_dir(&local_app_data);
+    }
+
+    #[test]
+    fn delete_guard_hard_blocks_system_locations() {
+        for path in [
+            "C:\\",
+            "C:\\Windows",
+            "C:\\Windows\\System32\\drivers",
+            "C:\\Program Files",
+            "C:\\Program Files (x86)\\App",
+            "C:\\ProgramData",
+            "C:\\$Recycle.Bin",
+            "C:\\System Volume Information",
+            "C:\\Recovery",
+            "C:\\pagefile.sys",
+            "C:\\hiberfil.sys",
+        ] {
+            let (guard, _) = classify_delete_guard(path, 1024);
+            assert_eq!(guard, "hard-block", "{path} must be hard-blocked");
+        }
+    }
+
+    #[test]
+    fn delete_guard_requires_confirm_for_top_level_and_large() {
+        let (guard, _) = classify_delete_guard("C:\\MyStuff", 1024);
+        assert_eq!(guard, "confirm", "top-level folders need typed confirm");
+
+        let (guard, _) =
+            classify_delete_guard("C:\\Users\\me\\Videos\\huge", DELETE_CONFIRM_BYTE_THRESHOLD);
+        assert_eq!(guard, "confirm", "folders over 5 GB need typed confirm");
+    }
+
+    #[test]
+    fn delete_guard_warns_on_app_state_and_allows_normal() {
+        let (guard, _) =
+            classify_delete_guard("C:\\Users\\me\\AppData\\Local\\SomeApp", 4096);
+        assert_eq!(guard, "warn", "app data should warn, not block");
+
+        let (guard, _) =
+            classify_delete_guard("C:\\Users\\me\\Downloads\\old-build", 4096);
+        assert_eq!(guard, "allow", "ordinary nested folders are allowed");
     }
 }
