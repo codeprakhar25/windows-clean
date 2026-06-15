@@ -1,8 +1,8 @@
 {
   "name": "windows-clean",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Production Windows space recovery assistant with native scan, guarded cleanup, and post-clean rescan.",
+  "description": "Developer junk cleaner for Windows — safely removes caches, temp files, and stale build artifacts.",
   "scripts": {
     "start": "vite --host 127.0.0.1",
     "dev": "vite --host 127.0.0.1",
