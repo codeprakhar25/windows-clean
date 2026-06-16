@@ -13,6 +13,8 @@
 
 **SpaceGuard** is a developer junk cleaner for Windows. It scans for safe-to-delete caches, temp files, and stale build artifacts — and typically recovers **10–30 GB** on a dev machine. Nothing is deleted until you confirm.
 
+<img width="2549" height="1471" alt="image" src="https://github.com/user-attachments/assets/fcfb98e1-9d3c-4ce9-9f70-1eb8717798ce" />
+
 ---
 
 ## What it cleans
